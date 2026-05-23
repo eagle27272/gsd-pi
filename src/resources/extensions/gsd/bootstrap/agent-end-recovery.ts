@@ -172,10 +172,9 @@ export function isBareClaudeCodeStreamAbortPlaceholder(lastMsg: unknown): boolea
  * "Auto-mode stopped — Unit aborted: Claude Code process aborted by user"
  * even though no user input occurred.
  *
- * Claude Code abort markers are intentionally ignored when the abort fires
- * while the session-switch is in flight: the abort is the expected side-effect
- * of the transition, not a user signal. Other branches (genuine `stopReason
- * === "aborted"` with explicit errorMessage) preserve the prior behavior.
+ * Abort markers are intentionally ignored when the abort fires while the
+ * session-switch is in flight: the abort belongs to the old turn being torn
+ * down by newSession(), not to the next unit.
  */
 export function _handleSessionSwitchAgentEnd(
   lastMsg: unknown,
@@ -199,10 +198,7 @@ export function _handleSessionSwitchAgentEnd(
   }
 
   if (m.stopReason === "aborted") {
-    const hasErrorMessage = !!m.errorMessage;
-    if (hasErrorMessage) {
-      resolveCancelled(_buildAbortedPauseContext(m as { errorMessage?: unknown }));
-    }
+    return;
   }
 }
 
