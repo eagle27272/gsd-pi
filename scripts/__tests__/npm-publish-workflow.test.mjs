@@ -39,6 +39,7 @@ test("prerelease publish preserves channel-specific default refs", () => {
   );
 
   assert.equal(workflow.on.workflow_dispatch.inputs.ref.default, "");
+  assert.equal(checkout.with.token, "${{ github.token }}");
   assert.match(checkout.with.ref, /github\.event\.inputs\.channel == 'next'/);
   assert.match(checkout.with.ref, /'next'/);
   assert.match(checkout.with.ref, /'main'/);
