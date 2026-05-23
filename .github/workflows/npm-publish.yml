@@ -74,14 +74,7 @@ jobs:
       - name: Install web host dependencies
         run: npm --prefix web ci
 
-      - name: Cache Next.js build
-        uses: actions/cache@v5
-        with:
-          path: web/.next/cache
-          key: nextjs-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-${{ hashFiles('web/app/**', 'web/components/**', 'web/lib/**', 'web/hooks/**') }}
-          restore-keys: |
-            nextjs-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-
-            nextjs-${{ runner.os }}-
+      - uses: ./.github/actions/cache-nextjs
 
       - name: Build core
         run: npm run build:core
@@ -210,14 +203,7 @@ jobs:
           node -e "const [major, minor] = process.versions.node.split('.').map(Number); if (major < 22 || (major === 22 && minor < 14)) { throw new Error('Trusted publishing requires Node >= 22.14.0'); }"
           node -e "const v=require('child_process').execSync('npm --version',{encoding:'utf8'}).trim().split('.').map(Number); if (v[0] < 11 || (v[0] === 11 && v[1] < 5) || (v[0] === 11 && v[1] === 5 && v[2] < 1)) { throw new Error('Trusted publishing requires npm >= 11.5.1'); }"
 
-      - name: Cache Next.js build
-        uses: actions/cache@v5
-        with:
-          path: web/.next/cache
-          key: nextjs-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-${{ hashFiles('web/app/**', 'web/components/**', 'web/lib/**', 'web/hooks/**') }}
-          restore-keys: |
-            nextjs-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-
-            nextjs-${{ runner.os }}-
+      - uses: ./.github/actions/cache-nextjs
 
       - name: Run live LLM tests (optional)
         continue-on-error: true
@@ -322,7 +308,7 @@ jobs:
             -d "$(jq -n --arg c "**GSD v${RELEASE_VERSION} Released**\n\n${NOTES}\n\n\`npm i @opengsd/gsd-pi@${RELEASE_VERSION}\`" '{content:$c}')"
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@v4.1.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

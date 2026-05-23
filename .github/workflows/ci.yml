@@ -99,14 +99,7 @@ jobs:
       - name: Install web host dependencies
         run: npm --prefix web ci
 
-      - name: Cache Next.js build
-        uses: actions/cache@v5
-        with:
-          path: web/.next/cache
-          key: nextjs-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-${{ hashFiles('web/app/**', 'web/components/**', 'web/lib/**', 'web/hooks/**') }}
-          restore-keys: |
-            nextjs-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-
-            nextjs-${{ runner.os }}-
+      - uses: ./.github/actions/cache-nextjs
 
       # validate-pack requires dist/web/standalone/server.js in the tarball (package.json files).
       - name: Build web host
@@ -150,13 +143,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v5
-        with:
-          name: ci-build-artifacts
-
-      - name: Restore build artifacts
-        run: bash scripts/ci-unpack-build-artifacts.sh
+      - uses: ./.github/actions/restore-ci-build-artifacts
 
       - name: Run unit tests
         run: |
@@ -182,13 +169,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v5
-        with:
-          name: ci-build-artifacts
-
-      - name: Restore build artifacts
-        run: bash scripts/ci-unpack-build-artifacts.sh
+      - uses: ./.github/actions/restore-ci-build-artifacts
 
       - name: Run package tests
         run: npm run test:packages:compiled
@@ -218,13 +199,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v5
-        with:
-          name: ci-build-artifacts
-
-      - name: Restore build artifacts
-        run: bash scripts/ci-unpack-build-artifacts.sh
+      - uses: ./.github/actions/restore-ci-build-artifacts
 
       - name: Check test coverage thresholds
         run: npm run test:coverage
@@ -248,25 +223,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v5
-        with:
-          name: ci-build-artifacts
-
-      - name: Restore build artifacts
-        run: bash scripts/ci-unpack-build-artifacts.sh
+      - uses: ./.github/actions/restore-ci-build-artifacts
 
       - name: Install web host dependencies
         run: npm --prefix web ci
 
-      - name: Cache Next.js build
-        uses: actions/cache@v5
-        with:
-          path: web/.next/cache
-          key: nextjs-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-${{ hashFiles('web/app/**', 'web/components/**', 'web/lib/**', 'web/hooks/**') }}
-          restore-keys: |
-            nextjs-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-
-            nextjs-${{ runner.os }}-
+      - uses: ./.github/actions/cache-nextjs
 
       - name: Run integration tests
         run: npm run test:integration
@@ -290,13 +252,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v5
-        with:
-          name: ci-build-artifacts
-
-      - name: Restore build artifacts
-        run: bash scripts/ci-unpack-build-artifacts.sh
+      - uses: ./.github/actions/restore-ci-build-artifacts
 
       - name: Run e2e suite (against built binary)
         run: |
@@ -334,13 +290,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v5
-        with:
-          name: ci-build-artifacts
-
-      - name: Restore build artifacts
-        run: bash scripts/ci-unpack-build-artifacts.sh
+      - uses: ./.github/actions/restore-ci-build-artifacts
 
       - name: Run docker e2e suite
         run: npm run test:e2e:docker
@@ -371,14 +321,7 @@ jobs:
           GSD_SKIP_RTK_INSTALL: '1'
         run: npm ci --ignore-scripts
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v5
-        with:
-          name: ci-build-artifacts
-
-      - name: Restore build artifacts
-        shell: bash
-        run: bash scripts/ci-unpack-build-artifacts.sh
+      - uses: ./.github/actions/restore-ci-build-artifacts
 
       - name: Typecheck extensions
         if: needs.fast-gates.outputs.portability-changed == 'true'
