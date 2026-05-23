@@ -92,6 +92,11 @@ function loadNative(): Record<string, unknown> {
   });
 }
 
+/** True when a real `.node` addon was loaded (not the throw-on-call proxy). */
+export function isNativeAddonLoaded(): boolean {
+  return _loadedSuccessfully;
+}
+
 export const native = loadNative() as {
   search: (content: Buffer | Uint8Array, options: unknown) => unknown;
   grep: (options: unknown) => unknown;
