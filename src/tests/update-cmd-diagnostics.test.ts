@@ -5,16 +5,21 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { runUpdate } from "../update-cmd.ts";
 import { handleUpdate } from "../resources/extensions/gsd/commands-handlers.ts";
 
-test("update-cmd prints latest version before comparison (#3445)", async () => {
+test("update-cmd prints latest version before comparison (#3445)", async (t) => {
   const originalFetch = globalThis.fetch;
   const originalVersion = process.env.GSD_VERSION;
   const originalStdoutWrite = process.stdout.write;
   const writes: string[] = [];
+  const tmp = mkdtempSync(join(tmpdir(), "gsd-update-diagnostics-"));
+
+  t.after(() => rmSync(tmp, { recursive: true, force: true }));
 
   try {
     process.env.GSD_VERSION = "1.2.3";
@@ -24,7 +29,7 @@ test("update-cmd prints latest version before comparison (#3445)", async () => {
       return true;
     };
 
-    await runUpdate();
+    await runUpdate({ agentDir: join(tmp, "agent"), skillsDir: join(tmp, "skills") });
   } finally {
     globalThis.fetch = originalFetch;
     (process.stdout as any).write = originalStdoutWrite;
@@ -40,6 +45,42 @@ test("update-cmd prints latest version before comparison (#3445)", async () => {
   const comparisonIdx = output.indexOf("Already up to date.");
   assert.ok(latestPrintIdx !== -1, "Must print latest version");
   assert.ok(latestPrintIdx < comparisonIdx, "Must print latest BEFORE comparison result");
+});
+
+test("update-cmd refreshes managed resources when already up to date (#52)", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const originalVersion = process.env.GSD_VERSION;
+  const originalStdoutWrite = process.stdout.write;
+  const tmp = mkdtempSync(join(tmpdir(), "gsd-update-refresh-"));
+  const fakeAgentDir = join(tmp, "agent");
+
+  t.after(() => rmSync(tmp, { recursive: true, force: true }));
+  mkdirSync(fakeAgentDir, { recursive: true });
+
+  writeFileSync(
+    join(fakeAgentDir, "managed-resources.json"),
+    JSON.stringify({ gsdVersion: "3.0.0", packageName: "gsd-pi", syncedAt: Date.now() }),
+  );
+
+  try {
+    process.env.GSD_VERSION = "1.0.1";
+    globalThis.fetch = async () => Response.json({ version: "1.0.1" });
+    (process.stdout as any).write = () => true;
+
+    await runUpdate({ agentDir: fakeAgentDir, skillsDir: join(tmp, "skills") });
+  } finally {
+    globalThis.fetch = originalFetch;
+    (process.stdout as any).write = originalStdoutWrite;
+    if (originalVersion === undefined) {
+      delete process.env.GSD_VERSION;
+    } else {
+      process.env.GSD_VERSION = originalVersion;
+    }
+  }
+
+  const manifest = JSON.parse(readFileSync(join(fakeAgentDir, "managed-resources.json"), "utf-8"));
+  assert.equal(manifest.gsdVersion, "1.0.1");
+  assert.equal(manifest.packageName, "@opengsd/gsd-pi");
 });
 
 test("update-check exports resolveInstallCommand (#4145)", async () => {
