@@ -41,7 +41,7 @@ const PACKAGE_SCRIPT_KEYS = ["typecheck", "lint", "test"] as const;
 
 /**
  * Discover verification commands using the first-non-empty-wins strategy (D003):
- *   1. Task plan verify field (split on && and newlines)
+ *   1. Task plan verify field (split on newlines)
  *   2. Explicit preference commands
  *   3. package.json scripts (typecheck, lint, test)
  *   4. Python pytest project markers
@@ -59,7 +59,7 @@ export function discoverCommands(options: DiscoverCommandsOptions): DiscoveredCo
   if (taskPlanVerify) {
     const commands: string[] = [];
     const candidates = taskPlanVerify
-      .split(/&&|\r?\n/)
+      .split(/\r?\n/)
       .map(c => c.trim())
       .filter(Boolean);
     for (const candidate of candidates) {

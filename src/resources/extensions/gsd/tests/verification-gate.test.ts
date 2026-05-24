@@ -56,7 +56,7 @@ describe("verification-gate: discovery", () => {
       taskPlanVerify: "npm run lint && npm run test",
       cwd: tmp,
     });
-    assert.deepStrictEqual(result.commands, ["npm run lint", "npm run test"]);
+    assert.deepStrictEqual(result.commands, ["npm run lint && npm run test"]);
     assert.equal(result.source, "task-plan");
   });
 
@@ -159,6 +159,15 @@ describe("verification-gate: discovery", () => {
     assert.equal(result.source, "task-plan");
   });
 
+  test("taskPlanVerify preserves cd context in && chains", () => {
+    const result = discoverCommands({
+      taskPlanVerify: "cd /tmp/project/subdir && uv run pytest tests/ -q --tb=short",
+      cwd: tmp,
+    });
+    assert.deepStrictEqual(result.commands, ["cd /tmp/project/subdir && uv run pytest tests/ -q --tb=short"]);
+    assert.equal(result.source, "task-plan");
+  });
+
   test("whitespace-only preference commands fall through", () => {
     writeFileSync(
       join(tmp, "package.json"),
@@ -217,12 +226,12 @@ describe("verification-gate: discovery", () => {
       cwd: tmp,
     });
     assert.equal(result.source, "task-plan");
-    assert.deepStrictEqual(result.commands, ["npm run lint", "npm run test"]);
+    assert.deepStrictEqual(result.commands, ["npm run lint && npm run test"]);
   });
 
-  test("mixed prose and commands in taskPlanVerify — only commands kept", () => {
+  test("mixed prose and commands in newline-delimited taskPlanVerify — only commands kept", () => {
     const result = discoverCommands({
-      taskPlanVerify: "Check that everything works && npm run test",
+      taskPlanVerify: "Check that everything works\nnpm run test",
       cwd: tmp,
     });
     // "Check that everything works" is prose (starts with capital, 4+ words)
