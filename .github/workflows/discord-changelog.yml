@@ -32,7 +32,7 @@ jobs:
       - name: Post changelog to Discord
         shell: bash
         run: |
-          node --input-type=module <<'NODE'
+          cat > discord-changelog.mjs <<'NODE'
           import { readFile } from "node:fs/promises";
 
           const eventName = process.env.GITHUB_EVENT_NAME;
