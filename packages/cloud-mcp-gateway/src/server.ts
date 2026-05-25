@@ -76,9 +76,7 @@ export function createGatewayServer(options: GatewayServerOptions = {}) {
         socket.destroy();
         return;
       }
-      const deviceToken = extractBearerToken(req.headers.authorization)
-        ?? url.searchParams.get("device_token")
-        ?? undefined;
+      const deviceToken = extractBearerToken(req.headers.authorization);
       const device = auth.authenticateDevice(deviceToken);
       if (!device) {
         socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");

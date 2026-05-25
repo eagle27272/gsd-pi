@@ -30,6 +30,26 @@ test("gateway reports invalid JSON as a client error", async () => {
   assert.deepEqual(JSON.parse(response.body) as unknown, { error: "Invalid JSON request body" });
 });
 
+test("runtime websocket rejects device tokens supplied in the URL query", () => {
+  const { server, auth } = createGatewayServer({ userToken: "user-token" });
+  const { code } = auth.createPairingCode("local-user");
+  const issued = auth.exchangePairingCode(code, "Laptop");
+  const socket = new MockUpgradeSocket();
+
+  server.emit(
+    "upgrade",
+    {
+      url: `/runtime/connect?device_token=${encodeURIComponent(issued.deviceToken)}`,
+      headers: {},
+    },
+    socket,
+    Buffer.alloc(0),
+  );
+
+  assert.match(socket.output, /401 Unauthorized/);
+  assert.equal(socket.destroyed, true);
+});
+
 async function dispatch(
   server: ReturnType<typeof createGatewayServer>["server"],
   request: {
@@ -79,5 +99,18 @@ class MockResponse extends EventEmitter {
 
   end(body: string): void {
     this.resolveDone({ status: this.status, body });
+  }
+}
+
+class MockUpgradeSocket extends EventEmitter {
+  output = "";
+  destroyed = false;
+
+  write(chunk: string): void {
+    this.output += chunk;
+  }
+
+  destroy(): void {
+    this.destroyed = true;
   }
 }
