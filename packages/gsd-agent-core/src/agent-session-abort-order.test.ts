@@ -77,6 +77,21 @@ function recordCallOrder<O extends object>(
 	return order;
 }
 
+function recordExtensionEmits(session: AgentSession): Array<{ type: string; reason?: string; previousSessionFile?: string }> {
+	const events: Array<{ type: string; reason?: string; previousSessionFile?: string }> = [];
+	const runner = (session as any)._extensionRunner;
+	const originalEmit = runner.emit.bind(runner);
+	runner.emit = async (event: { type: string; reason?: string; previousSessionFile?: string }) => {
+		events.push({
+			type: event.type,
+			reason: event.reason,
+			previousSessionFile: event.previousSessionFile,
+		});
+		return originalEmit(event);
+	};
+	return events;
+}
+
 function makeAssistantMessage(text: string) {
 	return {
 		role: "assistant",
@@ -487,5 +502,40 @@ describe("#4243 — abort() must run before _disconnectFromAgent()", () => {
 			abortIdx < disconnectIdx,
 			`abort() must run before _disconnectFromAgent() in switchSession; order=${order.join(",")}`,
 		);
+	});
+
+	it("newSession() emits legacy session_switch after session_start", async () => {
+		const session = await createSession({ persistSessions: true });
+		const previousSessionFile = session.sessionFile;
+		assert.ok(typeof previousSessionFile === "string" && previousSessionFile.length > 0);
+		(session as any)._cwd = process.cwd();
+
+		const events = recordExtensionEmits(session);
+		const ok = await session.newSession();
+		assert.equal(ok, true);
+
+		assert.deepEqual(events.slice(-2), [
+			{ type: "session_start", reason: "new", previousSessionFile },
+			{ type: "session_switch", reason: "new", previousSessionFile },
+		]);
+	});
+
+	it("switchSession() emits legacy session_switch after session_start", async () => {
+		const session = await createSession({ persistSessions: true });
+		const targetSessionFile = session.sessionFile;
+		assert.ok(typeof targetSessionFile === "string" && targetSessionFile.length > 0);
+
+		await session.newSession();
+		const previousSessionFile = session.sessionFile;
+		assert.ok(typeof previousSessionFile === "string" && previousSessionFile.length > 0);
+
+		const events = recordExtensionEmits(session);
+		const ok = await session.switchSession(targetSessionFile);
+		assert.equal(ok, true);
+
+		assert.deepEqual(events.slice(-2), [
+			{ type: "session_start", reason: "resume", previousSessionFile },
+			{ type: "session_switch", reason: "resume", previousSessionFile },
+		]);
 	});
 });

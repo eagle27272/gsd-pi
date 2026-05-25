@@ -2119,6 +2119,15 @@ export class AgentSession {
 		this.agent.state.systemPrompt = this._baseSystemPrompt;
 	}
 
+	private async emitSessionStartWithLegacySwitch(event: SessionStartEvent & { reason: "new" | "resume" }): Promise<void> {
+		await this._extensionRunner.emit(event);
+		await this._extensionRunner.emit({
+			type: "session_switch",
+			reason: event.reason,
+			previousSessionFile: event.previousSessionFile,
+		});
+	}
+
 	private buildExtensionResourcePaths(entries: Array<{ path: string; extensionPath: string }>): Array<{
 		path: string;
 		metadata: { source: string; scope: "temporary"; origin: "top-level"; baseDir?: string };
@@ -2756,7 +2765,7 @@ export class AgentSession {
 		this._reconnectToAgent();
 
 		if (this._extensionRunner) {
-			await this._extensionRunner.emit({
+			await this.emitSessionStartWithLegacySwitch({
 				type: "session_start",
 				reason: "new",
 				previousSessionFile,
@@ -2821,7 +2830,7 @@ export class AgentSession {
 		}
 
 		if (this._extensionRunner) {
-			await this._extensionRunner.emit({
+			await this.emitSessionStartWithLegacySwitch({
 				type: "session_start",
 				reason: "resume",
 				previousSessionFile,
