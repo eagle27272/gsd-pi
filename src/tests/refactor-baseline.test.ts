@@ -328,13 +328,13 @@ test("countMatches counts non-overlapping pattern matches", () => {
 test("countLegacyContractImports ignores rpc-client implementation types", () => {
   assert.equal(
     countLegacyContractImports(`
-      import type { RpcClient } from "@gsd-build/rpc-client";
-      import type { SdkAgentEvent, RpcCostUpdateEvent } from "@gsd-build/rpc-client";
+      import type { RpcClient } from "@opengsd/rpc-client";
+      import type { SdkAgentEvent, RpcCostUpdateEvent } from "@opengsd/rpc-client";
     `),
     2,
   );
   assert.equal(
-    countLegacyContractImports('import type { RpcClientOptions } from "@gsd-build/rpc-client";'),
+    countLegacyContractImports('import type { RpcClientOptions } from "@opengsd/rpc-client";'),
     0,
   );
 });
@@ -433,7 +433,7 @@ async function writeContractsSurfaceFixtures(root: string): Promise<void> {
   ];
   for (const file of files) {
     await mkdir(dirname(join(root, file)), { recursive: true });
-    await writeFile(join(root, file), 'import type { RpcCommand } from "@gsd-build/contracts";\n');
+    await writeFile(join(root, file), 'import type { RpcCommand } from "@opengsd/contracts";\n');
   }
 }
 

@@ -3,7 +3,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { BashResult, SessionStats } from "@gsd-build/contracts";
+import type { BashResult, SessionStats } from "@opengsd/contracts";
 import {
 	formatSessionStatsLines,
 	getBashExitCode,

@@ -33,11 +33,11 @@ function assertContractsBefore(scriptName: string, laterCommand: string): void {
 	assert.ok(script, `${scriptName} script must exist`);
 	const contractsIndex = script.indexOf("npm run build:contracts");
 	const laterIndex = script.indexOf(laterCommand);
-	assert.ok(contractsIndex >= 0, `${scriptName} must build @gsd-build/contracts`);
+	assert.ok(contractsIndex >= 0, `${scriptName} must build @opengsd/contracts`);
 	assert.ok(laterIndex >= 0, `${scriptName} must include ${laterCommand}`);
 	assert.ok(
 		contractsIndex < laterIndex,
-		`${scriptName} must build @gsd-build/contracts before ${laterCommand}`,
+		`${scriptName} must build @opengsd/contracts before ${laterCommand}`,
 	);
 }
 

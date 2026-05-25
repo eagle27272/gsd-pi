@@ -2,7 +2,7 @@
 /**
  * link-workspace-packages.cjs
  *
- * Creates node_modules/@gsd/* and node_modules/@gsd-build/* symlinks pointing
+ * Creates node_modules/@gsd/* and node_modules/@opengsd/* symlinks pointing
  * to shipped packages/* directories.
  *
  * During development, npm workspaces creates these automatically. But in the
@@ -22,7 +22,7 @@ const { getLinkablePackages, REPO_ROOT } = require('./lib/workspace-manifest.cjs
 
 const scopeDirs = {
   '@gsd': join(REPO_ROOT, 'node_modules', '@gsd'),
-  '@gsd-build': join(REPO_ROOT, 'node_modules', '@gsd-build'),
+  '@opengsd': join(REPO_ROOT, 'node_modules', '@opengsd'),
 }
 
 for (const scopeDir of Object.values(scopeDirs)) {

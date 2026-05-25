@@ -36,14 +36,14 @@ describe("workspace manifest (live project)", () => {
 
 		const names = packages.map((p: { packageName: string }) => p.packageName).sort();
 		assert.deepEqual(names, [
-			"@gsd-build/contracts",
-			"@gsd-build/mcp-server",
-			"@gsd-build/rpc-client",
 			"@gsd/native",
 			"@gsd/pi-agent-core",
 			"@gsd/pi-ai",
 			"@gsd/pi-coding-agent",
 			"@gsd/pi-tui",
+			"@opengsd/contracts",
+			"@opengsd/mcp-server",
+			"@opengsd/rpc-client",
 		]);
 
 		for (const pkg of packages) {
@@ -161,9 +161,9 @@ describe("verify-workspace-coverage CI gate", () => {
 				"src/index.test.ts": "import test from 'node:test'; test('ok', () => {});",
 			});
 			writePackage("pkg-b", {
-				name: "@gsd-build/pkg-b",
+				name: "@opengsd/pkg-b",
 				version: "1.0.0",
-				gsd: { linkable: true, scope: "@gsd-build", name: "pkg-b" },
+				gsd: { linkable: true, scope: "@opengsd", name: "pkg-b" },
 			}, {
 				"src/thing.test.js": "",
 			});
@@ -177,7 +177,7 @@ describe("verify-workspace-coverage CI gate", () => {
 
 		test("IGNORES non-linkable packages even if they have no tests", () => {
 			writePackage("internal-pkg", {
-				name: "@gsd-build/internal-pkg",
+				name: "@opengsd/internal-pkg",
 				version: "1.0.0",
 				// Intentionally no gsd.linkable — this package should be skipped entirely.
 			}, {

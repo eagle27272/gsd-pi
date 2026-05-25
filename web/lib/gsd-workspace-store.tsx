@@ -72,7 +72,7 @@ import type {
   WorkspaceSliceTarget,
   WorkspaceValidationIssue,
 } from "../../src/shared/workspace-types.ts"
-import type { RpcExtensionUIRequest } from "@gsd-build/contracts"
+import type { RpcExtensionUIRequest } from "@opengsd/contracts"
 
 export type WorkspaceStatus = "idle" | "loading" | "ready" | "error" | "unauthenticated"
 export type WorkspaceConnectionState =

@@ -418,6 +418,6 @@
     "typescript": "^5.7.0"
   },
   "dependencies": {
-    "@gsd-build/contracts": "file:../packages/contracts"
+    "@opengsd/contracts": "file:../packages/contracts"
   }
 }

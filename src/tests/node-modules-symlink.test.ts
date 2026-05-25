@@ -111,7 +111,7 @@ test("pnpm layout: merged node_modules contains entries from both hoisted and in
   // Create internal entries (workspace packages)
   mkdirSync(join(internal, "@gsd", "pi-ai"), { recursive: true });
   mkdirSync(join(internal, "@gsd", "pi-coding-agent"), { recursive: true });
-  mkdirSync(join(internal, "@gsd-build", "core"), { recursive: true });
+  mkdirSync(join(internal, "@opengsd", "core"), { recursive: true });
 
   reconcileMergedNodeModules(agentNodeModules, hoisted, internal);
 
@@ -123,7 +123,7 @@ test("pnpm layout: merged node_modules contains entries from both hoisted and in
   // Workspace packages resolve through internal symlinks
   assert.ok(existsSync(join(agentNodeModules, "@gsd")), "@gsd should resolve");
   assert.ok(existsSync(join(agentNodeModules, "@gsd", "pi-ai")), "@gsd/pi-ai should resolve");
-  assert.ok(existsSync(join(agentNodeModules, "@gsd-build")), "@gsd-build should resolve");
+  assert.ok(existsSync(join(agentNodeModules, "@opengsd")), "@opengsd should resolve");
 
   // Package root itself is not symlinked into its own merged dir
   assert.ok(
@@ -192,16 +192,16 @@ test("hasMissingWorkspaceScopes detects pnpm layout", (t) => {
     "npm-style: no missing workspace scopes",
   );
 
-  // pnpm-style: @gsd-build only in internal
-  mkdirSync(join(internal, "@gsd-build"), { recursive: true });
+  // pnpm-style: @opengsd only in internal
+  mkdirSync(join(internal, "@opengsd"), { recursive: true });
   assert.equal(
     hasMissingWorkspaceScopes(hoisted, internal),
     true,
-    "pnpm-style: @gsd-build missing from hoisted should be detected",
+    "pnpm-style: @opengsd missing from hoisted should be detected",
   );
 
-  // Non-@gsd scope missing from hoisted does NOT trigger detection —
-  // only @gsd* scopes are the contract signal.
+  // Non-GSD scope missing from hoisted does NOT trigger detection —
+  // only GSD workspace scopes are the contract signal.
   const tmp2 = mkdtempSync(join(tmpdir(), "gsd-pnpm-detect-non-gsd-"));
   t.after(() => rmSync(tmp2, { recursive: true, force: true }));
   const hoisted2 = join(tmp2, "hoisted");
@@ -211,7 +211,7 @@ test("hasMissingWorkspaceScopes detects pnpm layout", (t) => {
   assert.equal(
     hasMissingWorkspaceScopes(hoisted2, internal2),
     false,
-    "non-@gsd scope should not trigger missing-workspace detection",
+    "non-GSD scope should not trigger missing-workspace detection",
   );
 
   // Missing internal directory returns false (no layout to reason about)
@@ -246,7 +246,7 @@ test("merged node_modules marker uses fingerprint including directory entries", 
   assert.notEqual(fingerprint, fingerprintAfter, "fingerprint should change when a hoisted dep is added");
 
   // Fingerprint is also sensitive to internal changes
-  mkdirSync(join(internal, "@gsd-build"), { recursive: true });
+  mkdirSync(join(internal, "@opengsd"), { recursive: true });
   const fingerprintAfterInternal = mergedFingerprint(hoisted, internal);
   assert.notEqual(fingerprintAfter, fingerprintAfterInternal, "fingerprint should change when an internal dep is added");
 

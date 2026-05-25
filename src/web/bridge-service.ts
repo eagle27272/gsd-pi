@@ -14,7 +14,7 @@ import type {
   RpcExtensionUIResponse,
   RpcResponse,
   RpcSessionState,
-} from "@gsd-build/contracts";
+} from "@opengsd/contracts";
 import type {
   WorkspaceIndex as GSDWorkspaceIndex,
   WorkspaceMilestoneTarget as GSDWorkspaceMilestoneTarget,

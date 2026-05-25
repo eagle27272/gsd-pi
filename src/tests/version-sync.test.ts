@@ -52,10 +52,10 @@ function createFixture(): string {
   writeJson(root, "packages/pi-coding-agent/package.json", {
     name: "@gsd/pi-coding-agent",
     version: "1.0.0",
-    dependencies: { "@gsd-build/contracts": "^1.0.0" },
+    dependencies: { "@opengsd/contracts": "^1.0.0" },
   });
   writeJson(root, "packages/contracts/package.json", {
-    name: "@gsd-build/contracts",
+    name: "@opengsd/contracts",
     version: "1.0.0",
   });
   writeJson(root, "pkg/package.json", { name: "@glittercowboy/gsd", version: "1.0.0" });
@@ -108,7 +108,7 @@ test("verifyVersionSync reports every release-owned surface that drifts from roo
   assert.match(issues.join("\n"), /packages\/pi-coding-agent\/package\.json version is 1\.0\.0, expected 2\.0\.0/);
   assert.match(
     issues.join("\n"),
-    /packages\/pi-coding-agent\/package\.json dependencies\.@gsd-build\/contracts is \^1\.0\.0, expected \^2\.0\.0/,
+    /packages\/pi-coding-agent\/package\.json dependencies\.@opengsd\/contracts is \^1\.0\.0, expected \^2\.0\.0/,
   );
   assert.match(issues.join("\n"), /native\/Cargo\.toml workspace package version is 1\.0\.0, expected 2\.0\.0/);
   assert.match(issues.join("\n"), /native\/Cargo\.lock gsd-engine version is 1\.0\.0, expected 2\.0\.0/);
@@ -125,7 +125,7 @@ test("syncVersionSurfaces updates package, native, and bridge versions together"
   assert.equal(readJson<{ version: string }>(root, "pkg/package.json").version, "2.1.0-dev.abc123");
   assert.equal(
     readJson<{ dependencies: Record<string, string> }>(root, "packages/pi-coding-agent/package.json").dependencies[
-      "@gsd-build/contracts"
+      "@opengsd/contracts"
     ],
     "^2.1.0-dev.abc123",
   );

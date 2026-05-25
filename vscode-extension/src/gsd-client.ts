@@ -10,12 +10,12 @@ import type {
 	RpcSlashCommand,
 	SessionStats,
 	ThinkingLevel,
-} from "@gsd-build/contracts" with { "resolution-mode": "import" };
+} from "@opengsd/contracts" with { "resolution-mode": "import" };
 import { buildGsdClientSpawnPlan } from "./gsd-client-spawn.js";
 
 /**
  * Mirrors the RPC command/response protocol from the GSD agent.
- * Shared command and response payloads come from @gsd-build/contracts.
+ * Shared command and response payloads come from @opengsd/contracts.
  */
 export type { BashResult, ModelInfo, SessionStats, ThinkingLevel };
 export type SlashCommand = RpcSlashCommand;

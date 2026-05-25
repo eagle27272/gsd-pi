@@ -1,11 +1,11 @@
 {
-  "name": "@gsd-build/contracts",
+  "name": "@opengsd/contracts",
   "version": "1.0.2",
   "description": "Shared public contracts for GSD workspace boundaries",
   "license": "MIT",
   "gsd": {
     "linkable": true,
-    "scope": "@gsd-build",
+    "scope": "@opengsd",
     "name": "contracts"
   },
   "repository": {

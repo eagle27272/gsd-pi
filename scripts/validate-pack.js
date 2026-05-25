@@ -51,7 +51,7 @@ try {
   mkdirSync(npmCacheDir, { recursive: true });
 
   // --- Guard: @gsd/* workspace packages must not have @gsd/* cross-deps ---
-  // (@gsd-build/* packages CAN depend on each other — e.g., mcp-server depends
+  // (@opengsd/* packages CAN depend on each other — e.g., mcp-server depends
   // on rpc-client — because they are both published to the registry.)
   console.log('==> Checking workspace packages for @gsd/* cross-deps...');
   let crossFailed = false;

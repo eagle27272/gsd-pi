@@ -25,10 +25,10 @@ const PLATFORM_PACKAGE_DIRS = [
 ];
 
 const INTERNAL_PACKAGE_NAMES = new Set([
-  "@gsd-build/contracts",
-  "@gsd-build/daemon",
-  "@gsd-build/mcp-server",
-  "@gsd-build/rpc-client",
+  "@opengsd/contracts",
+  "@opengsd/daemon",
+  "@opengsd/mcp-server",
+  "@opengsd/rpc-client",
   "@gsd/native",
   "@gsd/pi-agent-core",
   "@gsd/pi-ai",

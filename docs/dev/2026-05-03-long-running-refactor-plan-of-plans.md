@@ -161,15 +161,15 @@ Baseline usage is documented in `docs/dev/refactor-baseline-runbook.md`.
 
 **Owned areas:**
 
-- New `packages/contracts` workspace package named `@gsd-build/contracts`.
+- New `packages/contracts` workspace package named `@opengsd/contracts`.
 - Runtime RPC protocol types.
-- `@gsd-build/rpc-client` compatibility exports when required by source tests.
+- `@opengsd/rpc-client` compatibility exports when required by source tests.
 - `src/headless*.ts`, `src/headless-events.ts`, `src/web/bridge-service.ts` only where source-owned runtime fixtures depend on them.
 - `src/resources/extensions/gsd/**` contract fixtures.
 
 **Implementation plan:**
 
-1. Create `@gsd-build/contracts` with:
+1. Create `@opengsd/contracts` with:
    - thinking levels including all currently supported levels
    - RPC command/event/response envelopes
    - session state and session stats
@@ -178,15 +178,15 @@ Baseline usage is documented in `docs/dev/refactor-baseline-runbook.md`.
    - MCP blocker request/response shapes
    - workflow tool registry metadata: canonical name, aliases, schema id, executor id, write policy, audit metadata
 2. Move only stable public DTOs first. Do not move implementation services into the contracts package.
-3. Make runtime RPC and `@gsd-build/rpc-client` import or re-export canonical contracts.
+3. Make runtime RPC and `@opengsd/rpc-client` import or re-export canonical contracts.
 4. Add golden JSONL fixtures for source-owned runtime/headless/auto behavior.
 5. Stop Phase 1A when `src` fixtures are stable. Defer MCP/web/VS Code/Studio/daemon DTO migration unless required by source tests.
 
 **Implemented so far:**
 
-- Created `packages/contracts` as `@gsd-build/contracts`.
+- Created `packages/contracts` as `@opengsd/contracts`.
 - Added canonical RPC constants and DTOs for commands, responses, v2 events, session state, session stats, bash results, and extension UI request/response payloads.
-- Migrated runtime RPC and `@gsd-build/rpc-client` to re-export the shared RPC contracts.
+- Migrated runtime RPC and `@opengsd/rpc-client` to re-export the shared RPC contracts.
 - Added Phase 1 fixture coverage with `src/tests/contracts-rpc-fixtures.test.ts`.
 - Updated the web parity contract test to assert retry state through the shared `RpcSessionState` type instead of reading RPC type source text.
 
@@ -496,7 +496,7 @@ Baseline usage is documented in `docs/dev/refactor-baseline-runbook.md`.
 2. Split web workspace store into store slices while preserving the public hook behavior.
 3. Make web routes and bridge services delegate to shared contracts and services instead of importing deep runtime internals.
 4. Move MCP workflow tool registration toward the shared workflow registry metadata.
-5. Move VS Code DTO parsing to `@gsd-build/contracts`.
+5. Move VS Code DTO parsing to `@opengsd/contracts`.
 6. Decide Studio role:
    - either wire it to the same contracts
    - or mark it explicitly as prototype/non-runtime until wired

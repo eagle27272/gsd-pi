@@ -26,7 +26,7 @@ npm ci                              # Install dependencies — MUST run first
 npm run secret-scan:install-hook    # Install git hooks — run once
 ```
 
-`npm ci` creates workspace symlinks in `node_modules/@gsd/*` and `node_modules/@gsd-build/*` pointing to `packages/`. These are required for builds and tests to resolve packages correctly.
+`npm ci` creates workspace symlinks in `node_modules/@gsd/*` and `node_modules/@opengsd/*` pointing to `packages/`. These are required for builds and tests to resolve packages correctly.
 
 Run `npm run secret-scan:install-hook` once after cloning. It installs a pre-commit hook that blocks commits containing hardcoded secrets or credentials. Conventional Commits format is validated by CI on push.
 
