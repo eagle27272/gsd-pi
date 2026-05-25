@@ -7,9 +7,10 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 
-import { verifyExpectedArtifact, hasImplementationArtifacts, resolveExpectedArtifactPath, diagnoseExpectedArtifact, diagnoseWorktreeIntegrityFailure, buildLoopRemediationSteps, writeBlockerPlaceholder, refreshRecoveryDbForArtifact } from "../auto-recovery.ts";
+import { verifyExpectedArtifact, hasImplementationArtifacts, resolveExpectedArtifactPath, diagnoseExpectedArtifact, diagnoseWorktreeIntegrityFailure, buildLoopRemediationSteps, writeBlockerPlaceholder, refreshRecoveryDbForArtifact, writeReactiveExecuteBlocker } from "../auto-recovery.ts";
 import { resolveMilestoneFile } from "../paths.ts";
-import { openDatabase, closeDatabase, insertMilestone, insertSlice, insertGateRow, insertTask, insertAssessment, getMilestone, getMilestoneCommitAttributionShas } from "../gsd-db.ts";
+import { openDatabase, closeDatabase, insertMilestone, insertSlice, insertGateRow, insertTask, insertAssessment, getMilestone, getMilestoneCommitAttributionShas, getTask } from "../gsd-db.ts";
+import { readEvents } from "../workflow-events.ts";
 import { clearParseCache } from "../files.ts";
 import { parseRoadmap } from "../parsers-legacy.ts";
 import { invalidateAllCaches } from "../cache.ts";
@@ -1659,6 +1660,69 @@ test("#4068: verifyExpectedArtifact parallel-research treats PARALLEL-BLOCKER as
       "#4068: PARALLEL-BLOCKER on disk must satisfy verifyExpectedArtifact so the loop does not re-dispatch",
     );
   } finally {
+    cleanup(base);
+  }
+});
+
+test("#57: verifyExpectedArtifact reactive-execute treats REACTIVE-BLOCKER as terminal completion", () => {
+  const base = makeTmpBase();
+  try {
+    const blockerPath = resolveExpectedArtifactPath("reactive-execute", "M001/S01/reactive+T01,T02", base);
+    assert.ok(blockerPath, "reactive blocker path resolves");
+    writeFileSync(blockerPath!, "# BLOCKER\n", "utf-8");
+
+    assert.equal(
+      verifyExpectedArtifact("reactive-execute", "M001/S01/reactive+T01,T02", base),
+      true,
+      "REACTIVE-BLOCKER must satisfy verification even when task summaries are missing",
+    );
+  } finally {
+    cleanup(base);
+  }
+});
+
+test("#57: writeReactiveExecuteBlocker reconciles batch task statuses and appends events", () => {
+  const base = makeTmpBase();
+  try {
+    openDatabase(join(base, ".gsd", "gsd.db"));
+    insertMilestone({ id: "M001", title: "Milestone", status: "active" });
+    insertSlice({ id: "S01", milestoneId: "M001", title: "Slice", status: "pending" });
+    insertTask({ id: "T01", milestoneId: "M001", sliceId: "S01", title: "One", status: "pending" });
+    insertTask({ id: "T02", milestoneId: "M001", sliceId: "S01", title: "Two", status: "pending" });
+    insertTask({ id: "T03", milestoneId: "M001", sliceId: "S01", title: "Three", status: "complete" });
+    writeFileSync(
+      join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T01-SUMMARY.md"),
+      "# T01 Summary\n",
+      "utf-8",
+    );
+    writeFileSync(
+      join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T03-SUMMARY.md"),
+      "# T03 Summary\n",
+      "utf-8",
+    );
+
+    const recovery = writeReactiveExecuteBlocker(
+      "M001/S01/reactive+T01,T02,T03",
+      base,
+      "verification retries exhausted",
+    );
+
+    assert.ok(recovery, "recovery should run with DB available");
+    assert.deepEqual(recovery!.completedTaskIds, ["T01"]);
+    assert.deepEqual(recovery!.skippedTaskIds, ["T02"]);
+    assert.equal(getTask("M001", "S01", "T01")?.status, "complete");
+    assert.equal(getTask("M001", "S01", "T02")?.status, "skipped");
+    assert.equal(getTask("M001", "S01", "T03")?.status, "complete");
+    assert.ok(existsSync(recovery!.blockerPath), "reactive blocker should be written");
+    const blocker = readFileSync(recovery!.blockerPath, "utf-8");
+    assert.match(blocker, /Summary present\*\*: T01, T03/);
+    assert.match(blocker, /Summary missing\*\*: T02/);
+
+    const events = readEvents(join(base, ".gsd", "event-log.jsonl"));
+    assert.ok(events.some((e) => e.cmd === "complete-task" && e.params.taskId === "T01" && e.trigger_reason === "reactive-execute-blocker-recovery"));
+    assert.ok(events.some((e) => e.cmd === "skip-task" && e.params.taskId === "T02" && e.trigger_reason === "reactive-execute-blocker-recovery"));
+  } finally {
+    closeDatabase();
     cleanup(base);
   }
 });

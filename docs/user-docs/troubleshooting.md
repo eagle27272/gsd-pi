@@ -66,6 +66,14 @@ After that, routine upgrades use `gsd upgrade`, `gsd update`, or `/gsd update` i
 
 **Fix:** Run `/gsd doctor` to repair state, then resume with `/gsd auto`. If the issue persists, check that the expected artifact file exists on disk.
 
+### Reactive execute writes `S##-REACTIVE-BLOCKER.md`
+
+**Symptoms:** A parallel `reactive-execute` batch finishes with a warning that GSD wrote a reactive blocker and advanced, with summary-present tasks marked complete and missing-summary tasks skipped.
+
+**Cause:** The batch exhausted artifact verification retries while one or more dispatched tasks were still missing `T##-SUMMARY.md`. Instead of pausing or re-dispatching the same parallel batch forever, GSD writes `S##-REACTIVE-BLOCKER.md`, reconciles any tasks that did write summaries as complete, marks missing-summary tasks skipped, and continues.
+
+**Fix:** Inspect the blocker file and skipped task list. If skipped work is still required, reopen or re-plan those tasks before depending on later slice or milestone artifacts.
+
 ### Auto mode stops with "Loop detected"
 
 **Cause:** The sliding-window detector found a repeated dispatch pattern that did not recover after the diagnostic retry. Missing expected artifacts usually surface through the bounded 3-attempt artifact verification retry path instead.

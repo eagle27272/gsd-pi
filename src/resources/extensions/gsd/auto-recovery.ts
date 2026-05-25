@@ -15,7 +15,7 @@ import { appendEvent } from "./workflow-events.js";
 import { atomicWriteSync } from "./atomic-write.js";
 import { clearParseCache } from "./files.js";
 import { parseRoadmap as parseLegacyRoadmap, parsePlan as parseLegacyPlan } from "./parsers-legacy.js";
-import { isDbAvailable, getTask, getSlice, getSliceTasks, getPendingGates, updateTaskStatus, updateSliceStatus, insertSlice, getMilestone, getMilestoneSlices, getLatestAssessmentByScope, updateMilestoneStatus, refreshOpenDatabaseFromDisk, getCompletedMilestoneTaskFileHints, getMilestoneCommitAttributionShas, recordMilestoneCommitAttribution } from "./gsd-db.js";
+import { isDbAvailable, getTask, getSlice, getSliceTasks, getPendingGates, updateTaskStatus, updateSliceStatus, insertSlice, getMilestone, getMilestoneSlices, getLatestAssessmentByScope, updateMilestoneStatus, refreshOpenDatabaseFromDisk, getCompletedMilestoneTaskFileHints, getMilestoneCommitAttributionShas, recordMilestoneCommitAttribution, transaction } from "./gsd-db.js";
 import { isValidationTerminal } from "./state.js";
 import { getErrorMessage } from "./error-utils.js";
 import { logWarning, logError } from "./workflow-logger.js";
@@ -786,6 +786,10 @@ export function verifyExpectedArtifact(
   if (unitType === "reactive-execute") {
     const { milestone: mid, slice: sid, task: batchPart } = parseUnitId(unitId);
     if (!mid || !sid || !batchPart) return false;
+    const blockerPath = resolveExpectedArtifactPath(unitType, unitId, base);
+    if (blockerPath && existsSync(blockerPath)) {
+      return true;
+    }
     const plusIdx = batchPart.indexOf("+");
     if (plusIdx === -1) {
       // Legacy format "reactive" without batch IDs — fall back to "any summary"
@@ -1069,6 +1073,126 @@ export function verifyExpectedArtifact(
   }
 
   return true;
+}
+
+export interface ReactiveExecuteBlockerRecovery {
+  blockerPath: string;
+  completedTaskIds: string[];
+  skippedTaskIds: string[];
+  unchangedTaskIds: string[];
+}
+
+/**
+ * Terminal recovery for a failed reactive-execute batch.
+ *
+ * Summary-present tasks are reconciled closed as complete; missing-summary
+ * tasks are closed as skipped. The slice-level blocker sentinel makes the
+ * failed batch terminal without fabricating per-task summaries.
+ */
+export function writeReactiveExecuteBlocker(
+  unitId: string,
+  base: string,
+  reason: string,
+): ReactiveExecuteBlockerRecovery | null {
+  if (!isDbAvailable()) return null;
+
+  const { milestone: mid, slice: sid, task: batchPart } = parseUnitId(unitId);
+  if (!mid || !sid || !batchPart) return null;
+
+  const plusIdx = batchPart.indexOf("+");
+  if (plusIdx === -1) return null;
+  const batchIds = batchPart.slice(plusIdx + 1).split(",").map((id) => id.trim()).filter(Boolean);
+  if (batchIds.length === 0) return null;
+
+  const blockerPath = resolveExpectedArtifactPath("reactive-execute", unitId, base);
+  if (!blockerPath) return null;
+
+  const tasksDir = resolveTasksDir(base, mid, sid);
+  const existingSummaries = new Set(
+    tasksDir
+      ? resolveTaskFiles(tasksDir, "SUMMARY").map((f) => f.replace(/-SUMMARY\.md$/i, "").toUpperCase())
+      : [],
+  );
+
+  const summaryPresent = batchIds.filter((tid) => existingSummaries.has(tid.toUpperCase()));
+  const summaryMissing = batchIds.filter((tid) => !existingSummaries.has(tid.toUpperCase()));
+  const completedTaskIds: string[] = [];
+  const skippedTaskIds: string[] = [];
+  const unchangedTaskIds: string[] = [];
+  const ts = new Date().toISOString();
+
+  transaction(() => {
+    for (const tid of summaryPresent) {
+      const task = getTask(mid, sid, tid);
+      if (!task || isClosedStatus(task.status)) {
+        unchangedTaskIds.push(tid);
+        continue;
+      }
+      updateTaskStatus(mid, sid, tid, "complete", ts);
+      completedTaskIds.push(tid);
+    }
+    for (const tid of summaryMissing) {
+      const task = getTask(mid, sid, tid);
+      if (!task || isClosedStatus(task.status)) {
+        unchangedTaskIds.push(tid);
+        continue;
+      }
+      updateTaskStatus(mid, sid, tid, "skipped", ts);
+      skippedTaskIds.push(tid);
+    }
+  });
+
+  const dir = dirname(blockerPath);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const content = [
+    "# BLOCKER — reactive-execute batch recovery",
+    "",
+    `Unit \`reactive-execute\` for \`${unitId}\` failed to produce all task summaries after verification retries were exhausted.`,
+    "",
+    `**Reason**: ${reason}`,
+    "",
+    `**Batch tasks**: ${batchIds.join(", ")}`,
+    `**Summary present**: ${summaryPresent.length > 0 ? summaryPresent.join(", ") : "none"}`,
+    `**Summary missing**: ${summaryMissing.length > 0 ? summaryMissing.join(", ") : "none"}`,
+    `**Marked complete**: ${completedTaskIds.length > 0 ? completedTaskIds.join(", ") : "none"}`,
+    `**Marked skipped**: ${skippedTaskIds.length > 0 ? skippedTaskIds.join(", ") : "none"}`,
+    "",
+    "This placeholder was written by auto-mode so the pipeline can advance without re-dispatching the same reactive batch.",
+    "Review skipped tasks before relying on downstream artifacts.",
+  ].join("\n");
+  writeFileSync(blockerPath, content, "utf-8");
+
+  for (const tid of completedTaskIds) {
+    try {
+      appendEvent(base, {
+        cmd: "complete-task",
+        params: { milestoneId: mid, sliceId: sid, taskId: tid },
+        ts,
+        actor: "system",
+        trigger_reason: "reactive-execute-blocker-recovery",
+      });
+    } catch (e) {
+      logWarning("recovery", `appendEvent failed for reactive complete recovery: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  for (const tid of skippedTaskIds) {
+    try {
+      appendEvent(base, {
+        cmd: "skip-task",
+        params: { milestoneId: mid, sliceId: sid, taskId: tid },
+        ts,
+        actor: "system",
+        trigger_reason: "reactive-execute-blocker-recovery",
+      });
+    } catch (e) {
+      logWarning("recovery", `appendEvent failed for reactive skip recovery: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  clearPathCache();
+  clearParseCache();
+
+  return { blockerPath, completedTaskIds, skippedTaskIds, unchangedTaskIds };
 }
 
 /**

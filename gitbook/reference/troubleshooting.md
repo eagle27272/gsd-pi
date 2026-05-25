@@ -18,6 +18,12 @@ The same unit dispatches repeatedly.
 
 **Fix:** Run `/gsd doctor` to repair state, then `/gsd auto`. If it persists, check that the expected artifact file exists on disk.
 
+### Reactive execute writes `S##-REACTIVE-BLOCKER.md`
+
+A parallel `reactive-execute` batch exhausted artifact retries while one or more dispatched tasks were still missing `T##-SUMMARY.md`.
+
+**Fix:** Inspect `S##-REACTIVE-BLOCKER.md` and the skipped task list. GSD marks tasks with summaries complete, marks missing-summary tasks skipped, and advances instead of pausing or re-dispatching the same batch.
+
 ### Auto mode stops with "Loop detected"
 
 A unit failed to produce its expected artifact twice.

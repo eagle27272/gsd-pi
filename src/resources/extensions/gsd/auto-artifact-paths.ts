@@ -154,8 +154,9 @@ export function resolveExpectedArtifactPath(
       // Gate evaluate writes to DB quality_gates table — verified via state derivation
       return null;
     case "reactive-execute":
-      // Reactive execute produces multiple task summaries — verified separately
-      return null;
+      // Reactive execute normally produces multiple task summaries. On terminal
+      // batch recovery, the engine writes a slice-level blocker sentinel.
+      return mid && sid ? resolveSliceArtifactPath(base, mid, sid, "REACTIVE-BLOCKER") : null;
     default:
       return null;
   }

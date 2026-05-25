@@ -43,6 +43,7 @@ import {
   writeBlockerPlaceholder,
   diagnoseExpectedArtifact,
   diagnoseWorktreeIntegrityFailure,
+  writeReactiveExecuteBlocker,
 } from "./auto-recovery.js";
 import { regenerateIfMissing } from "./workflow-projections.js";
 import { WorktreeStateProjection } from "./worktree-state-projection.js";
@@ -1804,6 +1805,32 @@ export async function postUnitPreVerification(pctx: PostUnitContext, opts?: PreV
             s.lastUnitAgentEndMessages,
           );
           if (attempt > MAX_ARTIFACT_VERIFICATION_RETRIES) {
+            if (s.currentUnit.type === "reactive-execute") {
+              const recovery = writeReactiveExecuteBlocker(
+                s.currentUnit.id,
+                verificationBasePath,
+                failureDetails,
+              );
+              if (recovery) {
+                s.pendingVerificationRetry = null;
+                s.verificationRetryCount.delete(retryKey);
+                s.verificationRetryFailureHashes.delete(retryKey);
+                invalidateAllCaches();
+                debugLog("postUnit", {
+                  phase: "reactive-execute-blocker-recovery",
+                  unitType: s.currentUnit.type,
+                  unitId: s.currentUnit.id,
+                  blockerPath: recovery.blockerPath,
+                  completedTaskIds: recovery.completedTaskIds,
+                  skippedTaskIds: recovery.skippedTaskIds,
+                });
+                ctx.ui.notify(
+                  `${failureDetails} Wrote reactive blocker and advanced: ${recovery.completedTaskIds.length} complete, ${recovery.skippedTaskIds.length} skipped.`,
+                  "warning",
+                );
+                return "continue";
+              }
+            }
             s.exhaustedVerificationUnits.add(retryKey);
             debugLog("postUnit", { phase: "artifact-verify-exhausted", unitType: s.currentUnit.type, unitId: s.currentUnit.id, attempt });
             ctx.ui.notify(

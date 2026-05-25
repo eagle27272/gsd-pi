@@ -1239,6 +1239,7 @@ export const DISPATCH_RULES: DispatchRule[] = [
 
       const sid = state.activeSlice.id;
       const sTitle = state.activeSlice.title;
+      if (resolveSliceFile(basePath, mid, sid, "REACTIVE-BLOCKER")) return null;
       const maxParallel = reactiveConfig?.max_parallel ?? 2;
       const subagentModel = reactiveConfig?.subagent_model ?? resolveModelWithFallbacksForUnit("subagent")?.primary;
       // Default-on safety threshold: only activate reactive dispatch when at

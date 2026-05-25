@@ -22,6 +22,12 @@ It checks file structure, referential integrity, completion state consistency, g
     **Fix:** Run `/gsd doctor` to repair state, then `/gsd auto`.
   </Accordion>
 
+  <Accordion title="Reactive execute writes S##-REACTIVE-BLOCKER.md">
+    **Cause:** A parallel `reactive-execute` batch exhausted artifact retries while one or more dispatched tasks were still missing `T##-SUMMARY.md`.
+
+    **Fix:** Inspect `S##-REACTIVE-BLOCKER.md` and the skipped task list. GSD marks tasks with summaries complete, marks missing-summary tasks skipped, and advances instead of pausing or re-dispatching the same batch.
+  </Accordion>
+
   <Accordion title="Auto mode stops with 'Loop detected'">
     **Cause:** A unit failed to produce its expected artifact twice in a row.
 
