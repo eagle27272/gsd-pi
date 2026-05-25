@@ -21,7 +21,9 @@
     }
   },
   "bin": {
-    "gsd-daemon": "./dist/cli.js"
+    "gsd-daemon": "./dist/cli.js",
+    "gsd-mcp": "./dist/mcp-cli.js",
+    "gsd-mcp-runtime": "./dist/mcp-runtime-cli.js"
   },
   "scripts": {
     "build": "tsc",

@@ -6,7 +6,7 @@ import { resolveConfigPath, loadConfig } from './config.js';
 import { Logger } from './logger.js';
 import { Daemon } from './daemon.js';
 import { install, uninstall, status } from './launchd.js';
-import { clearCloudConfig, exchangePairingCode, redactedCloudStatus, saveCloudConfig } from './cloud-config.js';
+import { handleCloudRuntimeCommand } from './cloud-cli.js';
 
 const USAGE = `Usage: gsd-daemon [options]
        gsd-daemon cloud status [--config <path>]
@@ -25,7 +25,10 @@ Options:
 
 async function main(): Promise<void> {
   if (process.argv[2] === 'cloud') {
-    await handleCloudCommand(process.argv.slice(3));
+    await handleCloudRuntimeCommand(process.argv.slice(3), {
+      binaryName: 'gsd-daemon',
+      nestedCommandName: 'cloud',
+    });
     return;
   }
 
@@ -97,77 +100,6 @@ async function main(): Promise<void> {
 
   const daemon = new Daemon(config, logger);
   await daemon.start();
-}
-
-async function handleCloudCommand(argv: string[]): Promise<void> {
-  const command = argv[0];
-  const { values } = parseArgs({
-    args: argv.slice(1),
-    options: {
-      config: { type: 'string', short: 'c' },
-      gateway: { type: 'string' },
-      code: { type: 'string' },
-      'runtime-name': { type: 'string' },
-      verbose: { type: 'boolean', short: 'v', default: false },
-      help: { type: 'boolean', short: 'h', default: false },
-    },
-    strict: true,
-  });
-
-  if (values.help || !command) {
-    process.stdout.write(USAGE);
-    process.exit(0);
-  }
-
-  const configPath = resolveConfigPath(values.config);
-  if (command === 'status') {
-    process.stdout.write(`${JSON.stringify(redactedCloudStatus(loadConfig(configPath)), null, 2)}\n`);
-    return;
-  }
-
-  if (command === 'disconnect') {
-    clearCloudConfig(configPath);
-    process.stdout.write('gsd-daemon: cloud runtime disconnected locally.\n');
-    return;
-  }
-
-  if (command === 'pair') {
-    if (!values.gateway || !values.code) {
-      throw new Error('cloud pair requires --gateway and --code');
-    }
-    const runtimeName = values['runtime-name'];
-    const result = await exchangePairingCode({
-      gatewayUrl: values.gateway,
-      code: values.code,
-      runtimeName,
-    });
-    saveCloudConfig(configPath, {
-      gateway_url: values.gateway,
-      device_token: result.deviceToken,
-      runtime_id: result.runtimeId,
-      ...(runtimeName ? { runtime_name: runtimeName } : {}),
-      enabled: true,
-    });
-    process.stdout.write(`gsd-daemon: paired cloud runtime ${result.runtimeId}.\n`);
-    return;
-  }
-
-  if (command === 'connect') {
-    const config = loadConfig(configPath);
-    if (!config.cloud?.device_token || !config.cloud.runtime_id) {
-      throw new Error('cloud runtime is not paired; run `gsd-daemon cloud pair` first');
-    }
-    const logger = new Logger({
-      filePath: config.log.file,
-      level: config.log.level,
-      verbose: values.verbose,
-    });
-    const daemon = new Daemon(config, logger);
-    await daemon.start();
-    return;
-  }
-
-  throw new Error(`Unknown cloud command: ${command}`);
 }
 
 main().catch((err: unknown) => {

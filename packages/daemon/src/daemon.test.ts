@@ -534,6 +534,17 @@ describe('CLI integration', () => {
     assert.ok(result.includes('--verbose'));
   });
 
+  it('gsd-mcp help prints execution-focused usage', () => {
+    const result = execFileSync(
+      process.execPath,
+      [join(__dirname, 'mcp-cli.js'), '--help'],
+      { encoding: 'utf-8', timeout: 5000 },
+    );
+    assert.ok(result.includes('Usage: gsd-mcp'));
+    assert.ok(result.includes('pair --gateway'));
+    assert.ok(result.includes('connect'));
+  });
+
   it('starts, logs to file, and exits cleanly on SIGTERM', { timeout: 15000 }, async () => {
     const dir = tmpDir();
     cleanupDirs.push(dir);
