@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { WebSocketServer } from "ws";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createGatewayMcpServer } from "./mcp.js";
-import { extractBearerToken, InMemoryAuthStore } from "./auth-store.js";
+import { extractBearerToken, FileAuthStore, InMemoryAuthStore } from "./auth-store.js";
 import { RuntimeRegistry } from "./runtime-registry.js";
 
 export interface GatewayServerOptions {
@@ -11,12 +11,16 @@ export interface GatewayServerOptions {
   host?: string;
   userToken?: string;
   userId?: string;
+  authStorePath?: string;
 }
 
 export function createGatewayServer(options: GatewayServerOptions = {}) {
   const userId = options.userId ?? "local-user";
   const userToken = options.userToken ?? process.env.GSD_CLOUD_USER_TOKEN ?? "dev-user-token";
-  const auth = new InMemoryAuthStore({ token: userToken, userId });
+  const authStorePath = options.authStorePath ?? process.env.GSD_CLOUD_AUTH_STORE_PATH;
+  const auth = authStorePath
+    ? new FileAuthStore(authStorePath, { token: userToken, userId })
+    : new InMemoryAuthStore({ token: userToken, userId });
   const registry = new RuntimeRegistry();
   const wss = new WebSocketServer({ noServer: true });
 
