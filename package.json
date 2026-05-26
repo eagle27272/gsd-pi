@@ -117,6 +117,7 @@
     "test:e2e:docker": "node --experimental-strip-types --test \"tests/e2e/docker/**/*.e2e.test.ts\""
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.2.83",
     "@anthropic-ai/sdk": "^0.90.0",
     "@anthropic-ai/vertex-sdk": "^0.14.4",
     "@aws-sdk/client-bedrock-runtime": "^3.983.0",
@@ -161,7 +162,6 @@
     "typescript": "^5.9.3"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.2.83",
     "@opengsd/engine-darwin-arm64": "1.0.2",
     "@opengsd/engine-darwin-x64": "1.0.2",
     "@opengsd/engine-linux-arm64-gnu": "1.0.2",
