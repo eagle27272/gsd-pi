@@ -246,6 +246,18 @@ test("complete-slice prompt keeps source fixes in execution units", () => {
   assert.doesNotMatch(prompt, /Fix failures before marking done/i);
 });
 
+test("complete-slice prompt binds all file operations to workingDirectory", () => {
+  const prompt = readPrompt("complete-slice");
+  assert.match(prompt, /Your working directory is `\{\{workingDirectory\}\}`/);
+  assert.match(prompt, /All file reads, writes, and shell commands MUST operate relative to this directory/);
+});
+
+test("complete-slice prompt disambiguates task-specific regressions from inherited failures", () => {
+  const prompt = readPrompt("complete-slice");
+  assert.match(prompt, /pre-task verification evidence shows it was absent before that task ran/i);
+  assert.match(prompt, /failures present before the task ran/i);
+});
+
 test("complete-slice prompt instructs writing summary and UAT files before tool call", () => {
   const prompt = readPrompt("complete-slice");
   assert.match(prompt, /\{\{sliceSummaryPath\}\}/);
