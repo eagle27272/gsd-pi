@@ -1,5 +1,5 @@
 // Open GSD - GitHub workflow runner contract tests.
-// File Purpose: Ensure active workflows use GitHub-hosted runners and cache actions.
+// File Purpose: Ensure active workflows use approved runners and cache actions.
 
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
@@ -8,10 +8,13 @@ import { test } from "node:test";
 import YAML from "yaml";
 
 const WORKFLOW_DIR = ".github/workflows";
-const GITHUB_HOSTED_RUNNERS = new Set([
+const APPROVED_RUNNERS = new Set([
   "ubuntu-latest",
   "windows-latest",
   "macos-14",
+  "blacksmith-4vcpu-ubuntu-2404",
+  "blacksmith-4vcpu-ubuntu-2404-arm",
+  "blacksmith-4vcpu-windows-2025",
 ]);
 
 function loadWorkflows() {
@@ -37,7 +40,7 @@ function visit(value, onValue) {
   }
 }
 
-test("active workflows use GitHub-hosted runners", () => {
+test("active workflows use approved runners", () => {
   for (const workflow of loadWorkflows()) {
     const jobs = workflow.document.jobs ?? {};
     for (const [jobName, job] of Object.entries(jobs)) {
@@ -45,8 +48,8 @@ test("active workflows use GitHub-hosted runners", () => {
       if (!runner || String(runner).includes("${{")) continue;
 
       assert.ok(
-        GITHUB_HOSTED_RUNNERS.has(runner),
-        `${workflow.path} job ${jobName} uses non-hosted runner ${runner}`,
+        APPROVED_RUNNERS.has(runner),
+        `${workflow.path} job ${jobName} uses unapproved runner ${runner}`,
       );
     }
   }
@@ -107,4 +110,5 @@ test("native Linux ARM64 build matrix uses a Rust target triple", () => {
   const linuxArm64 = entries.find((entry) => entry.platform === "linux-arm64-gnu");
 
   assert.equal(linuxArm64.target, "aarch64-unknown-linux-gnu");
+  assert.equal(linuxArm64.os, "blacksmith-4vcpu-ubuntu-2404-arm");
 });

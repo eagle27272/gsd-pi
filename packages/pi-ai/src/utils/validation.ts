@@ -2,6 +2,7 @@ import { Compile } from "typebox/compile";
 import type { TLocalizedValidationError } from "typebox/error";
 import { Value } from "typebox/value";
 import type { Tool, ToolCall } from "../types.js";
+import { normalizeToolArguments } from "./normalize-tool-arguments.js";
 
 const validatorCache = new WeakMap<object, ReturnType<typeof Compile>>();
 const TYPEBOX_KIND = Symbol.for("TypeBox.Kind");
@@ -307,6 +308,8 @@ export function validateToolArguments(tool: Tool, toolCall: ToolCall): any {
 			}
 		}
 	}
+
+	normalizeToolArguments(toolCall.name, args);
 
 	if (validator.Check(args)) {
 		return args;

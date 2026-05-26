@@ -277,16 +277,30 @@ jobs:
     if: >-
       github.event_name == 'pull_request' &&
       needs.fast-gates.outputs.heavy-code-changed == 'true'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout repository without GITHUB_TOKEN
+        shell: bash
+        env:
+          FETCH_DEPTH: '0'
+        run: |
+          set -euo pipefail
+          git init "$GITHUB_WORKSPACE"
+          cd "$GITHUB_WORKSPACE"
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          git -c protocol.version=2 fetch --no-tags --prune origin \
+            '+refs/heads/*:refs/remotes/origin/*' \
+            '+refs/tags/*:refs/tags/*' \
+            "+${GITHUB_REF}:refs/checkout-ref"
+          git checkout --force --detach "$GITHUB_SHA"
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '24'
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci

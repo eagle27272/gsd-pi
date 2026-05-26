@@ -1112,11 +1112,50 @@ export function checkoutBranchWithStashGuard(
     try {
       popStashByRef(basePath, stashMarker);
     } catch (popErr) {
+      const alreadyExists = stashAlreadyExistsFilesFromError(popErr);
+      const gsdAlreadyExists = alreadyExists.filter((f) => f.startsWith(".gsd/"));
+      const nonGsdAlreadyExists = alreadyExists.filter((f) => !f.startsWith(".gsd/"));
+      const stashPopMessage = popErr instanceof Error ? popErr.message : String(popErr);
+      const isUntrackedRestoreFailure = stashPopMessage.includes("could not restore untracked files from stash");
+      const stashRefForDrop = stashRefFromError(popErr);
+      const nonGsdUnmerged = nativeConflictFiles(basePath).filter((f) => !f.startsWith(".gsd/"));
+
+      if (
+        isUntrackedRestoreFailure &&
+        gsdAlreadyExists.length > 0 &&
+        nonGsdAlreadyExists.length === 0 &&
+        nonGsdUnmerged.length === 0
+      ) {
+        for (const f of gsdAlreadyExists) {
+          execFileSync("git", ["checkout", "HEAD", "--", f], {
+            cwd: basePath,
+            stdio: ["ignore", "pipe", "pipe"],
+            encoding: "utf-8",
+          });
+          nativeAddPaths(basePath, [f]);
+        }
+
+        if (stashRefForDrop) {
+          try {
+            execFileSync("git", ["stash", "drop", stashRefForDrop], {
+              cwd: basePath,
+              stdio: ["ignore", "pipe", "pipe"],
+              encoding: "utf-8",
+            });
+          } catch (err) { /* stash may already be consumed */
+            logWarning("worktree", `git stash drop failed: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        } else {
+          logWarning("worktree", "recorded stash entry could not be resolved; skipping automatic drop");
+        }
+        return;
+      }
+
       const msg = popErr instanceof Error ? popErr.message : String(popErr);
       const wrapped = new Error(
         `checkout to '${branch}' succeeded but stash restore failed; working tree changes remain in the stash list. Original error: ${msg}`,
       );
-      const ref = (popErr as { stashRef?: string } | null)?.stashRef;
+      const ref = stashRefForDrop;
       if (ref) (wrapped as { stashRef?: string }).stashRef = ref;
       throw wrapped;
     }

@@ -27,6 +27,7 @@ export class AssistantMessageComponent extends Container {
 	private timestampFormat: TimestampFormat;
 	private range?: ContentRange;
 	private showMetadata: boolean;
+	private connectedToUser: boolean;
 	private renderCache = new RenderCache();
 	private renderVersion = 0;
 
@@ -36,6 +37,7 @@ export class AssistantMessageComponent extends Container {
 		markdownTheme: MarkdownTheme = getMarkdownTheme(),
 		timestampFormat: TimestampFormat = "date-time-iso",
 		range?: ContentRange,
+		connectedToUser = false,
 	) {
 		super();
 
@@ -43,6 +45,7 @@ export class AssistantMessageComponent extends Container {
 		this.markdownTheme = markdownTheme;
 		this.timestampFormat = timestampFormat;
 		this.range = range;
+		this.connectedToUser = connectedToUser;
 		// No range = legacy full-message rendering; show metadata by default.
 		// Ranged (interleaved) instances start with metadata hidden; chat-controller
 		// calls setShowMetadata(true) on the last segment at message_end.
@@ -180,7 +183,7 @@ export class AssistantMessageComponent extends Container {
 		if (cached) return cached;
 
 		const frameWidth = Math.max(20, width);
-		const contentWidth = Math.max(1, frameWidth - 2);
+		const contentWidth = Math.max(1, frameWidth - 3);
 		const lines = super.render(contentWidth);
 		const metaParts = [];
 		if (this.lastMessage?.model) metaParts.push(this.lastMessage.model);
@@ -190,6 +193,7 @@ export class AssistantMessageComponent extends Container {
 		const rendered = renderAssistantRail(lines, frameWidth, {
 			label: "GSD",
 			meta: metaParts.length > 0 ? `· ${metaParts.join(" · ")}` : undefined,
+			connected: this.connectedToUser,
 		});
 		return this.renderCache.set(`${width}:${this.renderVersion}`, rendered.length > 0 ? ["", ...rendered] : rendered);
 	}
