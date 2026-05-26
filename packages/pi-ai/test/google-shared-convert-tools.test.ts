@@ -441,6 +441,50 @@ describe("google-shared convertTools", () => {
 });
 
 describe("google-shared convertMessages", () => {
+	it("adds the Gemini 3 unsigned function call thought-signature sentinel", () => {
+		const model = makeGoogleModel({
+			id: "gemini-3-pro",
+		});
+		const context: Context = {
+			messages: [
+				{
+					role: "assistant",
+					content: [
+						{
+							type: "toolCall",
+							id: "call-1",
+							name: "read_file",
+							arguments: { path: "README.md" },
+						},
+					],
+					api: "anthropic-messages",
+					provider: "google-antigravity",
+					model: "claude-sonnet-4-5",
+					usage: {
+						input: 0,
+						output: 0,
+						cacheRead: 0,
+						cacheWrite: 0,
+						totalTokens: 0,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					},
+					stopReason: "toolUse",
+					timestamp: 0,
+				},
+			],
+		};
+
+		const contents = convertMessages(model, context);
+
+		expect(contents[0]?.parts?.[0]).toMatchObject({
+			functionCall: {
+				name: "read_file",
+				args: { path: "README.md" },
+			},
+			thoughtSignature: "skip_thought_signature_validator",
+		});
+	});
+
 	it("keeps tool result images outside functionResponse for non-Gemini models", () => {
 		const model = makeGoogleModel({
 			id: "claude-sonnet-4-5",

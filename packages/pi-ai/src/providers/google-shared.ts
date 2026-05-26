@@ -50,6 +50,8 @@ export function retainThoughtSignature(existing: string | undefined, incoming: s
 
 // Thought signatures must be base64 for Google APIs (TYPE_BYTES).
 const base64SignaturePattern = /^[A-Za-z0-9+/]+={0,2}$/;
+// Google-documented sentinel for unsigned Gemini 3 function calls.
+const SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator";
 
 function isValidThoughtSignature(signature: string | undefined): boolean {
 	if (!signature) return false;
@@ -159,13 +161,17 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 					}
 				} else if (block.type === "toolCall") {
 					const thoughtSignature = resolveThoughtSignature(isSameProviderAndModel, block.thoughtSignature);
+					// Gemini 3 requires a signature on function calls when thinking is enabled.
+					const effectiveSignature =
+						thoughtSignature ??
+						(getGeminiMajorVersion(model.id) === 3 ? SKIP_THOUGHT_SIGNATURE_VALIDATOR : undefined);
 					const part: Part = {
 						functionCall: {
 							name: block.name,
 							args: block.arguments ?? {},
 							...(requiresToolCallId(model.id) ? { id: block.id } : {}),
 						},
-						...(thoughtSignature && { thoughtSignature }),
+						...(effectiveSignature && { thoughtSignature: effectiveSignature }),
 					};
 					parts.push(part);
 				}
