@@ -121,7 +121,7 @@ export function buildWelcomeScreenLines(opts: WelcomeScreenOptions): string[] {
 
   // Narrow terminal fallback
   if (termWidth < 70) {
-    return ['', `  Get Shit Done v${version}`, `  ${shortCwd}`, '']
+    return ['', `  Git Ship Done v${version}`, `  ${shortCwd}`, '']
   }
 
   const toolParts: string[] = []
@@ -139,7 +139,7 @@ export function buildWelcomeScreenLines(opts: WelcomeScreenOptions): string[] {
   const divider = '   '
   const panelWidth = innerWidth - logoWidth - visLen(divider)
   if (panelWidth < 34) {
-    return ['', `  Get Shit Done v${version}`, `  ${shortCwd}`, '']
+    return ['', `  Git Ship Done v${version}`, `  ${shortCwd}`, '']
   }
 
   // "Welcome back" context lines — GSD state if available, else hint.

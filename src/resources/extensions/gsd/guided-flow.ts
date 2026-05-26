@@ -2306,7 +2306,7 @@ export async function showSmartEntry(
         return;
       }
       const choice = await showNextAction(ctx, {
-        title: "GSD — Get Shit Done",
+        title: "GSD — Git Ship Done",
         summary: ["No active milestone."],
         actions: [
           {

@@ -25,7 +25,7 @@ import { tmpdir } from "node:os";
 // source and compiled contexts. process.cwd() is always the repo root in CI.
 const loaderPath = join(
   process.cwd(),
-  "packages", "pi-coding-agent", "dist", "core", "extensions", "loader.js",
+  "dist-test", "packages", "pi-coding-agent", "src", "core", "extensions", "loader.js",
 );
 
 test("loadExtensions shares module cache across extensions (perf regression #2108)", async () => {

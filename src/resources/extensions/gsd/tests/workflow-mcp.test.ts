@@ -16,6 +16,7 @@ import {
   getWorkflowTransportSupportError,
   getRequiredWorkflowToolsForAutoUnit,
   getRequiredWorkflowToolsForGuidedUnit,
+  resolveWorkflowMcpProjectRoot,
   supportsStructuredQuestions,
   usesWorkflowMcpTransport,
 } from "../workflow-mcp.ts";
@@ -31,6 +32,13 @@ function extractElicitPayload(request: unknown): ElicitPayload {
   const payload = (request as { params?: unknown }).params ?? request;
   return payload as ElicitPayload;
 }
+
+test("resolveWorkflowMcpProjectRoot maps milestone worktree cwd to project root", () => {
+  const projectRoot = "/tmp/my-project";
+  const worktree = join(projectRoot, ".gsd", "worktrees", "M002-abc");
+  assert.equal(resolveWorkflowMcpProjectRoot(worktree), projectRoot);
+  assert.equal(resolveWorkflowMcpProjectRoot(projectRoot), projectRoot);
+});
 
 test("guided execute-task requires canonical task completion tool", () => {
   assert.deepEqual(getRequiredWorkflowToolsForGuidedUnit("execute-task"), ["gsd_task_complete"]);

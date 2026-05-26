@@ -24,8 +24,13 @@ import { fileURLToPath } from 'node:url'
 import { generateWorktreeName } from './worktree-name-gen.js'
 import { existsSync } from 'node:fs'
 import { resolveBundledGsdExtensionModule } from './bundled-resource-path.js'
+import { getJitiWorkspaceAliases } from './jiti-workspace-aliases.js'
 
-const jiti = createJiti(fileURLToPath(import.meta.url), { interopDefault: true, debug: false })
+const jiti = createJiti(fileURLToPath(import.meta.url), {
+  interopDefault: true,
+  debug: false,
+  alias: getJitiWorkspaceAliases(import.meta.url),
+})
 const gsdExtensionPath = (...segments: string[]) =>
   resolveBundledGsdExtensionModule(import.meta.url, segments.join('/'))
 

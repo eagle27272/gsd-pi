@@ -683,13 +683,21 @@ let bridgeServiceOverrides: Partial<BridgeServiceDeps> | null = null;
 const projectBridgeRegistry = new Map<string, BridgeService>();
 const workspaceIndexCache = new Map<string, WorkspaceIndexCacheEntry>();
 
+function resolveSessionManagerModulePath(packageRoot: string, checkExists: typeof existsSync): string {
+  const candidates = [
+    join(packageRoot, "packages", "pi-coding-agent", "dist", "core", "session-manager.js"),
+    join(packageRoot, "dist-test", "packages", "pi-coding-agent", "src", "core", "session-manager.js"),
+  ];
+  for (const candidate of candidates) {
+    if (checkExists(candidate)) return candidate;
+  }
+  throw new Error(`session manager module not found; checked=${candidates.join(", ")}`);
+}
+
 async function loadSessionBrowserSessionsViaChildProcess(config: BridgeRuntimeConfig): Promise<SessionInfo[]> {
   const deps = getBridgeDeps();
-  const sessionManagerModulePath = join(config.packageRoot, "packages", "pi-coding-agent", "dist", "core", "session-manager.js");
   const checkExists = deps.existsSync ?? existsSync;
-  if (!checkExists(sessionManagerModulePath)) {
-    throw new Error(`session manager module not found; checked=${sessionManagerModulePath}`);
-  }
+  const sessionManagerModulePath = resolveSessionManagerModulePath(config.packageRoot, checkExists);
 
   const script = [
     'const { pathToFileURL } = await import("node:url");',
@@ -706,6 +714,12 @@ async function loadSessionBrowserSessionsViaChildProcess(config: BridgeRuntimeCo
         cwd: config.packageRoot,
         env: {
           ...(deps.env ?? process.env),
+          NODE_OPTIONS: [
+            deps.env?.NODE_OPTIONS,
+            `--import ${join(config.packageRoot, "src/resources/extensions/gsd/tests/resolve-ts.mjs")}`,
+          ]
+            .filter(Boolean)
+            .join(" "),
           GSD_SESSION_MANAGER_MODULE: sessionManagerModulePath,
           GSD_SESSION_BROWSER_CWD: config.projectCwd,
           GSD_SESSION_BROWSER_DIR: config.projectSessionsDir,
@@ -746,11 +760,8 @@ async function appendSessionInfoViaChildProcess(
   name: string,
 ): Promise<void> {
   const deps = getBridgeDeps();
-  const sessionManagerModulePath = join(config.packageRoot, "packages", "pi-coding-agent", "dist", "core", "session-manager.js");
   const checkExists = deps.existsSync ?? existsSync;
-  if (!checkExists(sessionManagerModulePath)) {
-    throw new Error(`session manager module not found; checked=${sessionManagerModulePath}`);
-  }
+  const sessionManagerModulePath = resolveSessionManagerModulePath(config.packageRoot, checkExists);
 
   const script = [
     'const { pathToFileURL } = await import("node:url");',
@@ -767,6 +778,12 @@ async function appendSessionInfoViaChildProcess(
         cwd: config.packageRoot,
         env: {
           ...(deps.env ?? process.env),
+          NODE_OPTIONS: [
+            deps.env?.NODE_OPTIONS,
+            `--import ${join(config.packageRoot, "src/resources/extensions/gsd/tests/resolve-ts.mjs")}`,
+          ]
+            .filter(Boolean)
+            .join(" "),
           GSD_SESSION_MANAGER_MODULE: sessionManagerModulePath,
           GSD_SESSION_BROWSER_DIR: config.projectSessionsDir,
           GSD_TARGET_SESSION_PATH: sessionPath,

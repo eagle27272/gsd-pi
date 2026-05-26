@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getModel } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { AgentSession } from "../src/core/agent-session.ts";
+import type { AgentSession } from "@gsd/agent-core";
 import {
 	type AgentSessionRuntime,
 	type CreateAgentSessionRuntimeFactory,

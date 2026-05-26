@@ -27,7 +27,7 @@ import { homedir } from "node:os";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { PartialMessageBuilder, ZERO_USAGE, mapUsage } from "./partial-builder.js";
-import { buildWorkflowMcpServers } from "../gsd/workflow-mcp.js";
+import { buildWorkflowMcpServers, resolveWorkflowMcpProjectRoot } from "../gsd/workflow-mcp.js";
 import { loadProjectGSDPreferences } from "../gsd/preferences.js";
 import { discoverMcpServerNames, computeMcpDisallowedTools } from "../gsd/mcp-filter.js";
 import { showInterviewRound, type Question, type RoundResult } from "../shared/tui.js";
@@ -349,9 +349,10 @@ export function buildPromptFromContext(context: Context): string {
 			"You are running inside Claude Code. Use these exact tool names — do not use lowercase or pi-native names:\n" +
 			"- Shell commands: 'Bash' (not 'bash')\n" +
 			"- File operations: 'Read', 'Write', 'Edit', 'Glob', 'Grep' (PascalCase, not lowercase)\n" +
-			"- GSD workflow tools (gsd_exec, gsd_slice_complete, gsd_task_complete, gsd_plan_slice, etc.) " +
+			"- GSD workflow tools (gsd_exec, gsd_slice_complete, gsd_task_complete, gsd_plan_slice, gsd_save_gate_result, etc.) " +
 			"are MCP tools — call them as mcp__gsd-workflow__<tool_name> " +
-			"(e.g. mcp__gsd-workflow__gsd_exec, mcp__gsd-workflow__gsd_slice_complete)\n" +
+			"(e.g. mcp__gsd-workflow__gsd_exec, mcp__gsd-workflow__gsd_save_gate_result)\n" +
+			"- ToolSearch is NOT available — never use it to discover tools; invoke the MCP tool directly\n" +
 			"</tool_context>",
 	);
 
@@ -1452,15 +1453,18 @@ export function buildSdkOptions(
 ): Record<string, unknown> {
 	const { reasoning, cwd, ...sdkExtraOptions } = extraOptions;
 	const sdkCwd = typeof cwd === "string" && cwd.trim().length > 0 ? cwd : process.cwd();
-	const mcpServers = buildWorkflowMcpServers(sdkCwd);
+	// Claude Code runs in the milestone worktree for file/shell work, but workflow MCP
+	// config (.mcp.json) and server discovery live at the project root.
+	const projectRoot = resolveWorkflowMcpProjectRoot(sdkCwd);
+	const mcpServers = buildWorkflowMcpServers(projectRoot);
 	const permissionMode = overrides?.permissionMode ?? "bypassPermissions";
 
-	const preferences = loadProjectGSDPreferences(sdkCwd);
+	const preferences = loadProjectGSDPreferences(projectRoot);
 	const mcpConfig = preferences?.preferences.claude_code_mcp;
 	const workflowServerName = mcpServers ? Object.keys(mcpServers)[0] : undefined;
 
 	// Always discover project MCPs — needed for both duplicate detection and filtering.
-	const discovered = discoverMcpServerNames(sdkCwd);
+	const discovered = discoverMcpServerNames(projectRoot);
 
 	// If the workflow MCP is already declared in the project's .mcp.json or
 	// .claude/settings.json, do not inject it again via mcpServers. Passing the

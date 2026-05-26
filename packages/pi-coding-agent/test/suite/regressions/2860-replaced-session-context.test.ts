@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, registerFauxProvider } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
-import type { AgentSession } from "../../../src/core/agent-session.ts";
+import type { AgentSession } from "@gsd/agent-core";
 import {
 	type CreateAgentSessionRuntimeFactory,
 	createAgentSessionFromServices,

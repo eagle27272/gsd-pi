@@ -26,7 +26,7 @@ import type {
 	Usage,
 } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
-import { AgentSession, type AgentSessionEvent } from "../src/core/agent-session.ts";
+import { AgentSession, type AgentSessionEvent } from "@gsd/agent-core";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { ModelRegistry } from "../src/core/model-registry.ts";
 import { SessionManager } from "../src/core/session-manager.ts";

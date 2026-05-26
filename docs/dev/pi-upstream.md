@@ -10,8 +10,8 @@ GSD vendors the [earendil-works/pi](https://github.com/earendil-works/pi) monore
 | Pinned ref | **v0.75.5** |
 | npm scope (upstream) | `@earendil-works/pi-*` |
 | GSD packages | `@gsd/pi-*`, `@gsd/agent-core`, `@gsd/agent-modes` |
-| Build | `npm run build:pi` ✅ |
-| Boundary | `npm run verify:pi-boundary` ✅ |
+| Build | `npm run build:pi` (run verification block below) |
+| Boundary | `npm run verify:pi-boundary` (also in `scripts/ci-fast-gates.sh`) |
 
 Phase 2 used **GSD shim restoration** (incremental compat on upstream v0.75.5 APIs) rather than a full upstream modes sync. `@gsd/agent-modes` was migrated from the old GSD fork and reconciled via shims in pi-tui, pi-coding-agent, pi-ai, and agent-core.
 
@@ -57,8 +57,9 @@ Smoke tests exercise CLI `--help` and `--version` only; they do not require API 
    ```bash
    node scripts/vendor-pi-deps.cjs --ref vX.Y.Z          # pi-ai, pi-agent-core, pi-tui
    node scripts/vendor-pi-coding-agent-core.cjs --ref vX.Y.Z
-   node scripts/post-vendor-gsd-seam.cjs                 # strip modes/cli/session from pi-coding-agent
+   node scripts/apply-seam.cjs                           # post-vendor deletes, import rewrites, boundary verify
    ```
+   Seam config: `scripts/pi-seam.json` (forbidden paths, protected files, import rewrites, theme/tool fixes).
 3. **Reconcile GSD shims** — upstream v0.75.5+ uses different TUI keybindings, extension context, session events, and tool renderer signatures. Prefer **incremental shims** in pi-* over restoring entire pre-vendor GSD files (HEAD restore of `model-registry.ts` / `settings-manager.ts` broke v0.75.5 compat in Phase 2).
 4. **Normalize package.json** — preserve `@gsd/pi-*` names, `gsd.linkable`, workspace `tsc` build scripts, and subpath exports (`./*` → `./dist/*`).
 5. **Fix import extensions** — GSD uses Node16 `.js` suffix imports; upstream may use `.ts` for `tsgo`. Bulk-fix or adopt upstream `tsconfig.build.json` if switching compilers.
@@ -74,10 +75,10 @@ Smoke tests exercise CLI `--help` and `--version` only; they do not require API 
 |---|---|---|
 | Clean seam | `packages/gsd-agent-core`, `packages/gsd-agent-modes` | Session, SDK, modes, CLI |
 | Type seam | `packages/pi-coding-agent/src/core/gsd-seam-types.ts` | Avoid compile-time pi ↔ agent-core cycle |
-| Ambient shim | `packages/pi-coding-agent/src/agent-core.d.ts` | Extension types without package dep |
+| Session types | `packages/pi-coding-agent/src/core/extension-session-types.ts` | Re-export session types from `@gsd/agent-core` |
 | Extension loader | `packages/pi-coding-agent/src/core/extensions/loader.ts` | `@gsd/agent-*`, `@earendil-works/*` aliases |
 | GSD core files | `model-discovery.ts`, `discovery-cache.ts`, `models-json-writer.ts`, `package-commands.ts`, `local-model-check.ts`, `capability-patches.ts`, `bash-interceptor.ts`, `constants.ts` | Provider discovery, offline mode, capability patches |
-| Keybindings | `packages/pi-coding-agent/src/core/keybindings.ts` | Legacy `AppAction` names + `app.*` keybinding map |
+| Keybindings | `packages/gsd-agent-core/src/keybindings.ts` | Legacy `AppAction` names + `app.*` keybinding map (pi re-exports via shim) |
 | Model registry shims | `packages/pi-coding-agent/src/core/model-registry.ts` | `discoverModels`, `isAllLocalChain`, `getApiKey`, GSD auth modes |
 | Settings shims | `packages/pi-coding-agent/src/core/settings-manager.ts` | Adaptive TUI, compaction override, gitignore picker |
 | pi-tui shims | `style.ts`, `editor-keybindings.ts`, `Container.detachChildren`, `Markdown.maxLines`, `Input.secure`, `Image.getDimensions` | GSD interactive mode compat |

@@ -194,4 +194,5 @@ if (require.main === module) {
 module.exports = {
 	findTestFiles,
 	selectPackageTestFiles,
+	findDistTestFiles,
 }

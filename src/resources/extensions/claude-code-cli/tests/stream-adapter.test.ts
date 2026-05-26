@@ -874,8 +874,10 @@ describe("stream-adapter — session persistence (#2859)", () => {
 			GSD_WORKFLOW_MCP_ENV: JSON.stringify({ GSD_CLI_PATH: "/tmp/gsd" }),
 			GSD_WORKFLOW_MCP_CWD: "/tmp/project",
 		});
+		const originalCwd = process.cwd();
+		const emptyDir = mkdtempSync(join(tmpdir(), "claude-mcp-inject-"));
 		try {
-
+			process.chdir(emptyDir);
 			const options = buildSdkOptions("claude-sonnet-4-20250514", "test");
 			const mcpServers = options.mcpServers as Record<string, any>;
 			assert.ok(mcpServers?.["gsd-workflow"], "expected gsd-workflow server config");
@@ -900,6 +902,8 @@ describe("stream-adapter — session persistence (#2859)", () => {
 				"mcp__gsd-workflow__*",
 			]);
 		} finally {
+			process.chdir(originalCwd);
+			rmSync(emptyDir, { recursive: true, force: true });
 			restore();
 		}
 	});
@@ -1011,6 +1015,34 @@ describe("stream-adapter — session persistence (#2859)", () => {
 			} else {
 				process.env.GSD_CLI_PATH = prevCliPath;
 			}
+		}
+	});
+
+	test("buildSdkOptions discovers project .mcp.json when session cwd is a milestone worktree", () => {
+		const restore = setWorkflowMcpEnv({
+			GSD_WORKFLOW_MCP_COMMAND: "node",
+			GSD_WORKFLOW_MCP_NAME: "gsd-workflow",
+			GSD_WORKFLOW_MCP_ARGS: JSON.stringify(["packages/mcp-server/dist/cli.js"]),
+			GSD_WORKFLOW_MCP_ENV: JSON.stringify({ GSD_CLI_PATH: "/tmp/gsd" }),
+		});
+		const originalCwd = process.cwd();
+		const projectDir = mkdtempSync(join(tmpdir(), "claude-mcp-worktree-"));
+		const worktreeDir = join(projectDir, ".gsd", "worktrees", "M002-test");
+		try {
+			mkdirSync(worktreeDir, { recursive: true });
+			writeFileSync(
+				join(projectDir, ".mcp.json"),
+				JSON.stringify({ mcpServers: { "gsd-workflow": { command: "node", args: ["cli.js"] } } }),
+			);
+			process.chdir(projectDir);
+			const options = buildSdkOptions("claude-sonnet-4-20250514", "test", undefined, { cwd: worktreeDir });
+			assert.equal(options.mcpServers, undefined, "should not inject when project root already declares workflow MCP");
+			const allowedTools = options.allowedTools as string[];
+			assert.ok(allowedTools.includes("mcp__gsd-workflow__*"), "worktree cwd must still allow workflow MCP tools from project config");
+		} finally {
+			process.chdir(originalCwd);
+			rmSync(projectDir, { recursive: true, force: true });
+			restore();
 		}
 	});
 

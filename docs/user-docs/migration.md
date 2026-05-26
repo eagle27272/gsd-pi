@@ -1,6 +1,6 @@
 # Migration from v1
 
-If you have projects with `.planning` directories from Get Shit Done v1 (now continued by the community as [get-shit-done-redux](https://github.com/open-gsd/get-shit-done-redux)), you can migrate them to gsd-pi's `.gsd` format.
+If you have projects with `.planning` directories from Git Ship Done v1 (now continued by the community as [gsd-core](https://github.com/open-gsd/gsd-core)), you can migrate them to gsd-pi's `.gsd` format.
 
 ## Running the Migration
 

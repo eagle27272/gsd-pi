@@ -10,6 +10,7 @@ import { registerDynamicTools } from "./dynamic-tools.js";
 import { registerExecTools } from "./exec-tools.js";
 import { registerJournalTools } from "./journal-tools.js";
 import { registerMemoryTools } from "./memory-tools.js";
+import { registerToolSearchShim } from "./tool-search-shim.js";
 import { registerQueryTools } from "./query-tools.js";
 import { registerScheduleWakeupTool } from "./schedule-wakeup-tool.js";
 import { registerHooks } from "./register-hooks.js";
@@ -122,6 +123,7 @@ export function registerGsdExtension(pi: ExtensionAPI): void {
     ["journal-tools", () => registerJournalTools(pi)],
     ["query-tools", () => registerQueryTools(pi)],
     ["memory-tools", () => registerMemoryTools(pi)],
+    ["tool-search-shim", () => registerToolSearchShim(pi)],
     ["exec-tools", () => registerExecTools(pi)],
     ["schedule-wakeup-tool", () => registerScheduleWakeupTool(pi)],
     ["shortcuts", () => registerShortcuts(pi)],

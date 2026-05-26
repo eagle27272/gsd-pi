@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { Agent } from "@earendil-works/pi-agent-core";
 import { getModel } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { AgentSession } from "../src/core/agent-session.ts";
+import { AgentSession } from "@gsd/agent-core";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import {
 	createExtensionRuntime,

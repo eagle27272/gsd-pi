@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 import { Agent } from "@earendil-works/pi-agent-core";
 import { getModel, type OAuthCredentials, type OAuthProvider } from "@earendil-works/pi-ai";
 import { getOAuthApiKey } from "@earendil-works/pi-ai/oauth";
-import { AgentSession } from "../src/core/agent-session.ts";
+import { AgentSession } from "@gsd/agent-core";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { createEventBus } from "../src/core/event-bus.ts";
 import type { Extension, ExtensionFactory, LoadExtensionsResult } from "../src/core/extensions/index.ts";

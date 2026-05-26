@@ -1922,7 +1922,15 @@ export function registerWorkflowTools(realServer: McpToolServer): void {
     "Save a quality gate result to the GSD database.",
     saveGateResultParams,
     async (args: Record<string, unknown>) => {
-      const parsed = parseWorkflowArgs(saveGateResultSchema, args);
+      const { prepareSaveGateResultArguments } = await importLocalModule<{
+        prepareSaveGateResultArguments: (raw: unknown) => unknown;
+      }>("../../../src/resources/extensions/gsd/tools/save-gate-result-args.js");
+      const prepared = prepareSaveGateResultArguments(args);
+      const record =
+        prepared !== null && typeof prepared === "object" && !Array.isArray(prepared)
+          ? (prepared as Record<string, unknown>)
+          : {};
+      const parsed = parseWorkflowArgs(saveGateResultSchema, record);
       return handleSaveGateResult(parsed.projectDir, parsed);
     },
   );

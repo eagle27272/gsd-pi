@@ -152,7 +152,7 @@ jobs:
 
   test-packages:
     name: test-packages
-    timeout-minutes: 15
+    timeout-minutes: 25
     needs: [fast-gates, build]
     if: needs.fast-gates.outputs.heavy-code-changed == 'true'
     runs-on: ubuntu-latest
@@ -203,6 +203,42 @@ jobs:
 
       - name: Check test coverage thresholds
         run: npm run test:coverage
+
+  coverage-report:
+    name: coverage-report
+    timeout-minutes: 60
+    needs: [fast-gates, build]
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.fast-gates.outputs.heavy-code-changed == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - uses: ./.github/actions/restore-ci-build-artifacts
+
+      - name: Generate merged coverage report (report-only)
+        run: npm run test:coverage:full
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: coverage-report
+          path: |
+            coverage/lcov.info
+            coverage/file-index.json
+          if-no-files-found: error
+          retention-days: 14
 
   integration-tests:
     name: integration-tests

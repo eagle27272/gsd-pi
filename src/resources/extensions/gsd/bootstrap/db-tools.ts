@@ -5,14 +5,29 @@ import type { ExtensionAPI } from "@gsd/pi-coding-agent";
 import { Text } from "@gsd/pi-tui";
 
 import { loadEffectiveGSDPreferences } from "../preferences.js";
-import { ensureDbOpen, resolveCtxCwd } from "./dynamic-tools.js";
+import { ensureDbOpen, resolveCtxCwd, resolveWorkflowToolBasePath } from "./dynamic-tools.js";
+import { importWorkflowExecutorsModule } from "../workflow-mcp.js";
 import { loadWriteGateSnapshot, shouldBlockRootArtifactSaveInSnapshot } from "./write-gate.js";
 import { logError } from "../workflow-logger.js";
 import { getErrorMessage } from "../error-utils.js";
 import { incrementLegacyTelemetry } from "../legacy-telemetry.js";
+import { prepareSaveGateResultArguments } from "../tools/save-gate-result-args.js";
 
 async function loadWorkflowExecutors(): Promise<typeof import("../tools/workflow-tool-executors.js")> {
-  return import("../tools/workflow-tool-executors.js");
+  return importWorkflowExecutorsModule();
+}
+
+function formatWorkflowToolLoadError(err: unknown): {
+  content: Array<{ type: "text"; text: string }>;
+  details: { operation: string; error: string };
+  isError: true;
+} {
+  const msg = getErrorMessage(err);
+  return {
+    content: [{ type: "text", text: `Error: ${msg}` }],
+    details: { operation: "workflow_tool_load", error: msg },
+    isError: true,
+  };
 }
 
 
@@ -59,6 +74,14 @@ function requirementRootWriteGuard(operation: string, basePath: string): { conte
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- result shape varies by tool
 function readDetails(result: any): any {
   return result?.details ?? result?.structuredContent;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- result shape varies by tool
+function formatToolErrorText(result: any, details: any): string {
+  const message = details?.error
+    ?? result?.content?.find((entry: { type?: string; text?: string }) => entry.type === "text")?.text
+    ?? "unknown";
+  return typeof message === "string" && message.startsWith("Error") ? message : `Error: ${message}`;
 }
 
 export function registerDbTools(pi: ExtensionAPI): void {
@@ -139,7 +162,7 @@ export function registerDbTools(pi: ExtensionAPI): void {
     renderResult(result: any, _options: any, theme: any) {
       const d = readDetails(result);
       if (result.isError || d?.error) {
-        return new Text(theme.fg("error", `Error: ${d?.error ?? "unknown"}`), 0, 0);
+        return new Text(theme.fg("error", formatToolErrorText(result, d)), 0, 0);
       }
       let text = theme.fg("success", `Decision ${d?.id ?? ""} saved`);
       if (d?.id) text += theme.fg("dim", ` → DECISIONS.md`);
@@ -220,7 +243,7 @@ export function registerDbTools(pi: ExtensionAPI): void {
     renderResult(result: any, _options: any, theme: any) {
       const d = readDetails(result);
       if (result.isError || d?.error) {
-        return new Text(theme.fg("error", `Error: ${d?.error ?? "unknown"}`), 0, 0);
+        return new Text(theme.fg("error", formatToolErrorText(result, d)), 0, 0);
       }
       let text = theme.fg("success", `Requirement ${d?.id ?? ""} updated`);
       text += theme.fg("dim", ` → REQUIREMENTS.md`);
@@ -323,7 +346,7 @@ export function registerDbTools(pi: ExtensionAPI): void {
     renderResult(result: any, _options: any, theme: any) {
       const d = readDetails(result);
       if (result.isError || d?.error) {
-        return new Text(theme.fg("error", `Error: ${d?.error ?? "unknown"}`), 0, 0);
+        return new Text(theme.fg("error", formatToolErrorText(result, d)), 0, 0);
       }
       let text = theme.fg("success", `Requirement ${d?.id ?? ""} saved`);
       text += theme.fg("dim", ` → REQUIREMENTS.md`);
@@ -337,8 +360,15 @@ export function registerDbTools(pi: ExtensionAPI): void {
   // ─── gsd_summary_save (formerly gsd_save_summary) ──────────────────────
 
   const summarySaveExecute = async (_toolCallId: string, params: any, _signal: AbortSignal | undefined, _onUpdate: unknown, _ctx: unknown) => {
-    const { executeSummarySave } = await loadWorkflowExecutors();
-    return executeSummarySave(params, resolveCtxCwd(_ctx));
+    try {
+      const { executeSummarySave } = await loadWorkflowExecutors();
+      return await executeSummarySave(params, resolveWorkflowToolBasePath(_ctx, params));
+    } catch (err) {
+      return {
+        ...formatWorkflowToolLoadError(err),
+        details: { operation: "save_summary", error: getErrorMessage(err) },
+      };
+    }
   };
 
   const summarySaveTool = {
@@ -374,7 +404,7 @@ export function registerDbTools(pi: ExtensionAPI): void {
     renderResult(result: any, _options: any, theme: any) {
       const d = readDetails(result);
       if (result.isError || d?.error) {
-        return new Text(theme.fg("error", `Error: ${d?.error ?? "unknown"}`), 0, 0);
+        return new Text(theme.fg("error", formatToolErrorText(result, d)), 0, 0);
       }
       let text = theme.fg("success", `${d?.artifact_type ?? "Artifact"} saved`);
       if (d?.path) text += theme.fg("dim", ` → ${d.path}`);
@@ -464,7 +494,7 @@ export function registerDbTools(pi: ExtensionAPI): void {
     renderResult(result: any, _options: any, theme: any) {
       const d = readDetails(result);
       if (result.isError || d?.error) {
-        return new Text(theme.fg("error", `Error: ${d?.error ?? "unknown"}`), 0, 0);
+        return new Text(theme.fg("error", formatToolErrorText(result, d)), 0, 0);
       }
       let text = theme.fg("success", `Generated ${d?.id ?? "ID"}`);
       if (d?.source === "reserved") text += theme.fg("dim", " (reserved)");
@@ -479,7 +509,7 @@ export function registerDbTools(pi: ExtensionAPI): void {
 
   const planMilestoneExecute = async (_toolCallId: string, params: any, _signal: AbortSignal | undefined, _onUpdate: unknown, _ctx: unknown) => {
     const { executePlanMilestone } = await loadWorkflowExecutors();
-    return executePlanMilestone(params, resolveCtxCwd(_ctx));
+    return executePlanMilestone(params, resolveWorkflowToolBasePath(_ctx, params));
   };
 
   const planMilestoneTool = {
@@ -551,7 +581,7 @@ export function registerDbTools(pi: ExtensionAPI): void {
 
   const planSliceExecute = async (_toolCallId: string, params: any, _signal: AbortSignal | undefined, _onUpdate: unknown, _ctx: unknown) => {
     const { executePlanSlice } = await loadWorkflowExecutors();
-    return executePlanSlice(params, resolveCtxCwd(_ctx));
+    return executePlanSlice(params, resolveWorkflowToolBasePath(_ctx, params));
   };
 
   const planSliceTool = {
@@ -675,7 +705,7 @@ export function registerDbTools(pi: ExtensionAPI): void {
 
   const taskCompleteExecute = async (_toolCallId: string, params: any, _signal: AbortSignal | undefined, _onUpdate: unknown, _ctx: unknown) => {
     const { executeTaskComplete } = await loadWorkflowExecutors();
-    return executeTaskComplete(params, resolveCtxCwd(_ctx));
+    return executeTaskComplete(params, resolveWorkflowToolBasePath(_ctx, params));
   };
 
   const taskCompleteTool = {
@@ -746,7 +776,7 @@ export function registerDbTools(pi: ExtensionAPI): void {
 
   const sliceCompleteExecute = async (_toolCallId: string, params: any, _signal: AbortSignal | undefined, _onUpdate: unknown, _ctx: unknown) => {
     const { executeSliceComplete } = await loadWorkflowExecutors();
-    return executeSliceComplete(params, resolveCtxCwd(_ctx));
+    return executeSliceComplete(params, resolveWorkflowToolBasePath(_ctx, params));
   };
 
   const sliceCompleteTool = {
@@ -947,7 +977,7 @@ export function registerDbTools(pi: ExtensionAPI): void {
 
   const milestoneCompleteExecute = async (_toolCallId: string, params: any, _signal: AbortSignal | undefined, _onUpdate: unknown, _ctx: unknown) => {
     const { executeCompleteMilestone } = await loadWorkflowExecutors();
-    return executeCompleteMilestone(params, resolveCtxCwd(_ctx));
+    return executeCompleteMilestone(params, resolveWorkflowToolBasePath(_ctx, params));
   };
 
   const milestoneCompleteTool = {
@@ -993,7 +1023,7 @@ export function registerDbTools(pi: ExtensionAPI): void {
 
   const milestoneValidateExecute = async (_toolCallId: string, params: any, _signal: AbortSignal | undefined, _onUpdate: unknown, _ctx: unknown) => {
     const { executeValidateMilestone } = await loadWorkflowExecutors();
-    return executeValidateMilestone(params, resolveCtxCwd(_ctx));
+    return executeValidateMilestone(params, resolveWorkflowToolBasePath(_ctx, params));
   };
 
   const milestoneValidateTool = {
@@ -1033,7 +1063,7 @@ export function registerDbTools(pi: ExtensionAPI): void {
 
   const replanSliceExecute = async (_toolCallId: string, params: any, _signal: AbortSignal | undefined, _onUpdate: unknown, _ctx: unknown) => {
     const { executeReplanSlice } = await loadWorkflowExecutors();
-    return executeReplanSlice(params, resolveCtxCwd(_ctx));
+    return executeReplanSlice(params, resolveWorkflowToolBasePath(_ctx, params));
   };
 
   const replanSliceTool = {
@@ -1084,7 +1114,7 @@ export function registerDbTools(pi: ExtensionAPI): void {
 
   const reassessRoadmapExecute = async (_toolCallId: string, params: any, _signal: AbortSignal | undefined, _onUpdate: unknown, _ctx: unknown) => {
     const { executeReassessRoadmap } = await loadWorkflowExecutors();
-    return executeReassessRoadmap(params, resolveCtxCwd(_ctx));
+    return executeReassessRoadmap(params, resolveWorkflowToolBasePath(_ctx, params));
   };
 
   const reassessRoadmapTool = {
@@ -1343,7 +1373,7 @@ export function registerDbTools(pi: ExtensionAPI): void {
 
   const saveGateResultExecute = async (_toolCallId: string, params: any, _signal: AbortSignal | undefined, _onUpdate: unknown, _ctx: unknown) => {
     const { executeSaveGateResult } = await loadWorkflowExecutors();
-    return executeSaveGateResult(params, resolveCtxCwd(_ctx));
+    return executeSaveGateResult(params, resolveWorkflowToolBasePath(_ctx, params));
   };
 
   const saveGateResultTool = {
@@ -1369,6 +1399,7 @@ export function registerDbTools(pi: ExtensionAPI): void {
       rationale: Type.String({ description: "One-sentence justification" }),
       findings: Type.Optional(Type.String({ description: "Detailed markdown findings" })),
     }),
+    prepareArguments: prepareSaveGateResultArguments,
     execute: saveGateResultExecute,
     renderCall(args: any, theme: any) {
       let text = theme.fg("toolTitle", theme.bold("save_gate_result "));

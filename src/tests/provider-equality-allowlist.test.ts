@@ -24,10 +24,23 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const REPO_ROOT = new URL("../..", import.meta.url).pathname;
+/** Real repo root — not dist-test/ (compile-tests mirrors package.json there). */
+function findRepoRoot(start: string): string {
+	let dir = start;
+	for (let i = 0; i < 12; i++) {
+		if (existsSync(join(dir, ".git"))) return dir;
+		const parent = resolve(dir, "..");
+		if (parent === dir) break;
+		dir = parent;
+	}
+	throw new Error(`Could not locate repo root (no .git found) from ${start}`);
+}
+
+const REPO_ROOT = findRepoRoot(dirname(fileURLToPath(import.meta.url)));
 
 // Transports known to be confusable with API shape. Extend this list as new
 // Anthropic-/OpenAI-/Gemini-fronting transports are added to the codebase.

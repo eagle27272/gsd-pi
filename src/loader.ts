@@ -101,7 +101,7 @@ if (!existsSync(appRoot)) {
   process.stderr.write(
     renderLogo(colorCyan) +
     '\n' +
-    `  Get Shit Done ${dim}v${gsdVersion}${reset}\n` +
+    `  Git Ship Done ${dim}v${gsdVersion}${reset}\n` +
     `  ${green}Welcome.${reset} Setting up your environment...\n\n`
   )
   process.env.GSD_FIRST_RUN_BANNER = '1'

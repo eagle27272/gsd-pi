@@ -42,4 +42,19 @@ if [ -n "${PR_BASE_SHA:-}" ] || [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ]; t
   bash scripts/check-source-grep-tests.sh
 fi
 
+echo "── test confidence tier map ──"
+node scripts/audit-test-confidence.mjs --strict
+
+echo "── script policy tests ──"
+node --test "scripts/__tests__/*.mjs" "scripts/__tests__/*.cjs"
+
+echo "── test gap strict (unwired) ──"
+node scripts/audit-test-gaps.mjs --strict-unwired
+
+echo "── test matrix strict ──"
+node scripts/audit-test-matrix.mjs --strict
+
+echo "── pi boundary ──"
+npm run verify:pi-boundary
+
 echo "ci-fast-gates: all checks passed ✓"

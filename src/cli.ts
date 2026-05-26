@@ -631,60 +631,24 @@ if (!isPrintMode && process.stdout.columns && process.stdout.columns < 40) {
 if (cliFlags.listModels !== undefined) {
   exitIfManagedResourcesAreNewer(agentDir)
   initResources(agentDir)
-  const listModelsLoader = new DefaultResourceLoader({
+  const { prepareModelRegistryForListing } = await import('@gsd/agent-modes/cli/prepare-model-registry.js')
+  const { listModels } = await import('@gsd/agent-modes/cli/list-models.js')
+  await prepareModelRegistryForListing(modelRegistry, {
     agentDir,
     cwd: process.cwd(),
     additionalExtensionPaths: cliFlags.extensions.length > 0 ? cliFlags.extensions : undefined,
+    afterLoad: async (registry) => {
+      await probeDeferredProvidersForListModels(registry)
+      try {
+        const { resolveDisabledModelProvidersFromPreferences } = await import('./resources/extensions/gsd/preferences.js')
+        registry.setDisabledModelProviders(resolveDisabledModelProvidersFromPreferences())
+      } catch {
+        // Non-fatal: list all ready providers when preferences cannot be loaded.
+      }
+    },
   })
-  await listModelsLoader.reload()
-  flushPendingProviderRegistrations(listModelsLoader, modelRegistry)
-  await probeDeferredProvidersForListModels(modelRegistry)
-
-  try {
-    const { resolveDisabledModelProvidersFromPreferences } = await import('./resources/extensions/gsd/preferences.js')
-    modelRegistry.setDisabledModelProviders(resolveDisabledModelProvidersFromPreferences())
-  } catch {
-    // Non-fatal: list all ready providers when preferences cannot be loaded.
-  }
-
-  const models = modelRegistry.getAvailable()
-  if (models.length === 0) {
-    console.log('No models available. Set API keys in environment variables.')
-    process.exit(0)
-  }
-
   const searchPattern = typeof cliFlags.listModels === 'string' ? cliFlags.listModels : undefined
-  let filtered = models
-  if (searchPattern) {
-    const q = searchPattern.toLowerCase()
-    filtered = models.filter((m) => `${m.provider} ${m.id} ${m.name}`.toLowerCase().includes(q))
-  }
-
-  // Sort by name descending (newest first), then provider, then id
-  filtered.sort((a, b) => {
-    const nameCmp = b.name.localeCompare(a.name)
-    if (nameCmp !== 0) return nameCmp
-    const provCmp = a.provider.localeCompare(b.provider)
-    if (provCmp !== 0) return provCmp
-    return a.id.localeCompare(b.id)
-  })
-
-  const fmt = (n: number) => n >= 1_000_000 ? `${n / 1_000_000}M` : n >= 1_000 ? `${n / 1_000}K` : `${n}`
-  const rows = filtered.map((m) => [
-    m.provider,
-    m.id,
-    m.name,
-    fmt(m.contextWindow),
-    fmt(m.maxTokens),
-    m.reasoning ? 'yes' : 'no',
-  ])
-  const hdrs = ['provider', 'model', 'name', 'context', 'max-out', 'thinking']
-  const widths = hdrs.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i].length)))
-  const pad = (s: string, w: number) => s.padEnd(w)
-  console.log(hdrs.map((h, i) => pad(h, widths[i])).join('  '))
-  for (const row of rows) {
-    console.log(row.map((c, i) => pad(c, widths[i])).join('  '))
-  }
+  await listModels(modelRegistry, { searchPattern })
   process.exit(0)
 }
 

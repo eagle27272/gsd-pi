@@ -41,15 +41,17 @@ If `npm run build` fails after running tests (e.g. `Cannot find module '@gsd/*'`
 
 ### Before pushing
 
-CI is tiered to match local scripts:
+CI is tiered to match local scripts. See [Test confidence stack](docs/dev/test-confidence-stack.md) for the full map.
 
 ```bash
-npm run verify:fast   # ~1–3 min: same scans as CI fast-gates (secrets, docs injection, skill refs)
-npm run verify:pr     # ~5–15 min: build:core → typecheck:extensions → test:unit
-npm run verify:full   # Optional: verify:pr + integration + e2e (closest to full CI on PRs)
+npm run verify:fast    # ~1–3 min: same scans as CI fast-gates (secrets, docs injection, skill refs)
+npm run verify:pr      # ~5–15 min: fast inner loop — build:core → typecheck:extensions → test:unit
+npm run verify:merge   # ~20–40 min: CI PR blocking parity (build, all test jobs, validate-pack)
+npm run verify:full    # Alias for verify:merge
+npm run audit:test-confidence   # Inventory report: runners, tiers, thin areas
 ```
 
-Run `verify:fast` on every push; run `verify:pr` before opening or updating a PR that touches `src/`, `packages/`, or tests.
+Run `verify:fast` on every push. While iterating, `verify:pr` is enough for a quick check. **Before requesting review** on a PR that touches `src/`, `packages/`, or tests, run **`verify:merge`** — a passing `verify:pr` alone does not match what CI requires to merge.
 
 If `verify:pr` fails after running tests (e.g. `Cannot find module '@gsd/*'` errors), run `npm ci` first to restore workspace symlinks, then try again.
 
@@ -97,7 +99,7 @@ git fetch origin
 git rebase origin/main
 ```
 
-CI must pass before your PR will be reviewed. Run `npm run verify:fast` on every push and `npm run verify:pr` before requesting review on code changes.
+CI must pass before your PR will be reviewed. Run `npm run verify:fast` on every push and `npm run verify:merge` before requesting review on code changes.
 
 ## Working with GSD (team workflow)
 
@@ -146,7 +148,7 @@ If this is a non-trivial change, explain the design and any alternatives you con
 ### Requirements
 
 - **CI must pass.** If your PR breaks tests, fix them before requesting review.
-- **Run `npm run verify:pr` locally before pushing.** See [Local development](#local-development) for setup.
+- **Run `npm run verify:merge` locally before requesting review.** Use `verify:pr` only as a fast inner loop. See [Local development](#local-development) and [Test confidence stack](docs/dev/test-confidence-stack.md).
 - **One concern per PR.** A bug fix is a bug fix. A feature is a feature. Don't bundle unrelated changes.
 - **No drive-by formatting.** Don't reformat code you didn't change. Don't reorder imports in files you're not modifying.
 - **Link issues when relevant.** Not mandatory for every PR, but if an issue exists, reference it.

@@ -48,4 +48,4 @@ What that means for this project:
 - **Collective ownership.** This is something bigger than one person. Contributors share the work and the direction.
 - **Honesty about the past.** We acknowledge the harm that was done rather than erase it.
 
-Active development, new features, and architectural investment all happen here. The v1 line continues separately as the community-maintained [get-shit-done-redux](https://github.com/open-gsd/get-shit-done-redux).
+Active development, new features, and architectural investment all happen here. The v1 line continues separately as the community-maintained [gsd-core](https://github.com/open-gsd/gsd-core).

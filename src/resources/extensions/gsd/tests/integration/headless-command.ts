@@ -407,9 +407,19 @@ async function main(): Promise<void> {
     let stderrBuf = "";
     let settled = false;
 
+    const resolveTsPath = join(repoRoot, "src/resources/extensions/gsd/tests/resolve-ts.mjs");
     const child = spawn("node", [loaderPath, "headless", "--json", "next"], {
       cwd: fixtureDir,
-      env: { ...process.env },
+      env: {
+        ...process.env,
+        NODE_OPTIONS: [
+          process.env.NODE_OPTIONS,
+          `--import ${resolveTsPath}`,
+          "--experimental-strip-types",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      },
       stdio: ["ignore", "pipe", "pipe"],
     });
 
