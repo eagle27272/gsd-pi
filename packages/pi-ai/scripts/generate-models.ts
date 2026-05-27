@@ -1138,6 +1138,13 @@ async function generateModels() {
 	// OpenRouter: xAI and other providers (excluding Anthropic, Google, OpenAI)
 	// AI Gateway: OpenAI-compatible catalog with tool-capable models
 	const modelsDevModels = await loadModelsDevData();
+	if (modelsDevModels.length === 0) {
+		console.error(
+			"models.dev fetch returned no models; refusing to overwrite src/models.generated.ts.",
+		);
+		console.error("Retry when network is available, or build with the committed catalog (skip generate-models).");
+		process.exit(1);
+	}
 	const openRouterModels = await fetchOpenRouterModels();
 	const aiGatewayModels = await fetchAiGatewayModels();
 
