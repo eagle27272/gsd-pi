@@ -37,6 +37,14 @@ describe("resolveAgentTool", () => {
 		expect(resolveAgentTool(tools, "Grep")?.name).toBe("grep");
 	});
 
+	it("maps Claude Code Read/Write/Edit/Bash via case-insensitive match", () => {
+		const tools = [makeTool("read"), makeTool("write"), makeTool("edit"), makeTool("bash")];
+		expect(resolveAgentTool(tools, "Read")?.name).toBe("read");
+		expect(resolveAgentTool(tools, "Write")?.name).toBe("write");
+		expect(resolveAgentTool(tools, "Edit")?.name).toBe("edit");
+		expect(resolveAgentTool(tools, "Bash")?.name).toBe("bash");
+	});
+
 	it("maps Claude Code WebFetch to fetch_page when registered", () => {
 		const tools = [makeTool("fetch_page")];
 		expect(resolveAgentTool(tools, "WebFetch")?.name).toBe("fetch_page");

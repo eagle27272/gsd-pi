@@ -355,7 +355,7 @@ export function scopeGsdWorkflowToolsForDispatch(
   const registeredToolNames = resolveRegisteredToolNames(pi, current);
   const scoped = unitType
     ? buildMinimalAutoGsdToolSet(current, unitType, registeredToolNames)
-    : buildMinimalGsdWorkflowToolSet(current);
+    : buildMinimalGsdWorkflowToolSet(current, registeredToolNames);
   const toolsChanged = !(scoped.length === current.length && scoped.every((name, index) => name === current[index]));
   const skillManifest = resolveSkillManifest(unitType);
   const canScopeSkills = skillManifest !== null && pi.getVisibleSkills && pi.setVisibleSkills;
