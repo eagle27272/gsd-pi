@@ -75,7 +75,7 @@ function readKnowledgeMemories(category: "pattern" | "gotcha"): KnowledgeMemoryR
   try {
     const rows = adapter
       .prepare(
-        "SELECT structured_fields FROM memories WHERE category = :cat AND structured_fields IS NOT NULL",
+        "SELECT structured_fields FROM memories WHERE category = :cat AND structured_fields IS NOT NULL AND superseded_by IS NULL",
       )
       .all({ ":cat": category }) as Array<{ structured_fields: string | null }>;
 
