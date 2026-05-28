@@ -161,11 +161,16 @@ jobs:
         with:
           ref: ${{ github.event.inputs.ref != '' && github.event.inputs.ref || (github.event.inputs.channel == 'next' && 'next' || 'main') }}
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
       - uses: actions/setup-node@v6
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-          cache: "npm"
+          cache: pnpm
 
       - name: Install published @opengsd/gsd-pi@${{ github.event.inputs.channel }} globally (with registry propagation retry)
         env:
@@ -180,11 +185,6 @@ jobs:
           echo "::error::Failed to install @opengsd/gsd-pi@${PUBLISH_VERSION} after 6 attempts."
           echo "::error::Recommended actions: (1) investigate the failing step above, (2) if the version exists on npm, deprecate it with 'npm deprecate @opengsd/gsd-pi@${PUBLISH_VERSION} \"broken ${CHANNEL} build; see Actions run\"', (3) cut a fix and re-run NPM Publish."
           exit 1
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.12.1
 
       - name: Install repo dependencies (for regression harness)
         run: pnpm install --frozen-lockfile
