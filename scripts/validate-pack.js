@@ -78,6 +78,17 @@ function resolveDependencyDir(packageRoot, nodeModulesRoot, dep) {
   return pkgJsonPath ? dirname(pkgJsonPath) : null;
 }
 
+function seedGlobalDependencyFromLocal(globalRoot, globalNodeModules, localPackageRoot, localNodeModules, dep) {
+  if (resolveBundledDepPkgJson(globalRoot, globalNodeModules, dep)) return true;
+  const localDir = resolveDependencyDir(localPackageRoot, localNodeModules, dep);
+  if (!localDir || !existsSync(join(localDir, 'package.json'))) return false;
+  const segments = dep.startsWith('@') ? dep.split('/') : [dep];
+  const target = join(globalRoot, 'node_modules', ...segments);
+  mkdirSync(dirname(target), { recursive: true });
+  cpSync(localDir, target, { recursive: true });
+  return true;
+}
+
 try {
   npmCacheDir = mkdtempSync(join(tmpdir(), 'validate-pack-npm-cache-'));
   mkdirSync(npmCacheDir, { recursive: true });
@@ -491,18 +502,22 @@ try {
       timeout: 30000,
       maxBuffer: DEFAULT_MAX_BUFFER,
     });
-    // Seed openai from the local tarball install instead of npm install in the
-    // global package tree, which OOMs resolving the full dependency graph.
+    // Seed runtime deps from the local tarball install instead of npm install in
+    // the global package tree, which OOMs resolving the full dependency graph.
     const localNodeModules = join(installDir, 'node_modules');
-    const localOpenaiDir = resolveDependencyDir(installedRoot, localNodeModules, 'openai');
-    const globalOpenaiDir = join(globalRoot, 'node_modules', 'openai');
-    if (!existsSync(join(globalOpenaiDir, 'index.js')) && localOpenaiDir && existsSync(join(localOpenaiDir, 'index.js'))) {
-      mkdirSync(join(globalRoot, 'node_modules'), { recursive: true });
-      cpSync(localOpenaiDir, globalOpenaiDir, { recursive: true });
+    const globalRuntimeSeedDeps = [
+      'openai',
+      'balanced-match',
+      'brace-expansion',
+      'graceful-fs',
+      'retry',
+      'signal-exit',
+    ];
+    for (const dep of globalRuntimeSeedDeps) {
+      seedGlobalDependencyFromLocal(globalRoot, globalNodeModules, installedRoot, localNodeModules, dep);
     }
 
-    const globalOpenaiIndex = resolveBundledDepPkgJson(globalRoot, globalNodeModules, 'openai');
-    if (!globalOpenaiIndex) {
+    if (!resolveBundledDepPkgJson(globalRoot, globalNodeModules, 'openai')) {
       console.log('ERROR: Global install left node_modules/openai unresolved after repair.');
       console.log(`    Checked nested and hoisted node_modules under ${globalRoot}`);
       process.exit(1);
