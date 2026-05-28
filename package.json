@@ -214,5 +214,15 @@
     "c8": {
       "yargs": "^18.0.0"
     }
-  }
+  },
+  "bundleDependencies": [
+    "@gsd/agent-core",
+    "@gsd/agent-modes",
+    "@gsd/native",
+    "@gsd/pi-agent-core",
+    "@gsd/pi-ai",
+    "@gsd/pi-coding-agent",
+    "@gsd/pi-tui",
+    "undici"
+  ]
 }

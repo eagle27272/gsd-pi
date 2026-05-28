@@ -127,8 +127,14 @@ jobs:
           CHANNEL: ${{ github.event.inputs.channel }}
         run: |
           VERSION=$(node -e 'process.stdout.write(require("./package.json").version)')
-          if npm view "@opengsd/gsd-pi@${VERSION}" version 2>/dev/null; then
-            echo "::error::Version ${VERSION} already exists. Trusted publishing only authenticates npm publish, not dist-tag mutation."
+          EXISTING=$(npm view "@opengsd/gsd-pi@${VERSION}" version 2>/dev/null || true)
+          if [ -n "${EXISTING}" ]; then
+            TAGGED=$(npm view "@opengsd/gsd-pi" "dist-tags.${CHANNEL}" 2>/dev/null || true)
+            if [ "${TAGGED}" = "${VERSION}" ]; then
+              echo "Version ${VERSION} is already published and @${CHANNEL} points to it — skipping publish."
+              exit 0
+            fi
+            echo "::error::Version ${VERSION} already exists but @${CHANNEL} points to '${TAGGED:-<unset>}'. Trusted publishing only authenticates npm publish, not dist-tag mutation."
             echo "::error::Move the tag manually if intended: npm dist-tag add @opengsd/gsd-pi@${VERSION} ${CHANNEL}"
             exit 1
           fi

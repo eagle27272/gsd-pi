@@ -27,18 +27,27 @@ import { initCmuxEventListeners } from "../../cmux/index.js";
 
 export { writeCrashLog } from "./crash-log.js";
 
+function isPipeClosedError(err: Error): boolean {
+  const errno = (err as NodeJS.ErrnoException).code;
+  if (errno === "EPIPE") return true;
+  const message = err.message;
+  return message === "write EOF" || message === "read EOF";
+}
+
 export function handleRecoverableExtensionProcessError(err: Error): boolean {
   if (err.message.includes("ProcessTransport is not ready for writing")) {
     process.stderr.write(`[gsd] swallowed dead transport control write: ${err.message}\n`);
     return true;
   }
-  if ((err as NodeJS.ErrnoException).code === "EPIPE") {
+  if (isPipeClosedError(err)) {
+    const code = (err as NodeJS.ErrnoException).code;
+    const tag = code ?? err.message;
     const stdoutGone = process.stdout.destroyed || process.stdout.writableEnded;
     if (stdoutGone) {
       process.exit(0);
     }
     process.stderr.write(
-      `[gsd] swallowed EPIPE (syscall=${(err as NodeJS.ErrnoException).syscall ?? "?"})\n`,
+      `[gsd] swallowed ${tag} (syscall=${(err as NodeJS.ErrnoException).syscall ?? "?"})\n`,
     );
     return true;
   }

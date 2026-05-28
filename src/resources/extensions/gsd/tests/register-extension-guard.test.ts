@@ -94,6 +94,16 @@ test("handleRecoverableExtensionProcessError leaves unrelated errors unhandled",
   assert.equal(handled, false);
 });
 
+test("handleRecoverableExtensionProcessError leaves ECONNRESET network errors unhandled", () => {
+  const handled = handleRecoverableExtensionProcessError(
+    Object.assign(new Error("socket hang up"), {
+      code: "ECONNRESET",
+      syscall: "read",
+    }),
+  );
+  assert.equal(handled, false);
+});
+
 test("handleRecoverableExtensionProcessError swallows EPIPE without writing a crash log", () => {
   const tmpHome = join(tmpdir(), `gsd-epipe-test-${randomUUID()}`);
   const origHome = process.env.GSD_HOME;
@@ -138,6 +148,44 @@ test("handleRecoverableExtensionProcessError swallows dead transport control wri
     );
     assert.equal(handled, true);
     assert.match(stderr, /swallowed dead transport control write/);
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+});
+
+test("handleRecoverableExtensionProcessError swallows write EOF without code", () => {
+  let stderr = "";
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderr += String(chunk);
+    return true;
+  }) as typeof process.stderr.write;
+
+  try {
+    const handled = handleRecoverableExtensionProcessError(
+      new Error("write EOF"),
+    );
+    assert.equal(handled, true);
+    assert.match(stderr, /swallowed write EOF/);
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+});
+
+test("handleRecoverableExtensionProcessError swallows read EOF without code", () => {
+  let stderr = "";
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderr += String(chunk);
+    return true;
+  }) as typeof process.stderr.write;
+
+  try {
+    const handled = handleRecoverableExtensionProcessError(
+      new Error("read EOF"),
+    );
+    assert.equal(handled, true);
+    assert.match(stderr, /swallowed read EOF/);
   } finally {
     process.stderr.write = originalWrite;
   }
