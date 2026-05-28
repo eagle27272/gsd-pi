@@ -124,6 +124,25 @@ test("handleRecoverableExtensionProcessError swallows EPIPE without writing a cr
   }
 });
 
+test("handleRecoverableExtensionProcessError swallows dead transport control write errors", () => {
+  let stderr = "";
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderr += String(chunk);
+    return true;
+  }) as typeof process.stderr.write;
+
+  try {
+    const handled = handleRecoverableExtensionProcessError(
+      new Error("ProcessTransport is not ready for writing"),
+    );
+    assert.equal(handled, true);
+    assert.match(stderr, /swallowed dead transport control write/);
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+});
+
 test("handleRecoverableExtensionProcessError swallows write EOF without code", () => {
   let stderr = "";
   const originalWrite = process.stderr.write.bind(process.stderr);
