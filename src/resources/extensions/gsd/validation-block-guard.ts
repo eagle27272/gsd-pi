@@ -34,9 +34,15 @@ const VALIDATION_BLOCKED_PARALLEL_SUBCOMMANDS = new Set([
   "merge",
 ]);
 
-const VALIDATION_BLOCKED_WORKFLOW_SUBCOMMANDS = new Set([
-  "run",
-  "resume",
+const VALIDATION_SAFE_WORKFLOW_SUBCOMMANDS = new Set([
+  "",
+  "new",
+  "list",
+  "validate",
+  "pause",
+  "info",
+  "install",
+  "uninstall",
 ]);
 
 export function isValidationBlockedState(state: GSDState): boolean {
@@ -56,7 +62,7 @@ export function isValidationBlockAllowedCommand(trimmed: string): boolean {
     return !VALIDATION_BLOCKED_PARALLEL_SUBCOMMANDS.has(subcommand ?? "");
   }
   if (name === "workflow") {
-    return !VALIDATION_BLOCKED_WORKFLOW_SUBCOMMANDS.has(subcommand ?? "");
+    return VALIDATION_SAFE_WORKFLOW_SUBCOMMANDS.has(subcommand ?? "");
   }
   return !VALIDATION_BLOCKED_COMMANDS.has(name);
 }

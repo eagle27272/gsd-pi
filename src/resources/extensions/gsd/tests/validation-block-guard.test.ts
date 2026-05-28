@@ -96,6 +96,8 @@ test("validation block rejects workflow-start and advancing commands", () => {
     "start bugfix",
     "workflow resume",
     "workflow run release-checklist",
+    "workflow release-checklist",
+    "workflow release-checklist env=prod",
     "parallel start",
     "parallel resume",
     "parallel merge",

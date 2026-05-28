@@ -131,6 +131,7 @@ test("dispatcher blocks workflow-advancing aliases while validation is blocked",
     "do mark all complete",
     "dispatch complete",
     "workflow resume",
+    "workflow release-checklist",
   ];
 
   for (const command of blockedCommands) {
