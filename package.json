@@ -12,11 +12,6 @@
     "url": "https://github.com/open-gsd/gsd-pi/issues"
   },
   "type": "module",
-  "workspaces": [
-    "packages/*",
-    "extensions/*",
-    "web"
-  ],
   "bin": {
     "gsd": "dist/loader.js",
     "gsd-cli": "dist/loader.js",

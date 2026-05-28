@@ -96,6 +96,10 @@ async function copyAssets(srcDir, destDir) {
     if (entry.isDirectory()) {
       await copyAssets(srcPath, destPath);
     } else {
+      if (entry.name.endsWith('.js')) {
+        const tsSibling = srcPath.replace(/\.js$/, '.ts');
+        if (existsSync(tsSibling)) continue;
+      }
       await mkdir(destDir, { recursive: true });
       await cp(srcPath, destPath, { force: true });
     }

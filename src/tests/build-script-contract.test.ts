@@ -2,7 +2,7 @@
 // File Purpose: Regression coverage for workspace build ordering around shared contracts.
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -12,7 +12,7 @@ function findRepoRoot(start: string): string {
 	for (let i = 0; i < 10; i++) {
 		try {
 			const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
-			if (pkg.name === "@opengsd/gsd-pi" && pkg.workspaces) return dir;
+			if (pkg.name === "@opengsd/gsd-pi" && existsSync(join(dir, "pnpm-workspace.yaml"))) return dir;
 		} catch {
 			// Keep walking.
 		}
