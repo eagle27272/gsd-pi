@@ -6,7 +6,7 @@
 
 import type { ExtensionCommandContext, ContextUsage, SessionEntry } from "@gsd/pi-coding-agent";
 
-import { formatCost, formatTokenCount } from "./metrics.js";
+import { formatCost, formatPercent, formatTokenCount } from "./metrics.js";
 import { loadEffectiveGSDPreferences } from "./preferences.js";
 
 export interface SessionTokenTotals {
@@ -78,12 +78,6 @@ export function scanSessionTokenTotals(
   }
 
   return totals;
-}
-
-function formatPercent(percent: number): string {
-  if (percent >= 100) return percent.toFixed(1);
-  if (percent >= 10) return percent.toFixed(1);
-  return percent.toFixed(2);
 }
 
 function formatContextLine(usage: ContextUsage | undefined): string[] {
@@ -173,6 +167,7 @@ export async function handleUsage(args: string, ctx: ExtensionCommandContext): P
   const modelLabel = model ? `${model.provider}/${model.id}` : null;
 
   if (args.includes("--json")) {
+    const prefs = loadEffectiveGSDPreferences()?.preferences;
     ctx.ui.notify(
       JSON.stringify(
         {
@@ -180,8 +175,8 @@ export async function handleUsage(args: string, ctx: ExtensionCommandContext): P
           contextUsage: contextUsage ?? null,
           sessionTotals,
           thresholds: {
-            contextPause: loadEffectiveGSDPreferences()?.preferences?.context_pause_threshold ?? null,
-            compaction: loadEffectiveGSDPreferences()?.preferences?.context_management?.compaction_threshold_percent ?? null,
+            contextPause: prefs?.context_pause_threshold ?? null,
+            compaction: prefs?.context_management?.compaction_threshold_percent ?? null,
           },
         },
         null,

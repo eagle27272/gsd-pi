@@ -7,7 +7,7 @@
 
 import type { ExtensionCommandContext, ContextUsage, SessionEntry, SessionMessageEntry } from "@gsd/pi-coding-agent";
 
-import { formatTokenCount } from "./metrics.js";
+import { formatPercent, formatTokenCount } from "./metrics.js";
 import { countTokensSync, type TokenProvider } from "./token-counter.js";
 import { writeContextChartHtml } from "./context-chart-html.js";
 import { openInBrowser } from "./export.js";
@@ -417,12 +417,6 @@ export function buildContextBreakdown(options: {
     },
     subagentSpawns: session.subagentSpawns,
   };
-}
-
-function formatPercent(percent: number): string {
-  if (percent >= 100) return percent.toFixed(1);
-  if (percent >= 10) return percent.toFixed(1);
-  return percent.toFixed(2);
 }
 
 function formatSectionLines(sections: ContextSectionBreakdown[], totalKnown: number | null): string[] {
