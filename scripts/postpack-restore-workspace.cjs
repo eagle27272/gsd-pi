@@ -3,14 +3,12 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const BACKUP_DIR = path.join(ROOT, '.prepack-backup');
 
 function restoreDir(currentDir, relativeDir = '') {
   for (const entry of fs.readdirSync(currentDir, { withFileTypes: true })) {
-    if (entry.name === 'materialized-bundled-deps.json') continue;
     const relPath = relativeDir ? path.join(relativeDir, entry.name) : entry.name;
     const sourcePath = path.join(currentDir, entry.name);
     if (entry.isDirectory()) {
@@ -27,10 +25,6 @@ function restoreDir(currentDir, relativeDir = '') {
 if (!fs.existsSync(BACKUP_DIR)) {
   process.exit(0);
 }
-
-spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'materialize-bundled-deps.cjs'), 'restore'], {
-  stdio: 'inherit',
-});
 
 restoreDir(BACKUP_DIR);
 fs.rmSync(BACKUP_DIR, { recursive: true, force: true });

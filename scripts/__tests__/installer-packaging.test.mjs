@@ -7,8 +7,8 @@ import test from "node:test";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 
-/** External deps that must ship inside the tarball for --ignore-scripts global installs. */
-const REQUIRED_BUNDLED_EXTERNALS = [
+/** External deps that postinstall repair must be able to materialize from the package root. */
+const REQUIRED_ROOT_EXTERNALS = [
   "@modelcontextprotocol/sdk",
   "minimatch",
   "picomatch",
@@ -25,12 +25,8 @@ test("installer deps module exposes postinstall orchestration", async () => {
   assert.equal(typeof repairPackageDependencies, "function");
 });
 
-test("installer tarball bundles extension-critical externals at the package root", () => {
-  for (const dep of REQUIRED_BUNDLED_EXTERNALS) {
+test("installer tarball declares extension-critical externals at the package root", () => {
+  for (const dep of REQUIRED_ROOT_EXTERNALS) {
     assert.ok(pkg.dependencies[dep], `root package must depend on ${dep}`);
-    assert.ok(
-      pkg.bundledDependencies.includes(dep),
-      `root bundledDependencies must include ${dep}`,
-    );
   }
 });

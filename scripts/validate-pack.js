@@ -135,16 +135,16 @@ try {
     cwd: ROOT,
     stdio: 'inherit',
   });
-  execFileSync(process.execPath, [join(__dirname, 'materialize-bundled-deps.cjs')], {
-    cwd: ROOT,
-    stdio: 'inherit',
-  });
 
   console.log('==> Packing tarball...');
   const packOutput = runNpm(['pack', '--json', '--ignore-scripts']);
   const packEntries = JSON.parse(packOutput);
   const packEntry = Array.isArray(packEntries) ? packEntries[0] : null;
-  const tarballName = packEntry?.filename;
+  if (!packEntry || typeof packEntry.filename !== 'string' || packEntry.filename.length === 0) {
+    console.log('ERROR: npm pack returned no package metadata.');
+    process.exit(1);
+  }
+  const tarballName = packEntry.filename;
   tarball = join(ROOT, tarballName);
 
   if (!existsSync(tarball)) {
@@ -163,11 +163,26 @@ try {
   // bundled payload (~15k files / ~220MB unpacked) with headroom for growth.
   const MAX_ENTRY_COUNT = 30000;
   const MAX_UNPACKED_BYTES = 350 * 1024 * 1024;
-  const entryCount = packEntry?.entryCount ?? 0;
-  const unpackedSize = packEntry?.unpackedSize ?? 0;
-  const allPackedPaths = Array.isArray(packEntry?.files)
-    ? packEntry.files.map((entry) => entry?.path).filter(Boolean)
-    : [];
+  const packMetadataErrors = [];
+  if (!Number.isFinite(packEntry.entryCount)) {
+    packMetadataErrors.push('missing numeric entryCount');
+  }
+  if (!Number.isFinite(packEntry.unpackedSize)) {
+    packMetadataErrors.push('missing numeric unpackedSize');
+  }
+  if (!Array.isArray(packEntry.files)) {
+    packMetadataErrors.push('missing files[] metadata');
+  } else if (packEntry.files.some((entry) => typeof entry?.path !== 'string' || entry.path.length === 0)) {
+    packMetadataErrors.push('files[] entries missing path metadata');
+  }
+  if (packMetadataErrors.length) {
+    console.log('ERROR: npm pack metadata missing fields required by the tarball bloat guard:');
+    for (const e of packMetadataErrors) console.log(`    ${e}`);
+    process.exit(1);
+  }
+  const entryCount = packEntry.entryCount;
+  const unpackedSize = packEntry.unpackedSize;
+  const allPackedPaths = packEntry.files.map((entry) => entry.path);
   const pnpmStorePaths = allPackedPaths.filter((p) => p.startsWith('node_modules/.pnpm/'));
   const nestedNmPaths = allPackedPaths.filter((p) => /^packages\/[^/]+\/node_modules\//.test(p));
   const bloatErrors = [];
@@ -186,7 +201,7 @@ try {
   if (bloatErrors.length) {
     console.log('ERROR: Tarball bloat guard tripped:');
     for (const e of bloatErrors) console.log(`    ${e}`);
-    console.log('    See scripts/materialize-bundled-deps.cjs (@gsd flatten) and package.json "files".');
+    console.log('    See package.json "files" and workspace package outputs.');
     process.exit(1);
   }
   console.log(`    Size guard OK: ${entryCount} entries, ${formatBytes(unpackedSize)} unpacked, ${pnpmStorePaths.length} .pnpm entries.`);
@@ -204,11 +219,7 @@ try {
 
   // --- Check critical files using npm pack metadata ---
   console.log('==> Checking critical files...');
-  const packedFiles = new Set(
-    Array.isArray(packEntry?.files)
-      ? packEntry.files.map((entry) => entry?.path).filter(Boolean)
-      : [],
-  );
+  const packedFiles = new Set(packEntry.files.map((entry) => entry.path));
 
   const requiredFiles = [
     'dist/loader.js',
