@@ -426,7 +426,10 @@ export function buildCategorySummaries(prefs: Record<string, unknown>): Record<s
       on_milestone: true,
       on_attention: true,
     };
-    const enabledCount = allKeys.filter(k => notif[k] ?? defaults[k]).length;
+    const masterEnabled = notif.enabled ?? defaults.enabled;
+    const enabledCount = masterEnabled
+      ? allKeys.filter((k) => (k === "enabled" ? masterEnabled : (notif[k] ?? defaults[k]))).length
+      : 0;
     notifSummary = `${enabledCount}/${allKeys.length} enabled`;
   }
 
