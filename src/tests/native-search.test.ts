@@ -1078,6 +1078,27 @@ test("stripThinkingFromHistory preserves complete native search assistant blocks
   assert.equal(messages[1].content[2].type, "web_search_tool_result");
 });
 
+test("stripThinkingFromHistory strips thinking from partial native search blocks", () => {
+  const messages: any[] = [
+    { role: "user", content: "search" },
+    {
+      role: "assistant",
+      content: [
+        { type: "thinking", thinking: "need search", signature: "sig1" },
+        { type: "server_tool_use", id: "srv1", name: "web_search", input: { query: "gsd" } },
+        { type: "text", text: "interrupted" },
+      ],
+    },
+    { role: "user", content: "next" },
+  ];
+
+  stripThinkingFromHistory(messages);
+
+  assert.equal(messages[1].content.length, 2);
+  assert.equal(messages[1].content[0].type, "server_tool_use");
+  assert.equal(messages[1].content[1].type, "text");
+});
+
 test("stripThinkingFromHistory strips even single assistant message", () => {
   const messages: any[] = [
     { role: "user", content: "hello" },

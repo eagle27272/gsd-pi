@@ -16,12 +16,47 @@ export const CUSTOM_SEARCH_TOOL_NAMES = ["search-the-web", "search_and_read", "g
 
 /** Thinking block types that require signature validation by the API */
 const THINKING_TYPES = new Set(["thinking", "redacted_thinking"]);
-const NATIVE_SERVER_TOOL_TYPES = new Set([
+const NATIVE_SERVER_TOOL_USE_TYPES = new Set([
   "server_tool_use",
-  "web_search_tool_result",
   "serverToolUse",
+]);
+const NATIVE_WEB_SEARCH_RESULT_TYPES = new Set([
+  "web_search_tool_result",
   "webSearchResult",
 ]);
+
+function nativeServerToolId(block: any): string | undefined {
+  if (!NATIVE_SERVER_TOOL_USE_TYPES.has(block?.type)) return undefined;
+  return typeof block.id === "string" ? block.id : undefined;
+}
+
+function nativeWebSearchResultId(block: any): string | undefined {
+  if (!NATIVE_WEB_SEARCH_RESULT_TYPES.has(block?.type)) return undefined;
+  const id = block.type === "webSearchResult" ? block.toolUseId : block.tool_use_id;
+  return typeof id === "string" ? id : undefined;
+}
+
+function hasCompleteNativeServerToolReplay(content: any[]): boolean {
+  const pendingToolUseIds = new Set<string>();
+  let sawNativeServerToolUse = false;
+
+  for (const block of content) {
+    const toolUseId = nativeServerToolId(block);
+    if (toolUseId !== undefined) {
+      if (pendingToolUseIds.has(toolUseId)) return false;
+      sawNativeServerToolUse = true;
+      pendingToolUseIds.add(toolUseId);
+      continue;
+    }
+
+    const resultId = nativeWebSearchResultId(block);
+    if (resultId !== undefined) {
+      if (!pendingToolUseIds.delete(resultId)) return false;
+    }
+  }
+
+  return sawNativeServerToolUse && pendingToolUseIds.size === 0;
+}
 
 /**
  * Providers whose Anthropic-Messages endpoint is known to accept the native
@@ -108,7 +143,7 @@ export function stripThinkingFromHistory(
 
     const content = msg.content;
     if (!Array.isArray(content)) continue;
-    if (content.some((block: any) => NATIVE_SERVER_TOOL_TYPES.has(block?.type))) {
+    if (hasCompleteNativeServerToolReplay(content)) {
       continue;
     }
 
