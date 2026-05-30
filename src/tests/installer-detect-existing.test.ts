@@ -78,7 +78,7 @@ test('detectInstalledVersion parses npm list wrapper output', async () => {
     if (process.platform !== 'win32') await chmod(npmPath, 0o755)
     process.env.PATH = [binDir, originalPath].filter(Boolean).join(delimiter)
 
-    assert.equal(await detectInstalledVersion(), '2.14.0')
+    assert.equal(await detectInstalledVersion({ packageManager: 'npm' }), '2.14.0')
   } finally {
     if (originalPath === undefined) {
       delete process.env.PATH
