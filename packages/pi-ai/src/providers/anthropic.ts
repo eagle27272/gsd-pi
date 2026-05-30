@@ -520,7 +520,13 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 			await options?.onResponse?.({ status: response.status, headers: headersToRecord(response.headers) }, model);
 			stream.push({ type: "start", partial: output });
 
-			type Block = (ThinkingContent | TextContent | ServerToolUse | WebSearchResult | (ToolCall & { partialJson: string })) & {
+			type Block = (
+				| ThinkingContent
+				| TextContent
+				| (ServerToolUse & { partialJson?: string })
+				| WebSearchResult
+				| (ToolCall & { partialJson: string })
+			) & {
 				index: number;
 			};
 			const blocks = output.content as Block[];
@@ -586,6 +592,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 							name: event.content_block.name,
 							input: event.content_block.input,
 							caller: event.content_block.caller,
+							partialJson: "",
 							index: event.index,
 						};
 						output.content.push(block);
@@ -637,6 +644,9 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 								delta: event.delta.partial_json,
 								partial: output,
 							});
+						} else if (block && block.type === "serverToolUse") {
+							block.partialJson = (block.partialJson ?? "") + event.delta.partial_json;
+							block.input = parseStreamingJson<unknown>(block.partialJson);
 						}
 					} else if (event.delta.type === "signature_delta") {
 						const index = blocks.findIndex((b) => b.index === event.index);
@@ -676,6 +686,11 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 								toolCall: block,
 								partial: output,
 							});
+						} else if (block.type === "serverToolUse") {
+							if (block.partialJson) {
+								block.input = parseStreamingJson<unknown>(block.partialJson);
+							}
+							delete (block as { partialJson?: string }).partialJson;
 						}
 					}
 				} else if (event.type === "message_delta") {

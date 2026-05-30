@@ -285,6 +285,82 @@ describe("Anthropic raw SSE parsing", () => {
 		});
 	});
 
+	it("accumulates native web search input JSON deltas", async () => {
+		const model = getModel("anthropic", "claude-haiku-4-5");
+		const context: Context = {
+			messages: [{ role: "user", content: "Search the web.", timestamp: Date.now() }],
+		};
+		const response = createSseResponse([
+			{
+				event: "message_start",
+				data: JSON.stringify({
+					type: "message_start",
+					message: {
+						id: "msg_test",
+						usage: {
+							input_tokens: 12,
+							output_tokens: 0,
+							cache_read_input_tokens: 0,
+							cache_creation_input_tokens: 0,
+						},
+					},
+				}),
+			},
+			{
+				event: "content_block_start",
+				data: JSON.stringify({
+					type: "content_block_start",
+					index: 0,
+					content_block: { type: "server_tool_use", id: "srv_1", name: "web_search", input: {} },
+				}),
+			},
+			{
+				event: "content_block_delta",
+				data: JSON.stringify({
+					type: "content_block_delta",
+					index: 0,
+					delta: { type: "input_json_delta", partial_json: '{"query":' },
+				}),
+			},
+			{
+				event: "content_block_delta",
+				data: JSON.stringify({
+					type: "content_block_delta",
+					index: 0,
+					delta: { type: "input_json_delta", partial_json: '"gsd","max_uses":2}' },
+				}),
+			},
+			{ event: "content_block_stop", data: JSON.stringify({ type: "content_block_stop", index: 0 }) },
+			{
+				event: "message_delta",
+				data: JSON.stringify({
+					type: "message_delta",
+					delta: { stop_reason: "end_turn" },
+					usage: {
+						input_tokens: 12,
+						output_tokens: 5,
+						cache_read_input_tokens: 0,
+						cache_creation_input_tokens: 0,
+					},
+				}),
+			},
+			{ event: "message_stop", data: JSON.stringify({ type: "message_stop" }) },
+		]);
+
+		const stream = streamAnthropic(model, context, {
+			client: createFakeAnthropicClient(response),
+		});
+		const result = await stream.result();
+
+		const serverToolUse = result.content.find((block): block is ServerToolUse => block.type === "serverToolUse");
+		expect(serverToolUse).toMatchObject({
+			id: "srv_1",
+			name: "web_search",
+			input: { query: "gsd", max_uses: 2 },
+		});
+		expect(serverToolUse).not.toHaveProperty("partialJson");
+	});
+
 	it("replays preserved native web search blocks in assistant history", async () => {
 		const model = getModel("anthropic", "claude-haiku-4-5");
 		const caller = { type: "direct" };
