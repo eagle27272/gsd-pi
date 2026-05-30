@@ -93,9 +93,34 @@ import {
   detectRootWriteLeak,
   formatRootWriteLeakMessage,
 } from "../root-write-leak-guard.js";
+import { classifyError, isTransient } from "../error-classifier.js";
 
 export const STUCK_WINDOW_SIZE = 6;
 const STUCK_RECOVERY_ATTEMPTS_KEY = "stuck_recovery_attempts";
+const TRANSIENT_PROVIDER_MESSAGE_KINDS = new Set(["rate-limit", "network", "stream", "connection", "server"]);
+
+function extractLastAssistantText(messages: unknown[] | null | undefined): string {
+  if (!Array.isArray(messages)) return "";
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (!msg || typeof msg !== "object") continue;
+    if ((msg as { role?: unknown }).role !== "assistant") continue;
+    const content = (msg as { content?: unknown }).content;
+    if (typeof content === "string" && content.trim()) return content.trim();
+    if (!Array.isArray(content)) continue;
+    const parts: string[] = [];
+    for (const block of content) {
+      if (!block || typeof block !== "object") continue;
+      const typed = block as { type?: unknown; text?: unknown };
+      if (typed.type === "text" && typeof typed.text === "string") {
+        parts.push(typed.text);
+      }
+    }
+    const text = parts.join("\n").trim();
+    if (text) return text;
+  }
+  return "";
+}
 
 export function resolveDispatchRecoveryAttempts(
   unitRecoveryCount: Map<string, number>,
@@ -2637,6 +2662,40 @@ export async function runUnitPhase(
         (u: { type: string; id: string; startedAt: number; toolCalls: number }) => u.type === unitType && u.id === unitId && u.startedAt === _resolveCurrentUnitStartedAtForTest(s.currentUnit),
       );
       if (lastUnit && lastUnit.toolCalls === 0) {
+        const lastAssistantMessage = extractLastAssistantText(s.lastUnitAgentEndMessages);
+        const providerMessageClass = classifyError(lastAssistantMessage);
+        if (
+          lastAssistantMessage &&
+          isTransient(providerMessageClass) &&
+          TRANSIENT_PROVIDER_MESSAGE_KINDS.has(providerMessageClass.kind)
+        ) {
+          const retryAfterMs = "retryAfterMs" in providerMessageClass ? providerMessageClass.retryAfterMs : 15_000;
+          await pauseAutoForProviderError(
+            ctx.ui,
+            ` for ${unitType} ${unitId}`,
+            () => deps.pauseAuto(ctx, pi),
+            {
+              isRateLimit: providerMessageClass.kind === "rate-limit",
+              isTransient: true,
+              retryAfterMs,
+              resume: () => {
+                void resumeAutoAfterProviderDelay(pi, ctx).catch((err) => {
+                  logWarning("engine", `Provider error auto-resume failed: ${err instanceof Error ? err.message : String(err)}`);
+                });
+              },
+            },
+          );
+          await emitCancelledUnitEnd(ic, unitType, unitId, unitStartSeq, {
+            message: lastAssistantMessage.slice(0, 200),
+            category: "provider",
+            isTransient: true,
+            retryAfterMs,
+          });
+          return {
+            action: "break",
+            reason: providerMessageClass.kind === "rate-limit" ? "rate-limit" : "api-timeout",
+          };
+        }
         if (USER_DRIVEN_DEEP_UNITS.has(unitType) && isAwaitingUserInput(s.lastUnitAgentEndMessages ?? undefined)) {
           debugLog("runUnitPhase", {
             phase: "zero-tool-calls-awaiting-user-input",
