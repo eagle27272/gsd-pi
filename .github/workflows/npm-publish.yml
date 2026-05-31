@@ -152,13 +152,26 @@ jobs:
           trap 'node scripts/postpack-restore-workspace.cjs' EXIT
           node scripts/prepack-resolve-workspace.cjs
           npm publish --ignore-scripts --tag "${CHANNEL}"
-          echo "Verifying @opengsd/gsd-pi@${VERSION} is reachable on npm..."
-          for i in 1 2 3 4 5; do
-            npm view "@opengsd/gsd-pi@${VERSION}" version 2>/dev/null && echo "Confirmed: @opengsd/gsd-pi@${VERSION} is live." && exit 0
-            echo "Attempt $i: not yet visible - waiting 10s..."
-            sleep 10
+          echo "Verifying @opengsd/gsd-pi@${VERSION} can be installed from npm..."
+          DELAY=10
+          for attempt in $(seq 1 12); do
+            PREFIX=$(mktemp -d "${RUNNER_TEMP:-/tmp}/gsd-npm-install-XXXXXX")
+            CACHE=$(mktemp -d "${RUNNER_TEMP:-/tmp}/gsd-npm-cache-XXXXXX")
+            if npm install -g "@opengsd/gsd-pi@${VERSION}" --ignore-scripts --prefer-online --prefix "${PREFIX}" --cache "${CACHE}"; then
+              rm -rf "${PREFIX}" "${CACHE}"
+              echo "Confirmed: @opengsd/gsd-pi@${VERSION} installs from npm."
+              exit 0
+            fi
+            rm -rf "${PREFIX}" "${CACHE}"
+            if [ "${attempt}" = "12" ]; then
+              break
+            fi
+            echo "Attempt ${attempt}: package metadata or tarball not fully propagated - waiting ${DELAY}s..."
+            sleep "${DELAY}"
+            DELAY=$((DELAY * 2))
+            if [ "${DELAY}" -gt 60 ]; then DELAY=60; fi
           done
-          echo "::error::Publish step succeeded but @opengsd/gsd-pi@${VERSION} is not reachable on npm after 50s. Check trusted publishing and registry propagation."
+          echo "::error::Publish step succeeded but @opengsd/gsd-pi@${VERSION} was not installable from npm after retries. Check registry tarball propagation before continuing."
           exit 1
 
   prerelease-verify:
@@ -568,13 +581,26 @@ jobs:
               exit 1
             fi
           fi
-          echo "Verifying @opengsd/gsd-pi@${RELEASE_VERSION} is reachable on npm..."
-          for i in 1 2 3 4 5; do
-            npm view "@opengsd/gsd-pi@${RELEASE_VERSION}" version 2>/dev/null && echo "Confirmed: @opengsd/gsd-pi@${RELEASE_VERSION} is live." && exit 0
-            echo "Attempt $i: not yet visible - waiting 10s..."
-            sleep 10
+          echo "Verifying @opengsd/gsd-pi@${RELEASE_VERSION} can be installed from npm..."
+          DELAY=10
+          for attempt in $(seq 1 12); do
+            PREFIX=$(mktemp -d "${RUNNER_TEMP:-/tmp}/gsd-npm-install-XXXXXX")
+            CACHE=$(mktemp -d "${RUNNER_TEMP:-/tmp}/gsd-npm-cache-XXXXXX")
+            if npm install -g "@opengsd/gsd-pi@${RELEASE_VERSION}" --ignore-scripts --prefer-online --prefix "${PREFIX}" --cache "${CACHE}"; then
+              rm -rf "${PREFIX}" "${CACHE}"
+              echo "Confirmed: @opengsd/gsd-pi@${RELEASE_VERSION} installs from npm."
+              exit 0
+            fi
+            rm -rf "${PREFIX}" "${CACHE}"
+            if [ "${attempt}" = "12" ]; then
+              break
+            fi
+            echo "Attempt ${attempt}: package metadata or tarball not fully propagated - waiting ${DELAY}s..."
+            sleep "${DELAY}"
+            DELAY=$((DELAY * 2))
+            if [ "${DELAY}" -gt 60 ]; then DELAY=60; fi
           done
-          echo "::error::Publish step succeeded but @opengsd/gsd-pi@${RELEASE_VERSION} is not reachable on npm after 50s. Check trusted publishing and registry propagation."
+          echo "::error::Publish step succeeded but @opengsd/gsd-pi@${RELEASE_VERSION} was not installable from npm after retries. Check registry tarball propagation before continuing."
           exit 1
 
       - name: Push release commit and tag
@@ -617,6 +643,7 @@ jobs:
           RELEASE_VERSION: ${{ needs.prod-release-plan.outputs.version }}
         run: |
           docker build --target runtime \
+            --build-arg "GSD_VERSION=${RELEASE_VERSION}" \
             -t ghcr.io/open-gsd/gsd-pi:latest \
             -t "ghcr.io/open-gsd/gsd-pi:${RELEASE_VERSION}" \
             .
