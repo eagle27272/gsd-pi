@@ -28,6 +28,8 @@ import {
   _buildImportCandidates,
   registerWorkflowTools,
   WORKFLOW_TOOL_NAMES,
+  CANONICAL_WORKFLOW_TOOL_NAMES,
+  WORKFLOW_TOOL_ALIAS_NAMES,
   validateProjectDir,
 } from "./workflow-tools.ts";
 
@@ -172,6 +174,22 @@ describe("workflow MCP tools", () => {
 
     assert.equal(server.tools.length, WORKFLOW_TOOL_NAMES.length);
     assert.deepEqual(server.tools.map((t) => t.name), [...WORKFLOW_TOOL_NAMES]);
+  });
+
+  it("omits backwards-compatibility aliases when advertiseAliases is false", () => {
+    const server = makeMockServer();
+    registerWorkflowTools(server as any, { advertiseAliases: false });
+
+    const toolNames = server.tools.map((t) => t.name);
+    assert.equal(toolNames.length, CANONICAL_WORKFLOW_TOOL_NAMES.length);
+    assert.deepEqual(toolNames, [...CANONICAL_WORKFLOW_TOOL_NAMES]);
+    for (const alias of WORKFLOW_TOOL_ALIAS_NAMES) {
+      assert.ok(!toolNames.includes(alias), `alias ${alias} should not be advertised`);
+    }
+    // Every canonical tool is still present.
+    for (const canonical of CANONICAL_WORKFLOW_TOOL_NAMES) {
+      assert.ok(toolNames.includes(canonical), `canonical ${canonical} must be registered`);
+    }
   });
 
   it("registers task reopen in the workflow MCP tool surface", () => {

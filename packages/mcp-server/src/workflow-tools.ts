@@ -10,7 +10,11 @@ import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
-import { WORKFLOW_TOOL_NAMES as CONTRACT_WORKFLOW_TOOL_NAMES } from "@opengsd/contracts";
+import {
+  WORKFLOW_TOOL_NAMES as CONTRACT_WORKFLOW_TOOL_NAMES,
+  CANONICAL_WORKFLOW_TOOL_NAMES as CONTRACT_CANONICAL_WORKFLOW_TOOL_NAMES,
+  WORKFLOW_TOOL_ALIAS_NAMES as CONTRACT_WORKFLOW_TOOL_ALIAS_NAMES,
+} from "@opengsd/contracts";
 
 import { logAliasUsage } from "./alias-telemetry.js";
 
@@ -739,6 +743,10 @@ interface McpToolServer {
 }
 
 export const WORKFLOW_TOOL_NAMES = CONTRACT_WORKFLOW_TOOL_NAMES;
+export const CANONICAL_WORKFLOW_TOOL_NAMES = CONTRACT_CANONICAL_WORKFLOW_TOOL_NAMES;
+export const WORKFLOW_TOOL_ALIAS_NAMES = CONTRACT_WORKFLOW_TOOL_ALIAS_NAMES;
+
+const WORKFLOW_TOOL_ALIAS_NAME_SET = new Set<string>(CONTRACT_WORKFLOW_TOOL_ALIAS_NAMES);
 
 const DEFAULT_WORKFLOW_OP_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -1594,8 +1602,34 @@ function wrapServerWithErrorHandler(realServer: McpToolServer): McpToolServer {
   };
 }
 
-export function registerWorkflowTools(realServer: McpToolServer): void {
-  const server = wrapServerWithErrorHandler(realServer);
+export interface RegisterWorkflowToolsOptions {
+  /**
+   * Whether to advertise the 14 backwards-compatibility alias tools in the
+   * server's tool list. Defaults to `true` so in-process callers (e.g. the
+   * daemon's handler map) keep resolving alias names. The MCP subprocess
+   * passes `false` to drop ~5.6K tokens/turn of duplicate alias schemas from
+   * the model-facing surface; canonical names are always registered.
+   */
+  advertiseAliases?: boolean;
+}
+
+export function registerWorkflowTools(
+  realServer: McpToolServer,
+  options: RegisterWorkflowToolsOptions = {},
+): void {
+  const advertiseAliases = options.advertiseAliases ?? true;
+  const wrapped = wrapServerWithErrorHandler(realServer);
+  // When aliases are not advertised, skip their registration entirely so they
+  // never enter the tool list. Canonical tools always register. Alias handlers
+  // remain available wherever advertiseAliases is true (e.g. the daemon).
+  const server: McpToolServer = advertiseAliases
+    ? wrapped
+    : {
+        tool(name, description, params, handler) {
+          if (WORKFLOW_TOOL_ALIAS_NAME_SET.has(name)) return undefined;
+          return wrapped.tool(name, description, params, handler);
+        },
+      };
   server.tool(
     "gsd_decision_save",
     "Record a project decision to the GSD database and regenerate DECISIONS.md.",

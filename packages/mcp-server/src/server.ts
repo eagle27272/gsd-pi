@@ -1336,7 +1336,13 @@ export async function createMcpServer(
     },
   );
 
-  registerWorkflowTools(server);
+  // Drop the 14 backwards-compatibility alias tools from the advertised
+  // surface by default (~5.6K tokens/turn). Canonical names cover every
+  // operation; set GSD_MCP_ADVERTISE_ALIASES=1 to restore aliases for external
+  // clients that still call them by their legacy names.
+  registerWorkflowTools(server, {
+    advertiseAliases: process.env.GSD_MCP_ADVERTISE_ALIASES === '1',
+  });
 
   return { server };
 }
