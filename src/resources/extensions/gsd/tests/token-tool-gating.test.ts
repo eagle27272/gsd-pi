@@ -201,6 +201,24 @@ test("buildMinimalAutoGsdToolSet preserves browser tools for run-uat", () => {
   assert.ok(!result.includes("gsd_task_complete"));
 });
 
+test("buildMinimalAutoGsdToolSet includes discuss-slice persistence tools", () => {
+  const result = buildMinimalAutoGsdToolSet([
+    "bash",
+    "read",
+    "gsd_summary_save",
+    "gsd_decision_save",
+    "gsd_plan_slice",
+    "gsd_task_complete",
+    "memory_query",
+    "capture_thought",
+  ], "discuss-slice");
+
+  assert.ok(result.includes("gsd_summary_save"));
+  assert.ok(result.includes("gsd_decision_save"));
+  assert.ok(!result.includes("gsd_plan_slice"));
+  assert.ok(!result.includes("gsd_task_complete"));
+});
+
 test("buildMinimalAutoGsdToolSet includes closeout tool for complete-slice", () => {
   const result = buildMinimalAutoGsdToolSet([
     "bash",
