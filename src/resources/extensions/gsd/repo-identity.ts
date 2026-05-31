@@ -325,7 +325,7 @@ export function repoIdentity(basePath: string): string {
     const markerId = readGsdIdMarker(markerRoot);
     if (markerId) {
       const markerPath = join(process.env.GSD_STATE_DIR || gsdHome(), "projects", markerId);
-      if (hasProjectState(markerPath)) return markerId;
+      if (hasProjectState(markerPath) || readRepoMeta(markerPath)) return markerId;
     }
   }
   // Local-only repo: include git root since there's no remote to anchor identity.
