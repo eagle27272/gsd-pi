@@ -473,6 +473,28 @@ describe("checkImportResolution", () => {
     }
   });
 
+  test("ignores nested generated SvelteKit $types imports", () => {
+    tempDir = join(tmpdir(), `post-exec-test-${Date.now()}`);
+    mkdirSync(tempDir, { recursive: true });
+    mkdirSync(join(tempDir, "src", "lib", "components"), { recursive: true });
+    writeFileSync(
+      join(tempDir, "src", "lib", "components", "RouteCard.ts"),
+      "import type { PageData } from '../../routes/blog/$types';\nexport const data = {} as PageData;"
+    );
+
+    try {
+      const task = createTask({
+        id: "T01",
+        key_files: ["src/lib/components/RouteCard.ts"],
+      });
+
+      const results = checkImportResolution(task, [], tempDir);
+      assert.deepEqual(results, []);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("fails when import doesn't resolve", () => {
     tempDir = join(tmpdir(), `post-exec-test-${Date.now()}`);
     mkdirSync(tempDir, { recursive: true });

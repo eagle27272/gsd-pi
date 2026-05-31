@@ -323,7 +323,7 @@ export function checkImportResolution(
       // block task completion on these imports.
       if (
         /^\.{1,2}\/\+types\//.test(importPath) ||
-        /^\.{1,2}\/\$types(?:$|\/)/.test(importPath)
+        /^(?:\.{1,2}\/)+(?:[^/]+\/)*\$types(?:$|\/)/.test(importPath)
       ) {
         continue;
       }
