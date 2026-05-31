@@ -101,9 +101,6 @@ export async function reconcileBeforeDispatch(
       }
     }
 
-    if (failures.length > 0) {
-      throw new ReconciliationFailedError({ failures, pass });
-    }
     if (blockers.length > 0) {
       return {
         ok: true,
@@ -111,6 +108,9 @@ export async function reconcileBeforeDispatch(
         repaired,
         blockers: [...new Set([...(stateSnapshot.blockers ?? []), ...blockers])],
       };
+    }
+    if (failures.length > 0) {
+      throw new ReconciliationFailedError({ failures, pass });
     }
     // Pass fully succeeded; loop runs again to detect cascading drift.
   }

@@ -253,6 +253,39 @@ test("ADR-017: terminal drift blockers return blockers instead of repair excepti
   assert.equal(result.repaired.length, 0);
 });
 
+test("ADR-017: terminal drift blockers take precedence over co-occurring repair failures", async () => {
+  const terminalDrift: DriftRecord = {
+    kind: "completed-milestone-reopened",
+    milestoneId: "M001",
+    dbStatus: "active",
+  };
+  const repairDrift: DriftRecord = { kind: "stale-sketch-flag", mid: "M001", sid: "S02" };
+  const terminalHandler: DriftHandler = {
+    kind: "completed-milestone-reopened",
+    detect: () => [terminalDrift],
+    blocker: () => "manual completed-milestone review required",
+    repair: () => {
+      throw new Error("repair should not run for terminal blockers");
+    },
+  };
+  const repairHandler: DriftHandler = {
+    kind: "stale-sketch-flag",
+    detect: () => [repairDrift],
+    repair: () => {
+      throw new Error("simulated repair failure");
+    },
+  };
+
+  const result = await reconcileBeforeDispatch("/project", {
+    invalidateStateCache: () => {},
+    deriveState: async () => makeState(),
+    registry: [repairHandler, terminalHandler],
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.blockers, ["manual completed-milestone review required"]);
+});
+
 // ─── #5701: merge-state drift ────────────────────────────────────────────────
 
 function makeGitBase(): string {
