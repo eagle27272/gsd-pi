@@ -16,6 +16,7 @@ import {
   resolveExternalStateProjectGsdFromWorktreePath,
   resolveExternalStateProjectIdentityFromWorktreePath,
 } from "./worktree-root.js";
+import { logWarning } from "./workflow-logger.js";
 
 
 // ─── Repo Metadata ───────────────────────────────────────────────────────────
@@ -214,7 +215,10 @@ function getRemoteUrl(basePath: string): string | null {
     }
 
     // Keep transient git failures distinct from "no remote configured".
-    console.warn(`[GSD] repo-identity: failed to resolve remote.origin.url for ${basePath}:`, error);
+    logWarning("state", "repo-identity: failed to resolve remote.origin.url", {
+      basePath,
+      error: String(error),
+    });
     return null;
   }
 }
