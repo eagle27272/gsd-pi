@@ -181,7 +181,7 @@ export async function checkEngineHealth(
         for (const row of reopened) {
           const completedAt = row.ended_at ?? row.started_at ?? null;
           const reopenAt = latestExplicitReopenAt(basePath, row.id);
-          if (reopenAt && completedAt && Date.parse(reopenAt) > Date.parse(completedAt)) continue;
+          if (reopenAt && (!completedAt || Date.parse(reopenAt) > Date.parse(completedAt))) continue;
           issues.push({
             severity: "error",
             code: "completed_milestone_reopened",

@@ -18,6 +18,7 @@ import {
   openDatabase,
   closeDatabase,
   _getAdapter,
+  insertArtifact,
   insertMilestone,
   insertSlice,
   insertTask,
@@ -1076,6 +1077,38 @@ test("ADR-017: artifact/DB status divergence fails closed instead of importing c
       assert.ok(err instanceof ReconciliationFailedError);
       assert.match((err as Error).message, /artifact-db-status-divergence/);
       assert.equal(getSlice("M001", "S01")?.status, "pending", "DB status remains authoritative");
+      return true;
+    },
+  );
+});
+
+test("ADR-017: orphan task completion artifact fails closed", async (t) => {
+  const base = mkdtempSync(join(tmpdir(), "gsd-orphan-task-artifact-drift-"));
+  t.after(() => cleanup(base));
+
+  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T99"), { recursive: true });
+  openDatabase(join(base, ".gsd", "gsd.db"));
+  insertMilestone({ id: "M001", title: "Milestone", status: "active" });
+  insertSlice({ id: "S01", milestoneId: "M001", title: "Slice", status: "pending" });
+  insertTask({ id: "T01", sliceId: "S01", milestoneId: "M001", title: "Task", status: "pending" });
+  insertArtifact({
+    path: join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T99", "T99-SUMMARY.md"),
+    artifact_type: "SUMMARY",
+    milestone_id: "M001",
+    slice_id: "S01",
+    task_id: "T99",
+    full_content: "# T99 Summary\n\nStale artifact after replan.\n",
+  });
+
+  await assert.rejects(
+    () =>
+      reconcileBeforeDispatch(base, {
+        invalidateStateCache: () => {},
+        deriveState: async () => makeState({ activeMilestone: { id: "M001", title: "Milestone" } }),
+      }),
+    (err: unknown) => {
+      assert.ok(err instanceof ReconciliationFailedError);
+      assert.match((err as Error).message, /artifact-db-status-divergence/);
       return true;
     },
   );

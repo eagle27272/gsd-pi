@@ -183,7 +183,22 @@ function detectArtifactDbStatusDriftForMilestone(
 
     for (const row of summaryRows) {
       const task = row.task_id ? taskById.get(row.task_id) : null;
-      if (!task || isClosedStatus(task.status)) continue;
+      if (!task) {
+        if (tasks.length > 0) {
+          addUniqueDrift(drifts, seen, {
+            kind: "artifact-db-status-divergence",
+            milestoneId,
+            sliceId: slice.id,
+            taskId: row.task_id ?? undefined,
+            artifactType: "SUMMARY",
+            artifactPath: row.path,
+            dbStatus: "missing-db-task",
+            reason: `task ${slice.id}/${row.task_id} has SUMMARY artifact but no DB task`,
+          });
+        }
+        continue;
+      }
+      if (isClosedStatus(task.status)) continue;
       addUniqueDrift(drifts, seen, {
         kind: "artifact-db-status-divergence",
         milestoneId,
