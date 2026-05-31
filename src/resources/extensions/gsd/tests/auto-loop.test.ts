@@ -4570,6 +4570,101 @@ test("autoLoop rejects execute-task with 0 tool calls as hallucinated (#1833)", 
   );
 });
 
+test("runUnitPhase retries 0-tool units with ordinary network-related assistant text", async (t) => {
+  _resetPendingResolve();
+
+  const basePath = mkdtempSync(join(tmpdir(), "gsd-zero-tool-network-text-"));
+  t.after(() => {
+    rmSync(basePath, { recursive: true, force: true });
+  });
+
+  const ctx = {
+    ...makeMockCtx(),
+    ui: {
+      notify: () => {},
+      setStatus: () => {},
+      setWorkingMessage: () => {},
+    },
+    sessionManager: {
+      getEntries: () => [],
+    },
+    modelRegistry: {
+      getProviderAuthMode: () => undefined,
+      isProviderRequestReady: () => true,
+    },
+  } as any;
+  const pi = {
+    ...makeMockPi(),
+    sendMessage: () => {
+      queueMicrotask(() => resolveAgentEnd(makeEvent([
+        {
+          role: "assistant",
+          content: [
+            { type: "text", text: "Error: I'll investigate the network error handling next." },
+          ],
+        },
+      ])));
+    },
+  } as any;
+  const s = makeLoopSession({
+    basePath,
+    canonicalProjectRoot: basePath,
+    originalBasePath: basePath,
+  });
+  const mockLedger = {
+    version: 1,
+    projectStartedAt: Date.now(),
+    units: [] as any[],
+  };
+  const deps = makeMockDeps({
+    closeoutUnit: async () => {
+      mockLedger.units.push({
+        type: "execute-task",
+        id: "M001/S01/T01",
+        startedAt: s.currentUnit?.startedAt ?? Date.now(),
+        toolCalls: 0,
+        assistantMessages: 1,
+        tokens: { input: 100, output: 20, total: 120, cacheRead: 0, cacheWrite: 0 },
+        cost: 0.01,
+      });
+    },
+    getLedger: () => mockLedger,
+  });
+  let seq = 0;
+
+  const result = await runUnitPhase(
+    { ctx, pi, s, deps, prefs: undefined, iteration: 1, flowId: "flow-zero-tool-network-text", nextSeq: () => ++seq },
+    {
+      unitType: "execute-task",
+      unitId: "M001/S01/T01",
+      prompt: "do work",
+      finalPrompt: "do work",
+      pauseAfterUatDispatch: false,
+      state: {
+        phase: "executing",
+        activeMilestone: { id: "M001", title: "Milestone" },
+        activeSlice: { id: "S01", title: "Slice" },
+        activeTask: { id: "T01", title: "Task" },
+        registry: [{ id: "M001", title: "Milestone", status: "active" }],
+        recentDecisions: [],
+        blockers: [],
+        nextAction: "",
+        progress: { milestones: { done: 0, total: 1 } },
+        requirements: { active: 0, validated: 0, deferred: 0, outOfScope: 0, blocked: 0, total: 0 },
+      } as any,
+      mid: "M001",
+      midTitle: "Milestone",
+      isRetry: false,
+      previousTier: undefined,
+    },
+    { recentUnits: [{ key: "execute-task/M001/S01/T01" }], stuckRecoveryAttempts: 0, consecutiveFinalizeTimeouts: 0 },
+  );
+
+  assert.equal(result.action, "retry");
+  assert.equal((result as any).reason, "zero-tool-calls");
+  assert.equal(deps.callLog.includes("pauseAuto"), false);
+});
+
 test("autoLoop pauses user-driven deep question instead of flagging 0 tool calls", async () => {
   _resetPendingResolve();
 
@@ -4755,6 +4850,92 @@ test("autoLoop rejects complete-slice with 0 tool calls as context-exhausted (#2
     1,
     "zero-tool retry should bypass finalize on the failed iteration",
   );
+});
+
+test("autoLoop pauses on zero-tool-call rate-limit assistant messages instead of immediate retry", async (t) => {
+  _resetPendingResolve();
+
+  const basePath = mkdtempSync(join(tmpdir(), "gsd-zero-tool-rate-limit-"));
+  t.after(() => {
+    _resetPendingResolve();
+    rmSync(basePath, { recursive: true, force: true });
+  });
+
+  const originalSetTimeout = globalThis.setTimeout;
+  const timers: Array<{ fn: () => void; delay: number }> = [];
+  globalThis.setTimeout = ((fn: () => void, delay?: number) => {
+    timers.push({ fn, delay: delay ?? 0 });
+    return 0 as unknown as ReturnType<typeof setTimeout>;
+  }) as typeof setTimeout;
+
+  try {
+    const ctx = makeMockCtx();
+    ctx.ui.setStatus = () => {};
+    const notifications: string[] = [];
+    ctx.ui.notify = (msg: string) => { notifications.push(msg); };
+    ctx.sessionManager = { getSessionFile: () => "/tmp/session.json" };
+    ctx.modelRegistry = {
+      getProviderAuthMode: () => undefined,
+      isProviderRequestReady: () => true,
+    };
+    const pi = makeMockPi();
+    const s = makeLoopSession({
+      basePath,
+      canonicalProjectRoot: basePath,
+      originalBasePath: basePath,
+    });
+
+    const mockLedger = {
+      version: 1,
+      projectStartedAt: Date.now(),
+      units: [] as any[],
+    };
+
+    const deps = makeMockDeps({
+      closeoutUnit: async () => {
+        mockLedger.units.push({
+          type: "execute-task",
+          id: "M001/S01/T01",
+          startedAt: s.currentUnit?.startedAt ?? Date.now(),
+          toolCalls: 0,
+          assistantMessages: 1,
+          tokens: { input: 100, output: 100, total: 200, cacheRead: 0, cacheWrite: 0 },
+          cost: 0.05,
+        });
+      },
+      getLedger: () => mockLedger,
+    });
+
+    const loopPromise = autoLoop(ctx as any, pi as any, s, deps);
+
+    await new Promise((r) => originalSetTimeout(r, 50));
+    resolveAgentEnd(makeEvent([
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "You've hit your limit · resets Jun 1 at 8am" }],
+      },
+    ]));
+
+    await loopPromise;
+
+    assert.equal(deps.callLog.includes("pauseAuto"), true);
+    assert.ok(
+      timers.some((timer) => timer.delay === 60_000),
+      "rate-limit message should schedule delayed auto-resume instead of immediate retry",
+    );
+    assert.ok(
+      notifications.some((msg) => msg.includes("Auto-resuming in 60s")),
+      "rate-limit pause should announce delayed resume",
+    );
+    assert.ok(
+      !notifications.some((msg) => msg.includes("context exhaustion")),
+      "rate-limit message should not be classified as context exhaustion",
+    );
+    const deriveCount = deps.callLog.filter((entry) => entry === "deriveState").length;
+    assert.equal(deriveCount, 1, "loop should pause after first iteration instead of redispatching");
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+  }
 });
 
 // ─── Worktree health check (#1833) ────────────────────────────────────────
