@@ -146,6 +146,35 @@ function withPreservedShimTools(toolNames: readonly string[]): string[] {
   return [...new Set([...toolNames, ...ALWAYS_PRESERVED_SHIM_TOOL_NAMES])];
 }
 
+/**
+ * Backwards-compatibility workflow tool aliases (each forwards to a canonical
+ * twin). Mirrors WORKFLOW_TOOL_CONTRACTS[].aliases in @opengsd/contracts. These
+ * stay registered/callable but are dropped from the model-advertised tool set
+ * (~5.6K tokens/turn of duplicate schemas) — the canonical name is always
+ * advertised, and prompts/scoped tool sets already use canonical names.
+ */
+const WORKFLOW_ALIAS_TOOL_NAMES = new Set<string>([
+  "gsd_save_decision",
+  "gsd_update_requirement",
+  "gsd_save_requirement",
+  "gsd_generate_milestone_id",
+  "gsd_task_plan",
+  "gsd_slice_replan",
+  "gsd_complete_slice",
+  "gsd_milestone_complete",
+  "gsd_milestone_validate",
+  "gsd_roadmap_reassess",
+  "gsd_complete_task",
+  "gsd_reopen_task",
+  "gsd_reopen_slice",
+  "gsd_reopen_milestone",
+]);
+
+/** True when a (possibly mcp-scoped) tool name is a workflow alias. */
+function isWorkflowAliasTool(toolName: string): boolean {
+  return WORKFLOW_ALIAS_TOOL_NAMES.has(canonicalToolName(toolName));
+}
+
 const RUN_UAT_BROWSER_TOOL_NAMES = [
   "browser_navigate",
   "browser_click",
@@ -1315,9 +1344,15 @@ export function registerHooks(
   // Extensions can override tool set after model selection by returning { toolNames: [...] }
   // Return undefined to let the built-in provider compatibility filtering proceed.
   pi.on("adjust_tool_set", async (event) => {
-    if (isFullGsdToolSurfaceRequested()) return undefined;
     const removed = new Set(event.filteredTools);
-    const providerCompatible = event.activeToolNames.filter((name) => !removed.has(name));
+    const compatible = event.activeToolNames.filter((name) => !removed.has(name));
+    // Always drop backwards-compatibility workflow aliases from the advertised
+    // surface; they remain registered/callable but never cost schema tokens.
+    const providerCompatible = compatible.filter((name) => !isWorkflowAliasTool(name));
+    const aliasesDropped = providerCompatible.length !== compatible.length;
+    if (isFullGsdToolSurfaceRequested()) {
+      return aliasesDropped ? { toolNames: providerCompatible } : undefined;
+    }
     const registeredToolNames = resolveRegisteredToolNames(pi, event.activeToolNames);
     const guidedUnit = getGuidedUnitContext();
     const requestScoped = buildRequestScopedGsdToolSet(
@@ -1342,6 +1377,6 @@ export function registerHooks(
     if (isGeneralGsdToolScopingRequested()) {
       return { toolNames: buildMinimalGsdToolSet(providerCompatible) };
     }
-    return undefined;
+    return aliasesDropped ? { toolNames: providerCompatible } : undefined;
   });
 }
