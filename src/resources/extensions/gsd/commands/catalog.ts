@@ -22,7 +22,7 @@ export const TOP_LEVEL_SUBCOMMANDS: readonly GsdCommandDefinition[] = [
   { cmd: "auto", desc: "Autonomous mode — research, plan, execute, commit, repeat" },
   { cmd: "stop", desc: "Stop auto mode gracefully" },
   { cmd: "pause", desc: "Pause auto-mode (preserves state, /gsd auto to resume)" },
-  { cmd: "status", desc: "Open 10-tab workflow visualizer" },
+  { cmd: "status", desc: "Open the status dashboard" },
   { cmd: "widget", desc: "Cycle widget: full → small → min → off" },
   { cmd: "visualize", desc: "Open 10-tab workflow visualizer (progress, timeline, deps, metrics, health, agent, changes, knowledge, captures, export)" },
   { cmd: "brief", desc: "Generate a visual HTML brief: diagram, plan, diff review, recap, table, or slides" },

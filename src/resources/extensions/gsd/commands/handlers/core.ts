@@ -26,10 +26,10 @@ export function showHelp(ctx: ExtensionCommandContext, args = ""): void {
     "  /gsd stop          Stop auto-mode gracefully",
     "",
     "VISIBILITY",
-    `  /gsd status         Interactive 10-tab TUI  (${formattedShortcutPair("dashboard")})`,
+    `  /gsd status         Status dashboard  (${formattedShortcutPair("dashboard")})`,
     `  /gsd parallel watch Parallel monitor  (${formattedShortcutPair("parallel")})`,
     `  /gsd notifications  Notification history  (${formattedShortcutPair("notifications")})`,
-    "  /gsd visualize      Interactive 10-tab TUI",
+    "  /gsd visualize      Workflow visualizer",
     "  /gsd report         Generate all HTML reports and open browser",
     "  /gsd brief <mode>   Visual HTML brief (diagram, plan, diff, recap, table, slides)",
     "  /gsd queue          Show queued/dispatched units",
@@ -80,10 +80,10 @@ export function showHelp(ctx: ExtensionCommandContext, args = ""): void {
     "  /gsd workflow       Custom workflow lifecycle  [new|run|list|validate|pause|resume]",
     "",
     "VISIBILITY",
-    `  /gsd status         Interactive 10-tab TUI  (${formattedShortcutPair("dashboard")})`,
+    `  /gsd status         Status dashboard  (${formattedShortcutPair("dashboard")})`,
     `  /gsd parallel watch Open parallel worker monitor  (${formattedShortcutPair("parallel")})`,
     "  /gsd widget         Cycle status widget  [full|small|min|off]",
-    "  /gsd visualize      Interactive 10-tab TUI (progress, timeline, deps, metrics, health, agent, changes, knowledge, captures, export)",
+    "  /gsd visualize      Workflow visualizer (progress, timeline, deps, metrics, health, agent, changes, knowledge, captures, export)",
     "  /gsd brief <mode>   Generate a visual HTML brief  [diagram|plan|diff|recap|table|slides] [topic] [--slides]",
     "  /gsd queue          Show queued/dispatched units and execution order",
     "  /gsd history        View execution history  [--cost] [--phase] [--model] [N]",
@@ -469,7 +469,7 @@ export async function handleCoreCommand(
     return true;
   }
   if (trimmed === "status") {
-    await handleVisualize(ctx);
+    await handleStatus(ctx);
     return true;
   }
   if (trimmed === "visualize") {
