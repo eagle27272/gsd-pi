@@ -1,11 +1,14 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { createRequire } from "node:module";
+import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { assertSafeDirectory } from "./validate-directory.js";
 import { detectWorkflowMcpLaunchConfig } from "./workflow-mcp.js";
 
 export const GSD_WORKFLOW_MCP_SERVER_NAME = "gsd-workflow";
+export const GSD_BROWSER_MCP_SERVER_NAME = "gsd-browser";
 
 export interface ProjectMcpServerConfig {
   command?: string;
@@ -18,10 +21,11 @@ export interface ProjectMcpServerConfig {
 export interface EnsureProjectWorkflowMcpConfigResult {
   configPath: string;
   serverName: string;
+  serverNames: string[];
   status: "created" | "updated" | "unchanged";
 }
 
-interface ProjectWorkflowMcpServerSpec {
+interface ProjectMcpServerSpec {
   serverName: string;
   server: ProjectMcpServerConfig;
 }
@@ -49,6 +53,31 @@ export function resolveBundledGsdCliPath(env: NodeJS.ProcessEnv = process.env): 
   return null;
 }
 
+export function resolveBundledGsdBrowserCliPath(env: NodeJS.ProcessEnv = process.env): string | null {
+  const explicit = env.GSD_BROWSER_CLI_PATH?.trim() || env.GSD_BROWSER_BIN_PATH?.trim();
+  if (explicit) return explicit;
+
+  try {
+    const requireFromHere = createRequire(import.meta.url);
+    const packageJsonPath = requireFromHere.resolve("@opengsd/gsd-browser/package.json");
+    const candidate = resolve(packageJsonPath, "..", "bin", "gsd-browser");
+    if (existsSync(candidate)) return candidate;
+  } catch {
+    // Fall through to path candidates for source/dist layouts.
+  }
+
+  const candidates = [
+    resolve(fileURLToPath(new URL("../../../../node_modules/@opengsd/gsd-browser/bin/gsd-browser", import.meta.url))),
+    resolve(fileURLToPath(new URL("../../../../node_modules/.bin/gsd-browser", import.meta.url))),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+
+  return null;
+}
+
 export function buildProjectWorkflowMcpServerConfig(
   projectRoot: string,
   env: NodeJS.ProcessEnv = process.env,
@@ -59,7 +88,7 @@ export function buildProjectWorkflowMcpServerConfig(
 function buildProjectWorkflowMcpServerSpec(
   projectRoot: string,
   env: NodeJS.ProcessEnv = process.env,
-): ProjectWorkflowMcpServerSpec {
+): ProjectMcpServerSpec {
   const resolvedProjectRoot = resolve(projectRoot);
   const gsdCliPath = resolveBundledGsdCliPath(env);
   const launch = detectWorkflowMcpLaunchConfig(resolvedProjectRoot, {
@@ -81,6 +110,102 @@ function buildProjectWorkflowMcpServerSpec(
       ...(launch.cwd ? { cwd: launch.cwd } : {}),
       ...(launch.env ? { env: launch.env } : {}),
     },
+  };
+}
+
+function parseJsonEnv<T>(env: NodeJS.ProcessEnv, name: string): T | undefined {
+  const raw = env[name];
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    throw new Error(`Invalid JSON in ${name}`);
+  }
+}
+
+function isEnvDisabled(value: string | undefined): boolean {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "0" || normalized === "false" || normalized === "off";
+}
+
+function buildBrowserSessionName(projectRoot: string): string {
+  const resolvedProjectRoot = resolve(projectRoot);
+  const base = basename(resolvedProjectRoot)
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "project";
+  const hash = createHash("sha1").update(resolvedProjectRoot).digest("hex").slice(0, 8);
+  return `gsd-${base}-${hash}`;
+}
+
+export function buildProjectBrowserMcpServerConfig(
+  projectRoot: string,
+  env: NodeJS.ProcessEnv = process.env,
+): ProjectMcpServerConfig | null {
+  return buildProjectBrowserMcpServerSpec(projectRoot, env)?.server ?? null;
+}
+
+function buildProjectBrowserMcpServerSpec(
+  projectRoot: string,
+  env: NodeJS.ProcessEnv = process.env,
+): ProjectMcpServerSpec | null {
+  if (isEnvDisabled(env.GSD_BROWSER_MCP_ENABLED)) return null;
+
+  const resolvedProjectRoot = resolve(projectRoot);
+  const serverName = env.GSD_BROWSER_MCP_NAME?.trim() || GSD_BROWSER_MCP_SERVER_NAME;
+  const explicitArgs = parseJsonEnv<unknown>(env, "GSD_BROWSER_MCP_ARGS");
+  const explicitEnv = parseJsonEnv<Record<string, string>>(env, "GSD_BROWSER_MCP_ENV");
+  const explicitCommand = env.GSD_BROWSER_MCP_COMMAND?.trim();
+  const explicitCliPath = env.GSD_BROWSER_CLI_PATH?.trim() || env.GSD_BROWSER_BIN_PATH?.trim();
+  const bundledCliPath = !explicitCommand && !explicitCliPath ? resolveBundledGsdBrowserCliPath(env) : null;
+  const command =
+    explicitCommand
+    || explicitCliPath
+    || (bundledCliPath ? process.execPath : undefined)
+    || "gsd-browser";
+  const args = Array.isArray(explicitArgs) && explicitArgs.length > 0
+    ? explicitArgs.map(String)
+    : [
+        ...(bundledCliPath ? [bundledCliPath] : []),
+        "mcp",
+        "--session",
+        buildBrowserSessionName(resolvedProjectRoot),
+        "--identity-scope",
+        "project",
+        "--identity-project",
+        resolvedProjectRoot,
+      ];
+  const cwd = env.GSD_BROWSER_MCP_CWD?.trim() || resolvedProjectRoot;
+
+  return {
+    serverName,
+    server: {
+      command,
+      args,
+      cwd,
+      ...(explicitEnv ? { env: explicitEnv } : {}),
+    },
+  };
+}
+
+export function buildProjectGsdMcpServers(
+  projectRoot: string,
+  env: NodeJS.ProcessEnv = process.env,
+): {
+  servers: Record<string, ProjectMcpServerConfig>;
+  workflowServerName: string;
+  browserServerName: string | undefined;
+} {
+  const workflow = buildProjectWorkflowMcpServerSpec(projectRoot, env);
+  const browser = buildProjectBrowserMcpServerSpec(projectRoot, env);
+  const servers = Object.fromEntries(
+    [workflow, browser].filter((spec): spec is ProjectMcpServerSpec => Boolean(spec))
+      .map((spec) => [spec.serverName, spec.server]),
+  );
+  return {
+    servers,
+    workflowServerName: workflow.serverName,
+    browserServerName: browser?.serverName,
   };
 }
 
@@ -107,23 +232,27 @@ export function ensureProjectWorkflowMcpConfig(
 
   const configPath = resolve(resolvedProjectRoot, ".mcp.json");
   const existing = readExistingConfig(configPath);
-  const { serverName, server: desiredServer } = buildProjectWorkflowMcpServerSpec(resolvedProjectRoot, env);
+  const { servers: desiredServers, workflowServerName } = buildProjectGsdMcpServers(resolvedProjectRoot, env);
   const previousServers = existing.mcpServers ?? {};
   const nextServers = {
     ...previousServers,
-    [serverName]: desiredServer,
+    ...desiredServers,
   };
+  const desiredServerNames = Object.keys(desiredServers);
 
   const alreadyPresent = existsSync(configPath);
   const unchanged =
-    JSON.stringify(previousServers[serverName] ?? null)
-      === JSON.stringify(desiredServer)
+    desiredServerNames.every((serverName) => (
+      JSON.stringify(previousServers[serverName] ?? null)
+        === JSON.stringify(desiredServers[serverName])
+    ))
     && existing.mcpServers !== undefined;
 
   if (unchanged) {
     return {
       configPath,
-      serverName,
+      serverName: workflowServerName,
+      serverNames: desiredServerNames,
       status: "unchanged",
     };
   }
@@ -137,7 +266,8 @@ export function ensureProjectWorkflowMcpConfig(
 
   return {
     configPath,
-    serverName,
+    serverName: workflowServerName,
+    serverNames: desiredServerNames,
     status: alreadyPresent ? "updated" : "created",
   };
 }

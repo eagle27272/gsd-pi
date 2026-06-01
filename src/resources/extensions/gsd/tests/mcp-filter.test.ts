@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { discoverMcpServerNames, discoverWorkflowMcpServerName, computeMcpDisallowedTools } from "../mcp-filter.ts";
+import { discoverBrowserMcpServerName, discoverMcpServerNames, discoverWorkflowMcpServerName, computeMcpDisallowedTools } from "../mcp-filter.ts";
 import type { ClaudeCodeMcpConfig } from "../preferences-types.ts";
 
 // ─── discoverMcpServerNames ────────────────────────────────────────────────
@@ -74,6 +74,23 @@ describe("discoverMcpServerNames", () => {
       }),
     );
     assert.equal(discoverWorkflowMcpServerName(dir), "custom-workflow");
+  });
+
+  it("discovers gsd-browser server names by config signature", () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-filter-test-"));
+    writeFileSync(
+      join(dir, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          "browser-uat": {
+            command: "gsd-browser",
+            args: ["mcp"],
+          },
+          unrelated: { command: "npx", args: ["other"] },
+        },
+      }),
+    );
+    assert.equal(discoverBrowserMcpServerName(dir), "browser-uat");
   });
 });
 

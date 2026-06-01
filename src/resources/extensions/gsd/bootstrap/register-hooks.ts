@@ -176,7 +176,7 @@ function isWorkflowAliasTool(toolName: string): boolean {
   return WORKFLOW_ALIAS_TOOL_NAMES.has(canonicalToolName(toolName));
 }
 
-/** True for the ~58 Playwright browser tools (browser_navigate, browser_click, …). */
+/** True for the browser automation tools (browser_navigate, browser_click, ...). */
 function isBrowserTool(toolName: string): boolean {
   return canonicalToolName(toolName).startsWith("browser_");
 }
@@ -274,16 +274,24 @@ function resolveScopedToolNames(
   const resolved = new Set<string>();
 
   for (const requested of requestedToolNames) {
-    if (exact.has(requested)) resolved.add(requested);
+    const scopedMatches: string[] = [];
 
     for (const activeName of activeToolNames) {
       if (!activeName.startsWith("mcp__")) continue;
       const toolSeparator = activeName.indexOf("__", "mcp__".length);
       if (toolSeparator < 0) continue;
       if (activeName.slice(toolSeparator + 2) === requested) {
-        resolved.add(activeName);
+        scopedMatches.push(activeName);
       }
     }
+
+    if (requested.startsWith("browser_") && scopedMatches.length > 0) {
+      for (const match of scopedMatches) resolved.add(match);
+      continue;
+    }
+
+    if (exact.has(requested)) resolved.add(requested);
+    for (const match of scopedMatches) resolved.add(match);
   }
 
   return [...resolved];
@@ -363,7 +371,7 @@ function isGeneralGsdToolScopingRequested(): boolean {
 }
 
 /**
- * Whether the ~58-tool Playwright browser surface (~7K tokens) should be
+ * Whether the browser automation surface (~7K tokens) should be
  * advertised in interactive sessions. Off by default — browser tools stay
  * registered/callable (so auto run-uat, which scopes them in explicitly, is
  * unaffected) but are dropped from the model-facing surface until opted in.

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { registerHooks } from "../bootstrap/register-hooks.ts";
-import { GSD_WORKFLOW_MCP_SERVER_NAME } from "../mcp-project-config.ts";
+import { GSD_BROWSER_MCP_SERVER_NAME, GSD_WORKFLOW_MCP_SERVER_NAME } from "../mcp-project-config.ts";
 import { clearSkillSnapshot, snapshotSkills } from "../skill-discovery.js";
 import { prepareWorkflowMcpForProject, shouldAutoPrepareWorkflowMcp } from "../workflow-mcp-auto-prep.ts";
 
@@ -133,6 +133,7 @@ test("before_agent_start auto-prepares project workflow MCP for Claude Code CLI"
     mcpServers?: Record<string, unknown>;
   };
   assert.ok(parsed.mcpServers?.[GSD_WORKFLOW_MCP_SERVER_NAME]);
+  assert.ok(parsed.mcpServers?.[GSD_BROWSER_MCP_SERVER_NAME]);
   assert.match(notifications.join("\n"), /Claude Code MCP prepared/);
 });
 
