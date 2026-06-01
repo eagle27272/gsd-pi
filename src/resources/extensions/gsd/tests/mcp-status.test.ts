@@ -163,7 +163,8 @@ describe("formatMcpInitResult", () => {
     const result = formatMcpInitResult("created", "/tmp/project/.mcp.json", "/tmp/project");
     assert.match(result, /created project mcp config/i);
     assert.match(result, /\/tmp\/project\/\.mcp\.json/);
-    assert.match(result, /claude code/i);
+    assert.match(result, /mcp-capable clients/i);
+    assert.doesNotMatch(result, /claude code/i);
   });
 
   test("shows unchanged message when config is current", () => {

@@ -10,7 +10,7 @@
  *   /gsd mcp test <srv>  — Test handshake + tools/list for a server
  *   /gsd mcp enable <srv> / disable <srv> — Toggle local server exposure
  *   /gsd mcp import <srv> [as <name>] — Copy a discovered server into local config
- *   /gsd mcp init [dir]  — Write project-local GSD workflow + browser MCP config
+ *   /gsd mcp init [dir]  — Write project-local GSD workflow MCP config
  */
 
 import type { ExtensionCommandContext } from "@gsd/pi-coding-agent";
@@ -68,7 +68,8 @@ export function formatMcpInitResult(
     `Project: ${targetPath}`,
     `Config:   ${configPath}`,
     "",
-    "Claude Code can now load the GSD workflow and browser MCP servers from this folder.",
+    "MCP-capable clients can now load the GSD workflow MCP server from this folder.",
+    "Restart or reconnect any client that already has this project open.",
   ].join("\n");
 }
 
@@ -80,7 +81,7 @@ export function formatMcpStatusReport(servers: McpServerStatus[]): string {
       "No MCP servers configured.",
       "",
       "Add servers to .mcp.json, .gsd/mcp.json, or $GSD_HOME/mcp.json (default: ~/.gsd/mcp.json) to enable MCP integrations.",
-      "Tip: run /gsd mcp init . to write the local GSD workflow + browser MCP config.",
+      "Tip: run /gsd mcp init . to write the local GSD workflow MCP config.",
       "See: https://modelcontextprotocol.io/quickstart",
     ].join("\n");
   }
