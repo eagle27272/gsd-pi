@@ -408,7 +408,7 @@ function parseHeadingListFormat(content: string): GSDPreferences {
     }
   }
 
-  return typed as GSDPreferences;
+  return normalizeParsedPreferences(typed as GSDPreferences);
 }
 
 // ─── Merging ────────────────────────────────────────────────────────────────

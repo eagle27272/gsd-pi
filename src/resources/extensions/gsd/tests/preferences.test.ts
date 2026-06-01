@@ -677,6 +677,16 @@ remote_questions:
   assert.equal(typeof prefs!.remote_questions?.channel_id, "number");
 });
 
+test("parsePreferencesMarkdown normalizes safe numeric remote_questions.channel_id in heading format", () => {
+  const content = `## Remote Questions
+channel: telegram
+channel_id: 12345
+`;
+  const prefs = parsePreferencesMarkdown(content);
+  assert.notEqual(prefs, null);
+  assert.equal(prefs!.remote_questions?.channel_id, "12345");
+});
+
 test("parses raw YAML blocks under headings", () => {
   const content = `## Parallel
 enabled: true
