@@ -135,7 +135,7 @@ function markTuiLatency(
 	phase: string,
 	data?: Record<string, unknown>,
 ): void {
-	host.session.markTurnLatency?.(phase, data);
+	host.session?.markTurnLatency?.(phase, data);
 }
 
 function markFirstVisibleAssistantOutput(
@@ -143,7 +143,7 @@ function markFirstVisibleAssistantOutput(
 	kind: "text" | "thinking" | "tool" | "message_end_only",
 	data?: Record<string, unknown>,
 ): void {
-	host.session.markFirstVisibleTurnLatency?.(kind, data);
+	host.session?.markFirstVisibleTurnLatency?.(kind, data);
 }
 
 function getVisibleTextLikeBlockType(block: any): "text" | "thinking" | undefined {
