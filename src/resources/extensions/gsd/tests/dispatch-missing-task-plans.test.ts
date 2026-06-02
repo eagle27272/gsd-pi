@@ -141,6 +141,42 @@ test("dispatch: present task plan proceeds to execute-task normally", async (t) 
     `unitId should be M002/S03/T01, got: ${result.action === "dispatch" ? result.unitId : "(stop)"}`);
 });
 
+test("dispatch: session milestone mismatch stops before missing-task-plan recovery", async (t) => {
+  const tmp = mkdtempSync(join(tmpdir(), "gsd-session-milestone-mismatch-"));
+  t.after(() => rmSync(tmp, { recursive: true, force: true }));
+
+  const worktreeRoot = join(tmp, ".gsd", "worktrees", "M002");
+  mkdirSync(worktreeRoot, { recursive: true });
+
+  const ctx = makeContextFor(tmp, "M001", "S01", "T01", {
+    basePath: worktreeRoot,
+    originalBasePath: tmp,
+    currentMilestoneId: "M002",
+  });
+  const result = await resolveDispatch(ctx);
+
+  assert.equal(result.action, "stop");
+  assert.ok(result.action === "stop");
+  assert.equal(result.level, "warning");
+  assert.match(result.reason, /context mid "M001" does not match session\.currentMilestoneId "M002"/);
+});
+
+test("dispatch: worktree path mismatch stops before planning a different milestone", async (t) => {
+  const tmp = mkdtempSync(join(tmpdir(), "gsd-worktree-path-milestone-mismatch-"));
+  t.after(() => rmSync(tmp, { recursive: true, force: true }));
+
+  const worktreeRoot = join(tmp, ".gsd", "worktrees", "M002");
+  mkdirSync(worktreeRoot, { recursive: true });
+
+  const ctx = makeContextFor(worktreeRoot, "M001", "S01", "T01");
+  const result = await resolveDispatch(ctx);
+
+  assert.equal(result.action, "stop");
+  assert.ok(result.action === "stop");
+  assert.equal(result.level, "warning");
+  assert.match(result.reason, /context mid "M001" does not match basePath worktree "M002"/);
+});
+
 test("dispatch: executing recovery checks active milestone worktree task plans before re-dispatching plan-slice", async (t) => {
   const tmp = mkdtempSync(join(tmpdir(), "gsd-6192-"));
   t.after(() => rmSync(tmp, { recursive: true, force: true }));

@@ -334,6 +334,25 @@ function strandedWorkMessage(args: {
   );
 }
 
+function formatStrandedWorkBlockerMessage(
+  action: OrphanAuditAction,
+  activeMilestoneId: string | null,
+): string {
+  const target = action.milestoneId;
+  const mode = action.recoveryMode === "worktree" ? "existing worktree" : "milestone branch";
+  const intro = activeMilestoneId
+    ? `Stranded work for ${target} blocks auto-mode before ${activeMilestoneId}.`
+    : `Stranded work for ${target} blocks auto-mode, but that milestone is not active in project state.`;
+
+  return [
+    intro,
+    "Choose one explicit next step:",
+    `1. Recover it: run \`/gsd auto ${target}\` to adopt the ${mode}.`,
+    `2. Defer it: run \`/gsd park ${target} "reason"\`, then rerun \`/gsd auto\`.`,
+    `3. Abandon it: run \`/gsd rethink\` and explicitly discard ${target}.`,
+  ].join("\n");
+}
+
 export function auditOrphanedMilestoneBranches(
   basePath: string,
   _isolationMode: "worktree" | "branch" | "none",
@@ -1177,14 +1196,14 @@ export async function bootstrapAutoSession(
     if (blockingStrandedRecoveryAction) {
       if (!state.activeMilestone) {
         ctx.ui.notify(
-          `Stranded work for ${blockingStrandedRecoveryAction.milestoneId} blocks auto-mode, but that milestone is not active in project state. Park or discard it explicitly before continuing.`,
+          formatStrandedWorkBlockerMessage(blockingStrandedRecoveryAction, null),
           "error",
         );
         return releaseLockAndReturn();
       }
       if (state.activeMilestone.id !== blockingStrandedRecoveryAction.milestoneId) {
         ctx.ui.notify(
-          `Stranded work for ${blockingStrandedRecoveryAction.milestoneId} blocks auto-mode before ${state.activeMilestone.id}. Recover, park, or discard ${blockingStrandedRecoveryAction.milestoneId} explicitly before continuing.`,
+          formatStrandedWorkBlockerMessage(blockingStrandedRecoveryAction, state.activeMilestone.id),
           "error",
         );
         return releaseLockAndReturn();
