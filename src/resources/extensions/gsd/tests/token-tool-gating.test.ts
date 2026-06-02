@@ -31,7 +31,7 @@ test("buildMinimalGsdToolSet preserves non-GSD tools and replaces broad GSD surf
   for (const toolName of MINIMAL_GSD_TOOL_NAMES) {
     assert.ok(result.includes(toolName), `expected ${toolName}`);
   }
-  assert.ok(!result.includes("gsd_plan_milestone"));
+  assert.ok(result.includes("gsd_plan_milestone"));
   assert.ok(!result.includes("gsd_task_complete"));
   assert.ok(!result.includes("gsd_graph"));
 });

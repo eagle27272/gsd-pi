@@ -123,6 +123,7 @@ export const MINIMAL_GSD_TOOL_NAMES = [
   "gsd_resume",
   "gsd_milestone_status",
   "gsd_checkpoint_db",
+  "gsd_plan_milestone",
   "memory_query",
   "capture_thought",
 ] as const;
