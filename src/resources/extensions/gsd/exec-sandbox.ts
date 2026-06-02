@@ -20,6 +20,8 @@ export interface ExecSandboxRequest {
   script: string;
   /** Optional purpose/label recorded in meta.json. */
   purpose?: string;
+  /** Optional structured metadata recorded in meta.json. */
+  metadata?: Record<string, unknown>;
   /** Per-invocation timeout in ms. Clamped to `clamp_timeout_ms`. */
   timeout_ms?: number;
 }
@@ -328,6 +330,7 @@ function writeMeta(
     stderr_truncated: result.stderr_truncated,
     stdout_path: result.stdout_path,
     stderr_path: result.stderr_path,
+    ...(request.metadata ? { metadata: request.metadata } : {}),
   };
   writeFileSync(path, `${JSON.stringify(meta, null, 2)}\n`);
 }
