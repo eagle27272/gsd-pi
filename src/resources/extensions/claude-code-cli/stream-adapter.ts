@@ -27,10 +27,21 @@ import { homedir } from "node:os";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { PartialMessageBuilder, ZERO_USAGE, mapUsage } from "./partial-builder.js";
-import { buildWorkflowMcpServers, resolveWorkflowMcpProjectRoot } from "../gsd/workflow-mcp.js";
+import {
+	buildWorkflowMcpServers,
+	getRequiredWorkflowToolsForAutoUnit,
+	resolveWorkflowMcpProjectRoot,
+} from "../gsd/workflow-mcp.js";
 import { buildProjectGsdMcpServers, ensureProjectWorkflowMcpConfig } from "../gsd/mcp-project-config.js";
 import { loadProjectGSDPreferences } from "../gsd/preferences.js";
-import { discoverBrowserMcpServerName, discoverMcpServerNames, discoverWorkflowMcpServerName, computeMcpDisallowedTools } from "../gsd/mcp-filter.js";
+import {
+	discoverBrowserMcpServerName,
+	discoverMcpServers,
+	discoverMcpServerNames,
+	discoverWorkflowMcpServerName,
+	computeMcpDisallowedTools,
+} from "../gsd/mcp-filter.js";
+import { RUN_UAT_CLAUDE_NATIVE_TOOL_NAMES, RUN_UAT_FORBIDDEN_TOOL_NAMES, resolveToolPresentationPlan } from "../gsd/tool-presentation-plan.js";
 import { showInterviewRound, type Question, type RoundResult } from "../shared/tui.js";
 import type {
 	BetaRawMessageStreamEvent,
@@ -322,6 +333,33 @@ function extractMessageText(msg: { role: string; content: unknown }): string {
 		if (textParts.length > 0) return textParts.join("\n");
 	}
 	return "";
+}
+
+const GSD_PHASE_PATTERNS: Array<[string, RegExp]> = [
+	["run-uat", /\b(?:UNIT:\s*Run UAT|run-uat)\b/i],
+	["complete-milestone", /\b(?:UNIT:\s*Complete Milestone|complete-milestone)\b/i],
+	["validate-milestone", /\b(?:UNIT:\s*Validate Milestone|validate-milestone)\b/i],
+	["reassess-roadmap", /\b(?:UNIT:\s*Reassess Roadmap|reassess-roadmap)\b/i],
+	["complete-slice", /\b(?:UNIT:\s*Complete Slice|complete-slice)\b/i],
+	["replan-slice", /\b(?:UNIT:\s*Replan Slice|replan-slice)\b/i],
+	["plan-slice", /\b(?:UNIT:\s*Plan Slice|plan-slice|gsd_plan_slice)\b/i],
+	["plan-milestone", /\b(?:UNIT:\s*Plan Milestone|plan-milestone|gsd_plan_milestone)\b/i],
+	["execute-task", /\b(?:UNIT:\s*Execute Task|execute-task|execute-task-simple|reactive-execute)\b/i],
+	["gate-evaluate", /\b(?:UNIT:\s*Gate Evaluate|gate-evaluate|gsd_save_gate_result)\b/i],
+	["research-milestone", /\b(?:UNIT:\s*Research Milestone|research-milestone)\b/i],
+	["research-slice", /\b(?:UNIT:\s*Research Slice|research-slice)\b/i],
+	["discuss-milestone", /\b(?:Discuss milestone|discuss-milestone)\b/i],
+];
+
+export function inferGsdPhaseFromContext(context: Context): string | undefined {
+	const text = [
+		context.systemPrompt ?? "",
+		...context.messages.map((message) => extractMessageText(message)),
+	].join("\n");
+	for (const [phase, pattern] of GSD_PHASE_PATTERNS) {
+		if (pattern.test(text)) return phase;
+	}
+	return undefined;
 }
 
 /**
@@ -1462,19 +1500,98 @@ function mapThinkingLevelToAnthropicEffort(level: ThinkingLevel | undefined, mod
 	}
 }
 
-function workflowMcpServerNameFromAllowedTools(allowedTools: unknown): string | undefined {
-	if (!Array.isArray(allowedTools)) return undefined;
-	for (const toolName of allowedTools) {
-		if (typeof toolName !== "string") continue;
-		const match = /^mcp__(.+)__\*$/.exec(toolName);
-		if (match?.[1] && match[1] !== "gsd-browser") return match[1];
-	}
-	return undefined;
+function parseAllowedMcpToolName(toolName: string): { server: string; tool: string } | undefined {
+	const match = /^mcp__(.+)__(\*|[^*]+)$/.exec(toolName);
+	return match?.[1] && match[2] ? { server: match[1], tool: match[2] } : undefined;
 }
 
 function browserMcpServerNameFromAllowedTools(allowedTools: unknown): string | undefined {
 	if (!Array.isArray(allowedTools)) return undefined;
-	return allowedTools.includes("mcp__gsd-browser__*") ? "gsd-browser" : undefined;
+	for (const toolName of allowedTools) {
+		if (typeof toolName !== "string") continue;
+		const parsed = parseAllowedMcpToolName(toolName);
+		if (!parsed) continue;
+		if (parsed.server === "gsd-browser" || parsed.tool.startsWith("browser_")) {
+			return parsed.server;
+		}
+	}
+	return undefined;
+}
+
+function workflowMcpServerNameFromAllowedTools(allowedTools: unknown): string | undefined {
+	if (!Array.isArray(allowedTools)) return undefined;
+	const browserServerName = browserMcpServerNameFromAllowedTools(allowedTools);
+	for (const toolName of allowedTools) {
+		if (typeof toolName !== "string") continue;
+		const parsed = parseAllowedMcpToolName(toolName);
+		if (!parsed || parsed.server === browserServerName || parsed.tool.startsWith("browser_")) continue;
+		return parsed.server;
+	}
+	return undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+	return isRecord(value) && Object.values(value).every((entry) => typeof entry === "string");
+}
+
+function cloneSdkMcpServerConfig(config: unknown): Record<string, unknown> | undefined {
+	if (!isRecord(config)) return undefined;
+	const cloned: Record<string, unknown> = {};
+	for (const key of ["type", "command", "cwd", "url"] as const) {
+		if (typeof config[key] === "string") cloned[key] = config[key];
+	}
+	if (Array.isArray(config.args)) {
+		cloned.args = config.args.filter((arg): arg is string => typeof arg === "string");
+	}
+	if (isStringRecord(config.env)) cloned.env = { ...config.env };
+	if (isStringRecord(config.headers)) cloned.headers = { ...config.headers };
+	if (isRecord(config.oauth)) cloned.oauth = { ...config.oauth };
+	return Object.keys(cloned).length > 0 ? cloned : undefined;
+}
+
+function resolveProjectMcpServerConfig(
+	projectRoot: string,
+	serverName: string | undefined,
+	fallbackServers?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+	if (!serverName) return undefined;
+	const projectServer = discoverMcpServers(projectRoot).find((server) => server.name === serverName);
+	return cloneSdkMcpServerConfig(projectServer?.config) ?? cloneSdkMcpServerConfig(fallbackServers?.[serverName]);
+}
+
+function resolveProjectMcpServerConfigs(
+	projectRoot: string,
+	serverNames: readonly (string | undefined)[],
+	fallbackServers?: Record<string, unknown>,
+): Record<string, Record<string, unknown>> | undefined {
+	const resolved: Record<string, Record<string, unknown>> = {};
+	for (const serverName of serverNames) {
+		const serverConfig = resolveProjectMcpServerConfig(projectRoot, serverName, fallbackServers);
+		if (serverName && serverConfig) resolved[serverName] = serverConfig;
+	}
+	return Object.keys(resolved).length > 0 ? resolved : undefined;
+}
+
+function resolveExactWorkflowMcpToolsForPhase(
+	gsdPhase: string | undefined,
+	workflowServerName: string | undefined,
+	workflowExplicitlyBlocked: boolean,
+): string[] {
+	if (!gsdPhase || !workflowServerName || workflowExplicitlyBlocked) return [];
+	const requiredTools = getRequiredWorkflowToolsForAutoUnit(gsdPhase);
+	const supportTools = gsdPhase === "run-uat" ? [] : ["gsd_milestone_status"];
+	const requestedToolNames = [...new Set([...requiredTools, ...supportTools])];
+	if (requestedToolNames.length === 0) return [];
+	return resolveToolPresentationPlan({
+		phase: gsdPhase,
+		surface: "claude-code-sdk",
+		workflowMcpServerName: workflowServerName,
+		requestedToolNames,
+	}).presentedToolNames;
 }
 
 export function autoInitClaudeCodeWorkflowMcp(cwd: string): void {
@@ -1505,9 +1622,9 @@ export function buildSdkOptions(
 	modelId: string,
 	prompt: string,
 	overrides?: { permissionMode?: "bypassPermissions" | "acceptEdits" | "default" | "plan" },
-	extraOptions: Record<string, unknown> & { reasoning?: ThinkingLevel } = {},
+	extraOptions: Record<string, unknown> & { reasoning?: ThinkingLevel; gsdPhase?: string } = {},
 ): Record<string, unknown> {
-	const { reasoning, cwd, ...sdkExtraOptions } = extraOptions;
+	const { reasoning, cwd, gsdPhase, ...sdkExtraOptions } = extraOptions;
 	const sdkCwd = typeof cwd === "string" && cwd.trim().length > 0 ? cwd : process.cwd();
 	// Claude Code runs in the milestone worktree for file/shell work, but workflow MCP
 	// config (.mcp.json) and server discovery live at the project root.
@@ -1591,13 +1708,46 @@ export function buildSdkOptions(
 	const browserMcpTools = !browserExplicitlyBlocked && browserServerName
 		? [`mcp__${browserServerName}__*`]
 		: [];
-	const gsdMcpTools = [...workflowMcpTools, ...browserMcpTools];
+	const phaseUsesBrowserMcp = !gsdPhase || gsdPhase === "run-uat";
+	const allowedBrowserMcpTools = phaseUsesBrowserMcp ? browserMcpTools : [];
+	const inlinePhaseMcpServers = gsdPhase
+		? resolveProjectMcpServerConfigs(
+				projectRoot,
+				[
+					workflowExplicitlyBlocked ? undefined : workflowServerName,
+					phaseUsesBrowserMcp && !browserExplicitlyBlocked ? browserServerName : undefined,
+				],
+				defaultMcpServers.servers,
+			)
+		: undefined;
+	const sdkMcpServers = inlinePhaseMcpServers ?? filteredMcpServers;
+	const strictMcpConfig = !!inlinePhaseMcpServers;
+	// Strict phase configs inline the exact MCP servers GSD needs. Loading
+	// project/local settings at the same time can duplicate those servers and
+	// leave allowed mcp__... tools with no registered backing tool.
+	const settingSources = strictMcpConfig ? [] : ["project", "local"];
+	const exactWorkflowMcpTools = resolveExactWorkflowMcpToolsForPhase(
+		gsdPhase,
+		workflowServerName,
+		workflowExplicitlyBlocked,
+	);
+	const runUatDisallowedTools = gsdPhase === "run-uat" && workflowServerName
+		? [
+				...RUN_UAT_FORBIDDEN_TOOL_NAMES.filter((toolName) => !toolName.startsWith("mcp__")),
+				"WebFetch",
+				"Agent",
+				`mcp__${workflowServerName}__gsd_exec`,
+				`mcp__${workflowServerName}__gsd_summary_save`,
+				`mcp__${workflowServerName}__gsd_save_gate_result`,
+			]
+		: [];
 	const disallowedTools: string[] = [...new Set([
 		"ToolSearch",
-		...(workflowMcpTools.length > 0 ? ["AskUserQuestion"] : []),
+		...(workflowMcpTools.length > 0 || exactWorkflowMcpTools.length > 0 ? ["AskUserQuestion"] : []),
+		...runUatDisallowedTools,
 		...extraDisallowedTools,
 	])];
-	const allowedTools = [
+	const standardClaudeTools = [
 		"Read",
 		"Write",
 		"Edit",
@@ -1607,8 +1757,19 @@ export function buildSdkOptions(
 		"Agent",
 		"WebFetch",
 		"WebSearch",
-		...(workflowMcpTools.length > 0 ? gsdMcpTools : ["AskUserQuestion", ...browserMcpTools]),
 	];
+	const allowedTools = gsdPhase === "run-uat"
+		? [
+				...RUN_UAT_CLAUDE_NATIVE_TOOL_NAMES,
+				...(exactWorkflowMcpTools.length > 0 ? exactWorkflowMcpTools : []),
+				...allowedBrowserMcpTools,
+			]
+		: [
+				...standardClaudeTools,
+				...exactWorkflowMcpTools,
+				...(workflowMcpTools.length > 0 ? workflowMcpTools : ["AskUserQuestion"]),
+				...allowedBrowserMcpTools,
+			];
 	const supportsAdaptive = modelSupportsAdaptiveThinking(modelId);
 	const effort =
 		reasoning && supportsAdaptive
@@ -1632,11 +1793,12 @@ export function buildSdkOptions(
 		cwd: sdkCwd,
 		permissionMode,
 		allowDangerouslySkipPermissions: permissionMode === "bypassPermissions",
-		settingSources: ["project", "local"],
+		settingSources,
 		systemPrompt: { type: "preset", preset: "claude_code" },
 		disallowedTools,
 		...(allowedTools.length > 0 ? { allowedTools } : {}),
-		...(filteredMcpServers ? { mcpServers: filteredMcpServers } : {}),
+		...(sdkMcpServers ? { mcpServers: sdkMcpServers } : {}),
+		...(strictMcpConfig ? { strictMcpConfig: true } : {}),
 		betas: (
 			modelId.includes("sonnet")
 			|| modelId.includes("opus-4-7")
@@ -1968,6 +2130,7 @@ async function pumpSdkMessages(
 		const onExternalToolResult = (options as ClaudeCodeStreamOptions | undefined)?.onExternalToolResult;
 		const cwd = resolveClaudeCodeCwd(options);
 		autoInitClaudeCodeWorkflowMcp(cwd);
+		const gsdPhase = inferGsdPhaseFromContext(context);
 		const canUseToolHandler = createClaudeCodeCanUseToolHandler(uiContext);
 		// When no UI is available (headless / auto-mode), auto-approve all
 		// tool requests. This replaces the old bypassPermissions workaround.
@@ -1980,6 +2143,7 @@ async function pumpSdkMessages(
 			{ permissionMode },
 			{
 				cwd,
+				gsdPhase,
 				reasoning: options?.reasoning,
 				canUseTool: canUseToolFallback,
 				...(uiContext

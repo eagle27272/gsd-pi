@@ -7,6 +7,7 @@
  *   /gsd mcp             — Overview of all servers (alias: /gsd mcp status)
  *   /gsd mcp status      — Same as bare /gsd mcp
  *   /gsd mcp check <srv> — Detailed status for a specific server
+ *   /gsd mcp discover [srv] — Connect and list tools for a server
  *   /gsd mcp test <srv>  — Test handshake + tools/list for a server
  *   /gsd mcp enable <srv> / disable <srv> — Toggle local server exposure
  *   /gsd mcp import <srv> [as <name>] — Copy a discovered server into local config
@@ -34,6 +35,7 @@ export interface McpServerStatus {
   name: string;
   transport: ManagedMcpTransport;
   connected: boolean;
+  available?: boolean;
   toolCount: number;
   error: string | undefined;
   disabled?: boolean;
@@ -44,6 +46,8 @@ export interface McpServerStatus {
 export interface McpServerDetail extends McpServerStatus {
   tools: string[];
 }
+
+const MCP_STATUS_PROBE_TIMEOUT_MS = 10_000;
 
 export function hasHostMcpTool(systemPrompt: string, serverName: string): boolean {
   const marker = `mcp__${serverName}__`;
@@ -89,13 +93,15 @@ export function formatMcpStatusReport(servers: McpServerStatus[]): string {
   const lines: string[] = [`MCP Server Status — ${servers.length} server(s)\n`];
 
   for (const s of servers) {
-    const icon = s.disabled ? "⊘" : s.error ? "✗" : s.connected ? "✓" : "○";
+    const icon = s.disabled ? "⊘" : s.error ? "✗" : s.connected || s.available ? "✓" : "○";
     const status = s.disabled
       ? "disabled"
       : s.error
       ? `error: ${s.error}`
       : s.connected
         ? `connected — ${s.toolCount} tools`
+        : s.available
+          ? `available — ${s.toolCount} tools`
         : "disconnected";
     const warningText = s.envWarnings?.length ? ` — ${s.envWarnings.length} warning(s)` : "";
     lines.push(`  ${icon} ${s.name} (${s.transport}) — ${status}${warningText}`);
@@ -103,8 +109,8 @@ export function formatMcpStatusReport(servers: McpServerStatus[]): string {
 
   lines.push("");
   lines.push("Use /gsd mcp check <server> for details on a specific server.");
+  lines.push("Use /gsd mcp discover <server> to connect and list tools.");
   lines.push("Use /gsd mcp test <server> to verify handshake and tool discovery.");
-  lines.push("Use mcp_discover to connect and list tools for a server.");
 
   return lines.join("\n");
 }
@@ -120,8 +126,8 @@ export function formatMcpServerDetail(server: McpServerDetail): string {
   } else if (server.error) {
     lines.push(`  Status:    error`);
     lines.push(`  Error:     ${server.error}`);
-  } else if (server.connected) {
-    lines.push(`  Status:    connected`);
+  } else if (server.connected || server.available) {
+    lines.push(`  Status:    ${server.connected ? "connected" : "available"}`);
     lines.push(`  Tools:     ${server.toolCount}`);
     if (server.tools.length > 0) {
       lines.push("");
@@ -133,7 +139,7 @@ export function formatMcpServerDetail(server: McpServerDetail): string {
   } else {
     lines.push(`  Status:    disconnected`);
     lines.push("");
-    lines.push(`  Run mcp_discover("${server.name}") to connect and list tools.`);
+    lines.push(`  Run /gsd mcp discover ${server.name} to connect and list tools.`);
   }
 
   if (server.envWarnings?.length) {
@@ -167,10 +173,94 @@ export function formatMcpConnectionTestResult(result: ManagedMcpConnectionTestRe
   ].join("\n");
 }
 
+export function formatMcpDiscoveryResult(result: ManagedMcpConnectionTestResult): string {
+  if (result.ok) {
+    return [
+      `MCP discovery completed for ${result.server}.`,
+      "",
+      `Transport: ${result.transport}`,
+      `Tools:     ${result.toolCount}`,
+      ...(result.tools.length > 0 ? ["", "Discovered tools:", ...result.tools.map((tool) => `  - ${tool}`)] : []),
+      "",
+      `Call with: mcp_call(server="${result.server}", tool="<tool_name>", args={...})`,
+    ].join("\n");
+  }
+
+  return [
+    `MCP discovery failed for ${result.server}.`,
+    "",
+    `Transport: ${result.transport}`,
+    `Error:     ${result.error ?? "Unknown error"}`,
+    ...(result.warnings.length > 0 ? ["", "Warnings:", ...result.warnings.map((warning) => `  - ${warning}`)] : []),
+  ].join("\n");
+}
+
+async function readLiveConnectionStatus(serverName: string): Promise<{
+  connected: boolean;
+  tools: string[];
+  error?: string;
+}> {
+  try {
+    const mcpClient = await import("../mcp-client/index.js");
+    const mod = mcpClient as Record<string, unknown>;
+    if (typeof mod.getConnectionStatus === "function") {
+      return (mod.getConnectionStatus as (name: string) => { connected: boolean; tools: string[]; error?: string })(serverName);
+    }
+  } catch {
+    // mcp-client may not expose status helpers in some hosts.
+  }
+  return { connected: false, tools: [] };
+}
+
+function shouldProbeConfiguredServer(config: { disabled?: boolean; transport: ManagedMcpTransport; envWarnings?: string[] }): boolean {
+  return !config.disabled && config.transport === "stdio" && (config.envWarnings?.length ?? 0) === 0;
+}
+
+async function resolveMcpRuntimeStatus(
+  config: {
+    name: string;
+    transport: ManagedMcpTransport;
+    disabled?: boolean;
+    envWarnings?: string[];
+  },
+  systemPrompt: string,
+): Promise<{
+  connected: boolean;
+  available: boolean;
+  tools: string[];
+  error?: string;
+}> {
+  const live = await readLiveConnectionStatus(config.name);
+  let connected = live.connected;
+  let tools = live.tools;
+  let error = live.error;
+
+  if (!connected && !error && hasHostMcpTool(systemPrompt, config.name)) connected = true;
+
+  if (!connected && !error && shouldProbeConfiguredServer(config)) {
+    const probed = await testMcpServerConnection(config.name, { timeoutMs: MCP_STATUS_PROBE_TIMEOUT_MS });
+    if (probed.ok) {
+      return {
+        connected: false,
+        available: true,
+        tools: probed.tools,
+      };
+    }
+    error = probed.error;
+  }
+
+  return {
+    connected,
+    available: false,
+    tools,
+    error,
+  };
+}
+
 // ─── Command handler ────────────────────────────────────────────────────────
 
 /**
- * Handle `/gsd mcp [status|check <server>]`.
+ * Handle `/gsd mcp [status|check <server>|discover [server]|...]`.
  */
 export async function handleMcpStatus(
   args: string,
@@ -197,6 +287,28 @@ export async function handleMcpStatus(
         "error",
       );
     }
+    return;
+  }
+
+  // /gsd mcp discover [server]
+  if (lowered === "discover" || lowered.startsWith("discover ")) {
+    const requestedServerName = trimmed.slice("discover".length).trim();
+    let serverName = requestedServerName;
+    if (!serverName) {
+      if (configs.length === 1) {
+        serverName = configs[0]!.name;
+      } else {
+        const available = configs.map((config) => config.name).join(", ") || "(none)";
+        ctx.ui.notify(
+          `Usage: /gsd mcp discover <server>\n\nAvailable: ${available}`,
+          "warning",
+        );
+        return;
+      }
+    }
+
+    const result = await testMcpServerConnection(serverName);
+    ctx.ui.notify(formatMcpDiscoveryResult(result), result.ok ? "info" : "warning");
     return;
   }
 
@@ -304,33 +416,17 @@ export async function handleMcpStatus(
       return;
     }
 
-    // Try to get connection/tool info from the mcp-client module if available
-    let connected = false;
-    let toolNames: string[] = [];
-    let error: string | undefined;
-    try {
-      const mcpClient = await import("../mcp-client/index.js");
-      // Access the module's connection state if exported; fall back gracefully
-      const mod = mcpClient as Record<string, unknown>;
-      if (typeof mod.getConnectionStatus === "function") {
-        const status = (mod.getConnectionStatus as (name: string) => { connected: boolean; tools: string[]; error?: string })(serverName);
-        connected = status.connected;
-        toolNames = status.tools;
-        error = status.error;
-      }
-    } catch {
-      // mcp-client may not expose status helpers — that's fine
-    }
-    if (!connected && !error && hasHostMcpTool(systemPrompt, serverName)) connected = true;
+    const runtime = await resolveMcpRuntimeStatus(config, systemPrompt);
 
     ctx.ui.notify(
       formatMcpServerDetail({
         name: config.name,
         transport: config.transport,
-        connected,
-        toolCount: toolNames.length,
-        tools: toolNames,
-        error,
+        connected: runtime.connected,
+        available: runtime.available,
+        toolCount: runtime.tools.length,
+        tools: runtime.tools,
+        error: runtime.error,
         disabled: config.disabled,
         sourcePath: config.sourcePath,
         envWarnings: config.envWarnings,
@@ -342,39 +438,20 @@ export async function handleMcpStatus(
 
   // /gsd mcp or /gsd mcp status
   if (!lowered || lowered === "status") {
-    // Build status for each server
-    const statuses: McpServerStatus[] = [];
-
-    for (const config of configs) {
-      let connected = false;
-      let toolCount = 0;
-      let error: string | undefined;
-
-      try {
-        const mcpClient = await import("../mcp-client/index.js");
-        const mod = mcpClient as Record<string, unknown>;
-        if (typeof mod.getConnectionStatus === "function") {
-          const status = (mod.getConnectionStatus as (name: string) => { connected: boolean; tools: string[]; error?: string })(config.name);
-          connected = status.connected;
-          toolCount = status.tools.length;
-          error = status.error;
-        }
-      } catch {
-        // Fall back to unknown state
-      }
-      if (!connected && !error && hasHostMcpTool(systemPrompt, config.name)) connected = true;
-
-      statuses.push({
+    const statuses: McpServerStatus[] = await Promise.all(configs.map(async (config) => {
+      const runtime = await resolveMcpRuntimeStatus(config, systemPrompt);
+      return {
         name: config.name,
         transport: config.transport,
-        connected,
-        toolCount,
-        error,
+        connected: runtime.connected,
+        available: runtime.available,
+        toolCount: runtime.tools.length,
+        error: runtime.error,
         disabled: config.disabled,
         sourcePath: config.sourcePath,
         envWarnings: config.envWarnings,
-      });
-    }
+      };
+    }));
 
     const warningLines = [
       ...management.warnings,
@@ -389,9 +466,10 @@ export async function handleMcpStatus(
 
   // Unknown subcommand
   ctx.ui.notify(
-    "Usage: /gsd mcp [status|check <server>|test <server>|enable <server>|disable <server>|delete <server> --confirm|import <server> [as <name>]|init [dir]]\n\n" +
+    "Usage: /gsd mcp [status|check <server>|discover [server]|test <server>|enable <server>|disable <server>|delete <server> --confirm|import <server> [as <name>]|init [dir]]\n\n" +
     "  status           Show all MCP server statuses (default)\n" +
     "  check <server>   Detailed status for a specific server\n" +
+    "  discover [server] Connect and list tools for a server\n" +
     "  test <server>    Verify MCP handshake and tools/list\n" +
     "  enable <server>  Enable a local GSD-managed server\n" +
     "  disable <server> Disable a local GSD-managed server\n" +
