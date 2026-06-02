@@ -435,6 +435,9 @@ function getPlannedKeyFiles(tasks: Array<
   );
 }
 
+export const _parseReactiveBatchTaskIdsForTest = parseReactiveBatchTaskIds;
+export const _getPlannedKeyFilesForTest = getPlannedKeyFiles;
+
 function resolveVerificationFailureMarkerPath(
   unitType: string,
   unitId: string,
