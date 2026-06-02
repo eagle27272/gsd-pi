@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AnthropicMessagesCompat, Api, Context, Model, OpenAICompletionsCompat } from "@earendil-works/pi-ai";
-import { getApiProvider } from "@earendil-works/pi-ai";
+import { getApiProvider, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { getOAuthProvider } from "@earendil-works/pi-ai/oauth";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
@@ -319,6 +319,27 @@ describe("ModelRegistry", () => {
 			expect(anthropicModels.length).toBeGreaterThan(1);
 			expect(anthropicModels.some((m) => m.id === "claude-custom")).toBe(true);
 			expect(anthropicModels.some((m) => m.id.includes("claude"))).toBe(true);
+		});
+
+		test("built-in provider custom entries inherit exact built-in thinking metadata", () => {
+			writeRawModelsJson({
+				"anthropic-vertex": {
+					models: [
+						{
+							id: "claude-sonnet-4-6",
+						},
+					],
+				},
+			});
+
+			const registry = ModelRegistry.create(authStorage, modelsJsonPath);
+			const model = registry.find("anthropic-vertex", "claude-sonnet-4-6");
+			const compat = model?.compat as AnthropicMessagesCompat | undefined;
+
+			expect(registry.getError()).toBeUndefined();
+			expect(model?.reasoning).toBe(true);
+			expect(compat?.forceAdaptiveThinking).toBe(true);
+			expect(model ? getSupportedThinkingLevels(model) : []).toContain("high");
 		});
 
 		test("custom model with same id replaces built-in model by id", () => {

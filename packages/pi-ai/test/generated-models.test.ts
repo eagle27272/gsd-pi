@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
+import { getSupportedThinkingLevels } from "../src/models.ts";
 import { MODELS } from "../src/models.generated.ts";
 
 describe("models.generated.ts", () => {
@@ -57,5 +58,18 @@ describe("models.generated.ts", () => {
 				maxTokens: 131072,
 			});
 		}
+	});
+
+	test("Anthropic Vertex reasoning models expose thinking levels", () => {
+		const models = MODELS["anthropic-vertex"];
+
+		expect(getSupportedThinkingLevels(models["claude-sonnet-4-6"])).toEqual([
+			"off",
+			"minimal",
+			"low",
+			"medium",
+			"high",
+		]);
+		expect(getSupportedThinkingLevels(models["claude-opus-4-8"])).toContain("xhigh");
 	});
 });
