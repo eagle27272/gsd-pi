@@ -1150,6 +1150,9 @@ function validateUatChecks(basePath: string, params: UatResultSaveParams): strin
 function validateUatMode(params: UatResultSaveParams): string | null {
   const modes = new Set(params.checks.map((check) => check.mode));
   const hasHuman = params.checks.some((check) => check.result === "NEEDS-HUMAN");
+  if (params.uatType === "artifact-driven" && hasHuman && params.verdict === "PASS") {
+    return "artifact-driven UAT cannot PASS with human-only checks";
+  }
   if (
     hasHuman &&
     params.verdict === "PASS" &&
@@ -1166,9 +1169,6 @@ function validateUatMode(params: UatResultSaveParams): string | null {
   }
   if (params.uatType === "live-runtime" && !modes.has("runtime") && !modes.has("browser")) {
     return "live-runtime UAT requires runtime or browser evidence";
-  }
-  if (params.uatType === "artifact-driven" && hasHuman && params.verdict === "PASS") {
-    return "artifact-driven UAT cannot PASS with human-only checks";
   }
   return null;
 }
