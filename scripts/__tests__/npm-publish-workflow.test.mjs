@@ -10,6 +10,13 @@ const workflow = YAML.parse(
   readFileSync(".github/workflows/npm-publish.yml", "utf8"),
 );
 
+const latestCondition = "${{ github.event.inputs.channel == 'latest' }}";
+const prereleaseChannel =
+  "${{ github.event.inputs.channel == 'latest' && 'dev' || github.event.inputs.channel }}";
+const prereleaseRef =
+  "${{ github.event.inputs.channel == 'latest' && 'main' || github.event.inputs.ref || (github.event.inputs.channel == 'next' && 'next' || 'main') }}";
+const prereleasePublishStep = `Publish @${prereleaseChannel}`;
+
 test("npm publish exposes only supported npm channels", () => {
   const channel = workflow.on.workflow_dispatch.inputs.channel;
 
@@ -18,18 +25,12 @@ test("npm publish exposes only supported npm channels", () => {
   assert.deepEqual(channel.options, ["dev", "next", "latest"]);
 });
 
-test("prerelease publish gates through the selected GitHub Environment", () => {
-  assert.equal(
-    workflow.jobs["prerelease-publish"].environment,
-    "${{ github.event.inputs.channel }}",
-  );
+test("prerelease publish gates through the effective prerelease GitHub Environment", () => {
+  assert.equal(workflow.jobs["prerelease-publish"].environment, prereleaseChannel);
 });
 
 test("production publish keeps the prod approval gate", () => {
-  assert.equal(
-    workflow.jobs["prod-release"].if,
-    "${{ github.event.inputs.channel == 'latest' }}",
-  );
+  assert.equal(workflow.jobs["prod-release"].if, latestCondition);
   assert.deepEqual(workflow.jobs["prod-release"].needs, [
     "prod-release-plan",
     "prod-native-build",
@@ -44,6 +45,8 @@ test("prerelease publish preserves channel-specific default refs", () => {
 
   assert.equal(workflow.on.workflow_dispatch.inputs.ref.default, "");
   assert.equal(checkout.with.token, "${{ github.token }}");
+  assert.equal(checkout.with.ref, prereleaseRef);
+  assert.match(checkout.with.ref, /github\.event\.inputs\.channel == 'latest'/);
   assert.match(checkout.with.ref, /github\.event\.inputs\.channel == 'next'/);
   assert.match(checkout.with.ref, /'next'/);
   assert.match(checkout.with.ref, /'main'/);
@@ -74,7 +77,8 @@ test("production publish plans the release and builds native artifacts in the sa
   const nativeBuild = workflow.jobs["prod-native-build"];
 
   assert.ok(plan, "production publish must plan the release version");
-  assert.equal(plan.if, "${{ github.event.inputs.channel == 'latest' }}");
+  assert.equal(plan.if, latestCondition);
+  assert.equal(plan.needs, "prerelease-verify");
   assert.equal(plan.outputs.version, "${{ steps.release.outputs.version }}");
   assert.equal(plan.outputs.source_sha, "${{ steps.release.outputs.source_sha }}");
   assert.ok(
@@ -113,7 +117,7 @@ test("main package publish verifies native engine packages first", () => {
     (step) => step.name === "Verify native platform packages exist",
   );
   const prereleasePublishIndex = prereleaseSteps.findIndex(
-    (step) => step.name === "Publish @${{ github.event.inputs.channel }}",
+    (step) => step.name === prereleasePublishStep,
   );
   const prereleaseVerifyIndex = prereleaseSteps.indexOf(prereleaseVerify);
 
@@ -155,7 +159,7 @@ test("main package publish validates tarball before publishing", () => {
     (step) => step.name === "Validate package is installable",
   );
   const prereleasePublishIndex = prereleaseSteps.findIndex(
-    (step) => step.name === "Publish @${{ github.event.inputs.channel }}",
+    (step) => step.name === prereleasePublishStep,
   );
 
   assert.ok(prereleaseValidate, "prerelease publish must run validate-pack");
@@ -177,7 +181,7 @@ test("main package publish validates tarball before publishing", () => {
 
 test("main package publish uses explicit prepack and disables npm lifecycle reruns", () => {
   const prereleasePublish = workflow.jobs["prerelease-publish"].steps.find(
-    (step) => step.name === "Publish @${{ github.event.inputs.channel }}",
+    (step) => step.name === prereleasePublishStep,
   );
   assert.match(prereleasePublish.run, /prepack-resolve-workspace\.cjs/);
   assert.match(prereleasePublish.run, /postpack-restore-workspace\.cjs/);

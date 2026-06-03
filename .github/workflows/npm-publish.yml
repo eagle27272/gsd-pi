@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       channel:
-        description: "npm dist-tag to publish"
+        description: "npm dist-tag or release path to publish; latest publishes/verifies @dev first, then waits for prod approval"
         required: true
         default: "dev"
         type: choice
@@ -17,7 +17,7 @@ on:
           - next
           - latest
       ref:
-        description: "Branch or SHA for prerelease publishes (defaults: dev -> main, next -> next; latest always uses main)"
+        description: "Branch or SHA for standalone prerelease publishes (defaults: dev -> main, next -> next; latest always uses main)"
         required: false
         default: ""
       publish_auth:
@@ -30,7 +30,7 @@ on:
           - "token"
 
 concurrency:
-  group: npm-publish-${{ github.event.inputs.channel }}-${{ github.event.inputs.ref || 'default' }}
+  group: npm-publish-${{ github.event.inputs.channel == 'latest' && 'dev' || github.event.inputs.channel }}-${{ github.event.inputs.channel == 'latest' && 'main' || github.event.inputs.ref || (github.event.inputs.channel == 'next' && 'next' || 'main') }}
   cancel-in-progress: false
 
 permissions:
@@ -47,11 +47,10 @@ env:
 
 jobs:
   prerelease-publish:
-    name: Publish @${{ github.event.inputs.channel }}
-    if: ${{ github.event.inputs.channel != 'latest' }}
+    name: Publish @${{ github.event.inputs.channel == 'latest' && 'dev' || github.event.inputs.channel }}
     # npm trusted publishing + provenance require GitHub-hosted runners (not Blacksmith).
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.channel }}
+    environment: ${{ github.event.inputs.channel == 'latest' && 'dev' || github.event.inputs.channel }}
     container:
       image: ghcr.io/open-gsd/gsd-ci-builder:latest
       credentials:
@@ -64,7 +63,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.inputs.ref != '' && github.event.inputs.ref || (github.event.inputs.channel == 'next' && 'next' || 'main') }}
+          ref: ${{ github.event.inputs.channel == 'latest' && 'main' || github.event.inputs.ref || (github.event.inputs.channel == 'next' && 'next' || 'main') }}
           token: ${{ github.token }}
           fetch-depth: 0
 
@@ -114,7 +113,7 @@ jobs:
       - name: Stamp prerelease version and sync platform packages
         id: stamp
         env:
-          VERSION_CHANNEL: ${{ github.event.inputs.channel }}
+          VERSION_CHANNEL: ${{ github.event.inputs.channel == 'latest' && 'dev' || github.event.inputs.channel }}
         run: |
           pnpm run pipeline:version-stamp
           pnpm run sync-platform-versions
@@ -133,9 +132,9 @@ jobs:
       - name: Validate package is installable
         run: pnpm run validate-pack
 
-      - name: Publish @${{ github.event.inputs.channel }}
+      - name: Publish @${{ github.event.inputs.channel == 'latest' && 'dev' || github.event.inputs.channel }}
         env:
-          CHANNEL: ${{ github.event.inputs.channel }}
+          CHANNEL: ${{ github.event.inputs.channel == 'latest' && 'dev' || github.event.inputs.channel }}
         run: |
           VERSION=$(node -e 'process.stdout.write(require("./package.json").version)')
           EXISTING=$(npm view "@opengsd/gsd-pi@${VERSION}" version 2>/dev/null || true)
@@ -175,14 +174,13 @@ jobs:
           exit 1
 
   prerelease-verify:
-    name: Verify @${{ github.event.inputs.channel }} package
-    if: ${{ github.event.inputs.channel != 'latest' }}
+    name: Verify @${{ github.event.inputs.channel == 'latest' && 'dev' || github.event.inputs.channel }} package
     needs: prerelease-publish
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.inputs.ref != '' && github.event.inputs.ref || (github.event.inputs.channel == 'next' && 'next' || 'main') }}
+          ref: ${{ github.event.inputs.channel == 'latest' && 'main' || github.event.inputs.ref || (github.event.inputs.channel == 'next' && 'next' || 'main') }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -195,10 +193,10 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: pnpm
 
-      - name: Install published @opengsd/gsd-pi@${{ github.event.inputs.channel }} globally (with registry propagation retry)
+      - name: Install published @opengsd/gsd-pi@${{ github.event.inputs.channel == 'latest' && 'dev' || github.event.inputs.channel }} globally (with registry propagation retry)
         env:
           PUBLISH_VERSION: ${{ needs.prerelease-publish.outputs.version }}
-          CHANNEL: ${{ github.event.inputs.channel }}
+          CHANNEL: ${{ github.event.inputs.channel == 'latest' && 'dev' || github.event.inputs.channel }}
         run: |
           for i in 1 2 3 4 5 6; do
             npm install -g "@opengsd/gsd-pi@${PUBLISH_VERSION}" && exit 0
@@ -228,7 +226,7 @@ jobs:
         if: failure()
         env:
           PUBLISH_VERSION: ${{ needs.prerelease-publish.outputs.version }}
-          CHANNEL: ${{ github.event.inputs.channel }}
+          CHANNEL: ${{ github.event.inputs.channel == 'latest' && 'dev' || github.event.inputs.channel }}
         run: |
           echo "::error::Post-publish verification failed for @opengsd/gsd-pi@${PUBLISH_VERSION}."
           echo "::error::Recommended actions: (1) investigate the failing step above, (2) if the version exists on npm, deprecate it with 'npm deprecate @opengsd/gsd-pi@${PUBLISH_VERSION} \"broken ${CHANNEL} build; see Actions run\"', (3) cut a fix and re-run NPM Publish."
@@ -237,6 +235,7 @@ jobs:
   prod-release-plan:
     name: Plan Production Release
     if: ${{ github.event.inputs.channel == 'latest' }}
+    needs: prerelease-verify
     runs-on: ubuntu-latest
     outputs:
       source_sha: ${{ steps.release.outputs.source_sha }}

@@ -63,7 +63,7 @@ docker run --rm -v $(pwd):/workspace ghcr.io/open-gsd/gsd-pi:latest --version
 | Workflow | File | Trigger | Purpose |
 |----------|------|---------|---------|
 | CI | `ci.yml` | PR + push to main | Build, test, typecheck — **gate for all promotions** |
-| NPM Publish | `npm-publish.yml` | Manual dispatch | Publish approved `@dev`, `@next`, or `@latest` releases |
+| NPM Publish | `npm-publish.yml` | Manual dispatch | Publish approved `@dev` and `@next` releases; for `@latest`, publish and verify `@dev` first, then wait for Prod approval |
 | Release Pipeline | `pipeline.yml` | After CI succeeds on main | Three-stage promotion |
 | Native Binaries | `build-native.yml` | `v*` tags | Cross-compile platform binaries |
 | Dev Cleanup | `cleanup-dev-versions.yml` | Weekly (Monday 06:00 UTC) | Unpublish `-dev.` versions older than 30 days |
@@ -135,7 +135,7 @@ The pipeline only triggers after `ci.yml` passes. Key gating tests include:
 ### Approving a Prod Release
 
 1. A version reaches the Test stage automatically
-2. In GitHub Actions, run **NPM Publish** with `channel=latest`; the workflow plans the release, builds all five native binaries, then the `prod-release` job will show "Waiting for review"
+2. In GitHub Actions, run **NPM Publish** with `channel=latest`; the workflow publishes and verifies `@dev` from `main`, then plans the release, builds all five native binaries, and the `prod-release` job will show "Waiting for review"
 3. Click **Review deployments** → select `prod` → **Approve**
 4. The workflow publishes the matching `@opengsd/engine-*` packages, verifies they are visible on npm, publishes `@opengsd/gsd-pi@latest`, pushes the release commit/tag, and creates a GitHub Release
 
