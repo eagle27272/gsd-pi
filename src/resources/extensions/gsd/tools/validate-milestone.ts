@@ -78,20 +78,6 @@ function getRequiredVerificationClasses(milestoneId: string): string[] {
   return required;
 }
 
-async function collectPersistedBrowserEvidence(basePath: string, milestoneId: string): Promise<string> {
-  const chunks: string[] = [];
-  for (const slice of getMilestoneSlices(milestoneId)) {
-    const artifactPath = `milestones/${milestoneId}/slices/${slice.id}/${slice.id}-ASSESSMENT.md`;
-    const artifact = getArtifact(artifactPath);
-    if (artifact?.full_content) chunks.push(artifact.full_content);
-
-    const assessmentPath = resolveSliceFile(basePath, milestoneId, slice.id, "ASSESSMENT");
-    const assessmentContent = assessmentPath ? await loadFile(assessmentPath) : null;
-    if (assessmentContent) chunks.push(assessmentContent);
-  }
-  return chunks.join("\n\n");
-}
-
 function hasRuntimeExecutableUatEvidenceText(text: string): boolean {
   if (!/\buatType:\s*runtime-executable\b/i.test(text)) return false;
   if (!/\bverdict:\s*PASS\b/i.test(text)) return false;
@@ -120,8 +106,37 @@ async function browserEvidenceGateRequiresAttention(
   ]);
   if (!hasBrowserRequiredText(requirementText)) return false;
 
-  const persistedEvidence = await collectPersistedBrowserEvidence(basePath, params.milestoneId);
-  if (hasRuntimeExecutableUatEvidenceText(persistedEvidence)) return false;
+  // Collect per-slice evidence so the runtime bypass is checked independently
+  // for each slice. Concatenating all slices before checking would allow runtime
+  // evidence from one slice to cover another slice's browser requirements.
+  const sliceEvidencePairs: Array<{ sliceRequirementText: string; evidenceText: string }> = [];
+  for (const slice of slices) {
+    const chunks: string[] = [];
+    const artifactPath = `milestones/${params.milestoneId}/slices/${slice.id}/${slice.id}-ASSESSMENT.md`;
+    const artifact = getArtifact(artifactPath);
+    if (artifact?.full_content) chunks.push(artifact.full_content);
+    const assessmentPath = resolveSliceFile(basePath, params.milestoneId, slice.id, "ASSESSMENT");
+    const assessmentContent = assessmentPath ? await loadFile(assessmentPath) : null;
+    if (assessmentContent) chunks.push(assessmentContent);
+    sliceEvidencePairs.push({
+      sliceRequirementText: compactTextParts([slice.demo, slice.goal, slice.success_criteria]),
+      evidenceText: chunks.join("\n\n"),
+    });
+  }
+  const persistedEvidence = sliceEvidencePairs.map((s) => s.evidenceText).join("\n\n");
+
+  // Runtime bypass: each slice whose own requirement text has browser-observable
+  // criteria must have its own runtime-executable UAT evidence. When no individual
+  // slice has slice-level browser requirements (e.g., they come from milestone-level
+  // fields only), fall back to checking whether any slice has runtime evidence.
+  const browserRequiringSlices = sliceEvidencePairs.filter((s) =>
+    hasBrowserRequiredText(s.sliceRequirementText),
+  );
+  const runtimeBypasses =
+    browserRequiringSlices.length > 0
+      ? browserRequiringSlices.every((s) => hasRuntimeExecutableUatEvidenceText(s.evidenceText))
+      : sliceEvidencePairs.some((s) => hasRuntimeExecutableUatEvidenceText(s.evidenceText));
+  if (runtimeBypasses) return false;
 
   const validationEvidence = compactTextParts([
     params.successCriteriaChecklist,

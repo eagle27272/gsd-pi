@@ -452,7 +452,9 @@ describe("handleValidateMilestone write ordering (#2725)", () => {
     insertSlice({
       id: "S01",
       milestoneId: "M001",
-      demo: "Scripted runtime check verifies the button handler and reload state without launching a browser.",
+      // Uses localhost so hasBrowserRequiredText returns true and the gate is
+      // actually triggered before the runtime evidence bypasses it.
+      demo: "Visit localhost:3000 to verify DOM state after clicking Mark All Complete.",
     });
     const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
     mkdirSync(sliceDir, { recursive: true });
@@ -488,6 +490,53 @@ describe("handleValidateMilestone write ordering (#2725)", () => {
 
     assert.ok(!("error" in result), `unexpected error: ${"error" in result ? result.error : ""}`);
     assert.equal(result.verdict, "pass");
+  });
+
+  it("downgrades to needs-attention when only one of two browser-requiring slices has runtime evidence", async () => {
+    base = makeTmpBase();
+    const dbPath = join(base, ".gsd", "gsd.db");
+    openDatabase(dbPath);
+    insertMilestone({ id: "M001" });
+    insertSlice({
+      id: "S01",
+      milestoneId: "M001",
+      demo: "Visit localhost:3000 to verify DOM state.",
+    });
+    insertSlice({
+      id: "S02",
+      milestoneId: "M001",
+      demo: "Visit localhost:3000 to confirm persistence after reload.",
+    });
+    // S01 has runtime-executable evidence; S02 has none.
+    mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01"), { recursive: true });
+    writeFileSync(
+      join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-ASSESSMENT.md"),
+      [
+        "---",
+        "sliceId: S01",
+        "uatType: runtime-executable",
+        "verdict: PASS",
+        "---",
+        "| DOM check | runtime | PASS | gsd_uat_exec:.gsd/evidence/uat/M001/S01/dom.json | Verified. |",
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const result = await handleValidateMilestone(
+      {
+        ...VALID_PARAMS,
+        verificationClasses: `${VALID_PARAMS.verificationClasses}\n| UAT | S01 runtime verified; S02 still needs evidence. |`,
+      },
+      base,
+    );
+
+    assert.ok(!("error" in result), `unexpected error: ${"error" in result ? result.error : ""}`);
+    assert.equal(
+      result.verdict,
+      "needs-attention",
+      "S01 runtime evidence must not bypass the gate for S02 which has browser requirements but no evidence",
+    );
   });
 
   it("ignores slice full_uat_md planning text for browser requirement detection", async () => {

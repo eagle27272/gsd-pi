@@ -643,7 +643,7 @@ test("executeUatResultSave accepts gsd_uat_exec evidence written in a milestone 
   }
 });
 
-test("executeUatResultSave allows artifact-driven PASS with explicitly non-automatable follow-up checks", async () => {
+test("executeUatResultSave rejects artifact-driven PASS with human follow-up checks", async () => {
   const base = makeTmpBase();
   const worktree = join(base, ".gsd", "worktrees", "M001");
   const evidenceId = "uat-artifact-nonautomatable";
@@ -709,14 +709,8 @@ test("executeUatResultSave allows artifact-driven PASS with explicitly non-autom
       notes: "UAT passed; non-automatable browser polish is deferred.",
     }, worktree));
 
-    assert.equal(result.isError, undefined);
-    assert.equal(result.details.operation, "save_uat_result");
-    assert.equal(result.details.verdict, "PASS");
-    const assessment = readFileSync(
-      join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-ASSESSMENT.md"),
-      "utf-8",
-    );
-    assert.match(assessment, /Browser polish is deferred/);
+    assert.equal(result.isError, true);
+    assert.match(String(result.content[0]?.text), /artifact-driven UAT cannot PASS with human-only checks/);
   } finally {
     closeDatabase();
     cleanup(base);
