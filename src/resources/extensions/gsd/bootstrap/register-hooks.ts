@@ -1305,17 +1305,25 @@ export function registerHooks(
     if (isAutoActive()) {
       try {
         const { loadEffectiveGSDPreferences } = await import("../preferences.js");
+        const {
+          createObservationMask,
+          createResponsesInputObservationMask,
+          truncateContextResultMessages,
+          truncateResponsesInputResultItems,
+        } = await import("../context-masker.js");
         const prefs = loadEffectiveGSDPreferences();
         const cmConfig = prefs?.preferences.context_management;
 
         // Observation masking: replace old tool results with placeholders
         if (cmConfig?.observation_masking !== false) {
           const keepTurns = cmConfig?.observation_mask_turns ?? 8;
-          const { createObservationMask } = await import("../context-masker.js");
-          const mask = createObservationMask(keepTurns);
           const messages = payload.messages;
           if (Array.isArray(messages)) {
-            payload.messages = mask(messages);
+            payload.messages = createObservationMask(keepTurns)(messages);
+          }
+          const input = payload.input;
+          if (Array.isArray(input)) {
+            payload.input = createResponsesInputObservationMask(keepTurns)(input);
           }
         }
 
@@ -1325,23 +1333,11 @@ export function registerHooks(
         const maxChars = cmConfig?.tool_result_max_chars ?? 800;
         const msgs = payload.messages;
         if (Array.isArray(msgs)) {
-          payload.messages = msgs.map((msg: Record<string, unknown>) => {
-            // Match toolResult messages (role: "toolResult", content is array of content blocks)
-            if (msg?.role === "toolResult" && Array.isArray(msg.content)) {
-              const blocks = msg.content as Array<Record<string, unknown>>;
-              const totalLen = blocks.reduce((sum: number, b) => sum + (typeof b.text === "string" ? b.text.length : 0), 0);
-              if (totalLen > maxChars) {
-                const truncated = blocks.map(b => {
-                  if (typeof b.text === "string" && b.text.length > maxChars) {
-                    return { ...b, text: b.text.slice(0, maxChars) + "\n…[truncated]" };
-                  }
-                  return b;
-                });
-                return { ...msg, content: truncated };
-              }
-            }
-            return msg;
-          });
+          payload.messages = truncateContextResultMessages(msgs as any, maxChars);
+        }
+        const input = payload.input;
+        if (Array.isArray(input)) {
+          payload.input = truncateResponsesInputResultItems(input as any, maxChars);
         }
       } catch { /* non-fatal */ }
     }
