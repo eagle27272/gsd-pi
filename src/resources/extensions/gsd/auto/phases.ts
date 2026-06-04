@@ -398,6 +398,8 @@ async function validateSourceWriteWorktreeSafety(
 
 let consecutiveSessionTimeouts = 0;
 const MAX_SESSION_TIMEOUT_AUTO_RESUMES = 3;
+/** Maximum zero-tool-call retries before pausing — context exhaustion is deterministic. */
+const MAX_ZERO_TOOL_RETRIES = 1;
 
 export function resetSessionTimeoutState(): void {
   consecutiveSessionTimeouts = 0;
@@ -2724,14 +2726,27 @@ export async function runUnitPhase(
             unitId,
           });
         } else {
+          const zeroToolKey = `${unitType}/${unitId}`;
+          const attempt = (s.zeroToolRetryCount.get(zeroToolKey) ?? 0) + 1;
           debugLog("runUnitPhase", {
             phase: "zero-tool-calls",
             unitType,
             unitId,
+            attempt,
             warning: "Unit completed with 0 tool calls — likely context exhaustion, marking as failed",
           });
+          if (attempt > MAX_ZERO_TOOL_RETRIES) {
+            s.zeroToolRetryCount.delete(zeroToolKey);
+            ctx.ui.notify(
+              `${unitType} ${unitId} completed with 0 tool calls — context exhaustion, pausing auto-mode after ${MAX_ZERO_TOOL_RETRIES} retry.`,
+              "error",
+            );
+            await deps.pauseAuto(ctx, pi);
+            return { action: "break", reason: "zero-tool-calls-exhausted" };
+          }
+          s.zeroToolRetryCount.set(zeroToolKey, attempt);
           ctx.ui.notify(
-            `${unitType} ${unitId} completed with 0 tool calls — context exhaustion, will retry`,
+            `${unitType} ${unitId} completed with 0 tool calls — context exhaustion, will retry (attempt ${attempt}/${MAX_ZERO_TOOL_RETRIES})`,
             "warning",
           );
           return {
@@ -2761,6 +2776,7 @@ export async function runUnitPhase(
   if (artifactVerified) {
     s.unitDispatchCount.delete(dispatchKey);
     s.unitRecoveryCount.delete(`${unitType}/${unitId}`);
+    s.zeroToolRetryCount.delete(dispatchKey);
   }
 
   // Write phase handoff anchor after successful research/planning completion
