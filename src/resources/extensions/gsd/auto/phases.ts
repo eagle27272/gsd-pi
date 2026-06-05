@@ -2250,8 +2250,13 @@ export async function runUnitPhase(
     if (match) {
       const ok = await pi.setModel(match, { persist: false });
       if (ok) {
-        if (s.autoModeStartThinkingLevel) {
-          pi.setThinkingLevel(s.autoModeStartThinkingLevel);
+        // Apply the same thinking level that selectAndApplyModel resolved for
+        // this unit (per-phase configured level), not the auto-start session
+        // snapshot. Fall back to the session snapshot only when no phase-level
+        // was resolved so the hook model doesn't silently reset reasoning effort.
+        const thinkingToApply = modelResult.appliedThinkingLevel ?? s.autoModeStartThinkingLevel;
+        if (thinkingToApply) {
+          pi.setThinkingLevel(thinkingToApply);
         }
         s.currentUnitModel = match as AutoSession["currentUnitModel"];
         ctx.ui.notify(`Hook model override: ${match.provider}/${match.id}`, "info");
