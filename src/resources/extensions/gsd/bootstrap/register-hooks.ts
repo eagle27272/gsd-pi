@@ -589,6 +589,17 @@ export function registerHooks(
     if (isAutoActive() || preserveCloseoutSurface) {
       ctx.ui.setWidget("gsd-health", undefined);
     }
+    // Cold start after /quit relaunches with cwd at the project root. When
+    // auto-mode is neither active nor paused (its own resume path re-enters the
+    // worktree with a lease check — auto.ts:3032), proactively chdir back into
+    // the active milestone's worktree so subsequent work isn't stranded at the
+    // root. Best-effort and a no-op when already inside a worktree.
+    if (!isAutoActive() && !isAutoPaused() && !preserveCloseoutSurface) {
+      try {
+        const { reenterActiveWorktreeIfNeeded } = await import("../worktree-reentry.js");
+        await reenterActiveWorktreeIfNeeded(basePath);
+      } catch { /* non-fatal */ }
+    }
   });
 
   pi.on("session_switch", async (_event, ctx) => {
