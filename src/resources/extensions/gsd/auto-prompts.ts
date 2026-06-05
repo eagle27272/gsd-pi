@@ -3530,11 +3530,25 @@ export async function buildReassessRoadmapPrompt(
 
 // ─── Reactive Execute Prompt ──────────────────────────────────────────────
 
+/**
+ * Build the `with model: "…" and thinking: "…"` suffix injected into a prompt
+ * that instructs the coordinator how to dispatch a `subagent` call. Either or
+ * both may be absent (ADR-026 / #508).
+ */
+function subagentCallSuffix(model?: string, thinking?: string): string {
+  const parts: string[] = [];
+  if (model) parts.push(`model: "${model}"`);
+  if (thinking) parts.push(`thinking: "${thinking}"`);
+  return parts.length > 0 ? ` with ${parts.join(" and ")}` : "";
+}
+
 export async function buildReactiveExecutePrompt(
   mid: string, midTitle: string, sid: string, sTitle: string,
   readyTaskIds: string[], base: string,
   subagentModel?: string,
-  opts?: { sessionContextWindow?: number; modelRegistry?: MinimalModelRegistry; sessionProvider?: string },
+  // Reasoning effort travels inside opts here (not as a positional param) so
+  // existing positional `opts` callers don't shift (#508).
+  opts?: { sessionContextWindow?: number; modelRegistry?: MinimalModelRegistry; sessionProvider?: string; subagentThinking?: string },
 ): Promise<string> {
   const { loadSliceTaskIO, deriveTaskGraph, graphMetrics } = await import("./reactive-graph.js");
 
@@ -3627,7 +3641,7 @@ export async function buildReactiveExecutePrompt(
       `When done, say: "Task ${tid} complete."`,
     ].join("\n");
 
-    const modelSuffix = subagentModel ? ` with model: "${subagentModel}"` : "";
+    const modelSuffix = subagentCallSuffix(subagentModel, opts?.subagentThinking);
     subagentSections.push([
       `### ${tid}: ${tTitle}`,
       "",
@@ -3711,10 +3725,11 @@ export async function buildParallelResearchSlicesPrompt(
   slices: Array<{ id: string; title: string }>,
   basePath: string,
   subagentModel?: string,
+  subagentThinking?: string,
 ): Promise<string> {
   // Build individual research-slice prompts for each slice
   const subagentSections: string[] = [];
-  const modelSuffix = subagentModel ? ` with model: "${subagentModel}"` : "";
+  const modelSuffix = subagentCallSuffix(subagentModel, subagentThinking);
   for (const slice of slices) {
     const slicePrompt = await buildResearchSlicePrompt(mid, midTitle, slice.id, slice.title, basePath, { contextModeRenderMode: "nested" });
     subagentSections.push([
@@ -3742,6 +3757,7 @@ export async function buildGateEvaluatePrompt(
   mid: string, midTitle: string, sid: string, sTitle: string,
   base: string,
   subagentModel?: string,
+  subagentThinking?: string,
 ): Promise<string> {
   // Pull only the gates this turn actually owns (Q3/Q4). Filter via the
   // registry so that scope:"slice" gates owned by other turns (Q8) can't
@@ -3798,7 +3814,7 @@ export async function buildGateEvaluatePrompt(
       "- `findings`: detailed markdown findings (or empty if omitted)",
     ].join("\n");
 
-    const modelSuffix = subagentModel ? ` with model: "${subagentModel}"` : "";
+    const modelSuffix = subagentCallSuffix(subagentModel, subagentThinking);
     subagentSections.push([
       `### ${def.id}: ${def.question}`,
       "",

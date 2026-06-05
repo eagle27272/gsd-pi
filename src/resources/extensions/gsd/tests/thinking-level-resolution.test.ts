@@ -1,0 +1,139 @@
+/**
+ * Per-phase thinking level resolution — behavior tests for ADR-026 (#497).
+ *
+ * Verifies the (model, thinking) pairing, the hybrid inline/block precedence,
+ * sibling-chain fallback, and static validation through exported runtime APIs.
+ */
+
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+
+import { resolveThinkingLevelForUnit, resolveModelWithFallbacksForUnit } from "../preferences-models.ts";
+import { validatePreferences } from "../preferences-validation.ts";
+
+function withPreferences<T>(frontmatter: string[], fn: () => T): T {
+  const oldHome = process.env.GSD_HOME;
+  const home = mkdtempSync(join(tmpdir(), "gsd-thinking-"));
+  try {
+    process.env.GSD_HOME = home;
+    writeFileSync(join(home, "preferences.md"), ["---", ...frontmatter, "---", ""].join("\n"));
+    return fn();
+  } finally {
+    if (oldHome === undefined) delete process.env.GSD_HOME;
+    else process.env.GSD_HOME = oldHome;
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+
+test("inline models.<phase>.thinking resolves for that phase", () => {
+  withPreferences(
+    ["models:", "  planning:", "    model: planning-model", "    thinking: xhigh"],
+    () => {
+      assert.equal(resolveThinkingLevelForUnit("plan-milestone"), "xhigh");
+      // Model still resolves normally alongside the paired thinking.
+      assert.equal(resolveModelWithFallbacksForUnit("plan-milestone")?.primary, "planning-model");
+    },
+  );
+});
+
+test("separate thinking block resolves without a model pin", () => {
+  withPreferences(["thinking:", "  execution: low"], () => {
+    assert.equal(resolveThinkingLevelForUnit("execute-task"), "low");
+    // No model configured — model resolution stays undefined.
+    assert.equal(resolveModelWithFallbacksForUnit("execute-task"), undefined);
+  });
+});
+
+test("inline thinking wins over the block for the same phase", () => {
+  withPreferences(
+    [
+      "models:",
+      "  planning:",
+      "    model: planning-model",
+      "    thinking: high",
+      "thinking:",
+      "  planning: low",
+    ],
+    () => {
+      assert.equal(resolveThinkingLevelForUnit("plan-slice"), "high");
+    },
+  );
+});
+
+test("a bare-string model bucket is complemented by the block for the same phase", () => {
+  withPreferences(
+    ["models:", "  execution: execution-model", "thinking:", "  execution: high"],
+    () => {
+      assert.equal(resolveModelWithFallbacksForUnit("execute-task")?.primary, "execution-model");
+      assert.equal(resolveThinkingLevelForUnit("execute-task"), "high");
+    },
+  );
+});
+
+test("a claimed model bucket does not inherit a sibling's thinking", () => {
+  // discuss has its own model (claims the bucket) but no thinking; planning has
+  // thinking. discuss must NOT borrow planning's thinking — the pair is anchored
+  // to the resolved model phase.
+  withPreferences(
+    [
+      "models:",
+      "  discuss: discuss-model",
+      "  planning:",
+      "    model: planning-model",
+      "    thinking: xhigh",
+    ],
+    () => {
+      assert.equal(resolveModelWithFallbacksForUnit("discuss-milestone")?.primary, "discuss-model");
+      assert.equal(resolveThinkingLevelForUnit("discuss-milestone"), undefined);
+    },
+  );
+});
+
+test("with no model configured, the thinking block follows the sibling chain", () => {
+  // discuss-milestone's chain is [discuss, planning]; only planning is set in
+  // the block, so discuss inherits it.
+  withPreferences(["thinking:", "  planning: high"], () => {
+    assert.equal(resolveThinkingLevelForUnit("discuss-milestone"), "high");
+  });
+});
+
+test("execution_simple inherits the execution block when its own is unset", () => {
+  withPreferences(["thinking:", "  execution: medium"], () => {
+    assert.equal(resolveThinkingLevelForUnit("execute-task-simple"), "medium");
+  });
+});
+
+test("returns undefined when nothing is configured", () => {
+  withPreferences(["models:", "  planning: planning-model"], () => {
+    assert.equal(resolveThinkingLevelForUnit("execute-task"), undefined);
+    assert.equal(resolveThinkingLevelForUnit("plan-milestone"), undefined);
+  });
+});
+
+test("validation warns on an illegal thinking level in the block", () => {
+  const result = validatePreferences({ thinking: { planning: "ultra" } } as never);
+  assert.ok(result.warnings.some((w) => w.includes("thinking.planning") && w.includes("not a valid thinking level")));
+  // Invalid entry is dropped, not kept.
+  assert.equal(result.preferences.thinking, undefined);
+});
+
+test("validation warns on an unknown phase key in the block", () => {
+  const result = validatePreferences({ thinking: { plannning: "high" } } as never);
+  assert.ok(result.warnings.some((w) => w.includes("unknown thinking phase") && w.includes("plannning")));
+});
+
+test("validation warns on an illegal inline models thinking level", () => {
+  const result = validatePreferences({
+    models: { planning: { model: "m", thinking: "max" } },
+  } as never);
+  assert.ok(result.warnings.some((w) => w.includes("models.planning.thinking") && w.includes("not a valid thinking level")));
+});
+
+test("validation accepts a valid thinking block", () => {
+  const result = validatePreferences({ thinking: { planning: "xhigh", execution: "low" } } as never);
+  assert.deepEqual(result.preferences.thinking, { planning: "xhigh", execution: "low" });
+  assert.equal(result.errors.length, 0);
+});
