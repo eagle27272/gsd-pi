@@ -27,7 +27,6 @@ import {
   setSliceSketchFlag,
   transaction,
   getAssessment,
-  getSliceTasks,
 } from "./gsd-db.js";
 import { isClosedStatus } from "./status-guards.js";
 import { extractVerdict, isAcceptableUatVerdict } from "./verdict-parser.js";
@@ -115,12 +114,6 @@ import {
   checkCloseoutConsistencyGate,
   formatCloseoutConsistencyBlock,
 } from "./closeout-consistency-gate.js";
-import {
-  formatPlannerHandoffPauseReason,
-  hasPlannerHandoffBeenOffered,
-  markPlannerHandoffOffered,
-  PLANNER_HANDOFF_RULE_NAME,
-} from "./planner-handoff.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -423,43 +416,6 @@ function hasMilestonePassedDiscuss(basePath: string, mid: string): boolean {
     }
   }
   return hasImplementationArtifacts(basePath, mid) === "present";
-}
-
-function isBeforeFirstImplementationTask(mid: string): boolean {
-  if (!isDbAvailable()) return true;
-  for (const slice of getMilestoneSlices(mid)) {
-    const tasks = getSliceTasks(mid, slice.id);
-    if (tasks.some(task => isClosedStatus(task.status))) return false;
-  }
-  return true;
-}
-
-function hasRoadmapLevelPlan(basePath: string, mid: string): boolean {
-  if (isDbAvailable() && getMilestoneSlices(mid).length > 0) return true;
-  const roadmapFile = resolveMilestoneFile(basePath, mid, "ROADMAP");
-  return !!(roadmapFile && existsSync(roadmapFile));
-}
-
-function isPlannerHandoffBoundary(state: GSDState): boolean {
-  if (state.phase !== "planning") return false;
-  if (!state.activeSlice || state.activeTask) return false;
-  const nextAction = state.nextAction ?? "";
-  return (
-    /^Plan slice \S+/.test(nextAction) ||
-    /^Slice \S+ has no DB tasks\./.test(nextAction)
-  );
-}
-
-function shouldOfferPlannerHandoff(basePath: string, mid: string, state: GSDState): boolean {
-  if (process.env.GSD_HEADLESS) return false;
-  if (!isPlannerHandoffBoundary(state)) return false;
-  if (!state.activeMilestone || state.activeMilestone.id !== mid) return false;
-  if (!hasRoadmapLevelPlan(basePath, mid)) return false;
-  if (hasMilestonePassedDiscuss(basePath, mid)) return false;
-  if (hasPlannerHandoffBeenOffered(basePath, mid)) return false;
-  if (!isBeforeFirstImplementationTask(mid)) return false;
-  if (hasImplementationArtifacts(basePath, mid) === "present") return false;
-  return true;
 }
 
 /**
@@ -1072,18 +1028,6 @@ export const DISPATCH_RULES: DispatchRule[] = [
       return {
         action: "stop" as const,
         reason: `Slice ${state.activeSlice.id} requires discussion before planning (require_slice_discussion is enabled). Run /gsd discuss to discuss this slice, then /gsd auto to resume.`,
-        level: "warning" as const,
-      };
-    },
-  },
-  {
-    name: PLANNER_HANDOFF_RULE_NAME,
-    match: async ({ state, mid, basePath }) => {
-      if (!shouldOfferPlannerHandoff(basePath, mid, state)) return null;
-      markPlannerHandoffOffered(basePath, mid);
-      return {
-        action: "stop" as const,
-        reason: formatPlannerHandoffPauseReason(mid),
         level: "warning" as const,
       };
     },

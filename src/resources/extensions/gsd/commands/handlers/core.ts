@@ -14,13 +14,6 @@ import { projectRoot } from "../context.js";
 import { formattedShortcutPair } from "../../shortcut-defs.js";
 import { getVisualBriefOutputDir } from "../../../visual-brief/artifact-policy.js";
 import { buildVisualBriefPrompt, parseVisualBriefArgs, VISUAL_BRIEF_USAGE } from "../../../visual-brief/prompts.js";
-import {
-  buildGsdPlannerSpawnPlan,
-  formatGsdPlannerCommand,
-  formatPlannerLaunchUnavailable,
-  launchGsdPlanner,
-  markPlannerHandoffOffered,
-} from "../../planner-handoff.js";
 
 export function showHelp(ctx: ExtensionCommandContext, args = ""): void {
   const summaryLines = [
@@ -36,7 +29,6 @@ export function showHelp(ctx: ExtensionCommandContext, args = ""): void {
     `  /gsd status         Status dashboard  (${formattedShortcutPair("dashboard")})`,
     `  /gsd parallel watch Parallel monitor  (${formattedShortcutPair("parallel")})`,
     `  /gsd notifications  Notification history  (${formattedShortcutPair("notifications")})`,
-    "  /gsd planner        Launch gsd-planner to review the current plan",
     "  /gsd visualize      Workflow visualizer",
     "  /gsd report         Generate all HTML reports and open browser",
     "  /gsd brief <mode>   Visual HTML brief (diagram, plan, diff, recap, table, slides)",
@@ -80,7 +72,6 @@ export function showHelp(ctx: ExtensionCommandContext, args = ""): void {
     "  /gsd stop           Stop auto-mode gracefully",
     "  /gsd pause          Pause auto-mode (preserves state, /gsd auto to resume)",
     "  /gsd discuss        Start guided milestone/slice discussion",
-    "  /gsd planner        Launch gsd-planner to customize a planned milestone before implementation",
     "  /gsd new-milestone  Create milestone from headless context (used by gsd headless)",
     "  /gsd new-project    Bootstrap a new project (use --deep for staged project-level discovery)",
     "  /gsd quick          Execute a quick task without full planning overhead",
@@ -92,7 +83,6 @@ export function showHelp(ctx: ExtensionCommandContext, args = ""): void {
     "VISIBILITY",
     `  /gsd status         Status dashboard  (${formattedShortcutPair("dashboard")})`,
     `  /gsd parallel watch Open parallel worker monitor  (${formattedShortcutPair("parallel")})`,
-    "  /gsd planner        Launch gsd-planner for plan review/customization  [Mxxx] [--dry-run]",
     "  /gsd widget         Cycle status widget  [full|small|min|off]",
     "  /gsd visualize      Workflow visualizer (progress, timeline, deps, metrics, health, agent, changes, knowledge, captures, export)",
     "  /gsd brief <mode>   Generate a visual HTML brief  [diagram|plan|diff|recap|table|slides] [topic] [--slides]",
@@ -473,68 +463,6 @@ async function handleModel(trimmedArgs: string, ctx: ExtensionCommandContext, pi
   ctx.ui.notify(`Model: ${targetModel.provider}/${targetModel.id}`, "info");
 }
 
-function parsePlannerArgs(args: string): { dryRun: boolean; milestoneId: string | null; extraArgs: string[] } {
-  const parts = args.trim().split(/\s+/).filter(Boolean);
-  let dryRun = false;
-  let milestoneId: string | null = null;
-  const extraArgs: string[] = [];
-
-  for (const part of parts) {
-    if (part === "--dry-run") {
-      dryRun = true;
-      continue;
-    }
-    if (!milestoneId && /^M\d+(?:-[a-z0-9]{6})?$/i.test(part)) {
-      milestoneId = part.toUpperCase();
-      continue;
-    }
-    extraArgs.push(part);
-  }
-
-  return { dryRun, milestoneId, extraArgs };
-}
-
-async function handlePlanner(args: string, ctx: ExtensionCommandContext): Promise<void> {
-  const basePath = projectRoot();
-  const parsed = parsePlannerArgs(args);
-  let milestoneId = parsed.milestoneId;
-  if (!milestoneId) {
-    const state = await deriveState(basePath);
-    milestoneId = state.activeMilestone?.id ?? null;
-  }
-  const plan = buildGsdPlannerSpawnPlan({
-    basePath,
-    milestoneId,
-    extraArgs: parsed.extraArgs,
-  });
-
-  if (parsed.dryRun) {
-    ctx.ui.notify(formatGsdPlannerCommand(plan), "info");
-    return;
-  }
-
-  const result = await launchGsdPlanner({
-    basePath,
-    milestoneId,
-    extraArgs: parsed.extraArgs,
-  });
-
-  if (result.status === "failed") {
-    ctx.ui.notify(formatPlannerLaunchUnavailable(result.plan, result.error), "warning");
-    return;
-  }
-
-  if (milestoneId) {
-    markPlannerHandoffOffered(basePath, milestoneId, "command");
-  }
-  ctx.ui.notify(
-    milestoneId
-      ? `Launched gsd-planner for ${milestoneId}. Run /gsd auto when you are ready to continue.`
-      : "Launched gsd-planner. Run /gsd auto when you are ready to continue.",
-    "info",
-  );
-}
-
 export async function handleCoreCommand(
   trimmed: string,
   ctx: ExtensionCommandContext,
@@ -550,10 +478,6 @@ export async function handleCoreCommand(
   }
   if (trimmed === "visualize") {
     await handleVisualize(ctx);
-    return true;
-  }
-  if (trimmed === "planner" || trimmed.startsWith("planner ")) {
-    await handlePlanner(trimmed.replace(/^planner\s*/, "").trim(), ctx);
     return true;
   }
   if (trimmed === "brief" || trimmed.startsWith("brief ")) {

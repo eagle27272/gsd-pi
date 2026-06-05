@@ -15,7 +15,6 @@
 | `/gsd discuss` | Discuss architecture and decisions (stop auto-mode first with `/gsd stop`) |
 | `/gsd status` | Open workflow visualizer |
 | `/gsd widget` | Cycle dashboard widget: full / small / min / off |
-| `/gsd planner [MID]` | Launch `gsd-planner` to review or customize a planned milestone before implementation |
 | `/gsd notifications` | View, filter, and clear persistent notification history |
 | `/gsd queue` | Queue and reorder future milestones (`pending`, `queued`, and legacy `planned`; safe during auto mode) |
 | `/gsd capture` | Fire-and-forget thought capture (works during auto mode) |

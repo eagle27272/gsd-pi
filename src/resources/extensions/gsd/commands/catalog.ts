@@ -14,7 +14,7 @@ export interface GsdCommandDefinition {
 type CompletionMap = Record<string, readonly GsdCommandDefinition[]>;
 
 export const GSD_COMMAND_DESCRIPTION =
-  "GSD — Git Ship Done: /gsd help|start|templates|next|auto|stop|pause|status|widget|visualize|planner|brief|report|queue|quick|discuss|capture|triage|dispatch|verdict|history|undo|undo-task|reset-slice|rate|skip|export|cleanup|closeout|rebuild|model|mode|prefs|config|keys|hooks|run-hook|skill-health|doctor|debug|logs|forensics|changelog|migrate|remote|steer|knowledge|memory|new-milestone|new-project|parallel|cmux|park|unpark|init|setup|onboarding|inspect|extensions|update|upgrade|fast|mcp|rethink|workflow|codebase|notifications|ship|do|usage|context|session-report|backlog|pr-branch|add-tests|scan|language|worktree|eval-review";
+  "GSD — Git Ship Done: /gsd help|start|templates|next|auto|stop|pause|status|widget|visualize|brief|report|queue|quick|discuss|capture|triage|dispatch|verdict|history|undo|undo-task|reset-slice|rate|skip|export|cleanup|closeout|rebuild|model|mode|prefs|config|keys|hooks|run-hook|skill-health|doctor|debug|logs|forensics|changelog|migrate|remote|steer|knowledge|memory|new-milestone|new-project|parallel|cmux|park|unpark|init|setup|onboarding|inspect|extensions|update|upgrade|fast|mcp|rethink|workflow|codebase|notifications|ship|do|usage|context|session-report|backlog|pr-branch|add-tests|scan|language|worktree|eval-review";
 
 export const TOP_LEVEL_SUBCOMMANDS: readonly GsdCommandDefinition[] = [
   { cmd: "help", desc: "Categorized command reference with descriptions" },
@@ -25,7 +25,6 @@ export const TOP_LEVEL_SUBCOMMANDS: readonly GsdCommandDefinition[] = [
   { cmd: "status", desc: "Open the status dashboard" },
   { cmd: "widget", desc: "Cycle widget: full → small → min → off" },
   { cmd: "visualize", desc: "Open 10-tab workflow visualizer (progress, timeline, deps, metrics, health, agent, changes, knowledge, captures, export)" },
-  { cmd: "planner", desc: "Launch gsd-planner to review or customize the current plan before implementation" },
   { cmd: "brief", desc: "Generate a visual HTML brief: diagram, plan, diff review, recap, table, or slides" },
   { cmd: "queue", desc: "Queue and reorder future milestones" },
   { cmd: "quick", desc: "Execute a quick task without full planning overhead" },
@@ -324,10 +323,6 @@ const NESTED_COMPLETIONS: CompletionMap = {
     { cmd: "--open", desc: "Open a browser chart saved to .gsd/reports/" },
     { cmd: "--text", desc: "Plain-text breakdown" },
     { cmd: "--json", desc: "Machine-readable JSON output" },
-  ],
-  planner: [
-    { cmd: "--dry-run", desc: "Print the gsd-planner command without launching it" },
-    { cmd: "M001", desc: "Launch planner for a specific milestone ID" },
   ],
   backlog: [
     { cmd: "add", desc: "Add item to backlog" },
