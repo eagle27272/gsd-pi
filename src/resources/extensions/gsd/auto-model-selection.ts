@@ -956,17 +956,16 @@ export async function selectAndApplyModel(
   // default is intentionally left untouched so no-config interactive runs keep
   // the user's /model thinking level. (ADR-026)
   if (appliedThinkingLevel == null && explicitThinkingLevel && ctx.model) {
+    // Prefer the full registry model (carries reasoning capability so the level
+    // can be clamped); fall back to ctx.model. Always route through
+    // applyThinkingLevelForModel so the clamp runs whenever capability metadata
+    // exists — never a raw verbatim setThinkingLevel that bypasses it (ADR-026).
     const current = resolveModelId(
       `${ctx.model.provider}/${ctx.model.id}`,
       ctx.modelRegistry?.getAvailable?.() ?? [],
       ctx.model.provider,
-    );
-    if (current) {
-      appliedThinkingLevel = applyThinkingLevelForModel(pi, explicitThinkingLevel, current, ctx);
-    } else {
-      pi.setThinkingLevel(explicitThinkingLevel);
-      appliedThinkingLevel = explicitThinkingLevel;
-    }
+    ) ?? (ctx.model as Model<Api>);
+    appliedThinkingLevel = applyThinkingLevelForModel(pi, explicitThinkingLevel, current, ctx);
   }
 
   return { routing, appliedModel, appliedThinkingLevel };

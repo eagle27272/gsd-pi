@@ -775,6 +775,63 @@ test("selectAndApplyModel applies explicit thinking with no model pin (interacti
   assert.deepEqual(thinkingLevels, ["high"]);
 });
 
+test("selectAndApplyModel clamps explicit no-model thinking via ctx.model when registry lookup fails (ADR-026)", async (t) => {
+  const originalCwd = process.cwd();
+  const tempProject = makeTempDir("gsd-routing-thinking-ctxmodel-");
+  const thinkingLevels: unknown[] = [];
+  t.after(() => {
+    process.chdir(originalCwd);
+    rmSync(tempProject, { recursive: true, force: true });
+  });
+
+  // ctx.model carries reasoning capability (map omits xhigh) but the registry
+  // returns nothing, so resolveModelId fails and ctx.model is the clamp source.
+  const ctxModel = {
+    id: "claude-sonnet-4-6",
+    provider: "anthropic",
+    api: "anthropic-messages",
+    reasoning: true,
+    thinkingLevelMap: { low: "low", medium: "medium", high: "high" },
+  };
+  mkdirSync(join(tempProject, ".gsd"), { recursive: true });
+  writeFileSync(
+    join(tempProject, ".gsd", "PREFERENCES.md"),
+    ["---", "thinking:", "  planning: xhigh", "---"].join("\n"),
+    "utf-8",
+  );
+  process.chdir(tempProject);
+
+  await selectAndApplyModel(
+    {
+      modelRegistry: { getAvailable: () => [] },   // registry lookup fails
+      sessionManager: { getSessionId: () => "test-session" },
+      ui: { notify: () => {} },
+      model: ctxModel,
+    } as any,
+    {
+      setModel: async () => true,
+      setThinkingLevel: (level: unknown) => { thinkingLevels.push(level); },
+      emitBeforeModelSelect: async () => undefined,
+      getActiveTools: () => [],
+      emitAdjustToolSet: async () => undefined,
+      setActiveTools: () => {},
+    } as any,
+    "plan-slice",
+    "M001/S01",
+    tempProject,
+    undefined,
+    false,
+    null,
+    undefined,
+    false,
+    undefined,
+    undefined,
+  );
+
+  // xhigh is unsupported by ctx.model → clamped to high, never sent verbatim.
+  assert.deepEqual(thinkingLevels, ["high"]);
+});
+
 test("resolveModelId: anthropic wins over claude-code when session provider is not claude-code", () => {
   const availableModels = [
     { id: "claude-sonnet-4-6", provider: "claude-code" },
