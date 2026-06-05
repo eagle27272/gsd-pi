@@ -650,6 +650,9 @@ export class ToolExecutionComponent extends Container {
 	 * Finalize a pending tool call as failed/interrupted while preserving any streamed partial output.
 	 */
 	completeWithError(message?: string): void {
+		if (this.result && !this.isPartial) {
+			return;
+		}
 		this.isPartial = false;
 		this.endedAt = this.endedAt ?? Date.now();
 		if (this.result) {

@@ -331,6 +331,59 @@ test("handleAgentEvent: standalone completed tool events roll up incrementally",
 	assert.ok(renderCount > 0);
 });
 
+test("handleAgentEvent: assistant error finalization does not fail completed tool calls", async () => {
+	initTheme("dark", false);
+	const chatContainer = new Container();
+	const host = createStreamingHost(chatContainer);
+	const toolCall = {
+		type: "toolCall",
+		id: "exec-1",
+		name: "gsd_exec",
+		arguments: { cmd: "true" },
+	};
+	const runningMessage = {
+		id: "a-tool",
+		role: "assistant",
+		provider: "openai-codex",
+		model: "gpt-5.4",
+		timestamp: 1,
+		stopReason: "stop",
+		content: [toolCall],
+	};
+	const erroredMessage = {
+		...runningMessage,
+		stopReason: "error",
+		errorMessage: "Model hit a transient error",
+	};
+
+	await handleAgentEvent(host, {
+		type: "message_start",
+		message: { ...runningMessage, content: [] },
+	} as any);
+	await handleAgentEvent(host, {
+		type: "message_update",
+		message: runningMessage,
+		assistantMessageEvent: { type: "toolcall_end", toolCall },
+	} as any);
+	await handleAgentEvent(host, {
+		type: "tool_execution_end",
+		toolCallId: toolCall.id,
+		toolName: toolCall.name,
+		result: { content: [{ type: "text", text: "ok" }], isError: false },
+		isError: false,
+	} as any);
+
+	await handleAgentEvent(host, {
+		type: "message_end",
+		message: erroredMessage,
+	} as any);
+
+	const rendered = stripAnsi(chatContainer.render(100).join("\n"));
+	assert.match(rendered, /success · \d+(ms|s)/);
+	assert.doesNotMatch(rendered, /failed · \d+(ms|s)/);
+	assert.doesNotMatch(rendered, /Model hit a transient error/);
+});
+
 test("handleAgentEvent: Claude Code MCP post-tool text does not erase user-facing pre-tool prose", async () => {
 	initTheme("dark", false);
 	const chatContainer = new Container();
