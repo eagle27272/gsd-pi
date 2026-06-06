@@ -47,6 +47,10 @@ export function isAutoCompletionStopInProgress(): boolean {
   return autoSession.completionStopInProgress;
 }
 
+export function clearAutoCompletionStopInProgress(): void {
+  autoSession.completionStopInProgress = false;
+}
+
 export function markToolStart(toolCallId: string, toolName?: string): void {
   markTrackedToolStart(toolCallId, autoSession.active, toolName);
 }

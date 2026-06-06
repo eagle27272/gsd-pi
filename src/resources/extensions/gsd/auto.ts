@@ -1138,6 +1138,48 @@ function setLifecycleOutcome(
   });
 }
 
+const TERMINAL_CLOSEOUT_COMMANDS = [
+  "/gsd status for overview",
+  "/gsd visualize to inspect",
+  "/gsd notifications for history",
+  "/gsd start for new work",
+];
+
+function setTerminalCloseoutOutcome(
+  ctx: ExtensionContext | undefined,
+  input: {
+    milestoneId?: string | null;
+    milestoneTitle?: string | null;
+    allMilestonesComplete?: boolean;
+    reason?: string;
+  },
+): void {
+  if (!ctx?.hasUI) return;
+  const milestoneLabel = input.milestoneId ? `Milestone ${input.milestoneId}` : "Milestone";
+  const title = input.allMilestonesComplete ? "All milestones complete" : `${milestoneLabel} complete`;
+  const titleLine = input.milestoneTitle && input.milestoneId
+    ? `${input.milestoneTitle}. `
+    : "";
+  const nextAction = input.allMilestonesComplete
+    ? "Review the closeout, then start new work when ready."
+    : "Review the closeout, then start the next milestone when ready.";
+
+  ctx.ui.setHeader?.(() => ({
+    render(): string[] { return []; },
+    invalidate(): void {},
+  }));
+  ctx.ui.setStatus?.("gsd-step", undefined);
+  ctx.ui.setWidget?.("gsd-progress", undefined);
+  setLifecycleOutcome(ctx, {
+    status: "complete",
+    title,
+    detail: `${titleLine}${input.reason ?? "Milestone closeout finished."}`,
+    nextAction,
+    commands: TERMINAL_CLOSEOUT_COMMANDS,
+    unitLabel: input.milestoneId ? `complete-milestone ${input.milestoneId}` : null,
+  });
+}
+
 function handleLostSessionLock(
   ctx?: ExtensionContext,
   lockStatus?: SessionLockStatus,
@@ -1283,7 +1325,6 @@ export async function cleanupAfterLoopExit(ctx: ExtensionContext): Promise<void>
   if (!s.paused) {
     if (preserveCompletionSurface) {
       ctx.ui.setStatus("gsd-auto", undefined);
-      s.completionStopInProgress = false;
       if (preserveStepSurface) {
         s.preserveStepSurfaceAfterLoopExit = false;
       }
@@ -1426,6 +1467,7 @@ export async function stopAuto(
     options.preserveCloseoutTranscript ?? completionStopRequested
   );
   const installCompletionWidget = completionStopRequested && !preserveCloseoutTranscript;
+  const installTerminalCloseoutOutcome = completionStopRequested && preserveCloseoutTranscript;
   const preserveCompletionSurface = completionStopRequested || preserveCloseoutTranscript;
   s.completionStopInProgress = preserveCompletionSurface;
   playNotificationBell("stop", loadedPreferences?.notifications);
@@ -1757,6 +1799,15 @@ export async function stopAuto(
       if (process.env.GSD_HEADLESS === "1") {
         ctx.ui.notify(`${stopNotificationPrefix}.`, "info");
       }
+    }
+
+    if (installTerminalCloseoutOutcome && ctx && options.completionWidget) {
+      setTerminalCloseoutOutcome(ctx, {
+        milestoneId: completionMilestoneId,
+        milestoneTitle: options.completionWidget.milestoneTitle ?? null,
+        allMilestonesComplete: options.completionWidget.allMilestonesComplete,
+        reason: reason ?? "Milestone closeout finished.",
+      });
     }
 
     // ── Step 9: Cmux sidebar / event log ──

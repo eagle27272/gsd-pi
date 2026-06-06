@@ -18,6 +18,7 @@ import { resolveManifest } from "../unit-context-manifest.js";
 import { isBlockedStateFile, isBashWriteToStateFile, BLOCKED_WRITE_ERROR } from "../write-intercept.js";
 import { loadFile, saveFile, formatContinue } from "../files.js";
 import {
+  clearAutoCompletionStopInProgress,
   clearToolInvocationError,
   getAutoRuntimeSnapshot,
   getSourceObservationStore,
@@ -790,6 +791,7 @@ export function registerHooks(
   });
 
   pi.on("before_agent_start", async (event, ctx: ExtensionContext) => {
+    clearAutoCompletionStopInProgress();
     resetPendingGatePauseGuard();
     applyMinimalGsdToolSurface(pi);
 
