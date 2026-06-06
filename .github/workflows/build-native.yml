@@ -291,8 +291,13 @@ jobs:
       - name: Install dependencies
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.platform_packages_only != 'true'
         run: |
+          # Install WITH optional deps. The web host build (next/tailwind) needs
+          # lightningcss's platform-native binary, which ships as an optionalDependency;
+          # --no-optional skips it and breaks `next build` with
+          # "Cannot find module '../lightningcss.linux-x64-gnu.node'". The @opengsd/engine-*
+          # optional deps are already published by this point, so a full install resolves.
           pnpm install --lockfile-only
-          pnpm install --frozen-lockfile --no-optional
+          pnpm install --frozen-lockfile
 
       - name: Build
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.platform_packages_only != 'true'
