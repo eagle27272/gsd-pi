@@ -25,10 +25,11 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 concurrency:
-  # Group per-PR (head_ref) so pushing to a PR cancels its stale run, but fall
-  # back to the unique run_id on branch pushes so an in-flight main/dev CI is
-  # never cancelled by a later push.
-  group: ci-${{ github.head_ref || github.run_id }}
+  # Group per-PR (pull_request.number is globally unique — head_ref is only the
+  # source branch name, which collides across forks/PRs that share it) so pushing
+  # to a PR cancels its own stale run, and fall back to the unique run_id on
+  # branch pushes so an in-flight main/dev CI is never cancelled by a later push.
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
