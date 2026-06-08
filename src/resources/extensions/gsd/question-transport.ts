@@ -75,7 +75,7 @@ export function resolveQuestionTransport(
     };
   }
 
-  if (usesWorkflowMcp && !workflowMcpStructuredQuestionsEnabled(options.env)) {
+  if (options.authMode === "externalCli" && !workflowMcpStructuredQuestionsEnabled(options.env)) {
     return {
       structuredQuestionsAvailable: "false",
       questionToolAvailable,

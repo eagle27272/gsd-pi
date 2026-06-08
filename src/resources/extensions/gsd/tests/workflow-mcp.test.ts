@@ -686,6 +686,39 @@ test("supportsStructuredQuestions recognizes workflow MCP question tools", () =>
   );
 });
 
+test("supportsStructuredQuestions gates non-local externalCli providers", () => {
+  assert.equal(
+    supportsStructuredQuestions(["ask_user_questions"], {
+      authMode: "externalCli",
+      env: {},
+    }),
+    true,
+  );
+  assert.equal(
+    supportsStructuredQuestions(["ask_user_questions"], {
+      authMode: "externalCli",
+      baseUrl: "https://api.example.com",
+      env: {},
+    }),
+    true,
+  );
+  assert.equal(
+    supportsStructuredQuestions(["ask_user_questions"], {
+      authMode: "externalCli",
+      env: { GSD_WORKFLOW_MCP_STRUCTURED_QUESTIONS: "0" } as NodeJS.ProcessEnv,
+    }),
+    false,
+  );
+  assert.equal(
+    supportsStructuredQuestions(["ask_user_questions"], {
+      authMode: "externalCli",
+      baseUrl: "https://api.example.com",
+      env: { GSD_WORKFLOW_MCP_STRUCTURED_QUESTIONS: "0" } as NodeJS.ProcessEnv,
+    }),
+    false,
+  );
+});
+
 test("transport compatibility passes when required tools fit current MCP surface", () => {
   const error = getWorkflowTransportSupportError(
     "claude-code",
