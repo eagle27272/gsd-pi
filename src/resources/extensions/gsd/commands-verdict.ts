@@ -8,7 +8,7 @@ import { resolveMilestoneFile } from "./paths.js";
 import { deriveState } from "./state.js";
 import { executeValidateMilestone } from "./tools/workflow-tool-executors.js";
 import { ensureDbOpen } from "./bootstrap/dynamic-tools.js";
-import { getLatestAssessmentByScope } from "./gsd-db.js";
+import { checkpointDatabase, getLatestAssessmentByScope } from "./gsd-db.js";
 import {
   VALIDATION_VERDICTS,
   extractVerdict,
@@ -221,6 +221,8 @@ export async function handleVerdict(
     ctx.ui.notify(msg, "error");
     return;
   }
+
+  checkpointDatabase();
 
   const prevVerdict = current.verdict ?? "unknown";
   const effectiveVerdict = extractEffectiveVerdict(result.details, parsed.verdict);
