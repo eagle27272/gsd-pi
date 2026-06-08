@@ -641,7 +641,7 @@ export function migrateHierarchyToDb(basePath: string): {
         title: sliceEntry.title,
         status: sliceStatus,
         risk: sliceEntry.risk,
-        depends: sliceEntry.depends,
+        depends: (sliceEntry.depends ?? []).map(d => d.replace(/^\[|\]$/g, '')).filter(d => /^[A-Za-z0-9][A-Za-z0-9-]*$/.test(d)),
         demo: sliceEntry.demo,
         sequence: si + 1, // Preserve roadmap parse order (#3356)
         isSketch: sliceEntry.isSketch ?? false, // ADR-011: preserve the `[sketch]` flag on re-import

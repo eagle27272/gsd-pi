@@ -189,9 +189,15 @@ export function parseRoadmapSlices(content: string): RoadmapSliceEntry[] {
       const risk = (riskMatch ? riskMatch[1] : "low") as RiskLevel;
 
       const depsMatch = rest.match(/`depends:\[([^\]]*)\]`/);
-      const depends = depsMatch && depsMatch[1]!.trim()
-        ? expandDependencies(depsMatch[1]!.split(",").map(s => s.trim()))
+      // Recovery fallback: double-bracket form `[[id]]` from serialized bracket-wrapped IDs
+      const fallbackDepsMatch = depsMatch ? null : rest.match(/`depends:\[(\[(?:[^\]]*)\](?:,\[(?:[^\]]*)\])*)\]`/);
+      const rawDepContent = (depsMatch ?? fallbackDepsMatch)?.[1] ?? "";
+      const SLICE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9-]*$/;
+      const RANGE_RE = /^[A-Za-z]+\d+(?:-|\.\.)[A-Za-z]+\d+$/;
+      const rawDepParts = rawDepContent.trim()
+        ? rawDepContent.replace(/\[|\]/g, "").split(",").map(s => s.trim()).filter(s => SLICE_ID_RE.test(s) || RANGE_RE.test(s))
         : [];
+      const depends = expandDependencies(rawDepParts);
 
       // ADR-011: the renderer writes a `[sketch]` badge for sketch slices.
       // Parse it back so the is_sketch flag survives a markdown → DB re-import

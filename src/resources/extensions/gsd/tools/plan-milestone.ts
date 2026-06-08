@@ -115,10 +115,20 @@ function validateProofStrategy(value: unknown): Array<{ riskOrUnknown: string; r
   });
 }
 
+const SLICE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9-]*$/;
+
 function validateSlices(value: unknown): PlanMilestoneSliceInput[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error("slices must be a non-empty array");
   }
+
+  // Pre-collect all slice IDs so depends cross-validation can reference the full set.
+  const allSliceIds = new Set<string>(
+    (value as unknown[])
+      .filter((e): e is Record<string, unknown> => !!e && typeof e === "object")
+      .map(e => e.sliceId)
+      .filter((id): id is string => isNonEmptyString(id)),
+  );
 
   const seen = new Set<string>();
   return value.map((entry, index) => {
@@ -154,8 +164,13 @@ function validateSlices(value: unknown): PlanMilestoneSliceInput[] {
     const titleIssue = validateTitle(title);
     if (titleIssue) throw new Error(`slices[${index}].title is invalid: ${titleIssue}`);
     if (!isNonEmptyString(risk)) throw new Error(`slices[${index}].risk must be a non-empty string`);
-    if (!Array.isArray(depends) || depends.some((item) => !isNonEmptyString(item))) {
-      throw new Error(`slices[${index}].depends must be an array of non-empty strings`);
+    if (!Array.isArray(depends) || depends.some((item) => !isNonEmptyString(item) || !SLICE_ID_RE.test(item as string))) {
+      throw new Error(`slices[${index}].depends must be an array of valid slice IDs (e.g. "S01")`);
+    }
+    for (const dep of depends as string[]) {
+      if (!allSliceIds.has(dep)) {
+        throw new Error(`slices[${index}].depends references unknown slice "${dep}" — check that it is defined in the same milestone`);
+      }
     }
     if (!isNonEmptyString(demo)) throw new Error(`slices[${index}].demo must be a non-empty string`);
     if (!isNonEmptyString(goal)) throw new Error(`slices[${index}].goal must be a non-empty string`);
