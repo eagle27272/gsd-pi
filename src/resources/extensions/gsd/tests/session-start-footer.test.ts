@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 
 import { autoSession } from "../auto-runtime-state.ts";
 import { registerHooks } from "../bootstrap/register-hooks.ts";
+import { _resetPreferenceDiagnosticNotificationsForTests } from "../preferences-diagnostics.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const HOOKS_SOURCE = readFileSync(
@@ -484,4 +485,83 @@ test("session_start and session_switch apply disabled model provider policy from
     ["anthropic"],
     "session_switch should re-read preferences for the switched project/session context",
   );
+});
+
+test("session_start surfaces malformed preference diagnostics through visible notifications", async (t) => {
+  const dir = join(
+    tmpdir(),
+    `gsd-session-pref-diagnostics-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  );
+  mkdirSync(join(dir, ".gsd"), { recursive: true });
+  const tempGsdHome = join(dir, "home");
+  mkdirSync(tempGsdHome, { recursive: true });
+
+  const originalCwd = process.cwd();
+  const originalGsdHome = process.env.GSD_HOME;
+  process.env.GSD_HOME = tempGsdHome;
+  process.chdir(dir);
+  _resetPreferenceDiagnosticNotificationsForTests();
+  t.after(() => {
+    process.chdir(originalCwd);
+    if (originalGsdHome === undefined) delete process.env.GSD_HOME;
+    else process.env.GSD_HOME = originalGsdHome;
+    _resetPreferenceDiagnosticNotificationsForTests();
+    try { rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort */ }
+  });
+
+  writeFileSync(
+    join(dir, ".gsd", "PREFERENCES.md"),
+    [
+      "---",
+      "version: 1",
+      "models:",
+      "  validation:",
+      "    openrouter/deepseek/deepseek-v4-pro",
+      "    thinking: high",
+      "---",
+      "",
+    ].join("\n"),
+    "utf-8",
+  );
+
+  const notifications: Array<{ message: string; level?: string }> = [];
+  const handlers = new Map<string, (event: unknown, ctx: any) => Promise<void> | void>();
+  const pi = {
+    on(event: string, handler: (event: unknown, ctx: any) => Promise<void> | void) {
+      handlers.set(event, handler);
+    },
+  } as any;
+  const ctx = {
+    hasUI: true,
+    ui: {
+      notify: (message: string, level?: string) => notifications.push({ message, level }),
+      setStatus: () => {},
+      setFooter: () => {},
+      setWorkingMessage: () => {},
+      onTerminalInput: () => () => {},
+      setWidget: () => {},
+    },
+    sessionManager: { getSessionId: () => null },
+    model: null,
+    setCompactionThresholdOverride: () => {},
+    modelRegistry: {
+      setDisabledModelProviders: () => {},
+      getProviderAuthMode: () => undefined,
+      isProviderRequestReady: () => false,
+    },
+  };
+
+  registerHooks(pi, []);
+
+  const sessionStart = handlers.get("session_start");
+  assert.ok(sessionStart, "session_start handler must be registered");
+  await sessionStart!({}, ctx);
+
+  const diagnostic = notifications.find((notification) =>
+    notification.message.includes("GSD project preferences error"),
+  );
+  assert.equal(diagnostic?.level, "error");
+  assert.match(diagnostic?.message ?? "", /could not be parsed/);
+  assert.match(diagnostic?.message ?? "", /line 5, column 5/);
+  assert.match(diagnostic?.message ?? "", /Preferences from this file were ignored/);
 });

@@ -41,6 +41,7 @@ import { logWarning as safetyLogWarning } from "../workflow-logger.js";
 import { installNotifyInterceptor } from "./notify-interceptor.js";
 import { initNotificationStore } from "../notification-store.js";
 import { initNotificationWidget } from "../notification-widget.js";
+import { notifyPreferenceDiagnostics } from "../preferences-diagnostics.js";
 import { resolveWorktreeProjectRoot } from "../worktree-root.js";
 import { extractSubagentAgentClasses } from "./subagent-input.js";
 import { approvalGateIdForUnit, isExplicitApprovalResponse, shouldPauseForUserApprovalQuestion } from "../user-input-boundary.js";
@@ -698,6 +699,7 @@ function initSessionNotifications(ctx: ExtensionContext): void {
   initNotificationStore(resolveNotificationStoreBasePath(contextBasePath(ctx)));
   installNotifyInterceptor(ctx);
   initNotificationWidget(ctx);
+  notifyPreferenceDiagnostics(ctx, contextBasePath(ctx), { surface: "session-start" });
 }
 
 async function prepareWorkflowMcpForHookContext(

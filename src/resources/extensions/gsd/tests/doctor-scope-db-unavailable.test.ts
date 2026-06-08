@@ -26,6 +26,24 @@ test("filterDoctorIssues keeps project and environment issues in scoped reports"
   );
 });
 
+test("filterDoctorIssues keeps invalid_preferences issues regardless of preferences file scope", () => {
+  // Both global and project preference diagnostics should survive scope filtering.
+  // doctor.ts uses unitId: "project" for all invalid_preferences issues so they
+  // pass through the scope filter the same way other project-level issues do.
+  const issues = [
+    { severity: "error", code: "invalid_preferences", scope: "project", unitId: "project", message: "global PREFERENCES.md parse error", fixable: false },
+    { severity: "error", code: "invalid_preferences", scope: "project", unitId: "project", message: "project PREFERENCES.md parse error", fixable: false },
+    { severity: "error", code: "invalid_preferences", scope: "project", unitId: "global", message: "stale unitId — should be filtered out", fixable: false },
+  ] as const;
+
+  const filtered = filterDoctorIssues([...issues], { scope: "M016", includeWarnings: true });
+  assert.deepEqual(
+    filtered.map((issue) => issue.message),
+    ["global PREFERENCES.md parse error", "project PREFERENCES.md parse error"],
+    "invalid_preferences issues with unitId: project survive scope filtering; unitId: global is dropped",
+  );
+});
+
 test("checkEngineHealth reports db_unavailable when gsd.db exists but the DB is closed", async (t) => {
   const base = mkdtempSync(join(tmpdir(), "gsd-doctor-db-unavailable-"));
   t.after(() => rmSync(base, { recursive: true, force: true }));

@@ -56,6 +56,15 @@ planning_depth: deep
 - **Array fields** (`always_use_skills`, etc.): concatenated (global first, then project)
 - **Object fields** (`models`, `git`, `auto_supervisor`): shallow-merged, project overrides per-key
 
+### Invalid or malformed preferences
+
+Preference loading never throws. When a `PREFERENCES.md` file is malformed or contains invalid settings, GSD keeps running with safe defaults but attaches diagnostics so the problem is visible instead of silently ignored:
+
+- **Parse failures** (missing closing `---` delimiter, YAML syntax error, unrecognized format) cause the whole file to be ignored. GSD falls back to a valid global or legacy preferences file rather than blocking.
+- **Invalid settings** (unknown keys, type mismatches) are sanitized or dropped; the remaining valid settings in the file still apply.
+
+Diagnostics surface through session-start notifications, `/gsd doctor` (with file path and, for YAML errors, line and column), and auto-mode preflight. See [Troubleshooting](./troubleshooting.md#preferences-file-ignored-or-settings-not-taking-effect).
+
 ## Global API Keys (`/gsd config`)
 
 Tool API keys are stored globally in `~/.gsd/agent/auth.json` and apply to all projects automatically. Set them once with `/gsd config` — no need to configure per-project `.env` files.

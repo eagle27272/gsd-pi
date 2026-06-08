@@ -9,6 +9,7 @@ import { resolveMilestoneFile, resolveMilestonePath, resolveSliceFile, resolveSl
 import { deriveState, isMilestoneComplete } from "./state.js";
 import { invalidateAllCaches } from "./cache.js";
 import { loadEffectiveGSDPreferences, type GSDPreferences } from "./preferences.js";
+import { collectPreferenceDiagnostics, formatPreferenceDiagnosticDetail } from "./preferences-diagnostics.js";
 import { isClosedStatus } from "./status-guards.js";
 
 import type { DoctorIssue, DoctorIssueCode, DoctorReport } from "./doctor-types.js";
@@ -331,6 +332,17 @@ export async function runGSDDoctor(basePath: string, options?: { fix?: boolean; 
   };
 
   const prefs = loadEffectiveGSDPreferences(basePath);
+  for (const diagnostic of collectPreferenceDiagnostics(basePath)) {
+    issues.push({
+      severity: diagnostic.severity,
+      code: "invalid_preferences",
+      scope: "project",
+      unitId: "project",
+      message: `GSD preferences ${diagnostic.kind}: ${formatPreferenceDiagnosticDetail(diagnostic)}`,
+      file: diagnostic.path,
+      fixable: false,
+    });
+  }
   if (prefs) {
     const prefIssues = validatePreferenceShape(prefs.preferences);
     for (const issue of prefIssues) {

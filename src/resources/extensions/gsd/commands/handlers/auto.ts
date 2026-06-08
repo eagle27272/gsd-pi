@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { enableDebug } from "../../debug-logger.js";
 import { getAutoDashboardData, isAutoActive, isAutoPaused, pauseAuto, startAutoDetached, stopAuto, stopAutoRemote } from "../../auto.js";
 import { handleRate } from "../../commands-rate.js";
+import { notifyPreferenceDiagnostics } from "../../preferences-diagnostics.js";
 import { setSessionModelOverride } from "../../session-model-override.js";
 import { guardRemoteSession, projectRoot } from "../context.js";
 import { findMilestoneIds } from "../../milestone-id-utils.js";
@@ -91,6 +92,7 @@ export async function handleAutoCommand(trimmed: string, ctx: ExtensionCommandCo
     if (!(await guardRemoteSession(ctx, pi))) return true;
     const basePath = projectRoot();
     if (await hasUnresolvedCloseoutBlocker(ctx, basePath)) return true;
+    notifyPreferenceDiagnostics(ctx, basePath, { surface: "auto-preflight" });
 
     // Validate the milestone target exists and is not already complete.
     if (milestoneId) {
@@ -118,6 +120,7 @@ export async function handleAutoCommand(trimmed: string, ctx: ExtensionCommandCo
     if (!(await guardRemoteSession(ctx, pi))) return true;
     const basePath = projectRoot();
     if (await hasUnresolvedCloseoutBlocker(ctx, basePath)) return true;
+    notifyPreferenceDiagnostics(ctx, basePath, { surface: "auto-preflight" });
 
     // Validate the milestone target exists and is not already complete.
     if (milestoneId) {

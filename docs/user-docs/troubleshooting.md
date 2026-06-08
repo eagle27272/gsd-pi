@@ -15,6 +15,7 @@ It checks:
 - Git worktree health (worktree and branch modes only — skipped in none mode)
 - Stale DB-backed runtime records and orphaned runtime files
 - Disk-only orphan milestone stub directories
+- Preference parse and validation diagnostics (malformed `PREFERENCES.md` frontmatter or invalid settings)
 
 ## Common Issues
 
@@ -233,6 +234,14 @@ For common provider setup issues (role errors, streaming errors, model ID mismat
 **Symptoms:** Auto mode pauses with "Budget ceiling reached."
 
 **Fix:** Increase `budget_ceiling` in preferences, or switch to `budget` token profile to reduce per-unit cost, then resume with `/gsd auto`.
+
+### Preferences file ignored or settings not taking effect
+
+**Symptoms:** On session start, `/gsd doctor`, or when starting auto mode, GSD reports a warning or error like `GSD project preferences error: .gsd/PREFERENCES.md could not be parsed.` or `GSD global preferences warning: ~/.gsd/PREFERENCES.md contains invalid settings.` Settings from the file appear to have no effect.
+
+**Cause:** The preferences file has malformed YAML frontmatter (for example a missing closing `---` delimiter or a YAML syntax error) or contains invalid settings. Parse failures cause the whole file to be ignored — GSD falls back to a valid global or legacy preferences file. Invalid individual settings are sanitized or dropped while the rest of the file still applies. Preferences never throw; the diagnostics make the problem visible instead of failing silently.
+
+**Fix:** Run `/gsd doctor` to see the file path, the parse/validation message, and (for YAML errors) the line and column. Fix the reported issue in the named file, then rerun the command. Auto-mode re-surfaces these diagnostics at preflight so they are visible before long-running automation proceeds.
 
 ### Auto mode says another session is running
 

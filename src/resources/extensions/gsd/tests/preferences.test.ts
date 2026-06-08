@@ -26,6 +26,7 @@ import {
   renderPreferencesForSystemPrompt,
   _resetParseWarningFlag,
 } from "../preferences.ts";
+import { collectPreferenceDiagnostics, formatPreferenceDiagnostic } from "../preferences-diagnostics.ts";
 import { formatConfiguredModel, toPersistedModelId } from "../commands-prefs-wizard.ts";
 import { _resetLogs, peekLogs } from "../workflow-logger.ts";
 import type { GSDPreferences, GSDModelConfigV2, GSDPhaseModelConfig } from "../preferences.ts";
@@ -817,6 +818,188 @@ bad: [
 
   _resetParseWarningFlag();
   _resetLogs();
+});
+
+test("malformed global preferences load with a structured parse diagnostic", (t) => {
+  const originalGsdHome = process.env.GSD_HOME;
+  const tempGsdHome = mkdtempSync(join(tmpdir(), "gsd-prefs-diagnostic-home-"));
+  t.after(() => {
+    if (originalGsdHome === undefined) delete process.env.GSD_HOME;
+    else process.env.GSD_HOME = originalGsdHome;
+    rmSync(tempGsdHome, { recursive: true, force: true });
+    _resetParseWarningFlag();
+    _resetLogs();
+  });
+
+  process.env.GSD_HOME = tempGsdHome;
+  _resetParseWarningFlag();
+  _resetLogs();
+  writeFileSync(
+    join(tempGsdHome, "PREFERENCES.md"),
+    [
+      "---",
+      "version: 1",
+      "models:",
+      "  validation:",
+      "    openrouter/deepseek/deepseek-v4-pro",
+      "    thinking: high",
+      "---",
+      "",
+    ].join("\n"),
+    "utf-8",
+  );
+
+  const loaded = loadGlobalGSDPreferences();
+  assert.notEqual(loaded, null);
+  assert.deepEqual(loaded!.preferences, {});
+  const diagnostic = loaded!.diagnostics?.[0];
+  assert.equal(diagnostic?.kind, "parse");
+  assert.equal(diagnostic?.severity, "error");
+  assert.equal(diagnostic?.line, 5);
+  assert.equal(diagnostic?.column, 5);
+  assert.equal(diagnostic?.ignored, true);
+  assert.match(diagnostic?.message ?? "", /Implicit keys need/);
+
+  const formatted = formatPreferenceDiagnostic(diagnostic!);
+  assert.match(formatted, /GSD global preferences error/);
+  assert.match(formatted, /line 5, column 5/);
+  assert.match(formatted, /Preferences from this file were ignored/);
+});
+
+test("project preference validation errors load with structured diagnostics", (t) => {
+  const originalCwd = process.cwd();
+  const originalGsdHome = process.env.GSD_HOME;
+  const tempProject = mkdtempSync(join(tmpdir(), "gsd-prefs-validation-project-"));
+  const tempGsdHome = mkdtempSync(join(tmpdir(), "gsd-prefs-validation-home-"));
+  t.after(() => {
+    process.chdir(originalCwd);
+    if (originalGsdHome === undefined) delete process.env.GSD_HOME;
+    else process.env.GSD_HOME = originalGsdHome;
+    rmSync(tempProject, { recursive: true, force: true });
+    rmSync(tempGsdHome, { recursive: true, force: true });
+  });
+
+  mkdirSync(join(tempProject, ".gsd"), { recursive: true });
+  process.env.GSD_HOME = tempGsdHome;
+  process.chdir(tempProject);
+  writeFileSync(
+    join(tempProject, ".gsd", "PREFERENCES.md"),
+    "---\nversion: 3\n---\n",
+    "utf-8",
+  );
+
+  const loaded = loadProjectGSDPreferences(tempProject);
+  assert.notEqual(loaded, null);
+  assert.equal(loaded!.preferences.version, undefined);
+  const diagnostic = loaded!.diagnostics?.find((item) => item.kind === "validation");
+  assert.equal(diagnostic?.scope, "project");
+  assert.equal(diagnostic?.severity, "error");
+  assert.equal(diagnostic?.sanitized, true);
+  assert.match(diagnostic?.message ?? "", /unsupported version 3/);
+
+  const collected = collectPreferenceDiagnostics(tempProject);
+  assert.ok(
+    collected.some((item) => item.path === loaded!.path && item.message.includes("unsupported version 3")),
+    "collector should include project validation diagnostics",
+  );
+});
+
+test("malformed project preferences do not override effective global wrapper", (t) => {
+  const originalCwd = process.cwd();
+  const originalGsdHome = process.env.GSD_HOME;
+  const tempProject = mkdtempSync(join(tmpdir(), "gsd-prefs-effective-project-"));
+  const tempGsdHome = mkdtempSync(join(tmpdir(), "gsd-prefs-effective-home-"));
+  t.after(() => {
+    process.chdir(originalCwd);
+    if (originalGsdHome === undefined) delete process.env.GSD_HOME;
+    else process.env.GSD_HOME = originalGsdHome;
+    rmSync(tempProject, { recursive: true, force: true });
+    rmSync(tempGsdHome, { recursive: true, force: true });
+    _resetParseWarningFlag();
+    _resetLogs();
+  });
+
+  mkdirSync(join(tempProject, ".gsd"), { recursive: true });
+  process.env.GSD_HOME = tempGsdHome;
+  process.chdir(tempProject);
+  _resetParseWarningFlag();
+  _resetLogs();
+
+  const globalPath = getGlobalGSDPreferencesPath();
+  const projectPath = getProjectGSDPreferencesPath(tempProject);
+  writeFileSync(globalPath, "---\nlanguage: Spanish\n---\n", "utf-8");
+  writeFileSync(
+    projectPath,
+    [
+      "---",
+      "version: 1",
+      "models:",
+      "  validation:",
+      "    openrouter/deepseek/deepseek-v4-pro",
+      "    thinking: high",
+      "---",
+      "",
+    ].join("\n"),
+    "utf-8",
+  );
+
+  const projectPrefs = loadProjectGSDPreferences(tempProject);
+  assert.equal(projectPrefs?.ignored, true);
+
+  const loaded = loadEffectiveGSDPreferences(tempProject);
+  assert.notEqual(loaded, null);
+  assert.equal(loaded!.path, globalPath);
+  assert.equal(loaded!.scope, "global");
+  assert.equal(loaded!.preferences.language, "Spanish");
+  assert.ok(
+    loaded!.diagnostics?.some((item) => item.path === projectPath && item.kind === "parse"),
+    "effective global preferences should carry malformed project diagnostics",
+  );
+});
+
+test("malformed global preferences: loadEffectiveGSDPreferences returns null without project file", (t) => {
+  const originalCwd = process.cwd();
+  const originalGsdHome = process.env.GSD_HOME;
+  const tempProject = mkdtempSync(join(tmpdir(), "gsd-prefs-effective-malformed-global-"));
+  const tempGsdHome = mkdtempSync(join(tmpdir(), "gsd-prefs-effective-malformed-home-"));
+  t.after(() => {
+    process.chdir(originalCwd);
+    if (originalGsdHome === undefined) delete process.env.GSD_HOME;
+    else process.env.GSD_HOME = originalGsdHome;
+    rmSync(tempProject, { recursive: true, force: true });
+    rmSync(tempGsdHome, { recursive: true, force: true });
+    _resetParseWarningFlag();
+    _resetLogs();
+  });
+
+  process.env.GSD_HOME = tempGsdHome;
+  process.chdir(tempProject);
+  _resetParseWarningFlag();
+  _resetLogs();
+
+  const globalPath = getGlobalGSDPreferencesPath();
+  writeFileSync(
+    globalPath,
+    [
+      "---",
+      "version: 1",
+      "models:",
+      "  validation:",
+      "    openrouter/deepseek/deepseek-v4-pro",
+      "    thinking: high",
+      "---",
+      "",
+    ].join("\n"),
+    "utf-8",
+  );
+
+  const globalPrefs = loadGlobalGSDPreferences();
+  assert.equal(globalPrefs?.ignored, true, "malformed global should be marked ignored");
+
+  // Symmetric with malformed project + no global: effective result should be null,
+  // not an effective object with ignored:true leaking through.
+  const loaded = loadEffectiveGSDPreferences(tempProject);
+  assert.equal(loaded, null, "effective preferences should be null when only global file is malformed");
 });
 
 // ── Experimental preferences ─────────────────────────────────────────────────

@@ -594,8 +594,24 @@ export interface LoadedGSDPreferences {
   path: string;
   scope: "global" | "project";
   preferences: GSDPreferences;
+  /** True when the file exists but its contents were ignored before merging. */
+  ignored?: boolean;
   /** Validation warnings (unknown keys, type mismatches, deprecations). Empty when preferences are clean. */
   warnings?: string[];
+  /** Structured parse/validation diagnostics for user-visible reporting. */
+  diagnostics?: PreferenceDiagnostic[];
+}
+
+export interface PreferenceDiagnostic {
+  path: string;
+  scope: "global" | "project";
+  severity: "error" | "warning";
+  kind: "parse" | "validation";
+  message: string;
+  line?: number;
+  column?: number;
+  ignored?: boolean;
+  sanitized?: boolean;
 }
 
 export interface SkillResolution {

@@ -119,6 +119,10 @@ Common block reasons and operator actions:
 
 Recovery classification now treats deterministic policy, tool-schema, stale-worker, and invalid-worktree failures as non-transient stops. Provider failures still use provider-specific transient classification and may retry automatically, while verification drift and unknown runtime failures escalate for inspection because repeating the same dispatch can preserve the drift.
 
+### Preference Diagnostics at Preflight
+
+When you start auto mode, GSD re-surfaces any GSD preference parse or validation diagnostics (malformed `PREFERENCES.md` frontmatter or invalid settings) as notifications before the loop begins, so you get actionable file/line guidance before long-running automation proceeds. These re-surface at the auto-mode preflight even if the same problem was already shown at session start; each surface still dedupes repeated diagnostics. Preference problems do not block auto mode — they are advisory. See [Configuration](./configuration.md#invalid-or-malformed-preferences) and [Troubleshooting](./troubleshooting.md#preferences-file-ignored-or-settings-not-taking-effect).
+
 ### Context Pre-Loading
 
 The dispatch prompt is carefully constructed with:

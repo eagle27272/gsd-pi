@@ -73,6 +73,15 @@ These are **separate concerns**:
 
 Setting `prefer_skills: []` does **not** disable skill discovery — it just means you have no preference overrides. Use `skill_discovery: off` to disable discovery entirely.
 
+### Parse & Validation Diagnostics
+
+Preference loading never throws. When a file is malformed or contains invalid settings, GSD falls back to safe defaults but attaches structured diagnostics (see `collectPreferenceDiagnostics()` in `preferences-diagnostics.ts`) so the problem is reported instead of silently ignored:
+
+- **Parse failures** (missing closing `---` delimiter, YAML syntax error, or an unrecognized file format) cause the whole file to be ignored. Loading continues to the next candidate — a valid global or legacy preferences file is still used, and a malformed project file never becomes the effective wrapper or blocks fallback.
+- **Validation problems** (unknown keys, type mismatches) are sanitized or dropped per-field; the remaining valid settings in the file still apply.
+
+Diagnostics record the file path, scope (global/project), severity (error/warning), kind (parse/validation), and — for YAML parse errors — the line and column. They surface through session-start notifications, `/gsd doctor`, and auto-mode preflight, with each surface deduping repeated diagnostics.
+
 ---
 
 ## Field Guide
