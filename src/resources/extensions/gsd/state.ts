@@ -66,6 +66,10 @@ import { wasWorkflowDatabaseOpenAttempted } from './db-workspace.js';
 import { formatCompletePhaseNextAction, countUnmappedActiveRequirements } from './requirements-backlog.js';
 import type { MilestoneRow } from './db-milestone-artifact-rows.js';
 import type { SliceRow, TaskRow } from './db-task-slice-rows.js';
+import {
+  classifyMilestoneReadiness,
+  readinessNeedsDiscussion,
+} from './milestone-readiness.js';
 
 function formatNeedsAttentionBlocker(milestoneId: string): string {
   return [
@@ -507,6 +511,12 @@ async function buildRegistryAndFindActive(
     const title = stripMilestonePrefix(m.title) || m.id;
     const hasContext = !!resolveMilestoneFile(basePath, m.id, "CONTEXT");
     const hasDraftContext = !hasContext && !!resolveMilestoneFile(basePath, m.id, "CONTEXT-DRAFT");
+    const readiness = classifyMilestoneReadiness({
+      status: m.status,
+      hasContext,
+      hasDraftContext,
+      sliceCount: slices.length,
+    });
 
     if (!activeMilestoneFound) {
       const deps = m.depends_on;
@@ -517,9 +527,9 @@ async function buildRegistryAndFindActive(
         continue;
       }
 
-      if (m.status === 'queued' && slices.length === 0 && !hasContext) {
+      if (readiness.kind === 'queued-shell') {
         if (!firstDeferredQueuedShell) {
-          firstDeferredQueuedShell = { id: m.id, title, deps, hasDraftContext };
+          firstDeferredQueuedShell = { id: m.id, title, deps, hasDraftContext: readiness.hasDraftContext };
         }
         registry.push({ id: m.id, title, status: 'pending', ...(deps.length > 0 ? { dependsOn: deps } : {}) });
         continue;
@@ -533,7 +543,7 @@ async function buildRegistryAndFindActive(
         continue;
       }
 
-      if ((m.status === 'needs-discussion' && !hasContext) || hasDraftContext) activeMilestoneHasDraft = true;
+      if (readinessNeedsDiscussion(readiness)) activeMilestoneHasDraft = true;
 
       activeMilestone = { id: m.id, title };
       activeMilestoneSlices = slices;

@@ -44,6 +44,7 @@ import {
 import { logWarning } from "./workflow-logger.js";
 import { formattedShortcutPair } from "./shortcut-defs.js";
 import { readUnitRuntimeRecord, type AutoUnitRuntimeRecord } from "./unit-runtime.js";
+import { describeMilestoneReadinessPhase } from "./milestone-readiness.js";
 
 const ACTIVE_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
 
@@ -224,12 +225,10 @@ export function describeNextUnit(state: GSDState): { label: string; description:
   const sTitle = state.activeSlice?.title;
   const tid = state.activeTask?.id;
   const tTitle = state.activeTask?.title;
+  const readinessDescription = describeMilestoneReadinessPhase(state.phase);
+  if (readinessDescription) return readinessDescription;
 
   switch (state.phase) {
-    case "needs-discussion":
-      return { label: "Discuss milestone draft", description: "Milestone has a draft context — needs discussion before planning." };
-    case "pre-planning":
-      return { label: "Research & plan milestone", description: "Scout the landscape and create the roadmap." };
     case "planning":
       return { label: `Plan ${sid}: ${sTitle}`, description: "Research and decompose into tasks." };
     case "executing":

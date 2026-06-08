@@ -364,6 +364,7 @@ test("effective unit isolation follows degraded branch fallback", () => {
 
 test("discuss-to-auto handoff defaults to step mode unless explicitly disabled", () => {
   const guidedFlowSrc = readGsdFile("guided-flow.ts");
+  const discussionHandoffSrc = readGsdFile("discussion-handoff.ts");
   const workflowSrc = readGsdFile("commands/handlers/workflow.ts");
 
   assert.ok(
@@ -371,7 +372,7 @@ test("discuss-to-auto handoff defaults to step mode unless explicitly disabled",
     "guided-flow must not hardcode step: false on pending auto-start entries",
   );
   assert.match(
-    guidedFlowSrc,
+    discussionHandoffSrc,
     /scheduleAutoStartAfterIdle\(ctx, pi, basePath, false, \{ step: step \?\? true \}\)/,
     "checkAutoStartAfterDiscuss should default missing step flags to step mode",
   );

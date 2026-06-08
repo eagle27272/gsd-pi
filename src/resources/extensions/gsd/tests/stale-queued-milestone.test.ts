@@ -74,6 +74,33 @@ describe("stale queued milestone selection (#3470)", () => {
     assert.equal(m070Entry!.status, "active", "M070 should be active in registry");
   });
 
+  test("queued milestone with roadmap projection but no DB slices stays deferred", async () => {
+    base = createFixtureBase();
+    openDatabase(":memory:");
+
+    // M068: queued shell with a stale ROADMAP projection, but no CONTEXT and no DB slices.
+    insertMilestone({ id: "M068", title: "Queued Roadmap Projection", status: "queued" });
+    writeFile(base, "milestones/M068/M068-ROADMAP.md", "# M068\n\n## Slices\n\n- [ ] **S99: Stale Slice**");
+
+    // M070: real active milestone — context, roadmap, slices, tasks
+    insertMilestone({ id: "M070", title: "Real Active", status: "active" });
+    insertSlice({ id: "S01", milestoneId: "M070", title: "Slice One", status: "active", risk: "low", depends: [] });
+    insertTask({ id: "T01", sliceId: "S01", milestoneId: "M070", title: "Task One", status: "pending" });
+
+    writeFile(base, "milestones/M070/M070-CONTEXT.md", "# M070: Real Active\n\nThis is the real milestone.");
+    writeFile(base, "milestones/M070/M070-ROADMAP.md", "# M070: Real Active\n\n## Slices\n\n- [ ] **S01: Slice One**");
+    writeFile(base, "milestones/M070/slices/S01/S01-PLAN.md", "# S01: Slice One\n\n## Tasks\n\n- [ ] **T01: Task One**");
+
+    invalidateStateCache();
+    const state = await deriveStateFromDb(base);
+
+    assert.equal(state.activeMilestone?.id, "M070", "ROADMAP-only queued milestone must not block active M070");
+
+    const m068Entry = state.registry.find((e: any) => e.id === "M068");
+    assert.ok(m068Entry, "M068 should still appear in registry");
+    assert.equal(m068Entry!.status, "pending", "M068 should stay pending without CONTEXT or DB slices");
+  });
+
   test("queued milestone WITH context file can still be selected as active", async () => {
     base = createFixtureBase();
     openDatabase(":memory:");
