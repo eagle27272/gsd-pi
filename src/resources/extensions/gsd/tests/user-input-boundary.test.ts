@@ -78,21 +78,23 @@ test("isAwaitingUserInput does not trigger on thinking-block approval phrases", 
 });
 
 test("messageHasPendingAskUserQuestionsTool detects in-flight structured question tools", () => {
+  // No externalResult → still in-flight
   assert.equal(
     messageHasPendingAskUserQuestionsTool({
       role: "assistant",
       content: [
         { type: "text", text: "Which direction?" },
-        { type: "toolCall", name: "mcp__gsd-workflow__ask_user_questions", state: "running" },
+        { type: "toolCall", name: "mcp__gsd-workflow__ask_user_questions" },
       ],
     }),
     true,
   );
+  // externalResult present → tool call completed, no longer pending
   assert.equal(
     messageHasPendingAskUserQuestionsTool({
       role: "assistant",
       content: [
-        { type: "toolCall", name: "ask_user_questions", state: "completed" },
+        { type: "toolCall", name: "ask_user_questions", externalResult: { content: [], isError: false } },
       ],
     }),
     false,
