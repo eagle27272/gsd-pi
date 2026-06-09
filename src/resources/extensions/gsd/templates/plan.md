@@ -46,6 +46,13 @@
      For simple projects or scripts:
      - Executable verification commands (bash assertions, curl checks, etc.) are sufficient
 
+     For browser-facing web apps (React, Next, Vue, Vite, static HTML, etc.):
+     - Prefer `npx playwright test <spec>` in Verification when `@playwright/test` exists
+     - If Playwright is not set up yet, the first UI slice should add `playwright.config.ts`,
+       a minimal smoke spec (for example `e2e/smoke.spec.ts`), and a safe verify command
+     - Slice closeout UAT must declare `browser-executable` or `runtime-executable` — not
+       `artifact-driven` — when checks navigate to localhost or exercise the live UI
+
      If the project has no test framework and the work is non-trivial,
      the first task should set one up. A test runner costs 2 minutes
      and pays for itself immediately.

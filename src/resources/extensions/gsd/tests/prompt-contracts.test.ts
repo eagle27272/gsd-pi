@@ -545,6 +545,24 @@ test("plan-slice prompt clarifies gsd_plan_slice handles task persistence", () =
   assert.match(prompt, /gsd_plan_slice` handles task persistence/i);
 });
 
+test("plan-slice prompt references web app UAT guidance when planning browser work", () => {
+  const prompt = readPrompt("plan-slice");
+  assert.match(prompt, /Web App UAT guidance/i);
+  assert.match(prompt, /Playwright smoke scaffolding/i);
+});
+
+test("complete-slice prompt references web app UAT mode rules", () => {
+  const prompt = readPrompt("complete-slice");
+  assert.match(prompt, /Web App UAT guidance/i);
+  assert.match(prompt, /browser-executable|runtime-executable/i);
+});
+
+test("plan-milestone prompt seeds web verification strategy", () => {
+  const prompt = readPrompt("plan-milestone");
+  assert.match(prompt, /Web apps/i);
+  assert.match(prompt, /Playwright|browser_\*/i);
+});
+
 test("replan-slice prompt uses gsd_replan_slice as canonical DB-backed tool", () => {
   const prompt = readPrompt("replan-slice");
   assert.match(prompt, /gsd_replan_slice/);

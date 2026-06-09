@@ -58,6 +58,7 @@ import { buildSkillActivationBlock, buildSkillDiscoveryVars } from "./skill-acti
 import { findMilestoneIds } from "./milestone-ids.js";
 import { buildRunUatPresentationForType, RUN_UAT_TOOL_PRESENTATION_PLAN_ID } from "./tool-presentation-plan.js";
 import { resolveEffectiveUatType, shouldDispatchUatForContent, type UatType } from "./uat-policy.js";
+import { buildWebAppUatGuidanceBlock } from "./web-app-uat.js";
 
 export { buildSkillActivationBlock, buildSkillDiscoveryVars };
 
@@ -2019,6 +2020,12 @@ export async function buildPlanMilestonePrompt(mid: string, midTitle: string, ba
   } else {
     trackPromptContext(contextTelemetry, "knowledge", "skipped", null, "missing");
   }
+  const webAppUatGuidance = buildWebAppUatGuidanceBlock(base);
+  if (webAppUatGuidance) {
+    pushTracked("web-app-uat", webAppUatGuidance);
+  } else {
+    trackPromptContext(contextTelemetry, "web-app-uat", "skipped", null, "not a web app");
+  }
   pushTracked("templates", inlineTemplate("roadmap", "Roadmap"));
   if (inlineLevel === "full") {
     pushTracked("templates", inlineTemplate("decisions", "Decisions"));
@@ -2347,6 +2354,14 @@ async function renderSlicePrompt(options: {
     trackPromptContext(contextTelemetry, "graph-subgraph", "inline", graphBlock);
   } else {
     trackPromptContext(contextTelemetry, "graph-subgraph", "skipped", null, "missing");
+  }
+
+  const webAppUatGuidance = buildWebAppUatGuidanceBlock(base);
+  if (webAppUatGuidance) {
+    inlined.push(webAppUatGuidance);
+    trackPromptContext(contextTelemetry, "web-app-uat", "inline", webAppUatGuidance);
+  } else {
+    trackPromptContext(contextTelemetry, "web-app-uat", "skipped", null, "not a web app");
   }
 
   const planTemplateInline = level === "minimal" ? inlineCompactTemplate("plan", "Slice Plan") : inlineTemplate("plan", "Slice Plan");
@@ -2876,6 +2891,14 @@ export async function buildCompleteSlicePrompt(
     } else {
       body = `${body}\n\n---\n\n${knowledgeInlineCS}`;
     }
+  }
+
+  const webAppUatGuidance = buildWebAppUatGuidanceBlock(base);
+  if (webAppUatGuidance && body) {
+    body = `${webAppUatGuidance}\n\n---\n\n${body}`;
+    trackPromptContext(contextTelemetry, "web-app-uat", "inline", webAppUatGuidance);
+  } else {
+    trackPromptContext(contextTelemetry, "web-app-uat", "skipped", null, webAppUatGuidance ? "missing composed body" : "not a web app");
   }
 
   // Overrides section prepends to the top of the inlined context —

@@ -63,6 +63,7 @@ Then:
    - `{{taskPlanTemplatePath}}`
 2. {{skillActivation}} Record the installed skills you expect executors to use in each task plan's `skills_used` frontmatter.
 3. Define slice-level verification: the objective stopping condition. Plan real test files with real assertions; for simple slices, executable commands are fine.
+   **Web apps:** when inlined Web App UAT guidance is present, follow it for Playwright scaffolding and browser-capable verification commands.
 4. For non-trivial slices, plan observability / proof level / integration closure, threat surface, and requirement impact. Omit entirely for simple slices.
 5. Decompose the slice into tasks that fit one context window each. Every task passed to `gsd_plan_slice` must use the exact keys `taskId`, `title`, `description`, `estimate`, `files`, `verify`, `inputs`, `expectedOutput`, and optional `observabilityImpact`. Put Why / Do / Done-when detail in `description`. `files`, `inputs`, and `expectedOutput` must be JSON arrays of strings, even for one path (for example, `"expectedOutput": ["src/index.ts"]`, never `"expectedOutput": "src/index.ts"`). `expectedOutput` is path-only: list only files the task creates or overwrites, and use `[]` for pure verification tasks.
 6. **Persist planning state through `gsd_plan_slice`.** Call it with the full payload. The tool writes to the DB and renders `{{outputPath}}` and `{{slicePath}}/tasks/T##-PLAN.md` automatically. Do NOT rely on direct `PLAN.md` writes.

@@ -47,6 +47,8 @@ If milestone research is inlined, trust it and skip redundant exploration. If fi
 
 Narrate decomposition reasoning in complete sentences: grouping, risk order, verification strategy.
 
+**Web apps:** when inlined Web App UAT guidance is present, set milestone `Verification Classes` → UAT to browser-observable acceptance (Playwright spec or `browser_*` checks). Order an early slice to add Playwright smoke scaffolding when the dependency is missing.
+
 Then:
 1. Use the **Roadmap** output template from the inlined context above
 2. {{skillActivation}}

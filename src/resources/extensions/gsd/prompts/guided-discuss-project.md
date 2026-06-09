@@ -36,6 +36,8 @@ After the opening answer, classify project shape as **`simple`** or **`complex`*
 
 Persist the verdict through `gsd_summary_save` with `artifact_type: "PROJECT"` into `## Project Shape`; downstream `discuss-requirements`, `discuss-milestone`, and `discuss-slice` read the rendered projection.
 
+When the project is browser-facing (web app, SPA, static site with UI, Next/React/Vue, etc.), also record **`Web stack:`** under `## Project Shape` (framework + whether Playwright or browser UAT is expected). Downstream planning uses this to choose `browser-executable` / `runtime-executable` UAT instead of deferring UI proof to humans.
+
 ### Before deeper rounds
 
 Ground your questions in the **Preparation Context snapshot above** (stack, structure, greenfield/brownfield and framework signals) plus any prior `.planning/` or `.gsd/` artifacts — those are authoritative. **Do not survey the codebase** with `rg`/`find`/`scout` before asking; read a specific file only when a question's answer genuinely hinges on it.
@@ -103,7 +105,7 @@ Once the user confirms depth:
 
 1. Use the **Project** output template (inlined above).
 2. Call `gsd_summary_save` with `artifact_type: "PROJECT"` and full project markdown as `content`; omit `milestone_id`. The tool persists the DB-backed PROJECT artifact and renders `.gsd/PROJECT.md`. Preserve the user's terms and framing.
-3. The `## Project Shape` section MUST contain `**Complexity:** simple` or `**Complexity:** complex` (matching the verdict you announced) plus a one-line `**Why:**` rationale. Downstream stages read this line.
+3. The `## Project Shape` section MUST contain `**Complexity:** simple` or `**Complexity:** complex` (matching the verdict you announced) plus a one-line `**Why:**` rationale. For browser-facing projects, also include `**Web stack:**` (framework and expected browser/Playwright UAT approach). Downstream stages read these lines.
 4. The `## Capability Contract` section MUST reference `.gsd/REQUIREMENTS.md` — that file does not yet exist; the next stage (`discuss-requirements`) will produce it.
 5. The `## Milestone Sequence` MUST list at least M001 with title and one-liner. Subsequent milestones may be listed as known intents; they will be elaborated in their own discuss-milestone stages.
 6. Do NOT use `artifact_type: "CONTEXT"` and do NOT pass `milestone_id: "PROJECT"`; that creates a fake milestone named PROJECT.
