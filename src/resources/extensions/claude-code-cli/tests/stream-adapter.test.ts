@@ -36,6 +36,7 @@ import {
 	autoInitClaudeCodeWorkflowMcp,
 	inferGsdPhaseFromContext,
 } from "../stream-adapter.ts";
+import { CLAUDE_CODE_MODELS } from "../models.ts";
 import type { AssistantMessage, Context, Message } from "@gsd/pi-ai";
 import type { SDKUserMessage } from "../sdk-types.ts";
 import { _setAutoActiveForTest } from "../../gsd/auto.ts";
@@ -790,6 +791,33 @@ describe("stream-adapter — Claude Code external tool results", () => {
 			isError: false,
 		});
 		assert.deepEqual(finalContent[1], { type: "text", text: "Read complete." });
+	});
+});
+
+describe("claude-code-cli — Claude Fable 5 Opus-tier support", () => {
+	test("Fable 5 is exposed in the Claude Code model picker list", () => {
+		const fable = CLAUDE_CODE_MODELS.find((m) => m.id === "claude-fable-5");
+		assert.ok(fable, "claude-fable-5 must appear in CLAUDE_CODE_MODELS");
+		assert.equal(fable!.reasoning, true);
+		assert.equal(fable!.contextWindow, 1_000_000);
+		assert.equal(fable!.maxTokens, 128_000);
+	});
+
+	test("Fable 5 gets Opus-tier gates: xhigh effort, adaptive thinking, 1M-context beta", () => {
+		const options = buildSdkOptions("claude-fable-5", "test prompt", undefined, { reasoning: "xhigh" });
+		assert.equal(options.effort, "xhigh", "xhigh must pass through natively for Fable 5");
+		assert.deepEqual(options.thinking, { type: "adaptive" }, "Fable 5 must use adaptive thinking");
+		assert.ok(
+			Array.isArray(options.betas) && (options.betas as string[]).includes("context-1m-2025-08-07"),
+			"Fable 5 must enable the 1M-context beta",
+		);
+	});
+
+	test("non-Opus models do not receive Fable 5's Opus-tier gates", () => {
+		// Failure/contrast path: Haiku supports adaptive thinking but is not xhigh/1M-tier.
+		const options = buildSdkOptions("claude-haiku-4-5", "test prompt", undefined, { reasoning: "xhigh" });
+		assert.equal(options.effort, "high", "xhigh must clamp to high for non-Opus-tier models");
+		assert.deepEqual(options.betas, [], "Haiku must not enable the 1M-context beta");
 	});
 });
 

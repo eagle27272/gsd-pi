@@ -1542,6 +1542,8 @@ function modelSupportsAdaptiveThinking(modelId: string): boolean {
 		|| modelId.includes("opus-4.7")
 		|| modelId.includes("opus-4-8")
 		|| modelId.includes("opus-4.8")
+		|| modelId.includes("fable-5")
+		|| modelId.includes("fable.5")
 		|| modelId.includes("sonnet-4-6")
 		|| modelId.includes("sonnet-4.6")
 		|| modelId.includes("sonnet-4-7")
@@ -1567,6 +1569,8 @@ function mapThinkingLevelToAnthropicEffort(level: ThinkingLevel | undefined, mod
 				|| modelId.includes("opus-4.7")
 				|| modelId.includes("opus-4-8")
 				|| modelId.includes("opus-4.8")
+				|| modelId.includes("fable-5")
+				|| modelId.includes("fable.5")
 			) return "xhigh";
 			if (modelId.includes("opus-4-6") || modelId.includes("opus-4.6")) return "max";
 			return "high";
@@ -1899,6 +1903,8 @@ export function buildSdkOptions(
 			|| modelId.includes("opus-4.7")
 			|| modelId.includes("opus-4-8")
 			|| modelId.includes("opus-4.8")
+			|| modelId.includes("fable-5")
+			|| modelId.includes("fable.5")
 		) ? ["context-1m-2025-08-07"] : [],
 		...(thinkingConfig ?? {}),
 		...(effort ? { effort } : {}),
