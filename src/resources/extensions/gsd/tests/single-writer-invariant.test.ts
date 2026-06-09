@@ -167,6 +167,30 @@ test("no module outside gsd-db.ts issues raw write SQL against the engine DB", (
   }
 });
 
+test("db/queries.ts (the Query Module) is read-only — contains no write SQL", () => {
+  // The read seam is separate from the single-writer layer. queries.ts holds
+  // SELECT-only wrappers so read-only callers depend on a read seam, not the
+  // write surface. (test 1 above also forbids this, since queries.ts is not in
+  // db/writers/ — this is the explicit, positive statement of intent.)
+  const queriesPath = join(gsdDir, "db", "queries.ts");
+  const content = readFileSync(queriesPath, "utf-8");
+  const lines = content.split("\n");
+  const violations: Violation[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const m = PREPARE_WRITE_RE.exec(line) ?? EXEC_WRITE_RE.exec(line);
+    if (m) {
+      violations.push({ file: "db/queries.ts", line: i + 1, snippet: line.trim(), kind: m[1].toUpperCase() });
+    }
+  }
+  assert.equal(
+    violations.length,
+    0,
+    `db/queries.ts must contain no write SQL — move write wrappers to db/writers/:\n` +
+      violations.map((v) => `  db/queries.ts:${v.line} [${v.kind}] — ${v.snippet}`).join("\n"),
+  );
+});
+
 test("gsd-db.ts exports the expected single-writer wrappers", async () => {
   // Positive assertion — fail loudly if the module layout changes so this
   // structural test can't silently become a no-op.
