@@ -15,20 +15,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { CompleteSliceParams } from "../types.js";
-import { isClosedStatus } from "../status-guards.js";
 import {
-  transaction,
-  insertMilestone,
-  insertSlice,
-  getSlice,
-  getSliceTasks,
-  getMilestone,
-  updateSliceStatus,
+  completeSliceCascade,
   setSliceSummaryMd,
   saveGateResult,
   getPendingGatesForTurn,
-  getMilestoneSlices,
-  updateMilestoneStatus,
 } from "../gsd-db.js";
 import { getGatesForTurn } from "../gate-registry.js";
 import { gsdProjectionRoot, clearPathCache, resolveMilestoneFile } from "../paths.js";
@@ -371,60 +362,34 @@ export async function handleCompleteSlice(
     };
   }
 
-  // ── Guards + DB writes inside a single transaction (prevents TOCTOU) ───
+  // ── Atomic completion cascade (guards + writes in one transaction) ───────
   const completedAt = new Date().toISOString();
   let guardError: string | null = null;
   let existingSummaryMd = "";
   let duplicateComplete = false;
 
-  transaction(() => {
-    // State machine preconditions (inside txn for atomicity).
-    // Milestone/slice not existing is OK — insertMilestone/insertSlice below will auto-create.
-    // Only block if they exist and are closed.
-    const milestone = getMilestone(params.milestoneId);
-    if (milestone && isClosedStatus(milestone.status)) {
-      guardError = `cannot complete slice in a closed milestone: ${params.milestoneId} (status: ${milestone.status})`;
-      return;
-    }
-
-    const slice = getSlice(params.milestoneId, params.sliceId);
-    existingSummaryMd = slice?.full_summary_md?.trim() ?? "";
-    if (slice && isClosedStatus(slice.status)) {
-      duplicateComplete = true;
-      return;
-    }
-
-    // Verify all tasks are complete
-    const tasks = getSliceTasks(params.milestoneId, params.sliceId);
-    if (tasks.length === 0) {
-      guardError = `no tasks found for slice ${params.sliceId} in milestone ${params.milestoneId}`;
-      return;
-    }
-
-    const incompleteTasks = tasks.filter(t => !isClosedStatus(t.status));
-    if (incompleteTasks.length > 0) {
-      const incompleteIds = incompleteTasks.map(t => `${t.id} (status: ${t.status})`).join(", ");
-      guardError = `incomplete tasks: ${incompleteIds}`;
-      return;
-    }
-
-    // All guards passed — perform writes. Preserve existing planning metadata:
-    // completion should not overwrite title/risk/depends/demo/sequence.
-    insertMilestone({ id: params.milestoneId, title: params.milestoneId });
-    if (!slice) {
-      insertSlice({ id: params.sliceId, milestoneId: params.milestoneId, title: params.sliceTitle || params.sliceId });
-    }
-    updateSliceStatus(params.milestoneId, params.sliceId, "complete", completedAt);
-
-    const updatedSlices = getMilestoneSlices(params.milestoneId);
-    if (
-      milestone?.status === "planned" &&
-      updatedSlices.length > 0 &&
-      updatedSlices.every((s) => isClosedStatus(s.status))
-    ) {
-      updateMilestoneStatus(params.milestoneId, "active");
-    }
+  const outcome = completeSliceCascade(params.milestoneId, params.sliceId, {
+    sliceTitle: params.sliceTitle,
+    completedAt,
   });
+  if (outcome.ok) {
+    existingSummaryMd = outcome.existingSummaryMd;
+    duplicateComplete = outcome.duplicate;
+  } else {
+    switch (outcome.reason) {
+      case "milestone-closed":
+        guardError = `cannot complete slice in a closed milestone: ${params.milestoneId} (status: ${outcome.status})`;
+        break;
+      case "no-tasks":
+        guardError = `no tasks found for slice ${params.sliceId} in milestone ${params.milestoneId}`;
+        break;
+      case "incomplete-tasks": {
+        const incompleteIds = outcome.incomplete.map((t) => `${t.id} (status: ${t.status})`).join(", ");
+        guardError = `incomplete tasks: ${incompleteIds}`;
+        break;
+      }
+    }
+  }
 
   if (duplicateComplete) {
     const staleSummaryPath = sliceSummaryPath(
