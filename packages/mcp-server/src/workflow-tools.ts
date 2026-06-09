@@ -107,7 +107,7 @@ type WorkflowToolExecutors = {
       sliceTitle: string;
       oneLiner: string;
       narrative: string;
-      verification: string;
+      verification?: string;
       uatContent: string;
       deviations?: string;
       knownLimitations?: string;
@@ -1468,7 +1468,7 @@ const sliceCompleteParams = {
   sliceTitle: z.string().describe("Title of the slice"),
   oneLiner: z.string().describe("One-line summary of what the slice accomplished"),
   narrative: z.string().describe("Detailed narrative of what happened across all tasks"),
-  verification: z.string().describe("What was verified across all tasks"),
+  verification: z.string().optional().describe("What was verified across all tasks — if omitted, summary records verification as passed without detail."),
   uatContent: z.string().describe("UAT test content (markdown body)"),
   deviations: z.string().optional(),
   knownLimitations: z.string().optional(),
@@ -1503,6 +1503,7 @@ const sliceCompleteParams = {
   ])).optional(),
 };
 const sliceCompleteSchema = z.object(sliceCompleteParams);
+export const _sliceCompleteSchemaForTest = sliceCompleteSchema;
 
 const summarySaveParams = {
   projectDir: projectDirParam,
