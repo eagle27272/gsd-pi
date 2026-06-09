@@ -553,6 +553,25 @@ let hasToolsInTurn = false;
 let pinnedBorder: DynamicBorder | undefined;
 // Reference to the pinned markdown component below the border
 let pinnedTextComponent: Markdown | undefined;
+// Set when the pinned zone was shown this turn; used to realign viewport after teardown.
+let pinnedZoneNeedsViewportRealign = false;
+
+function tearDownPinnedZone(
+	host: { pinnedMessageContainer: { clear(): void }; ui: { requestRender(force?: boolean): void } },
+	options?: { realignViewport?: boolean },
+): void {
+	const needsRealign = pinnedZoneNeedsViewportRealign;
+	if (pinnedBorder) pinnedBorder.stopSpinner();
+	pinnedBorder = undefined;
+	pinnedTextComponent = undefined;
+	host.pinnedMessageContainer.clear();
+	lastPinnedText = "";
+	hasToolsInTurn = false;
+	pinnedZoneNeedsViewportRealign = false;
+	if (options?.realignViewport && needsRealign) {
+		host.ui.requestRender(true);
+	}
+}
 
 function mergeToolPhases(phases: ToolExecutionPhase[]): ToolExecutionPhase[] {
 	const merged: ToolExecutionPhase[] = [];
@@ -675,14 +694,9 @@ export async function handleAgentEvent(host: InteractiveModeStateHost & {
 	if (event.type === "message_start" && event.message.role === "assistant") {
 		lastProcessedContentIndex = 0;
 		lastContentLength = 0;
-		lastPinnedText = "";
-		hasToolsInTurn = false;
 		renderedSegments = [];
 		orphanedSegments = [];
-		if (pinnedBorder) pinnedBorder.stopSpinner();
-		pinnedBorder = undefined;
-		pinnedTextComponent = undefined;
-		host.pinnedMessageContainer.clear();
+		tearDownPinnedZone(host);
 	}
 
 	switch (event.type) {
@@ -695,15 +709,10 @@ export async function handleAgentEvent(host: InteractiveModeStateHost & {
 					host.streamingMessage = undefined;
 					host.pendingTools.clear();
 					host.pendingMessagesContainer.clear();
-					host.pinnedMessageContainer.clear();
-					lastPinnedText = "";
-					hasToolsInTurn = false;
+					tearDownPinnedZone(host);
 					renderedSegments = [];
 					orphanedSegments = [];
 					lastContentLength = 0;
-					if (pinnedBorder) pinnedBorder.stopSpinner();
-					pinnedBorder = undefined;
-					pinnedTextComponent = undefined;
 					host.compactionQueuedMessages = [];
 					host.rebuildChatFromMessages();
 					host.updatePendingMessagesDisplay();
@@ -1111,6 +1120,7 @@ export async function handleAgentEvent(host: InteractiveModeStateHost & {
 								// doesn't exceed the viewport and cause render flashing.
 								pinnedTextComponent.maxLines = pinnedMax;
 								host.pinnedMessageContainer.addChild(pinnedTextComponent);
+								pinnedZoneNeedsViewportRealign = true;
 								// Hide the separate status loader — the pinned zone replaces it
 								if (host.loadingAnimation) {
 									host.loadingAnimation.stop();
@@ -1129,11 +1139,7 @@ export async function handleAgentEvent(host: InteractiveModeStateHost & {
 					} else if (pinnedBorder) {
 						// Every candidate is still visible in the chat scrollback —
 						// tear down the pinned zone so we don't duplicate on-screen text.
-						pinnedBorder.stopSpinner();
-						pinnedBorder = undefined;
-						pinnedTextComponent = undefined;
-						host.pinnedMessageContainer.clear();
-						lastPinnedText = "";
+						tearDownPinnedZone(host);
 						if (!host.loadingAnimation) {
 							host.statusContainer.clear();
 							startLoadingAnimation(host);
@@ -1323,12 +1329,7 @@ export async function handleAgentEvent(host: InteractiveModeStateHost & {
 				// Clear pinned output once the message is finalized in the chat
 				// container — prevents duplicate display when the agent continues
 				// (e.g. form elicitation) after the assistant message ends.
-				if (pinnedBorder) pinnedBorder.stopSpinner();
-				host.pinnedMessageContainer.clear();
-				lastPinnedText = "";
-				hasToolsInTurn = false;
-				pinnedBorder = undefined;
-				pinnedTextComponent = undefined;
+				tearDownPinnedZone(host, { realignViewport: true });
 				host.footer.invalidate();
 			}
 			host.ui.requestRender();
@@ -1398,14 +1399,7 @@ export async function handleAgentEvent(host: InteractiveModeStateHost & {
 			host.pendingTools.clear();
 			// Pinned output is only useful while work is actively streaming.
 			// Keep chat history as the single source after completion.
-			if (pinnedBorder) {
-				pinnedBorder.stopSpinner();
-			}
-			host.pinnedMessageContainer.clear();
-			lastPinnedText = "";
-			hasToolsInTurn = false;
-			pinnedBorder = undefined;
-			pinnedTextComponent = undefined;
+			tearDownPinnedZone(host, { realignViewport: true });
 			await host.checkShutdownRequested();
 			host.ui.requestRender();
 			break;

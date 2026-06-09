@@ -168,6 +168,12 @@ export function setExtensionWidget(host: InteractiveModeDelegateHost, key: strin
 		const targetMap = placement === "belowEditor" ? host.extensionWidgetsBelow : host.extensionWidgetsAbove;
 		targetMap.set(key, component);
 		renderWidgets(host, );
+		// Step-complete / handoff widgets replace the live progress panel and can
+		// shrink the layout after pinned streaming output is torn down. Force a
+		// full viewport realign so the transcript stays visible.
+		if (key === "gsd-outcome" && content !== undefined) {
+			host.ui.requestRender(true);
+		}
 	}
 
 export function clearExtensionWidgets(host: InteractiveModeDelegateHost): void {
