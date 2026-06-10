@@ -46,15 +46,17 @@ export function worktreesDirs(projectRoot: string): string[] {
 /**
  * Physical path for the worktree `name` under `projectRoot`.
  *
- * An existing worktree directory keeps its location (canonical or legacy);
- * otherwise the canonical location is returned for creation. The legacy
- * check is a plain existsSync so a stale legacy directory still resolves —
+ * Canonical wins only when it has a `.git` marker (i.e. is a live worktree).
+ * A bare directory with no `.git` — a stale leftover from an aborted create
+ * or a partial cleanup — does not shadow an existing legacy worktree, so the
+ * legacy path is tried next. The legacy check remains a plain existsSync;
  * callers that need a *registered* worktree validate the `.git` marker
- * themselves (resolveCanonicalMilestoneRoot, Worktree Safety).
+ * themselves (resolveCanonicalMilestoneRoot, getAutoWorktreePath).
+ * Falls back to canonical for new-worktree creation when neither path exists.
  */
 export function worktreePathFor(projectRoot: string, name: string): string {
   const canonical = join(canonicalWorktreesDir(projectRoot), name);
-  if (existsSync(canonical)) return canonical;
+  if (existsSync(canonical) && existsSync(join(canonical, ".git"))) return canonical;
   const legacy = join(legacyWorktreesDir(projectRoot), name);
   if (existsSync(legacy)) return legacy;
   return canonical;
