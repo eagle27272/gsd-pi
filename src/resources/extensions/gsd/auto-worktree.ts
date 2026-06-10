@@ -20,7 +20,7 @@ import {
   unlinkSync,
   lstatSync as lstatSyncFn,
 } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep as pathSep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { GSDError, GSD_IO_ERROR, GSD_GIT_ERROR } from "./errors.js";
 import {
   reconcileWorktreeDb,
@@ -50,6 +50,7 @@ import {
   nudgeGitBranchCache,
 } from "./worktree.js";
 import {
+  findWorktreeSegment,
   isGsdWorktreePath,
   normalizeWorktreePathForCompare,
   resolveWorktreeProjectRoot,
@@ -655,21 +656,12 @@ export function checkResourcesStale(
  * Returns the corrected base path.
  */
 export function escapeStaleWorktree(base: string): string {
-  // Direct layout: /.gsd/worktrees/
-  const directMarker = `${pathSep}.gsd${pathSep}worktrees${pathSep}`;
-  let idx = base.indexOf(directMarker);
-  if (idx === -1) {
-    // Symlink-resolved layout: /.gsd/projects/<hash>/worktrees/
-    const symlinkRe = new RegExp(
-      `\\${pathSep}\\.gsd\\${pathSep}projects\\${pathSep}[a-f0-9]+\\${pathSep}worktrees\\${pathSep}`,
-    );
-    const match = base.match(symlinkRe);
-    if (!match || match.index === undefined) return base;
-    idx = match.index;
-  }
+  const segment = findWorktreeSegment(base.replaceAll("\\", "/"));
+  if (!segment) return base;
 
-  // base is inside .gsd/worktrees/<something> — extract the project root
-  const projectRoot = base.slice(0, idx);
+  // base is inside .gsd/worktrees/<something> — extract the project root.
+  // Normalization is 1:1 on characters, so the segment index is valid in `base`.
+  const projectRoot = base.slice(0, segment.gsdIdx);
 
   // Guard: If the candidate project root's .gsd IS the user-level ~/.gsd,
   // the string-slice heuristic matched the wrong /.gsd/ boundary. This happens
