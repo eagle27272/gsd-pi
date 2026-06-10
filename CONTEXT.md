@@ -90,6 +90,7 @@
 - **Status normalization (`toStatus`)**: the single parse seam `toStatus(raw: string): Status` where free-form DB strings enter the typed domain. Maps aliases to canonical (`done`/`closed` → `complete`, `planned` → `pending`) and quarantines unknown values rather than forcing a data migration. The Status Transition Core writes canonical, so the store converges to canonical over time without violating the DB-is-source-of-truth drift invariant.
 - **Unit Registry**: the single declarative table (`unit-registry.ts`) mapping each Unit type to its **Unit Descriptor**. The source from which `KNOWN_UNIT_TYPES`/`UnitType`, the tool contracts, the scope-class Sets, and the unit→phase chain are derived. Adding a Unit type = one registry row + one template file. Preserves the pre-registry asymmetries explicitly: `discuss-slice`/`execute-task-simple` are `kind: "variant"` (contracts and scope Sets, but excluded from `KNOWN_UNIT_TYPES`); `triage-captures`/`quick-task` carry `toolContract: null` and `phaseChain: null`. See `docs/dev/ADR-033-unit-type-registry.md`.
 - **Unit Descriptor**: one Unit type's declaration — kind (primary/variant), scope class (`execute-task` / `section-close` / `standard`), Phase routing chain, and tool surface contract. Prompt *composition* stays in `auto-prompts.ts`; the descriptor only declares.
+- **Publication module**: the module (`publication.ts`) that owns pushing a merged milestone and opening a draft PR (`auto_push`/`auto_pr`) behind `publishMilestone(request)`. Distinct from the merge verb: merge is a Worktree Lifecycle concern; publication needs only the resulting commit, a remote, and preferences. Publication failure is non-fatal to a completed local merge. See `docs/dev/ADR-034-milestone-merge-publication-split.md`.
 
 ## Current decision in force
 
@@ -170,6 +171,10 @@ Dispatch remains responsible for selecting the next Unit from reconciled state. 
 - "What a Unit type is" should be declared once, in the **Unit Registry**. The parallel tables (`KNOWN_UNIT_TYPES`, `UNIT_TOOL_CONTRACTS`, the scope Sets in `auto-unit-tool-scope.ts`, the unit→phase switch in `preferences-models.ts`) become derived views with stable import paths (the `gsd-db.ts` barrel discipline). Parity is pinned by one table-driven registry test. The Tool Contract module (ADR-015) compiles from the registry. Remaining steps: fold `UNIT_MANIFESTS` data into descriptor rows (already type-enforced against the registry's `UnitType`), declare prompt-template association.
 
   See `docs/dev/ADR-033-unit-type-registry.md`.
+
+- The merge verb's full contract — including the stash-restore choreography currently wrapped around it at four `auto/phases.ts` call sites — moves inside Worktree Lifecycle's `exitMilestone`, making the "sole owner of merge" statement above true in code. Push and PR creation split out into the **Publication module**, called after a successful milestone merge. Migration order: extract Publication first (done), then absorb the stash choreography, then relocate the merge core out of `auto-worktree.ts`.
+
+  See `docs/dev/ADR-034-milestone-merge-publication-split.md`.
 
 ## Current implementation snapshot (phase 1)
 
