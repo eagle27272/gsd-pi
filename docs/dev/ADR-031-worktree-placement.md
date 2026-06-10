@@ -43,7 +43,9 @@ In-flight milestones must survive upgrades. The legacy container (`<projectRoot>
 
 `worktree-placement.ts` owns the forward direction (project root + name → physical path): `CANONICAL_WORKTREES_DIRNAME`, `canonicalWorktreesDir`, `legacyWorktreesDir`, `worktreesDirs`, `worktreePathFor`. `worktree-manager.ts` re-exports basePath-resolving wrappers (`worktreesDir`, `allWorktreesDirs`, `worktreePath`).
 
-The reverse direction (path → project identity) stays in `worktree-root.ts`: `findWorktreeSegment` is the **only** marker-matching implementation, now recognizing three layouts — canonical (`/.gsd-worktrees/`), legacy direct (`/.gsd/worktrees/`), and external-state (`~/.gsd/projects/<hash>/worktrees/`). The duplicate detectors listed in Context were deleted and routed through this seam.
+The reverse direction (path → project identity) stays in `worktree-root.ts`: `findWorktreeSegment` is the **only** marker-matching implementation, now recognizing three layouts — canonical (`/.gsd-worktrees/`), legacy direct (`/.gsd/worktrees/`), and external-state (`~/.gsd/projects/<hash>/worktrees/`). `projectRootFromWorktreePath` is the thin path→root-prefix helper over it; the duplicate detectors listed in Context (`escapeStaleWorktree`, `parseWorktreeBase`, `doctor-environment`, `captures`, `worktree-session-state`) were deleted and routed through it.
+
+Two consumers cannot import the seam and keep deliberate, comment-pinned copies that must be hand-synchronized when a layout changes: `bg-shell/utilities.ts` mirrors the reverse marker regexes (bg-shell does not import the gsd extension), and `packages/mcp-server`'s `worktreeContainers` mirrors the forward container pair (the MCP server cannot statically import the extension tree).
 
 ### 4. Decision-record reconciliation
 
@@ -60,6 +62,6 @@ Documented here because they were previously undocumented load-bearing behavior:
 
 - New milestone worktrees appear at `<projectRoot>/.gsd-worktrees/<MID>` — visible, findable, project-local.
 - Existing legacy worktrees keep working: resolution, safety validation, merge, teardown, and doctor repair all accept both containers. No migration step is required; legacy worktrees age out as milestones complete.
-- A new layout (if ever needed) is taught in exactly two places: `worktree-placement.ts` (forward) and `findWorktreeSegment` (reverse).
+- A new layout (if ever needed) is taught in two seam files — `worktree-placement.ts` (forward) and `findWorktreeSegment` (reverse) — plus the two comment-pinned boundary copies that cannot import the seam: `bg-shell/utilities.ts` (reverse) and `packages/mcp-server`'s `worktreeContainers` (forward).
 - The HOME-detection guard in `worktree-root.ts` and the stale-worktree escape heuristic remain for legacy paths; they are dead weight for canonical paths and can be retired with the legacy layout.
 - `.gitignore` in existing projects gains the `.gsd-worktrees/` entry via the idempotent `ensureGitignore` bootstrap; the doctor flags it when missing.
