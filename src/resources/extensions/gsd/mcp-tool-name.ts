@@ -1,5 +1,7 @@
 // Project/App: gsd-pi
-// File Purpose: Shared parsing and formatting helpers for MCP-scoped tool names.
+// File Purpose: GSD-facing face over the shared @gsd/pi-ai MCP tool-name helpers.
+
+import { parseMcpToolName as parsePiAiMcpToolName, stripMcpToolPrefix } from "@gsd/pi-ai";
 
 const MCP_TOOL_PREFIX = "mcp__";
 
@@ -9,18 +11,11 @@ export interface ParsedMcpToolName {
 }
 
 export function parseMcpToolName(toolName: string): ParsedMcpToolName | null {
-  if (!toolName.startsWith(MCP_TOOL_PREFIX)) return null;
-  const toolSeparator = toolName.indexOf("__", MCP_TOOL_PREFIX.length);
-  if (toolSeparator < 0) return null;
-  return {
-    serverName: toolName.slice(MCP_TOOL_PREFIX.length, toolSeparator),
-    toolName: toolName.slice(toolSeparator + 2),
-  };
+  const parsed = parsePiAiMcpToolName(toolName);
+  return parsed ? { serverName: parsed.server, toolName: parsed.tool } : null;
 }
 
-export function stripMcpToolPrefix(toolName: string): string {
-  return parseMcpToolName(toolName)?.toolName ?? toolName;
-}
+export { stripMcpToolPrefix };
 
 export function toMcpToolName(serverName: string, toolName: string): string {
   return `${MCP_TOOL_PREFIX}${serverName}__${toolName}`;

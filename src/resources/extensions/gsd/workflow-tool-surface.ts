@@ -28,7 +28,7 @@ export const WORKFLOW_TOOL_ALIAS_PAIRS: readonly WorkflowToolAliasPair[] =
 export const WORKFLOW_TOOL_ALIAS_TO_CANONICAL: Readonly<Record<string, string>> =
   Object.fromEntries(WORKFLOW_TOOL_ALIAS_PAIRS.map(({ alias, canonical }) => [alias, canonical]));
 
-const WORKFLOW_MCP_ADAPTER_TOOL_NAMES = [
+export const WORKFLOW_MCP_ADAPTER_TOOL_NAMES = [
   "gsd_cancel",
   "gsd_captures",
   "ask_user_questions",
@@ -44,6 +44,9 @@ const WORKFLOW_MCP_ADAPTER_TOOL_NAMES = [
   "gsd_roadmap",
   "gsd_status",
 ] as const;
+
+/** Session-orchestration tools exposed by the workflow MCP adapter alongside the contract tools. */
+export type WorkflowMcpAdapterToolName = (typeof WORKFLOW_MCP_ADAPTER_TOOL_NAMES)[number];
 
 export const WORKFLOW_TOOL_SURFACE_NAMES = [
   ...WORKFLOW_MCP_ADAPTER_TOOL_NAMES,

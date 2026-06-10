@@ -255,6 +255,12 @@ export const WORKFLOW_TOOL_CONTRACTS = [
 	},
 ] as const satisfies readonly WorkflowToolContractMetadata[];
 
+/** Literal union of canonical workflow tool names. Typing a name list with this union makes drift from WORKFLOW_TOOL_CONTRACTS a compile error. */
+export type CanonicalWorkflowToolName = (typeof WORKFLOW_TOOL_CONTRACTS)[number]["canonicalName"];
+
+/** Literal union of backwards-compatibility alias names. */
+export type WorkflowToolAliasName = (typeof WORKFLOW_TOOL_CONTRACTS)[number]["aliases"][number];
+
 export const WORKFLOW_TOOL_NAMES = WORKFLOW_TOOL_CONTRACTS.flatMap((tool) => [
 	tool.canonicalName,
 	...tool.aliases,
