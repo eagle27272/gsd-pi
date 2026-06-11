@@ -148,6 +148,39 @@ export function clearPathCache(): void {
 
 // ─── Name Builders ─────────────────────────────────────────────────────────
 
+/** Directories owned by the GSD framework — metadata, never project source. */
+export const FRAMEWORK_METADATA_DIRS: readonly string[] = [".gsd", ".planning", ".audits"];
+
+/**
+ * Every artifact suffix used with the name builders below — the single source
+ * for the `<ID>-<SUFFIX>.md` naming vocabulary. Extend this list when a new
+ * artifact type is introduced; consumers (md-importer walking, pre-execution
+ * artifact detection) pick it up from here.
+ */
+export const PLANNING_ARTIFACT_SUFFIXES: readonly string[] = [
+  "CONTEXT",
+  "CONTEXT-DRAFT",
+  "ROADMAP",
+  "PLAN",
+  "REPLAN",
+  "SUMMARY",
+  "RESEARCH",
+  "VALIDATION",
+  "ASSESSMENT",
+  "UAT",
+  "DISCUSSION",
+  "EVAL-REVIEW",
+  "PARKED",
+  "VERIFICATION-FAILED",
+  "CONTINUE",
+];
+
+/** Matches a bare planning-artifact file name, e.g. "M001-CONTEXT.md", "S01-PLAN.md". */
+export const PLANNING_ARTIFACT_NAME_RE = new RegExp(
+  `^[MST]\\d+-(${PLANNING_ARTIFACT_SUFFIXES.join("|")})\\.md$`,
+  "i",
+);
+
 /**
  * Build a milestone-level file name.
  * ("M001", "CONTEXT") → "M001-CONTEXT.md"

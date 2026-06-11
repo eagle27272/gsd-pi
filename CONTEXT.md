@@ -59,6 +59,7 @@
 - **Recovery Classification module**: module that maps provider, tool, policy, git, worktree, runtime, and reconciliation-drift failures to a Recovery decision.
 - **Tool Contract module**: module that keeps Unit prompts, tool schemas, tool policy, source-observation invariants, and pre-dispatch validation aligned.
 - **Task Output Contract**: the concrete files a planned Task promises to create or overwrite. Distinct from task inputs, verification commands, and human-readable success outcomes.
+- **Task Input**: a source-tree file a planned Task reads at execution time. Task Inputs are source files only — `.gsd/` planning artifacts (CONTEXT, ROADMAP, PLAN, SUMMARY) are never Task Inputs, in any path form. They are projections of DB state; the framework delivers their content to executors as composed, preloaded context, never as a file path to re-read.
 - **Observation Budgeting**: context-management policy for what prior tool observations remain available to a Provider on later turns. Distinct from Display Truncation: Observation Budgeting changes model-visible context, while Display Truncation changes only the user-visible terminal surface.
 - **Display Truncation**: rendering policy that hides or collapses tool output in the terminal without changing the underlying tool result available to the session.
 - **File Observation**: a durable record that a source file was observed, including enough identity and coverage metadata to let a Unit reason from the file without repeatedly reconstructing it from line windows.

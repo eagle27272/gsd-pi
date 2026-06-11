@@ -2470,6 +2470,9 @@ export async function buildPlanSlicePrompt(
       `Either (a) add an earlier task that creates X on disk before the task that needs it, ` +
       `or (b) if this task IS the one that creates X, move X from inputs to expected_output. ` +
       `Do NOT put X in a task's expected_output if that task only reads or verifies X — only tasks that actually write X to disk should list it in expected_output.\n` +
+      `- **"[file] X: ... GSD planning artifacts are projections preloaded as context / written by workflow tools"**: ` +
+      `Remove X from the task's inputs, files, and expectedOutput entirely. Planning artifacts (anything under .gsd/, .planning/, or .audits/, or names like M001-CONTEXT.md / S01-PLAN.md) are preloaded as context and written by workflow tools — ` +
+      `do NOT add a task that creates X and do NOT move X to expectedOutput.\n` +
       `- **"[file] X: Task T_early reads X but it's created by task T_late (sequence violation)"**: ` +
       `Either (a) reorder tasks so T_late (the creator) runs before T_early (the reader), ` +
       `or (b) if T_late doesn't actually create X (it only reads/tests it), remove X from T_late's expected_output entirely.\n` +

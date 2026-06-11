@@ -1487,8 +1487,8 @@ export const executeTaskComplete = async (params, projectDir) => {
             estimate: "15m",
             files: ["src/resources/extensions/gsd/tools/workflow-tool-executors.ts"],
             verify: "node --test",
-            inputs: [".gsd/milestones/M001/M001-ROADMAP.md"],
-            expectedOutput: ["S01-PLAN.md", "T01-PLAN.md"],
+            inputs: [],
+            expectedOutput: ["src/bridge-status.md"],
           },
         ],
       });
@@ -2436,8 +2436,8 @@ export const executeTaskComplete = async (params, projectDir) => {
             estimate: "10m",
             files: ["packages/mcp-server/src/workflow-tools.ts"],
             verify: "node --test",
-            inputs: ["M006-ROADMAP.md"],
-            expectedOutput: ["S06-ASSESSMENT.md", "M006-ROADMAP.md"],
+            inputs: [],
+            expectedOutput: ["src/gate-seed.md"],
           },
         ],
       });
