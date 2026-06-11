@@ -14,6 +14,8 @@ interface ManagedBrowserToolDetails {
   server: string;
   tool: string;
   mcpTool: string;
+  /** All MCP tools invoked, in order, when a translation made multiple calls. */
+  mcpTools?: string[];
   sessionName?: string;
   projectRoot?: string;
   truncated?: boolean;
@@ -38,9 +40,28 @@ interface McpContentItem {
   [key: string]: unknown;
 }
 
+interface ManagedTranslatedCall {
+  mcpTool: string;
+  args: Record<string, unknown>;
+  /** Best-effort call: a failure adds no evidence but does not fail the tool. */
+  optional?: boolean;
+}
+
+interface ManagedToolTranslation {
+  /** Every MCP tool build() can emit; all must be served for contract coverage. */
+  requires: readonly string[];
+  /** Expand the Pi contract args into one or more sequential gsd-browser MCP calls. */
+  build(args: Record<string, unknown>): ManagedTranslatedCall[];
+}
+
 interface ManagedBrowserToolSpec {
   /** gsd-browser MCP tool candidates, tried in order. Defaults to the contract name itself. */
   mcpTools?: string[];
+  /**
+   * Param-shape translation for contract tools gsd-browser does not serve
+   * under any name. Takes precedence over mcpTools/name-based dispatch.
+   */
+  translate?: ManagedToolTranslation;
   label: string;
   description: string;
   parameters: TSchema;
@@ -52,6 +73,7 @@ const connections = new Map<string, ManagedConnection>();
 const pendingConnections = new Map<string, Promise<ManagedConnection>>();
 const DEFAULT_MAX_LINES = 2_000;
 const DEFAULT_MAX_BYTES = 50 * 1024;
+const MCP_CALL_TIMEOUT_MS = 60_000;
 
 const AssertionCheck = Type.Object({
   kind: Type.String({ description: "Assertion kind, e.g. url_contains, text_visible, selector_visible, no_console_errors, no_failed_requests." }),
@@ -86,7 +108,7 @@ const BatchStep = Type.Object({
  */
 export const MANAGED_GSD_BROWSER_TOOL_NAMES = BROWSER_CONTRACT_TOOL_NAMES;
 
-const MANAGED_BROWSER_TOOL_SPECS: Record<BrowserContractToolName, ManagedBrowserToolSpec> = {
+export const MANAGED_BROWSER_TOOL_SPECS: Record<BrowserContractToolName, ManagedBrowserToolSpec> = {
   browser_navigate: {
     label: "Browser Navigate",
     description: "Navigate the managed gsd-browser session to a URL and return page state. Use for local web app verification and UAT evidence.",
@@ -96,6 +118,13 @@ const MANAGED_BROWSER_TOOL_SPECS: Record<BrowserContractToolName, ManagedBrowser
     }, { additionalProperties: true }),
   },
   browser_click: {
+    translate: {
+      requires: ["browser_batch"],
+      build: (args) => [{
+        mcpTool: "browser_batch",
+        args: { steps: [{ action: "click", ...args }] },
+      }],
+    },
     label: "Browser Click",
     description: "Click an element in the managed gsd-browser session by selector or coordinates.",
     parameters: Type.Object({
@@ -105,6 +134,13 @@ const MANAGED_BROWSER_TOOL_SPECS: Record<BrowserContractToolName, ManagedBrowser
     }, { additionalProperties: true }),
   },
   browser_type: {
+    translate: {
+      requires: ["browser_batch"],
+      build: (args) => [{
+        mcpTool: "browser_batch",
+        args: { steps: [{ action: "type", ...args }] },
+      }],
+    },
     label: "Browser Type",
     description: "Type or fill text into an input in the managed gsd-browser session.",
     parameters: Type.Object({
@@ -164,6 +200,38 @@ const MANAGED_BROWSER_TOOL_SPECS: Record<BrowserContractToolName, ManagedBrowser
     }, { additionalProperties: true }),
   },
   browser_verify: {
+    translate: {
+      requires: ["browser_navigate", "browser_assert", "browser_screenshot"],
+      build: (args) => {
+        const calls: ManagedTranslatedCall[] = [
+          {
+            mcpTool: "browser_navigate",
+            args: { url: args.url, ...(args.timeout === undefined ? {} : { timeout: args.timeout }) },
+          },
+        ];
+        const verifyChecks = Array.isArray(args.checks) ? args.checks as Array<Record<string, unknown>> : [];
+        const assertChecks: Array<Record<string, unknown>> = [];
+        for (const check of verifyChecks) {
+          if (typeof check.expectedText === "string") {
+            assertChecks.push({ kind: "text_visible", text: check.expectedText });
+          }
+          if (typeof check.selector === "string") {
+            if (check.expectedVisible === false) {
+              assertChecks.push({ kind: "selector_hidden", selector: check.selector });
+            } else if (check.expectedVisible === true || check.expectedText === undefined) {
+              assertChecks.push({ kind: "selector_visible", selector: check.selector });
+            }
+          }
+        }
+        if (assertChecks.length > 0) {
+          calls.push({ mcpTool: "browser_assert", args: { checks: assertChecks } });
+        }
+        if (verifyChecks.some((check) => check.screenshot === true)) {
+          calls.push({ mcpTool: "browser_screenshot", args: {}, optional: true });
+        }
+        return calls;
+      },
+    },
     label: "Browser Verify",
     description: "Run a structured browser verification flow and return evidence from the managed gsd-browser session.",
     parameters: Type.Object({
@@ -236,6 +304,16 @@ const MANAGED_BROWSER_TOOL_SPECS: Record<BrowserContractToolName, ManagedBrowser
     }, { additionalProperties: true }),
   },
   browser_reload: {
+    // gsd-browser's daemon has a reload command but does not expose it over
+    // MCP, so reload rides browser_evaluate. The network-idle settle is
+    // best-effort: pages with persistent connections never go idle.
+    translate: {
+      requires: ["browser_evaluate", "browser_wait_for"],
+      build: () => [
+        { mcpTool: "browser_evaluate", args: { expression: "location.reload()" } },
+        { mcpTool: "browser_wait_for", args: { condition: "network_idle", timeout: 3_000 }, optional: true },
+      ],
+    },
     label: "Browser Reload",
     description: "Reload the current page in the managed gsd-browser session.",
     parameters: Type.Object({}, { additionalProperties: true }),
@@ -351,10 +429,26 @@ function isUnknownMcpToolError(error: unknown): boolean {
   return /unknown tool|tool .*not found|tool not found|not registered|does not exist/i.test(message);
 }
 
-function normalizeManagedArgs(piToolName: string, args: Record<string, unknown>): Record<string, unknown> {
+function normalizeBatchStep(step: unknown): unknown {
+  if (!step || typeof step !== "object") return step;
+  const { clearFirst, ...rest } = step as Record<string, unknown>;
+  return clearFirst === undefined ? step : { ...rest, clear_first: clearFirst };
+}
+
+export function normalizeManagedArgs(piToolName: string, args: Record<string, unknown>): Record<string, unknown> {
   if (piToolName === "browser_snapshot_refs") {
     const { interactiveOnly: _interactiveOnly, ...snapshotArgs } = args;
     return snapshotArgs;
+  }
+  if (piToolName === "browser_batch") {
+    // gsd-browser's MCP batch tool reads snake_case option and step keys.
+    const { stopOnFailure, finalSummaryOnly, steps, ...rest } = args;
+    return {
+      ...rest,
+      ...(Array.isArray(steps) ? { steps: steps.map(normalizeBatchStep) } : {}),
+      ...(stopOnFailure === undefined ? {} : { stop_on_failure: stopOnFailure }),
+      ...(finalSummaryOnly === undefined ? {} : { summary_only: finalSummaryOnly }),
+    };
   }
   return args;
 }
@@ -433,43 +527,104 @@ function truncateHeadText(
   };
 }
 
+type McpToolCallResult = {
+  content?: unknown;
+  structuredContent?: unknown;
+  isError?: boolean;
+};
+
+function callGsdBrowserMcp(
+  connection: ManagedConnection,
+  mcpTool: string,
+  args: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<McpToolCallResult> {
+  return connection.client.callTool(
+    { name: mcpTool, arguments: args },
+    undefined,
+    { signal, timeout: MCP_CALL_TIMEOUT_MS },
+  ) as Promise<McpToolCallResult>;
+}
+
+function buildManagedToolResult(
+  connection: ManagedConnection,
+  piToolName: string,
+  mcpToolsUsed: string[],
+  contentItems: McpContentItem[],
+  lastResult: McpToolCallResult,
+): ManagedBrowserToolResult {
+  const serialized = serializeMcpContent(contentItems);
+  return {
+    content: serialized.content,
+    details: {
+      engine: "gsd-browser",
+      server: connection.launch.serverName,
+      tool: piToolName,
+      mcpTool: mcpToolsUsed[mcpToolsUsed.length - 1] ?? piToolName,
+      ...(mcpToolsUsed.length > 1 ? { mcpTools: mcpToolsUsed } : {}),
+      sessionName: connection.launch.sessionName,
+      projectRoot: connection.launch.projectRoot,
+      truncated: serialized.truncated,
+      outputLines: serialized.outputLines,
+      outputBytes: serialized.outputBytes,
+      structuredContent: lastResult.structuredContent,
+      mcpIsError: Boolean(lastResult.isError),
+    },
+    isError: Boolean(lastResult.isError),
+  };
+}
+
+async function callTranslatedGsdBrowserTool(
+  connection: ManagedConnection,
+  piToolName: string,
+  translation: ManagedToolTranslation,
+  args: Record<string, unknown>,
+  options: { signal?: AbortSignal },
+): Promise<ManagedBrowserToolResult> {
+  const calls = translation.build(args);
+  const contentItems: McpContentItem[] = [];
+  const toolsUsed: string[] = [];
+  let lastResult: McpToolCallResult = {};
+
+  for (const call of calls) {
+    let result: McpToolCallResult;
+    try {
+      result = await callGsdBrowserMcp(connection, call.mcpTool, normalizeManagedArgs(call.mcpTool, call.args), options.signal);
+    } catch (error) {
+      if (call.optional) continue;
+      throw error;
+    }
+    if (call.optional && result.isError) continue;
+    toolsUsed.push(call.mcpTool);
+    if (Array.isArray(result.content)) contentItems.push(...result.content as McpContentItem[]);
+    lastResult = result;
+    // Later calls assume the earlier ones took effect (e.g. assert after a
+    // failed navigation would report misleading evidence), so stop here.
+    if (lastResult.isError) break;
+  }
+
+  return buildManagedToolResult(connection, piToolName, toolsUsed, contentItems, lastResult);
+}
+
 async function callManagedGsdBrowserTool(
   piToolName: string,
-  mcpTools: string[],
+  spec: ManagedBrowserToolSpec,
   args: Record<string, unknown>,
   options: { signal?: AbortSignal; ctx?: ExtensionContext },
 ): Promise<ManagedBrowserToolResult> {
   const connection = await getOrConnectManagedGsdBrowser(options.ctx, options.signal);
   const normalizedArgs = normalizeManagedArgs(piToolName, args);
+
+  if (spec.translate) {
+    return callTranslatedGsdBrowserTool(connection, piToolName, spec.translate, normalizedArgs, options);
+  }
+
   let lastError: unknown;
-
-  for (const mcpTool of mcpTools) {
+  for (const mcpTool of spec.mcpTools ?? [piToolName]) {
     try {
-      const result = await connection.client.callTool(
-        { name: mcpTool, arguments: normalizedArgs },
-        undefined,
-        { signal: options.signal, timeout: 60000 },
-      );
+      const result = await callGsdBrowserMcp(connection, mcpTool, normalizedArgs, options.signal);
       const contentItems = Array.isArray(result.content) ? result.content as McpContentItem[] : [];
-      const serialized = serializeMcpContent(contentItems);
-
-      return {
-        content: serialized.content,
-        details: {
-          engine: "gsd-browser",
-          server: connection.launch.serverName,
-          tool: piToolName,
-          mcpTool,
-          sessionName: connection.launch.sessionName,
-          projectRoot: connection.launch.projectRoot,
-          truncated: serialized.truncated,
-          outputLines: serialized.outputLines,
-          outputBytes: serialized.outputBytes,
-          structuredContent: (result as { structuredContent?: unknown }).structuredContent,
-          mcpIsError: Boolean((result as { isError?: boolean }).isError),
-        },
-        isError: Boolean((result as { isError?: boolean }).isError),
-      };
+      return buildManagedToolResult(connection, piToolName, [mcpTool], contentItems, result);
     } catch (error) {
       lastError = error;
       if (!isUnknownMcpToolError(error)) break;
@@ -492,12 +647,16 @@ function formatManagedBrowserError(toolName: string, error: unknown): string {
 
 /**
  * Contract tools the server's advertised tool list cannot satisfy through any
- * of their declared MCP candidates.
+ * of their declared MCP candidates or translations.
  */
 export function findMissingContractCoverage(servedToolNames: Iterable<string>): BrowserContractToolName[] {
   const served = new Set(servedToolNames);
   return BROWSER_CONTRACT_TOOL_NAMES.filter((name) => {
-    const candidates = MANAGED_BROWSER_TOOL_SPECS[name].mcpTools ?? [name];
+    const spec = MANAGED_BROWSER_TOOL_SPECS[name];
+    if (spec.translate) {
+      return !spec.translate.requires.every((required) => served.has(required));
+    }
+    const candidates = spec.mcpTools ?? [name];
     return !candidates.some((candidate) => served.has(candidate));
   });
 }
@@ -560,7 +719,7 @@ export function registerManagedGsdBrowserTools(pi: ExtensionAPI): void {
         try {
           return await callManagedGsdBrowserTool(
             name,
-            tool.mcpTools ?? [name],
+            tool,
             params as Record<string, unknown>,
             { signal, ctx },
           );
@@ -572,7 +731,7 @@ export function registerManagedGsdBrowserTools(pi: ExtensionAPI): void {
               engine: "gsd-browser",
               server: "gsd-browser",
               tool: name,
-              mcpTool: tool.mcpTools?.[0] ?? name,
+              mcpTool: tool.translate?.requires[0] ?? tool.mcpTools?.[0] ?? name,
               error: error instanceof Error ? error.message : String(error),
             },
             isError: true,
