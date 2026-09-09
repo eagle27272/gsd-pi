@@ -101,6 +101,8 @@
     "gsd": "node scripts/dev-cli.js",
     "update:gsd-browser": "node scripts/update-gsd-browser-local.mjs",
     "postinstall": "node scripts/install.js",
+    "install-global": "node scripts/install-global.js",
+    "uninstall-global": "node scripts/install-global.js --uninstall",
     "pi:install-global": "node scripts/install-pi-global.js",
     "pi:uninstall-global": "node scripts/uninstall-pi-global.js",
     "sync-pkg-version": "node scripts/sync-pkg-version.cjs",

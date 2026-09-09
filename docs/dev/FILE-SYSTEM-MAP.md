@@ -961,8 +961,9 @@ package and refreshes stale or incomplete managed copies.
 | scripts/validate-mcp-server-tarball.mjs | Build System, MCP Server/Client | Standalone MCP package validation |
 | scripts/validate-pack.sh | Build System | Package validation script |
 | scripts/validate-pack.js | Build System | Package validation (Node.js) |
-| scripts/install-pi-global.js | Build System | Global installation helper |
-| scripts/uninstall-pi-global.js | Build System | Global uninstallation helper |
+| scripts/install-global.js | Build System | Symlink the gsd CLI from this checkout into a global bin dir (--uninstall to remove) |
+| scripts/install-pi-global.js | Build System | Copy src/resources (extensions, skills, agents) into ~/.pi/agent for the pi agent |
+| scripts/uninstall-pi-global.js | Build System | Remove copied GSD resources from ~/.pi |
 | scripts/install-hooks.sh | Build System, GSD Workflow | Git hook installer |
 | scripts/secret-scan.sh | Build System, Auth/OAuth | Secret scanning for credentials |
 | scripts/docs-prompt-injection-scan.sh | Build System | Prompt injection detection in docs |

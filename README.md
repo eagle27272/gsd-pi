@@ -24,8 +24,15 @@ node scripts/dev-cli.js
 Or link the `gsd` binary globally:
 
 ```bash
-pnpm run pi:install-global
+pnpm run install-global     # symlinks gsd + gsd-cli into `npm prefix -g`/bin
+pnpm run uninstall-global   # removes them
 ```
+
+The symlinks point at `dist/bootstrap.js` in this checkout, so a later
+`git pull && pnpm run build:core` updates the global `gsd` in place — no re-link
+needed. If the target bin directory is not on your `PATH`, the script prints the
+`export PATH=...` line to add. Override the destination with `--bin-dir <path>`
+or `GSD_GLOBAL_BIN_DIR`.
 
 Then run `gsd` in any project directory. GSD stores project planning and runtime
 state under `.gsd/`, with gitignored sibling runtime directories such as
