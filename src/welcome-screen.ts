@@ -123,7 +123,6 @@ export function buildWelcomeScreenLines(opts: WelcomeScreenOptions): string[] {
   if (process.env.BRAVE_ANSWERS_KEY)  toolParts.push('Answers ✓')
   if (process.env.JINA_API_KEY)       toolParts.push('Jina ✓')
   if (process.env.TAVILY_API_KEY)     toolParts.push('Tavily ✓')
-  if (process.env.CONTEXT7_API_KEY)   toolParts.push('Context7 ✓')
   if (remoteChannel)                  toolParts.push(`${remoteChannel.charAt(0).toUpperCase() + remoteChannel.slice(1)} ✓`)
 
   const innerWidth = Math.max(1, termWidth - 2)

@@ -64,7 +64,6 @@ export const PROVIDER_REGISTRY: ProviderInfo[] = [
   { id: "alibaba-dashscope",   label: "Alibaba DashScope",    category: "llm", envVar: "DASHSCOPE_API_KEY",    dashboardUrl: "dashscope.console.aliyun.com" },
 
   // Tool Keys
-  { id: "context7",  label: "Context7 Docs",     category: "tool", envVar: "CONTEXT7_API_KEY",  dashboardUrl: "context7.com/dashboard" },
   { id: "jina",      label: "Jina Page Extract",  category: "tool", envVar: "JINA_API_KEY",      dashboardUrl: "jina.ai/api" },
 
   // Search Providers

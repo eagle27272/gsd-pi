@@ -8,7 +8,7 @@
  * Covers:
  *   - LLM providers required by the effective model preferences (per phase)
  *   - Remote questions channel if configured (Slack/Discord/Telegram token)
- *   - Optional search/tool integrations (Brave, Tavily, Jina, Context7)
+ *   - Optional search/tool integrations (Brave, Tavily, Jina)
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -352,7 +352,7 @@ function resolveKeyFromAuthOrEnv(providerId: string): KeyLookup | null {
   }
 
   // Fall back to PROVIDER_REGISTRY env var for providers not covered by getEnvApiKey
-  // (e.g., search providers like Brave, Tavily; tool providers like Jina, Context7)
+  // (e.g., search providers like Brave, Tavily; tool providers like Jina)
   if (info?.envVar && process.env[info.envVar]) {
     return { found: true, source: "env", backedOff: false };
   }
@@ -538,7 +538,7 @@ function checkRemoteQuestionsProvider(): ProviderCheckResult | null {
 }
 
 function checkOptionalProviders(): ProviderCheckResult[] {
-  const optional = ["brave", "tavily", "jina", "context7"] as const;
+  const optional = ["brave", "tavily", "jina"] as const;
   const results: ProviderCheckResult[] = [];
 
   // Determine which search providers are configured so we can suppress

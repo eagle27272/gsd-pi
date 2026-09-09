@@ -66,12 +66,6 @@ interface RunOnboardingOptions {
 
 const TOOL_KEYS: ToolKeyConfig[] = [
   {
-    provider: 'context7',
-    envVar: 'CONTEXT7_API_KEY',
-    label: 'Context7',
-    hint: 'up-to-date library docs',
-  },
-  {
     provider: 'jina',
     envVar: 'JINA_API_KEY',
     label: 'Jina AI',

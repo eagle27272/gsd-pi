@@ -16,14 +16,13 @@ export function isStoredEnvCredential(cred: ApiKeyCredential): cred is ApiKeyCre
 
 /**
  * Hydrate process.env from stored auth.json credentials for optional tool keys.
- * Runs on every launch so extensions see Brave/Context7/Jina keys stored via the
+ * Runs on every launch so extensions see Brave/Jina keys stored via the
  * wizard on prior launches.
  */
 export function loadStoredEnvKeys(authStorage: AuthStorage): void {
   const providers: Array<[string, string]> = [
     ['brave',         'BRAVE_API_KEY'],
     ['brave_answers', 'BRAVE_ANSWERS_KEY'],
-    ['context7',      'CONTEXT7_API_KEY'],
     ['jina',          'JINA_API_KEY'],
     ['tavily',        'TAVILY_API_KEY'],
     ['slack_bot',     'SLACK_BOT_TOKEN'],

@@ -13,7 +13,7 @@ const SUBCOMMAND_HELP: Record<string, string> = {
     '  - LLM provider (Anthropic, OpenAI, Google, OpenRouter, Ollama, LM Studio, etc.)',
     '  - Web search provider (Brave, Tavily, built-in)',
     '  - Remote questions (Discord, Slack, Telegram)',
-    '  - Tool API keys (Context7, Jina, Groq)',
+    '  - Tool API keys (Jina, Groq)',
     '',
     'All steps are skippable and can be changed later with /login or /search-provider.',
     '',

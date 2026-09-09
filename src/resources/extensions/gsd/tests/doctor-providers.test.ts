@@ -273,7 +273,7 @@ test("runProviderChecks returns error for Anthropic when no key present", () => 
 
 test("runProviderChecks optional providers have required=false", () => {
   const results = runProviderChecks();
-  const optional = results.filter(r => ["brave", "tavily", "jina", "context7"].includes(r.name));
+  const optional = results.filter(r => ["brave", "tavily", "jina"].includes(r.name));
   for (const r of optional) {
     assert.equal(r.required, false, `${r.name} should not be required`);
   }
@@ -281,7 +281,7 @@ test("runProviderChecks optional providers have required=false", () => {
 
 test("runProviderChecks optional providers show unconfigured when no key", () => {
   withEnv(
-    { BRAVE_API_KEY: undefined, TAVILY_API_KEY: undefined, JINA_API_KEY: undefined, CONTEXT7_API_KEY: undefined },
+    { BRAVE_API_KEY: undefined, TAVILY_API_KEY: undefined, JINA_API_KEY: undefined },
     () => {
       const origHome = process.env.HOME;
       process.env.HOME = mkdtempSync(join(tmpdir(), "gsd-providers-test-"));
