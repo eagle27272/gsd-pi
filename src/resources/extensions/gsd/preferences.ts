@@ -861,7 +861,7 @@ export function applyModeDefaults(mode: WorkflowMode, prefs: GSDPreferences): GS
   return mergePreferences(defaults, prefs);
 }
 
-function mergePreferences(base: GSDPreferences, override: GSDPreferences): GSDPreferences {
+export function mergePreferences(base: GSDPreferences, override: GSDPreferences): GSDPreferences {
   return {
     // Preserve validated preference keys that do not need custom merge logic.
     // The explicit fields below still own defaults, arrays, and deep merges.
@@ -888,6 +888,9 @@ function mergePreferences(base: GSDPreferences, override: GSDPreferences): GSDPr
     context_pause_threshold: override.context_pause_threshold ?? base.context_pause_threshold,
     notifications: (base.notifications || override.notifications)
       ? { ...(base.notifications ?? {}), ...(override.notifications ?? {}) }
+      : undefined,
+    herdr: (base.herdr || override.herdr)
+      ? { ...(base.herdr ?? {}), ...(override.herdr ?? {}) }
       : undefined,
     git: (base.git || override.git)
       ? { ...(base.git ?? {}), ...(override.git ?? {}) }

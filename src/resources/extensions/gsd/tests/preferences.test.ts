@@ -26,6 +26,7 @@ import {
   renderPreferencesForSystemPrompt,
   renderLanguageDirectiveForPrompt,
   clearGSDPreferencesCache,
+  mergePreferences,
   _loadProjectPreferencesCandidatesForTest,
   _resetParseWarningFlag,
 } from "../preferences.ts";
@@ -684,6 +685,31 @@ test("notification fields validate correctly", () => {
   assert.equal(preferences.notifications?.enabled, true);
   assert.equal(preferences.notifications?.local_bell, true);
   assert.equal(preferences.notifications?.on_complete, false);
+});
+
+// ── Herdr preferences ────────────────────────────────────────────────────────
+
+test("herdr: valid block passes validation", () => {
+  const { errors } = validatePreferences({ herdr: { enabled: true, notifications: false, title: true } } as any);
+  assert.equal(errors.filter((e) => e.includes("herdr")).length, 0);
+});
+
+test("herdr: non-boolean key is rejected", () => {
+  const { errors } = validatePreferences({ herdr: { enabled: "yes" } } as any);
+  assert.ok(errors.some((e) => e.includes("herdr.enabled must be a boolean")));
+});
+
+test("herdr: non-object block is rejected", () => {
+  const { errors } = validatePreferences({ herdr: true } as any);
+  assert.ok(errors.some((e) => e.includes("herdr must be an object")));
+});
+
+test("herdr: base+override deep-merge keeps untouched keys", () => {
+  const merged = mergePreferences(
+    { herdr: { enabled: true, title: true } } as any,
+    { herdr: { title: false } } as any,
+  );
+  assert.deepEqual(merged.herdr, { enabled: true, title: false });
 });
 
 test("gate_evaluation slice_gates only accepts gate-evaluate-owned gates", () => {

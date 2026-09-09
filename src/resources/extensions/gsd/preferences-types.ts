@@ -110,6 +110,15 @@ export interface CopilotCatalogPreferences {
   /** Staleness threshold in ms for "if_stale" mode. Default: 21_600_000 (6h). Range: 60_000–604_800_000 (1min–7d). */
   stale_after_ms?: number;
 }
+
+export interface HerdrPreferences {
+  /** Master switch for Herdr reporting. Default: true (opt-out). Only affects sessions inside a Herdr pane. */
+  enabled?: boolean;
+  /** Route blocked/attention notifications through Herdr instead of the desktop toast. Default: true. */
+  notifications?: boolean;
+  /** Set the Herdr pane title/state-labels from GSD auto-mode progress. Default: true. */
+  title?: boolean;
+}
 import type { GitHubSyncConfig } from "../github-sync/types.js";
 
 // ─── Workflow Modes ──────────────────────────────────────────────────────────
@@ -514,6 +523,8 @@ export interface GSDPreferences {
   budget_enforcement?: BudgetEnforcementMode;
   context_pause_threshold?: number;
   notifications?: NotificationPreferences;
+  /** Herdr multiplexer integration. Inert outside a Herdr pane. See preferences reference. */
+  herdr?: HerdrPreferences;
   git?: GitPreferences;
   post_unit_hooks?: PostUnitHookConfig[];
   pre_dispatch_hooks?: PreDispatchHookConfig[];

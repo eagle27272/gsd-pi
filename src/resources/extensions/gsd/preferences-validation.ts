@@ -619,6 +619,20 @@ export function validatePreferences(preferences: GSDPreferences): {
     }
   }
 
+  // ─── Herdr ─────────────────────────────────────────────────────────
+  if (preferences.herdr !== undefined) {
+    if (preferences.herdr && typeof preferences.herdr === "object" && !Array.isArray(preferences.herdr)) {
+      for (const key of ["enabled", "notifications", "title"] as const) {
+        if (preferences.herdr[key] !== undefined && typeof preferences.herdr[key] !== "boolean") {
+          errors.push(`herdr.${key} must be a boolean`);
+        }
+      }
+      validated.herdr = preferences.herdr;
+    } else {
+      errors.push("herdr must be an object");
+    }
+  }
+
   // ─── Post-Unit Hooks ─────────────────────────────────────────────────
   if (preferences.post_unit_hooks && Array.isArray(preferences.post_unit_hooks)) {
     const validHooks: PostUnitHookConfig[] = [];
