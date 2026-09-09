@@ -5,7 +5,6 @@ const path = require("node:path");
 
 const RELEASE_WORKSPACE_PACKAGE_DIRS = [
   "packages/contracts",
-  "packages/daemon",
   "packages/gsd-agent-core",
   "packages/gsd-agent-modes",
   "packages/mcp-server",
@@ -29,7 +28,6 @@ const INTERNAL_PACKAGE_NAMES = new Set([
   "@gsd/agent-core",
   "@gsd/agent-modes",
   "@opengsd/contracts",
-  "@opengsd/daemon",
   "@opengsd/mcp-server",
   "@opengsd/rpc-client",
   "@gsd/native",

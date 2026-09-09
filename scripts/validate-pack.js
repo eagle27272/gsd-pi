@@ -319,8 +319,6 @@ try {
     'packages/pi-ai/bin/pi-ai.js',
     'packages/pi-ai/dist/cli.js',
     'packages/native/dist/file-identity/index.js',
-    'packages/daemon/bin/gsd-daemon.js',
-    'packages/daemon/dist/cli.js',
     'packages/rpc-client/dist/index.js',
     'packages/mcp-server/bin/gsd-mcp-server.js',
     'packages/mcp-server/dist/cli.js',
@@ -554,28 +552,6 @@ try {
     console.log('    install.js --help OK');
   } catch (err) {
     console.log('ERROR: install.js --help failed after install.');
-    if (err.stdout) console.log(err.stdout);
-    if (err.stderr) console.log(err.stderr);
-    process.exit(1);
-  }
-
-  // --- Verify packaged non-linkable CLI resolves its root-provided deps ---
-  console.log('==> Verifying packaged daemon dependency resolution...');
-  try {
-    const daemonHelpOutput = execFileSync(process.execPath, [join(installedRoot, 'packages', 'daemon', 'bin', 'gsd-daemon.js'), '--help'], {
-      cwd: installDir,
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 15000,
-      maxBuffer: DEFAULT_MAX_BUFFER,
-    });
-    if (!daemonHelpOutput.includes('Usage: gsd-daemon')) {
-      console.log('ERROR: gsd-daemon --help returned unexpected output.');
-      process.exit(1);
-    }
-    console.log('    daemon package deps resolve.');
-  } catch (err) {
-    console.log('ERROR: packaged daemon dependency resolution failed after install.');
     if (err.stdout) console.log(err.stdout);
     if (err.stderr) console.log(err.stderr);
     process.exit(1);

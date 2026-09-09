@@ -15,7 +15,6 @@
   "bin": {
     "gsd": "dist/bootstrap.js",
     "gsd-cli": "dist/bootstrap.js",
-    "gsd-mcp-server": "packages/mcp-server/bin/gsd-mcp-server.js",
     "gsd-pi": "scripts/install.js"
   },
   "files": [
@@ -60,8 +59,7 @@
     "build:pi": "pnpm run build:contracts && pnpm run build:native-pkg && pnpm run build:pi-tui && pnpm run build:pi-ai && pnpm run build:pi-agent-core && pnpm run build:pi-coding-agent-bootstrap && pnpm run build:agent-core && pnpm run build:pi-coding-agent && pnpm run build:agent-modes",
     "build:pi-coding-agent-bootstrap": "node scripts/bootstrap-pi-coding-agent-build.cjs",
     "build:mcp-server": "pnpm --filter @opengsd/mcp-server run build",
-    "build:daemon": "pnpm --filter @opengsd/daemon run build",
-    "build:core": "pnpm run build:contracts && pnpm run build:pi && pnpm run build:rpc-client && pnpm run build:mcp-server && pnpm run build:daemon && tsc && pnpm run copy-resources && pnpm run copy-themes && pnpm run copy-export-html",
+    "build:core": "pnpm run build:contracts && pnpm run build:pi && pnpm run build:rpc-client && pnpm run build:mcp-server && tsc && pnpm run copy-resources && pnpm run copy-themes && pnpm run copy-export-html",
     "build": "pnpm run build:core",
     "copy-resources": "node scripts/copy-resources.cjs",
     "copy-themes": "node scripts/copy-themes.cjs",

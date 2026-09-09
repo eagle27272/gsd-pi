@@ -10,8 +10,8 @@ function parse(...args: string[]) {
 }
 
 describe('parseCliArgs — modes', () => {
-  test('accepts mcp mode (added during refactor)', () => {
-    assert.equal(parse('--mode', 'mcp').mode, 'mcp')
+  test('mcp mode is no longer accepted (gsd --mode mcp removed)', () => {
+    assert.equal(parse('--mode', 'mcp').mode, undefined)
   })
 
   test('still accepts text/json/rpc modes', () => {

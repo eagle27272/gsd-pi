@@ -70,8 +70,9 @@ test("resolveEngineOptionalDependencyVersion keeps prerelease publishes on stabl
   assert.equal(resolveEngineOptionalDependencyVersion("1.0.2-rc.1"), "1.0.2-rc.1");
 });
 
-test("version sync keeps daemon and excludes retired cloud products", () => {
-  assert.ok(RELEASE_WORKSPACE_PACKAGE_DIRS.includes("packages/daemon"));
+test("version sync keeps the workflow MCP server and excludes retired products", () => {
+  assert.ok(RELEASE_WORKSPACE_PACKAGE_DIRS.includes("packages/mcp-server"));
+  assert.ok(!RELEASE_WORKSPACE_PACKAGE_DIRS.includes("packages/daemon"));
   assert.ok(!RELEASE_WORKSPACE_PACKAGE_DIRS.includes("packages/cloud-mcp-gateway"));
   assert.ok(!RELEASE_WORKSPACE_PACKAGE_DIRS.includes("packages/gsd-cloud"));
 });
@@ -95,11 +96,11 @@ test("syncVersionSurfaces rewrites internal deps to the stamped prerelease versi
       }, null, 2)}\n`,
     );
 
-    mkdirSync(join(root, "packages", "daemon"), { recursive: true });
+    mkdirSync(join(root, "packages", "mcp-server"), { recursive: true });
     writeFileSync(
-      join(root, "packages", "daemon", "package.json"),
+      join(root, "packages", "mcp-server", "package.json"),
       `${JSON.stringify({
-        name: "@opengsd/daemon",
+        name: "@opengsd/mcp-server",
         version: "1.0.2",
         dependencies: {
           "@opengsd/rpc-client": "^1.0.2",
@@ -110,11 +111,11 @@ test("syncVersionSurfaces rewrites internal deps to the stamped prerelease versi
     syncVersionSurfaces(root, devVersion);
 
     const rpcClient = JSON.parse(readFileSync(join(root, "packages", "rpc-client", "package.json"), "utf8"));
-    const daemon = JSON.parse(readFileSync(join(root, "packages", "daemon", "package.json"), "utf8"));
+    const mcpServer = JSON.parse(readFileSync(join(root, "packages", "mcp-server", "package.json"), "utf8"));
 
     assert.equal(rpcClient.version, devVersion);
-    assert.equal(daemon.version, devVersion);
-    assert.equal(daemon.dependencies["@opengsd/rpc-client"], "workspace:*");
+    assert.equal(mcpServer.version, devVersion);
+    assert.equal(mcpServer.dependencies["@opengsd/rpc-client"], "workspace:*");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

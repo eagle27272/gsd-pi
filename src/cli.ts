@@ -111,7 +111,6 @@ function printNonTtyErrorAndExit(missing: string | undefined, includeWebHint: bo
   process.stderr.write('[gsd]   gsd auto                       Auto-mode (pipeable, no TUI)\n')
   process.stderr.write('[gsd]   gsd --print "your message"     Single-shot prompt\n')
   process.stderr.write('[gsd]   gsd --mode rpc                 JSON-RPC over stdin/stdout\n')
-  process.stderr.write('[gsd]   gsd --mode mcp                 MCP server over stdin/stdout\n')
   process.stderr.write('[gsd]   gsd --mode text "message"      Text output mode\n')
   if (includeWebHint) {
     process.stderr.write('[gsd]   gsd headless                   Auto-mode without TUI\n')
@@ -258,106 +257,6 @@ if (shouldBypassManagedResourceMismatchGate(cliFlags.messages[0])) {
   process.exit(0)
 }
 
-// ---------------------------------------------------------------------------
-// Graph subcommand — `gsd graph build|status|query|diff`
-// ---------------------------------------------------------------------------
-if (cliFlags.messages[0] === 'graph') {
-  const sub = cliFlags.messages[1]
-  const { buildGraph, writeGraph, graphStatus, graphQuery, graphDiff, resolveGsdRoot } = await import('@opengsd/mcp-server')
-
-  const projectDir = process.cwd()
-  const gsdRoot = resolveGsdRoot(projectDir)
-
-  // Projection-write version gating (T003 spike, write side): `graph build`
-  // bypasses the DB, so it must consult the schema stamp and refuse to write
-  // into a newer project; read-only subcommands warn loudly but keep their
-  // read-only semantics. A missing DB keeps current behavior, and the version
-  // knowledge stays in the extension (the mcp-server graph code is untouched).
-  const { openExistingWorkflowDatabase } = await import('./resources/extensions/gsd/db-workspace.js')
-  const dbOpen = openExistingWorkflowDatabase(projectDir)
-  const schemaTooNewMessage = !dbOpen.ok && dbOpen.reason === 'schema-too-new' ? dbOpen.error.message : null
-
-  if (!sub || sub === 'build') {
-    if (schemaTooNewMessage !== null) {
-      process.stderr.write(`[gsd] graph build failed: ${schemaTooNewMessage}\n`)
-      process.exit(1)
-    }
-    try {
-      const graph = await buildGraph(projectDir)
-      await writeGraph(gsdRoot, graph)
-      process.stdout.write(`Graph built: ${graph.nodes.length} nodes, ${graph.edges.length} edges\n`)
-    } catch (err) {
-      process.stderr.write(`[gsd] graph build failed: ${err instanceof Error ? err.message : String(err)}\n`)
-      process.exit(1)
-    }
-  } else if (sub === 'status') {
-    if (schemaTooNewMessage !== null) {
-      process.stderr.write(`[gsd] Warning: ${schemaTooNewMessage}\n`)
-    }
-    try {
-      const result = await graphStatus(projectDir)
-      if (!result.exists) {
-        process.stdout.write('Graph: not built yet. Run: gsd graph build\n')
-      } else {
-        process.stdout.write(`Graph status:\n`)
-        process.stdout.write(`  exists:    ${result.exists}\n`)
-        process.stdout.write(`  nodes:     ${result.nodeCount}\n`)
-        process.stdout.write(`  edges:     ${result.edgeCount}\n`)
-        process.stdout.write(`  stale:     ${result.stale}\n`)
-        process.stdout.write(`  ageHours:  ${result.ageHours !== undefined ? result.ageHours.toFixed(2) : 'n/a'}\n`)
-        process.stdout.write(`  lastBuild: ${result.lastBuild ?? 'n/a'}\n`)
-      }
-    } catch (err) {
-      process.stderr.write(`[gsd] graph status failed: ${err instanceof Error ? err.message : String(err)}\n`)
-      process.exit(1)
-    }
-  } else if (sub === 'query') {
-    const term = cliFlags.messages[2]
-    if (!term) {
-      process.stderr.write('Usage: gsd graph query <term>\n')
-      process.exit(1)
-    }
-    if (schemaTooNewMessage !== null) {
-      process.stderr.write(`[gsd] Warning: ${schemaTooNewMessage}\n`)
-    }
-    try {
-      const result = await graphQuery(projectDir, term)
-      if (result.nodes.length === 0) {
-        process.stdout.write(`No nodes found for term: "${term}"\n`)
-      } else {
-        process.stdout.write(`Query results for "${term}" (${result.nodes.length} nodes, ${result.edges.length} edges):\n`)
-        for (const node of result.nodes) {
-          process.stdout.write(`  [${node.type}] ${node.label} (${node.confidence})\n`)
-        }
-      }
-    } catch (err) {
-      process.stderr.write(`[gsd] graph query failed: ${err instanceof Error ? err.message : String(err)}\n`)
-      process.exit(1)
-    }
-  } else if (sub === 'diff') {
-    if (schemaTooNewMessage !== null) {
-      process.stderr.write(`[gsd] Warning: ${schemaTooNewMessage}\n`)
-    }
-    try {
-      const result = await graphDiff(projectDir)
-      process.stdout.write(`Graph diff:\n`)
-      process.stdout.write(`  nodes added:    ${result.nodes.added.length}\n`)
-      process.stdout.write(`  nodes removed:  ${result.nodes.removed.length}\n`)
-      process.stdout.write(`  nodes changed:  ${result.nodes.changed.length}\n`)
-      process.stdout.write(`  edges added:    ${result.edges.added.length}\n`)
-      process.stdout.write(`  edges removed:  ${result.edges.removed.length}\n`)
-    } catch (err) {
-      process.stderr.write(`[gsd] graph diff failed: ${err instanceof Error ? err.message : String(err)}\n`)
-      process.exit(1)
-    }
-  } else {
-    process.stderr.write(`Unknown graph command: ${sub}\n`)
-    process.stderr.write('Commands: build, status, query <term>, diff\n')
-    process.exit(1)
-  }
-  process.exit(0)
-}
-
 exitIfManagedResourcesAreNewer(agentDir)
 
 // Early TTY check — must come before heavy initialization to avoid dangling
@@ -370,7 +269,6 @@ exitIfManagedResourcesAreNewer(agentDir)
 const subcommandsExemptFromEarlyTtyCheck = new Set([
   'auto',
   'config',
-  'graph',
   'headless',
   'read',
   'quick',
@@ -786,30 +684,6 @@ if (isPrintMode) {
     printStartupTimings()
     await runRpcMode(session)
     process.exit(0)
-  }
-
-  if (mode === 'mcp') {
-    printStartupTimings()
-    const { startMcpServer } = await import('./mcp-server.js')
-    const { buildMcpModeTools } = await import('./mcp-mode-tools.js')
-
-    // Activate every registered tool before starting the MCP transport.
-    // `session.agent.state.tools` is the *active* subset, not the full
-    // registry — if we expose only the active set, extension-registered
-    // tools (gsd workflow, browser-tools, mac-tools, search-the-web, …)
-    // are invisible to MCP clients. Flipping the active set to every
-    // known tool name makes `state.tools` mirror the full registry for
-    // this MCP session, which is what an external client expects.
-    const allToolNames = session.getAllTools().map((t) => t.name)
-    session.setActiveToolsByName(allToolNames)
-    const tools = await buildMcpModeTools(session.agent.state.tools ?? [])
-
-    await startMcpServer({
-      tools,
-      version: process.env.GSD_VERSION || '0.0.0',
-    })
-    // MCP server runs until the transport closes; keep alive
-    await new Promise(() => {})
   }
 
   const { runPrintMode } = await loadPrintModeModule()

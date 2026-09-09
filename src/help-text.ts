@@ -118,29 +118,6 @@ const SUBCOMMAND_HELP: Record<string, string> = {
     '  gsd worktree remove old-branch --force  Remove even with unmerged changes',
   ].join('\n'),
 
-  graph: [
-    'Usage: gsd graph <subcommand> [options]',
-    '',
-    'Manage the GSD project knowledge graph. Reads .gsd/ artifacts and builds',
-    'a queryable graph of milestones, slices, tasks, rules, patterns, and lessons.',
-    '',
-    'Subcommands:',
-    '  build   Parse .gsd/ artifacts (STATE.md, milestone ROADMAPs, slice PLANs,',
-    '          KNOWLEDGE.md) and write .gsd/graphs/graph.json atomically.',
-    '  query   Search graph nodes by term (BFS from seed matches, budget-trimmed).',
-    '          Returns matching nodes and reachable edges within the token budget.',
-    '  status  Show whether graph.json exists, its age, node/edge counts, and',
-    '          whether it is stale (built more than 24 hours ago).',
-    '  diff    Compare current graph.json with .last-build-snapshot.json.',
-    '          Returns added, removed, and changed nodes and edges.',
-    '',
-    'Examples:',
-    '  gsd graph build                        Build the graph from .gsd/ artifacts',
-    '  gsd graph status                       Check graph age and node/edge counts',
-    '  gsd graph query auth                   Find nodes related to "auth"',
-    '  gsd graph diff                         Show changes since last snapshot',
-  ].join('\n'),
-
   read: [
     'Usage: gsd read <progress|roadmap|memory> --json --project <path>',
     '',
@@ -233,7 +210,7 @@ export function printHelp(version: string): void {
   writeHelpHeader(version)
   process.stdout.write('Usage: gsd [options] [message...]\n\n')
   process.stdout.write('Options:\n')
-  process.stdout.write('  --mode <text|json|rpc|mcp> Output mode (default: interactive)\n')
+  process.stdout.write('  --mode <text|json|rpc>  Output mode (default: interactive)\n')
   process.stdout.write('  --print, -p              Single-shot print mode\n')
   process.stdout.write('  --continue, -c           Resume the most recent session\n')
   process.stdout.write('  --session <path|id>      Resume a specific session file or ID\n')
@@ -259,7 +236,6 @@ export function printHelp(version: string): void {
   process.stdout.write('  auto [args]              Run auto-mode without TUI (pipeable)\n')
   process.stdout.write('  quick <task>             Execute a quick task without TUI\n')
   process.stdout.write('  headless [cmd] [args]    Run /gsd commands without TUI (default: auto)\n')
-  process.stdout.write('  graph <subcommand>       Manage knowledge graph (build, query, status, diff)\n')
   process.stdout.write('\nRun gsd <subcommand> --help for subcommand-specific help.\n')
 }
 

@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 
 export interface CliFlags {
-  mode?: 'text' | 'json' | 'rpc' | 'mcp'
+  mode?: 'text' | 'json' | 'rpc'
   print?: boolean
   continue?: boolean
   help?: boolean
@@ -31,7 +31,6 @@ const VALID_THINKING_LEVELS = new Set<CliThinkingLevel>(['off', 'minimal', 'low'
 
 const PASSTHROUGH_SUBCOMMANDS = new Set([
   'config',
-  'graph',
   'headless',
   'install',
   'list',
@@ -56,7 +55,7 @@ export function parseCliArgs(argv: string[]): CliFlags {
     const arg = args[i]
     if (arg === '--mode' && i + 1 < args.length) {
       const mode = args[++i]
-      if (mode === 'text' || mode === 'json' || mode === 'rpc' || mode === 'mcp') flags.mode = mode
+      if (mode === 'text' || mode === 'json' || mode === 'rpc') flags.mode = mode
     } else if (arg === '--print' || arg === '-p') {
       flags.print = true
     } else if (arg === '--continue' || arg === '-c') {
