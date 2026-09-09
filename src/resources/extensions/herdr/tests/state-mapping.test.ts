@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildHerdrTitle, buildStateLabels } from "../state-mapping.ts";
+import { buildHerdrTitle, buildStateLabels, normalizeDisplay } from "../state-mapping.ts";
 import type { HerdrStateInput } from "../../shared/herdr-events.ts";
 
 test("buildHerdrTitle: milestone + slice + task + phase", () => {
@@ -31,14 +31,12 @@ test("buildHerdrTitle: no unit → phase only", () => {
   assert.equal(buildHerdrTitle({ phase: "researching" }), "researching");
 });
 
-test("buildHerdrTitle: normalizes and truncates to 80 chars", () => {
-  const s: HerdrStateInput = {
-    phase: "executing",
-    activeMilestone: { id: "M1", title: "x".repeat(200) },
-  };
-  const out = buildHerdrTitle(s);
-  assert.ok(out.length <= 80, `expected <=80, got ${out.length}`);
-  assert.ok(!/\s{2,}/.test(out));
+test("normalizeDisplay: strips C0 + DEL to spaces, collapses whitespace, truncates to 80", () => {
+  assert.equal(normalizeDisplay("foo\nbar"), "foo bar");
+  assert.equal(normalizeDisplay("a\x00b\x7Fc"), "a b c");
+  assert.equal(normalizeDisplay("a   b"), "a b");
+  assert.equal(normalizeDisplay("  hi  "), "hi");
+  assert.equal(normalizeDisplay("x".repeat(200)).length, 80);
 });
 
 test("buildStateLabels: progress fraction prefers tasks, then slices, then milestones", () => {

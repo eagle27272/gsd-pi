@@ -11,7 +11,7 @@ const MAX = 80;
 export function normalizeDisplay(value: string): string {
   return value
     // eslint-disable-next-line no-control-regex
-    .replace(/[\x00-\x1F]/g, "")
+    .replace(/[\x00-\x1F\x7F]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, MAX);
