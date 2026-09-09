@@ -1,15 +1,15 @@
 {
-  "name": "@opengsd/gsd-pi",
+  "name": "gsd-pi",
   "version": "1.18.0",
   "description": "GSD Pi local-first coding agent",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/open-gsd/gsd-pi.git"
+    "url": "git+https://github.com/eagle27272/gsd-pi.git"
   },
-  "homepage": "https://github.com/open-gsd/gsd-pi#readme",
+  "homepage": "https://github.com/eagle27272/gsd-pi#readme",
   "bugs": {
-    "url": "https://github.com/open-gsd/gsd-pi/issues"
+    "url": "https://github.com/eagle27272/gsd-pi/issues"
   },
   "type": "module",
   "bin": {
@@ -34,10 +34,6 @@
     "package.json",
     "README.md"
   ],
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
-  },
   "piConfig": {
     "name": "gsd",
     "configDir": ".gsd"
@@ -133,10 +129,6 @@
     "verify:merge:needed": "bash scripts/verify-merge-needed.sh",
     "verify:full": "pnpm run verify:merge",
     "pipeline:version-stamp": "node scripts/version-stamp.mjs",
-    "release:changelog": "node scripts/generate-changelog.mjs",
-    "release:bump": "node scripts/bump-version.mjs",
-    "release:update-changelog": "node scripts/update-changelog.mjs",
-    "prepublishOnly": "pnpm run sync-pkg-version && pnpm run sync-platform-versions && pnpm run verify:version-sync && pnpm run verify:native-platform-packages && node scripts/prepublish-check.mjs && pnpm run build && pnpm run typecheck:extensions && pnpm run validate-pack",
     "test:live-regression": "node --experimental-strip-types tests/live-regression/run.ts",
     "test:auto-acceptance": "node tests/acceptance-bed/auto-milestone-bed.mjs",
     "test:e2e": "node --experimental-strip-types --test --test-concurrency=1 \"tests/e2e/*.e2e.test.ts\"",

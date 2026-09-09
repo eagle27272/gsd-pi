@@ -294,7 +294,7 @@ test("gsd exits early with a clear message when synced resources are newer than 
   mkdirSync(fakeAgentDir, { recursive: true });
   writeFileSync(
     join(fakeAgentDir, "managed-resources.json"),
-    JSON.stringify({ gsdVersion: "999.0.0", packageName: "@opengsd/gsd-pi" }),
+    JSON.stringify({ gsdVersion: "999.0.0", packageName: "gsd-pi" }),
   );
 
   t.after(() => { rmSync(fakeHome, { recursive: true, force: true }); });

@@ -307,7 +307,7 @@ test("initResources manifest tracks bundled extension subdirectories (#2367)", a
 
     assert.equal(
       manifest.packageName,
-      "@opengsd/gsd-pi",
+      "gsd-pi",
       "managed resource manifest should be scoped to the package that wrote it",
     );
 
@@ -432,7 +432,7 @@ test("initResources refreshes a stale managed gsd-browser package skill during r
     join(fakeAgentDir, "managed-resources.json"),
     JSON.stringify({
       gsdVersion: currentPackageVersion(),
-      packageName: "@opengsd/gsd-pi",
+      packageName: "gsd-pi",
       contentHash: "force-refresh",
     }),
   );
@@ -729,7 +729,7 @@ test("initResources restores missing top-level shared resources during resource 
       gsdVersion: process.env.GSD_VERSION && process.env.GSD_VERSION !== "0.0.0"
         ? process.env.GSD_VERSION
         : packageVersion,
-      packageName: "@opengsd/gsd-pi",
+      packageName: "gsd-pi",
       contentHash: "force-refresh",
     }),
   );
@@ -778,7 +778,7 @@ test("initResources restores missing bundled skills during resource refresh", as
       gsdVersion: process.env.GSD_VERSION && process.env.GSD_VERSION !== "0.0.0"
         ? process.env.GSD_VERSION
         : packageVersion,
-      packageName: "@opengsd/gsd-pi",
+      packageName: "gsd-pi",
       contentHash: "force-refresh",
     }),
   );
