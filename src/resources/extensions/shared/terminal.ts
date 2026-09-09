@@ -11,10 +11,17 @@ export function isCmuxTerminal(env: NodeJS.ProcessEnv = process.env): boolean {
   return Boolean(env.CMUX_WORKSPACE_ID && env.CMUX_SURFACE_ID);
 }
 
+/** True when running inside a Herdr pane (HERDR_ENV=1 + pane/bin vars). */
+export function isHerdrTerminal(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.HERDR_ENV === "1"
+    && Boolean(env.HERDR_PANE_ID && env.HERDR_PANE_ID.trim())
+    && Boolean(env.HERDR_BIN_PATH && env.HERDR_BIN_PATH.trim());
+}
+
 export function supportsCtrlAltShortcuts(): boolean {
   const term = (process.env.TERM_PROGRAM || "").toLowerCase();
   const jetbrains = (process.env.TERMINAL_EMULATOR || "").toLowerCase().includes("jetbrains");
-  if (isCmuxTerminal()) return true;
+  if (isCmuxTerminal() || isHerdrTerminal()) return true;
   return !UNSUPPORTED_TERMS.some((t) => term.includes(t)) && !jetbrains;
 }
 
