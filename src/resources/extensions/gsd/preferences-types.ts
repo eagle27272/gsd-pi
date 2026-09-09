@@ -169,6 +169,7 @@ export const KNOWN_PREFERENCE_KEYS = new Set<string>([
   "budget_enforcement",
   "context_pause_threshold",
   "notifications",
+  "herdr",
   "git",
   "post_unit_hooks",
   "pre_dispatch_hooks",

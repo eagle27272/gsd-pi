@@ -712,6 +712,11 @@ test("herdr: base+override deep-merge keeps untouched keys", () => {
   assert.deepEqual(merged.herdr, { enabled: true, title: false });
 });
 
+test("herdr: does not produce unknown-key warning", () => {
+  const result = validatePreferences({ herdr: { enabled: true } } as any);
+  assert.ok(!result.warnings.some((w) => /herdr/.test(w) && /unknown|unrecognized|typo/i.test(w)));
+});
+
 test("gate_evaluation slice_gates only accepts gate-evaluate-owned gates", () => {
   const valid = validatePreferences({
     gate_evaluation: { enabled: true, slice_gates: ["Q3", "Q4"], task_gates: false },
