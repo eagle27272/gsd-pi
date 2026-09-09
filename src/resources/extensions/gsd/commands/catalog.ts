@@ -19,7 +19,7 @@ export interface GsdCommandDefinition {
 type CompletionMap = Record<string, readonly GsdCommandDefinition[]>;
 
 export const GSD_COMMAND_DESCRIPTION =
-  "GSD — Git Ship Done: /gsd help|start|templates|next|auto|stop|pause|status|widget|visualize|brief|report|queue|quick|discuss|capture|triage|dispatch|verdict|history|undo|undo-task|reset-slice|rate|skip|export|cleanup|closeout|recover|rebuild|db|model|mode|prefs|config|keys|hooks|run-hook|skill-health|doctor|debug|logs|forensics|changelog|migrate|remote|steer|knowledge|memory|new-milestone|new-project|parallel|cmux|park|unpark|discard|init|setup|onboarding|inspect|extensions|update|upgrade|fast|mcp|rethink|workflow|codebase|notifications|ship|do|usage|context|session-report|backlog|pr-branch|add-tests|scan|language|worktree|eval-review";
+  "GSD — Git Ship Done: /gsd help|start|templates|next|auto|stop|pause|status|widget|visualize|brief|report|queue|quick|discuss|capture|triage|dispatch|verdict|history|undo|undo-task|reset-slice|rate|skip|export|cleanup|closeout|recover|rebuild|db|model|mode|prefs|config|keys|hooks|run-hook|skill-health|doctor|debug|logs|forensics|changelog|migrate|steer|knowledge|memory|new-milestone|new-project|parallel|cmux|park|unpark|discard|init|setup|onboarding|inspect|extensions|update|upgrade|fast|mcp|rethink|workflow|codebase|notifications|ship|do|usage|context|session-report|backlog|pr-branch|add-tests|scan|language|worktree|eval-review";
 
 export const TOP_LEVEL_SUBCOMMANDS: readonly GsdCommandDefinition[] = [
   { cmd: "help", desc: "Categorized command reference with descriptions" },
@@ -70,10 +70,9 @@ export const TOP_LEVEL_SUBCOMMANDS: readonly GsdCommandDefinition[] = [
   { cmd: "debug", desc: "Create and inspect persistent /gsd debug sessions" },
   { cmd: "forensics", desc: "Examine execution logs" },
   { cmd: "init", desc: "Project init wizard — detect, configure, bootstrap .gsd/" },
-  { cmd: "setup", desc: "Configuration hub: status + sub-routes (llm, model, search, remote, keys, prefs, onboarding)" },
+  { cmd: "setup", desc: "Configuration hub: status + sub-routes (llm, model, search, keys, prefs, onboarding)" },
   { cmd: "onboarding", desc: "Re-run the setup wizard  [--resume|--reset|--step <name>]" },
   { cmd: "migrate", desc: "Migrate a v1 .planning directory to DB-backed .gsd with backup + audit" },
-  { cmd: "remote", desc: "Control remote auto-mode" },
   { cmd: "steer", desc: "Hard-steer plan documents during execution" },
   { cmd: "inspect", desc: "Show SQLite DB diagnostics" },
   { cmd: "knowledge", desc: "Add persistent project knowledge (rule, pattern, or lesson)" },
@@ -155,7 +154,6 @@ const NESTED_COMPLETIONS: CompletionMap = {
     { cmd: "llm", desc: "Configure LLM provider & auth" },
     { cmd: "model", desc: "Pick default model for the active provider" },
     { cmd: "search", desc: "Configure web search provider" },
-    { cmd: "remote", desc: "Configure remote integrations (Discord/Slack/Telegram)" },
     { cmd: "keys", desc: "Manage API keys (alias for /gsd keys)" },
     { cmd: "prefs", desc: "Global preferences wizard (alias for /gsd prefs)" },
     { cmd: "onboarding", desc: "Run the full onboarding wizard (alias for /gsd onboarding)" },
@@ -163,7 +161,7 @@ const NESTED_COMPLETIONS: CompletionMap = {
   onboarding: [
     { cmd: "--resume", desc: "Resume from the last completed step" },
     { cmd: "--reset", desc: "Reset onboarding state and start over (does not clear API keys)" },
-    { cmd: "--step", desc: "Run a single step: llm|model|search|remote|tool-keys|prefs|skills|doctor|project" },
+    { cmd: "--step", desc: "Run a single step: llm|model|search|tool-keys|prefs|skills|doctor|project" },
   ],
   notifications: [
     { cmd: "clear", desc: "Clear all notifications" },
@@ -205,12 +203,6 @@ const NESTED_COMPLETIONS: CompletionMap = {
     { cmd: "wizard", desc: "Interactive preferences wizard" },
     { cmd: "setup", desc: "First-time preferences setup" },
     { cmd: "import-claude", desc: "Import settings from Claude Code" },
-  ],
-  remote: [
-    { cmd: "slack", desc: "Configure Slack integration" },
-    { cmd: "discord", desc: "Configure Discord integration" },
-    { cmd: "status", desc: "Show remote connection status" },
-    { cmd: "disconnect", desc: "Disconnect remote integrations" },
   ],
   history: [
     { cmd: "--cost", desc: "Show cost breakdown per entry" },

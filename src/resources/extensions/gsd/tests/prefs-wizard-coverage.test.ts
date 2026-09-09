@@ -42,7 +42,6 @@ const PREF_SAMPLE_VALUES: Record<string, unknown> = {
     on_attention: true,
   },
   cmux: { enabled: true },
-  remote_questions: { provider: "slack", channel: "C123" },
   git: {
     auto_push: false,
     push_branches: true,
@@ -291,7 +290,6 @@ test("category summaries expose the wizard menu surface for configured prefs", (
     ],
   );
   assert.match(summaries.models, /phase/);
-  assert.match(summaries.integrations, /remote: C123/);
   assert.match(summaries.verification, /1 cmd/);
   assert.match(summaries.workspace, /mode: parent/);
   assert.match(summaries.workspace, /1 repo/);

@@ -6,9 +6,9 @@
 // keypresses). So re-entry cannot replay the clack wizard — instead it routes
 // to a setup hub built from ctx.ui.select, which the TUI owns.
 //
-// Clack-only steps (llm/search/remote/tool-keys via the first-run wizard) are
+// Clack-only steps (llm/search/tool-keys via the first-run wizard) are
 // surfaced as notifications pointing the user at the canonical per-step
-// commands (/login, /gsd keys, /gsd remote) that are already ctx.ui-safe.
+// commands (/login, /gsd keys) that are already ctx.ui-safe.
 
 import type { ExtensionCommandContext } from "@gsd/pi-coding-agent"
 import {
@@ -70,12 +70,6 @@ async function runStep(ctx: ExtensionCommandContext, stepId: OnboardingStepId): 
     case "search":
       ctx.ui.notify(
         "Web search setup: run /gsd keys add and pick a search provider (brave, tavily, etc.).",
-        "info",
-      )
-      return
-    case "remote":
-      ctx.ui.notify(
-        "Remote questions setup: run /gsd remote to configure Discord / Slack / Telegram notifications.",
         "info",
       )
       return

@@ -6,12 +6,6 @@ import { accessSync, constants } from "node:fs";
 import { delimiter, resolve } from "node:path";
 import type { NotificationPreferences } from "./types.js";
 import { loadEffectiveGSDPreferences } from "./preferences.js";
-import { sendRemoteNotification as _sendRemoteNotification } from "../remote-questions/notify.js";
-
-/** Swappable dispatcher for remote notifications — exported so tests can mock it. */
-export const remoteNotificationDispatcher = {
-  send: _sendRemoteNotification,
-};
 
 export type NotifyLevel = "info" | "success" | "warning" | "error";
 export type NotificationKind = "complete" | "error" | "budget" | "milestone" | "attention";
@@ -48,10 +42,6 @@ export function sendDesktopNotification(
   }
   const loadedPreferences = loadEffectiveGSDPreferences()?.preferences;
   const notifications = deps.notifications ?? loadedPreferences?.notifications;
-
-  // Remote notifications fire independently of desktop preferences.
-  // sendRemoteNotification handles "not configured" gracefully (early return).
-  void remoteNotificationDispatcher.send(title, message).catch(() => {});
 
   if (!shouldSendDesktopNotification(kind, notifications)) return;
 

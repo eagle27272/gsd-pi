@@ -6,7 +6,6 @@
  *   - LLM provider key detection from auth.json
  *   - Missing required provider → error status
  *   - Backed-off credentials → warning status
- *   - Remote questions channel check (configured vs missing token)
  *   - Optional provider unconfigured status
  *   - formatProviderReport output
  *   - summariseProviderIssues compaction
@@ -134,11 +133,11 @@ test("formatProviderReport shows error icon and detail for error status", () => 
 
 test("formatProviderReport shows warning icon for warning status", () => {
   const results: ProviderCheckResult[] = [{
-    name: "slack_bot",
-    label: "Slack Bot",
-    category: "remote",
+    name: "brave",
+    label: "Brave Search",
+    category: "search",
     status: "warning",
-    message: "Slack Bot — channel configured but token not found",
+    message: "Brave Search — configured but token not found",
     required: true,
   }];
   const out = formatProviderReport(results);

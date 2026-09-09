@@ -121,7 +121,7 @@ function clearCurrentUnitToolErrorHarnessAbort(toolName: string): void {
 }
 
 type WelcomeScreenModule = {
-  buildWelcomeScreenLines(opts: { version: string; remoteChannel?: string; width?: number }): string[];
+  buildWelcomeScreenLines(opts: { version: string; width?: number }): string[];
 };
 
 async function loadWelcomeScreenModule(): Promise<WelcomeScreenModule | undefined> {
@@ -158,13 +158,6 @@ async function installWelcomeHeader(ctx: ExtensionContext): Promise<void> {
     const welcome = await loadWelcomeScreenModule();
     if (!welcome) return;
 
-    let remoteChannel: string | undefined;
-    try {
-      const { resolveRemoteConfig } = await import("../../remote-questions/config.js");
-      const rc = resolveRemoteConfig();
-      if (rc) remoteChannel = rc.channel;
-    } catch { /* non-fatal */ }
-
     ctx.ui.setHeader(() => {
       let cachedLines: string[] | undefined;
       let cachedWidth: number | undefined;
@@ -173,7 +166,6 @@ async function installWelcomeHeader(ctx: ExtensionContext): Promise<void> {
           if (cachedLines !== undefined && cachedWidth === width) return cachedLines;
           cachedLines = welcome.buildWelcomeScreenLines({
             version: process.env.GSD_VERSION || "0.0.0",
-            remoteChannel,
             width,
           });
           cachedWidth = width;

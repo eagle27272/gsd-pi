@@ -7,7 +7,6 @@
  *
  * Covers:
  *   - LLM providers required by the effective model preferences (per phase)
- *   - Remote questions channel if configured (Slack/Discord/Telegram token)
  *   - Optional search/tool integrations (Brave, Tavily, Jina)
  */
 
@@ -460,53 +459,6 @@ function checkLlmProviders(): ProviderCheckResult[] {
   return results;
 }
 
-function checkRemoteQuestionsProvider(): ProviderCheckResult | null {
-  try {
-    const loaded = loadEffectiveGSDPreferences();
-    const rq = loaded?.preferences?.remote_questions;
-    if (!rq) return null;
-
-    const channel = rq.channel as string | undefined;
-    if (!channel) return null;
-
-    const providerMap: Record<string, string> = {
-      slack: "slack_bot",
-      discord: "discord_bot",
-      telegram: "telegram_bot",
-    };
-
-    const providerId = providerMap[channel.toLowerCase()];
-    if (!providerId) return null;
-
-    const info = PROVIDER_REGISTRY.find(p => p.id === providerId);
-    const label = info?.label ?? channel;
-    const lookup = resolveKey(providerId);
-
-    if (!lookup.found) {
-      return {
-        name: providerId,
-        label,
-        category: "remote",
-        status: "warning",
-        message: `${label} — channel configured but token not found`,
-        detail: info?.envVar ? `Set ${info.envVar} or run /gsd keys` : `Run /gsd keys to configure`,
-        required: true,
-      };
-    }
-
-    return {
-      name: providerId,
-      label,
-      category: "remote",
-      status: "ok",
-      message: `${label} — token present (${lookup.source})`,
-      required: true,
-    };
-  } catch {
-    return null;
-  }
-}
-
 function checkOptionalProviders(): ProviderCheckResult[] {
   const optional = ["brave", "tavily", "jina"] as const;
   const results: ProviderCheckResult[] = [];
@@ -548,16 +500,13 @@ function checkOptionalProviders(): ProviderCheckResult[] {
 // ── Public API ─────────────────────────────────────────────────────────────────
 
 /**
- * Run all provider checks: required LLM keys, remote questions channel, optional tools.
+ * Run all provider checks: required LLM keys, optional tools.
  * Fast (sub-10ms) — reads auth.json and env vars only, no network I/O.
  */
 export function runProviderChecks(): ProviderCheckResult[] {
   const results: ProviderCheckResult[] = [];
 
   results.push(...checkLlmProviders());
-
-  const remoteCheck = checkRemoteQuestionsProvider();
-  if (remoteCheck) results.push(remoteCheck);
 
   results.push(...checkOptionalProviders());
 

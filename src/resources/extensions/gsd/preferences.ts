@@ -56,7 +56,6 @@ export type {
   ResolvedModelConfig,
   SkillDiscoveryMode,
   AutoSupervisorConfig,
-  RemoteQuestionsConfig,
   CmuxPreferences,
   UokTurnActionMode,
   UokPreferences,
@@ -711,7 +710,7 @@ function parseFrontmatterBlockWithDiagnostics(
       };
     }
     return {
-      preferences: normalizeParsedPreferences(parsed as GSDPreferences),
+      preferences: parsed as GSDPreferences,
       diagnostics: [],
     };
   } catch (e) {
@@ -753,23 +752,6 @@ function extractYamlErrorLocation(
     ...(line !== undefined ? { line } : {}),
     ...(column !== undefined ? { column } : {}),
   };
-}
-
-function normalizeParsedPreferences(preferences: GSDPreferences): GSDPreferences {
-  const remoteQuestions = preferences.remote_questions;
-  if (remoteQuestions && typeof remoteQuestions === "object" && typeof remoteQuestions.channel_id === "number") {
-    const rawChannelId = remoteQuestions.channel_id;
-    const normalizedChannelId =
-      Number.isSafeInteger(rawChannelId) ? String(rawChannelId) : rawChannelId;
-    return {
-      ...preferences,
-      remote_questions: {
-        ...remoteQuestions,
-        channel_id: normalizedChannelId,
-      },
-    };
-  }
-  return preferences;
 }
 
 /**
@@ -862,7 +844,7 @@ function parseHeadingListFormat(content: string): PreferenceParseResult {
   }
 
   return {
-    preferences: normalizeParsedPreferences(typed as GSDPreferences),
+    preferences: typed as GSDPreferences,
     diagnostics,
     ...(runtimeContractParseFailed ? { runtimeContractParseFailed: true } : {}),
   };
@@ -911,9 +893,6 @@ function mergePreferences(base: GSDPreferences, override: GSDPreferences): GSDPr
     cmux: (base.cmux || override.cmux)
       ? { ...(base.cmux ?? {}), ...(override.cmux ?? {}) }
       : undefined,
-    remote_questions: override.remote_questions
-      ? { ...(base.remote_questions ?? {}), ...override.remote_questions }
-      : base.remote_questions,
     git: (base.git || override.git)
       ? { ...(base.git ?? {}), ...(override.git ?? {}) }
       : undefined,

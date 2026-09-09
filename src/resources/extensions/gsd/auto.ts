@@ -189,7 +189,6 @@ import { getAutoWorktreeOriginalBase } from "./auto-worktree-session-registry.js
 import { syncWorktreeStateBack } from "./auto-worktree-sync.js";
 import { teardownAutoWorktree } from "./auto-worktree-teardown.js";
 import { pruneQueueOrder } from "./queue-order.js";
-import { startCommandPolling as _startCommandPolling, isRemoteConfigured } from "../remote-questions/manager.js";
 import { createDefaultMilestoneMergeTransaction } from "./milestone-merge-transaction.js";
 
 import { debugLog, isDebugEnabled, writeDebugSummary } from "./debug-logger.js";
@@ -839,27 +838,6 @@ function deregisterSigtermHandler(): void {
   s.sigtermHandler = null;
 }
 
-/**
- * Wrapper: start background command polling for the configured remote channel
- * (currently Telegram only). Stores the cleanup function on the session so
- * every exit path can stop the interval via stopCommandPolling().
- * No-op when no remote channel is configured.
- */
-function startAutoCommandPolling(basePath: string): void {
-  if (!isRemoteConfigured()) return;
-  // Clear any existing interval before starting a new one (e.g. resume path).
-  stopAutoCommandPolling();
-  s.commandPollingCleanup = _startCommandPolling(basePath);
-}
-
-/** Wrapper: stop background command polling and clear the stored cleanup. */
-function stopAutoCommandPolling(): void {
-  if (s.commandPollingCleanup) {
-    s.commandPollingCleanup();
-    s.commandPollingCleanup = null;
-  }
-}
-
 export { type AutoDashboardData } from "./auto-dashboard.js";
 
 export function getAutoDashboardData(): AutoDashboardData {
@@ -1411,7 +1389,6 @@ function handleLostSessionLock(
   s.paused = false;
   deactivateGSD();
   clearUnitTimeout();
-  stopAutoCommandPolling();
   restoreProjectRootEnv();
   restoreMilestoneLockEnv();
   deregisterSigtermHandler();
@@ -1532,7 +1509,6 @@ export async function cleanupAfterLoopExit(ctx: ExtensionContext): Promise<void>
   s.active = false;
   deactivateGSD();
   clearUnitTimeout();
-  stopAutoCommandPolling();
   restoreProjectRootEnv();
   restoreMilestoneLockEnv();
   if (!preservePausedSurface) clearSessionModelOverrideForCommandSession(ctx);
@@ -1748,7 +1724,6 @@ export async function stopAuto(
     // ── Step 1: Timers and locks ──
     try {
       clearUnitTimeout();
-      stopAutoCommandPolling();
       if (lockBase()) clearLock(lockBase());
       if (lockBase()) releaseSessionLock(lockBase());
     } catch (e) {
@@ -2244,7 +2219,6 @@ export async function pauseAuto(
   s.paused = true;
   if (options.abortActiveTurn && ctx && !ctx.isIdle()) ctx.abort();
   clearUnitTimeout();
-  stopAutoCommandPolling();
 
   // Flush queued follow-up messages (#3512).
   // Late async notifications (async_job_result, gsd-auto-wrapup) can trigger
@@ -3100,7 +3074,6 @@ export async function startAuto(
     } catch (err) {
       debugLog("resume-orchestration-resume", { error: err instanceof Error ? err.message : String(err) });
     }
-    startAutoCommandPolling(s.basePath);
     try {
       await runAutoLoopWithUok({
         ctx,
@@ -3174,8 +3147,6 @@ export async function startAuto(
   } catch (err) {
     debugLog("start-orchestration-start", { error: err instanceof Error ? err.message : String(err) });
   }
-
-  startAutoCommandPolling(s.basePath);
 
   // Dispatch the first unit
   try {

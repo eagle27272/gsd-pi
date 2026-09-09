@@ -111,8 +111,8 @@ function writeManagedResourceManifest(agentDir: string, contentHash: string): vo
         .filter(e => e.isDirectory())
         .filter(e => {
           // Track directories that are actual extensions — identified by an
-          // index.js/index.ts entry point OR an extension-manifest.json (e.g.
-          // remote-questions which uses mod.ts instead of index.ts).
+          // index.js/index.ts entry point OR an extension-manifest.json (some
+          // extensions use mod.ts instead of index.ts).
           const dirPath = join(bundledExtensionsDir, e.name)
           return existsSync(join(dirPath, 'index.js'))
             || existsSync(join(dirPath, 'index.ts'))

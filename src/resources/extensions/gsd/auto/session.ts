@@ -290,10 +290,6 @@ export class AutoSession {
   // ── Signal handler ───────────────────────────────────────────────────────
   sigtermHandler: (() => void) | null = null;
 
-  // ── Remote command polling ───────────────────────────────────────────────
-  /** Cleanup function returned by startCommandPolling(); null when not running. */
-  commandPollingCleanup: (() => void) | null = null;
-
   // ── Orchestration seam ───────────────────────────────────────────────────
   orchestration: AutoOrchestrationModule | null = null;
   pendingOrchestrationDispatch: PendingOrchestrationDispatch | null = null;
@@ -454,9 +450,6 @@ export class AutoSession {
 
     // Signal handler
     this.sigtermHandler = null;
-
-    // Remote command polling — cleanup must be called before reset (auto.ts stopAuto)
-    this.commandPollingCleanup = null;
 
     // Orchestration seam
     this.orchestration = null;

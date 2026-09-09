@@ -645,18 +645,6 @@ export function validatePreferences(preferences: GSDPreferences): {
     }
   }
 
-  // ─── Remote Questions ───────────────────────────────────────────────
-  if (preferences.remote_questions !== undefined) {
-    const remoteQuestions = preferences.remote_questions as unknown;
-    if (remoteQuestions === null || remoteQuestions === false) {
-      // Bare YAML stubs and explicit disable both mean absent (#1764).
-    } else if (typeof remoteQuestions === "object") {
-      validated.remote_questions = remoteQuestions as GSDPreferences["remote_questions"];
-    } else {
-      errors.push("remote_questions must be an object");
-    }
-  }
-
   // ─── Post-Unit Hooks ─────────────────────────────────────────────────
   if (preferences.post_unit_hooks && Array.isArray(preferences.post_unit_hooks)) {
     const validHooks: PostUnitHookConfig[] = [];

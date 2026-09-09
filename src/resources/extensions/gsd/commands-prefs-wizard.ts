@@ -538,7 +538,6 @@ export function buildCategorySummaries(prefs: Record<string, unknown>): Record<s
 
   // Integrations
   const cmux = prefs.cmux as Record<string, unknown> | undefined;
-  const remote = prefs.remote_questions as Record<string, unknown> | undefined;
   const github = prefs.github as Record<string, unknown> | undefined;
   let integrationsSummary = "(defaults)";
   {
@@ -546,7 +545,6 @@ export function buildCategorySummaries(prefs: Record<string, unknown>): Record<s
     if (prefs.language) parts.push(`lang: ${prefs.language}`);
     if (prefs.search_provider) parts.push(`search: ${prefs.search_provider}`);
     if (cmux?.enabled) parts.push("cmux");
-    if (remote?.channel) parts.push(`remote: ${remote.channel}`);
     if (github?.enabled) parts.push("github");
     if (parts.length > 0) integrationsSummary = parts.join(", ");
   }
@@ -1570,38 +1568,8 @@ async function configureIntegrations(ctx: ExtensionCommandContext, prefs: Record
   if (Object.keys(cmux).length > 0) prefs.cmux = cmux;
   else if (prefs.cmux !== undefined) delete prefs.cmux;
 
-  // remote_questions
-  await configureRemoteQuestions(ctx, prefs);
-
   // github sync
   await configureGitHubSync(ctx, prefs);
-}
-
-async function configureRemoteQuestions(ctx: ExtensionCommandContext, prefs: Record<string, unknown>): Promise<void> {
-  const existing = (prefs.remote_questions as Record<string, unknown> | undefined) ?? {};
-  const channel = await promptEnum(ctx, "Remote questions channel", existing.channel, ["slack", "discord", "telegram"]);
-  const channelId = await promptString(ctx, "Remote questions channel_id", existing.channel_id);
-  const timeout = await promptInteger(ctx, "Remote questions timeout (minutes, 1–30)", existing.timeout_minutes, "10");
-  const poll = await promptInteger(ctx, "Remote questions poll interval (seconds, 2–30)", existing.poll_interval_seconds, "5");
-
-  if (channel !== undefined) existing.channel = channel;
-  if (channelId !== undefined) {
-    if (channelId) existing.channel_id = channelId;
-    else delete existing.channel_id;
-  }
-  applyNumber(existing, "timeout_minutes", timeout);
-  applyNumber(existing, "poll_interval_seconds", poll);
-
-  // Required pair: channel + channel_id. If either is missing, keep whatever existed unchanged.
-  if (existing.channel && existing.channel_id) {
-    prefs.remote_questions = existing;
-  } else if (!existing.channel && !existing.channel_id) {
-    if (prefs.remote_questions !== undefined) delete prefs.remote_questions;
-  } else {
-    // Partial config — hold it so user can finish, but warn.
-    ctx.ui.notify("remote_questions requires both channel and channel_id; keeping partial config.", "warning");
-    prefs.remote_questions = existing;
-  }
 }
 
 async function configureGitHubSync(ctx: ExtensionCommandContext, prefs: Record<string, unknown>): Promise<void> {
@@ -1903,7 +1871,7 @@ export function serializePreferencesToFrontmatter(prefs: Record<string, unknown>
     "skill_rules", "custom_instructions", "models", "thinking", "skill_discovery",
     "skill_staleness_days", "auto_supervisor", "uat_dispatch", "unique_milestone_ids",
     "budget_ceiling", "budget_enforcement", "context_pause_threshold",
-    "notifications", "cmux", "remote_questions", "git",
+    "notifications", "cmux", "git",
     "stale_commit_threshold_minutes",
     "min_request_interval_ms",
     "post_unit_hooks", "pre_dispatch_hooks",

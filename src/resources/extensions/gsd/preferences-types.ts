@@ -161,7 +161,6 @@ export const KNOWN_PREFERENCE_KEYS = new Set<string>([
   "context_pause_threshold",
   "notifications",
   "cmux",
-  "remote_questions",
   "git",
   "post_unit_hooks",
   "pre_dispatch_hooks",
@@ -403,13 +402,6 @@ export type ResolvedAutoSupervisorConfig = Omit<AutoSupervisorConfig, "model"> &
   modelFallbacks?: string[];
 };
 
-export interface RemoteQuestionsConfig {
-  channel: "slack" | "discord" | "telegram";
-  channel_id: string | number;
-  timeout_minutes?: number;        // clamped to 1-30
-  poll_interval_seconds?: number;  // clamped to 2-30
-}
-
 export interface CmuxPreferences {
   enabled?: boolean;
   notifications?: boolean;
@@ -532,7 +524,6 @@ export interface GSDPreferences {
   context_pause_threshold?: number;
   notifications?: NotificationPreferences;
   cmux?: CmuxPreferences;
-  remote_questions?: RemoteQuestionsConfig;
   git?: GitPreferences;
   post_unit_hooks?: PostUnitHookConfig[];
   pre_dispatch_hooks?: PreDispatchHookConfig[];

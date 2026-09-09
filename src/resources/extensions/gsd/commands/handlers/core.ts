@@ -54,7 +54,7 @@ export function showHelp(ctx: ExtensionCommandContext, args = ""): void {
     "",
     "SETUP",
     "  /gsd onboarding     Re-run setup wizard  [--resume|--reset|--step <name>]",
-    "  /gsd setup          Configuration hub  [llm|model|search|remote|keys|prefs|onboarding]",
+    "  /gsd setup          Configuration hub  [llm|model|search|keys|prefs|onboarding]",
     "  /gsd init           Project init wizard",
     "  /gsd model          Switch active session model",
     "  /gsd prefs          Manage preferences (alias for /gsd setup prefs)",
@@ -144,7 +144,7 @@ export function showHelp(ctx: ExtensionCommandContext, args = ""): void {
     "",
     "SETUP & CONFIGURATION",
     "  /gsd onboarding     Re-run setup wizard  [--resume|--reset|--step <name>]",
-    "  /gsd setup          Configuration hub  [llm|model|search|remote|keys|prefs|onboarding]",
+    "  /gsd setup          Configuration hub  [llm|model|search|keys|prefs|onboarding]",
     "  /gsd init           Project init wizard — detect, configure, bootstrap .gsd/",
     "  /gsd model          Switch active session model  [provider/model|model-id]",
     "  /gsd mode           Set workflow mode (solo/team)  [global|project]",
@@ -175,7 +175,6 @@ export function showHelp(ctx: ExtensionCommandContext, args = ""): void {
     "  /gsd task settle  Settle an orphaned running task Attempt (dry-run first)  <M001/S01/T01> --reason \"...\" [--apply] [--reconcile-lifecycle]",
     "  /gsd worktree       Manage worktrees from the TUI  [list|merge|clean|remove]",
     "  /gsd migrate        Migrate .planning/ (v1) to DB-backed .gsd/ with backup + audit",
-    "  /gsd remote         Control remote auto-mode  [slack|discord|status|disconnect]",
     "  /gsd inspect        Show SQLite DB diagnostics (schema, row counts, recent entries)",
     "  /gsd update         Update GSD to the latest version via npm  [--models refreshes the model catalog]",
     "  /gsd upgrade        Alias for /gsd update",
@@ -321,11 +320,6 @@ export async function handleSetup(args: string, ctx: ExtensionCommandContext, pi
     await handleOnboarding("--step search", ctx);
     return;
   }
-  if (args === "remote") {
-    const { handleOnboarding } = await import("./onboarding.js");
-    await handleOnboarding("--step remote", ctx);
-    return;
-  }
   if (args === "model") {
     // Default model picker: persist settings.json default only — do not pin the
     // session override that /gsd model uses, or PREFERENCES.md per-phase models
@@ -369,7 +363,6 @@ export async function handleSetup(args: string, ctx: ExtensionCommandContext, pi
     "  /gsd setup llm        — LLM provider & auth\n" +
     "  /gsd setup model      — Default model picker\n" +
     "  /gsd setup search     — Web search provider\n" +
-    "  /gsd setup remote     — Remote questions (Discord/Slack/Telegram)\n" +
     "  /gsd setup keys       — API keys (alias for /gsd keys)\n" +
     "  /gsd setup prefs      — Global preferences (alias for /gsd prefs)\n" +
     "  /gsd setup onboarding — Full wizard (alias for /gsd onboarding)\n\n" +

@@ -10,7 +10,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import {
@@ -141,36 +141,6 @@ test("invalid value types produce errors and fall back to undefined", () => {
     assert.ok(errors.some(e => e.includes(field)), `${field}: error produced`);
     assert.equal((preferences as any)[field], undefined, `${field}: falls back to undefined`);
   }
-});
-
-test("remote_questions accepts object config and false disables without error", () => {
-  const stub = validatePreferences({ remote_questions: null } as any);
-  assert.equal(stub.errors.length, 0);
-  assert.equal(stub.preferences.remote_questions, undefined);
-
-  const disabled = validatePreferences({ remote_questions: false } as any);
-  assert.equal(disabled.errors.length, 0);
-  assert.equal(disabled.preferences.remote_questions, undefined);
-
-  const configured = validatePreferences({
-    remote_questions: { channel: "telegram", channel_id: "12345" },
-  });
-  assert.equal(configured.errors.length, 0);
-  assert.deepEqual(configured.preferences.remote_questions, {
-    channel: "telegram",
-    channel_id: "12345",
-  });
-
-  for (const value of ["telegram", 0]) {
-    const invalid = validatePreferences({ remote_questions: value } as any);
-    assert.ok(invalid.errors.includes("remote_questions must be an object"));
-  }
-});
-
-test("preferences template uses an explicit false remote_questions stub (#1764)", () => {
-  const template = readFileSync(new URL("../templates/PREFERENCES.md", import.meta.url), "utf-8");
-  assert.match(template, /^remote_questions: false$/m);
-  assert.doesNotMatch(template, /^remote_questions:\s*$/m);
 });
 
 test("flat_rate_providers: accepts string array", () => {
@@ -1106,28 +1076,6 @@ test("handles empty models config", () => {
   const prefs = parsePreferencesMarkdown("---\nversion: 1\n---\n");
   assert.notEqual(prefs, null);
   assert.equal(prefs!.models, undefined);
-});
-
-test("parsePreferencesMarkdown keeps unsafe numeric remote_questions.channel_id as number", () => {
-  const content = `---
-remote_questions:
-  channel: discord
-  channel_id: 1234567890123456789
----
-`;
-  const prefs = parsePreferencesMarkdown(content);
-  assert.notEqual(prefs, null);
-  assert.equal(typeof prefs!.remote_questions?.channel_id, "number");
-});
-
-test("parsePreferencesMarkdown normalizes safe numeric remote_questions.channel_id in heading format", () => {
-  const content = `## Remote Questions
-channel: telegram
-channel_id: 12345
-`;
-  const prefs = parsePreferencesMarkdown(content);
-  assert.notEqual(prefs, null);
-  assert.equal(prefs!.remote_questions?.channel_id, "12345");
 });
 
 test("parses raw YAML blocks under headings", () => {

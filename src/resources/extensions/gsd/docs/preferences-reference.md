@@ -236,12 +236,6 @@ In `"parent"` mode, slice/task `targetRepositories` default to the declared chil
   - `isolation_mode`: `"same-tree"` — currently the only supported value.
   - `subagent_model`: optional model override for reactive task subagents. Accepts a bare model ID **or** the `{ model, provider?, fallbacks? }` object form (parity with `models.<phase>`). Falls back to the `models.subagent` routing when omitted.
 
-- `remote_questions`: route interactive questions to Slack/Discord for headless auto-mode. Keys:
-  - `channel`: `"slack"` or `"discord"` — channel type.
-  - `channel_id`: string or number — channel ID.
-  - `timeout_minutes`: number — question timeout in minutes (clamped 1-30).
-  - `poll_interval_seconds`: number — poll interval in seconds (clamped 2-30).
-
 - `notifications`: configures desktop notification behavior during auto-mode. Keys:
   - `enabled`: boolean — master toggle for all notifications. Default: `true`.
   - `local_bell`: boolean — play a local terminal bell when a question needs an answer or auto-mode stops. Default: `false`.
@@ -802,23 +796,6 @@ phases:
 ```
 
 Uses the `budget` profile to minimize token usage, with explicit override to keep slice-level research enabled.
-
----
-
-## Remote Questions Example
-
-```yaml
----
-version: 1
-remote_questions:
-  channel: slack
-  channel_id: "C0123456789"
-  timeout_minutes: 15
-  poll_interval_seconds: 10
----
-```
-
-Routes interactive questions to a Slack channel for headless auto-mode sessions. Questions time out after 15 minutes if unanswered.
 
 ---
 

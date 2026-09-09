@@ -22,7 +22,6 @@ import {
   shouldBlockContextWrite,
 } from "../bootstrap/write-gate.ts";
 import { classifyCommand } from "../safety/destructive-guard.ts";
-import { toRoundResultResponse } from "../../remote-questions/manager.ts";
 import {
   markInteractiveElicitationStart,
   markInteractiveElicitationEnd,
@@ -368,73 +367,6 @@ test("register-hooks persists first structured question round for new milestone 
   const state = await deriveState(dir);
   assert.equal(state.activeMilestone?.id, "M004");
   assert.equal(state.phase, "needs-discussion");
-});
-
-test("register-hooks clears depth gate when remote (Telegram/Slack/Discord) answer is normalized (#4406)", async (t) => {
-  const dir = makeTempDir("remote");
-  const originalCwd = process.cwd();
-  process.chdir(dir);
-  resetWriteGateState(dir);
-
-  t.after(() => {
-    try {
-      resetWriteGateState(dir);
-    } finally {
-      process.chdir(originalCwd);
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  const handlers = new Map<string, Array<(event: any, ctx?: any) => Promise<void> | void>>();
-  const pi = {
-    on(event: string, handler: (event: any, ctx?: any) => Promise<void> | void) {
-      const existing = handlers.get(event) ?? [];
-      existing.push(handler);
-      handlers.set(event, existing);
-    },
-  } as any;
-
-  registerHooks(pi, []);
-
-  const questionId = "depth_verification_M002_confirm";
-  const questions = [
-    {
-      id: questionId,
-      question: "Do you agree?",
-      options: [
-        { label: "Yes, you got it (Recommended)" },
-        { label: "Needs adjustment" },
-      ],
-    },
-  ];
-
-  await armDepthGate(handlers, "ask_user_questions", questions);
-  assert.equal(getPendingGate(), questionId);
-
-  // Simulate the normalized response the remote manager now emits:
-  // a Telegram button press returns a RemoteAnswer that is fed through
-  // toRoundResultResponse before reaching details.response.
-  const remoteAnswer = {
-    answers: {
-      [questionId]: { answers: ["Yes, you got it (Recommended)"] },
-    },
-  };
-  const normalized = toRoundResultResponse(remoteAnswer);
-
-  for (const handler of handlers.get("tool_result") ?? []) {
-    await handler({
-      toolName: "ask_user_questions",
-      input: { questions },
-      details: { response: normalized },
-    });
-  }
-
-  assert.equal(getPendingGate(), null, "normalized remote answer must clear the gate");
-  assert.equal(
-    shouldBlockContextArtifactSave("CONTEXT", "M002").block,
-    false,
-    "remote confirmation must unlock the matching milestone context write",
-  );
 });
 
 test("register-hooks returns hard blocker when depth question is cancelled", async (t) => {
