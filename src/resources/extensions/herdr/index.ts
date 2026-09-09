@@ -66,6 +66,11 @@ export function __wire(
       }
     });
     pi.on("session_start", (_event, ctx) => {
+      // Register the agent with Herdr immediately so it is listed and shows a
+      // status dot before the first turn. `report-agent-session` alone only
+      // updates native session identity, not lifecycle state, so without this
+      // the pane has no `gsd` agent until the first `turn_start`.
+      reporter.reportState("idle");
       const sm = (ctx as { sessionManager?: { getSessionId?: () => string; getSessionFile?: () => string | undefined } })?.sessionManager;
       reporter.reportSession({ sessionId: sm?.getSessionId?.(), sessionPath: sm?.getSessionFile?.() });
     });

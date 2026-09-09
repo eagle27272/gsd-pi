@@ -65,14 +65,17 @@ test("stop(blocked) and blocked/input_needed notifications → blocked", () => {
   );
 });
 
-test("session_start reads identity from ctx.sessionManager", () => {
+test("session_start registers the agent (idle) then reads identity from ctx.sessionManager", () => {
   const { pi, fire } = fakePi();
   const rep = fakeReporter();
   __wire(pi, rep, allOn);
   fire("session_start", { type: "session_start", reason: "startup" }, {
     sessionManager: { getSessionId: () => "sid-1", getSessionFile: () => "/s/sid-1.jsonl" },
   });
-  assert.deepEqual(rep.calls, [["session", { sessionId: "sid-1", sessionPath: "/s/sid-1.jsonl" }]]);
+  assert.deepEqual(rep.calls, [
+    ["state", { s: "idle", o: undefined }],
+    ["session", { sessionId: "sid-1", sessionPath: "/s/sid-1.jsonl" }],
+  ]);
 });
 
 test("session_shutdown then session_end → exactly one release", () => {
@@ -88,6 +91,7 @@ test("enabled:false registers no lifecycle handlers", () => {
   const { pi, fire } = fakePi();
   const rep = fakeReporter();
   __wire(pi, rep, () => ({ enabled: false, notifications: true, title: true }));
+  fire("session_start", { type: "session_start", reason: "startup" }, { sessionManager: { getSessionId: () => "sid-1" } });
   fire("agent_start", { type: "agent_start" });
   fire("turn_end", { type: "turn_end" });
   assert.equal(rep.calls.length, 0);

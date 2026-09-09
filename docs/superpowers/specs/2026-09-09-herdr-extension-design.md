@@ -354,9 +354,13 @@ export default function (pi: ExtensionAPI): void {
     pi.on("notification", (e) => {
       if (isBlockedKind(e)) reporter.reportState("blocked", { message: notifText(e) });
     });
-    pi.on("session_start", (e) => reporter.reportSession({
-      sessionId: sessionIdOf(e), sessionPath: sessionPathOf(e),
-    }));
+    pi.on("session_start", (_e, ctx) => {
+      // Register the agent immediately so the pane lists it (and shows a status
+      // dot) before the first turn — `report-agent-session` alone sets only
+      // native session identity, not lifecycle state.
+      reporter.reportState("idle");
+      reporter.reportSession({ sessionId: sessionIdOf(ctx), sessionPath: sessionPathOf(ctx) });
+    });
     const release = () => { if (!released) { released = true; reporter.release(); } };
     pi.on("session_shutdown", release);
     pi.on("session_end", release);
@@ -397,6 +401,11 @@ Notes:
   handler's `ctx` — `ctx.sessionManager.getSessionId()` and
   `ctx.sessionManager.getSessionFile()` (`ReadonlySessionManager`). If both are
   empty, `reportSession` is skipped.
+- Initial registration: the `session_start` handler also emits a
+  `report-agent --state idle` before the session-identity report. Without it the
+  first `report-agent` for `--source custom:gsd` only fires on the first
+  `turn_start`, so a freshly-started GSD sits in the pane unlisted and dot-less
+  until the user's first prompt.
 - Subscriptions to `pi.events` channels are added **synchronously** in the
   factory body (not behind an awaited `session_start`) so a `SYNC` emitted in
   the same event-loop turn as extension load is not lost — this is the exact
@@ -586,7 +595,7 @@ All new pure/seam-covered logic gets `node:test` unit tests under
 | `env.test.ts` | `detectHerdrEnv` truth table: all-present → object; each var missing → null; `HERDR_ENV` values `"0"`/`""`/unset → null; socket optional. `isHerdrTerminal` parity. |
 | `reporter.test.ts` | exact argv for each of the 4 commands; `--seq` strictly increasing across mixed calls; dedup skips identical consecutive `reportState`/`reportMetadata` but not `release`; `message` change defeats dedup; `runner` throw is swallowed; title/label normalized + truncated to 80. |
 | `state-mapping.test.ts` | `buildHerdrTitle` with/without milestone/slice/task; phase-only fallback; `buildStateLabels` progress fraction selection (tasks → slices → milestones) and empty case. |
-| `lifecycle.test.ts` | fake `pi` (records `.on` handlers) + fake reporter: `agent_start`/`turn_start` → `working`; `turn_end`/`stop` → `idle`; attention `notification` → `blocked` w/ message; `session_shutdown` → single `release` (idempotent with `session_end`); `enabled:false` registers no lifecycle handlers; `SYNC` with `title:false` → no metadata call; `CLEAR` → clear-title call. |
+| `lifecycle.test.ts` | fake `pi` (records `.on` handlers) + fake reporter: `agent_start`/`turn_start` → `working`; `turn_end`/`stop` → `idle`; attention `notification` → `blocked` w/ message; `session_start` → `idle` (initial registration) then session-identity report; `session_shutdown` → single `release` (idempotent with `session_end`); `enabled:false` registers no lifecycle handlers; `SYNC` with `title:false` → no metadata call; `CLEAR` → clear-title call. |
 
 GSD-side:
 
