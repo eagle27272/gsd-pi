@@ -24,13 +24,10 @@ export const UNIT_EXTENSION_GLOBS = new Set([
   'shared',
   'subagent',
   'claude-code-cli',
-  'cursor-cli',
   'github-sync',
   'universal-config',
   'visual-brief',
-  'voice',
   'mcp-client',
-  'remote-questions',
 ]);
 
 export const INTEGRATION_EXTENSION_GLOBS = new Set([
@@ -43,7 +40,7 @@ export const INTEGRATION_EXTENSION_GLOBS = new Set([
   'slash-commands',
 ]);
 
-export const SOURCE_ROOTS = ['src', 'packages', 'scripts', 'web'];
+export const SOURCE_ROOTS = ['src', 'packages', 'scripts'];
 
 // Archived material is kept for provenance only: nothing imports it and no
 // runner executes it, so it must not register as live test or source surface.
@@ -58,7 +55,6 @@ export const AUXILIARY_TEST_SCRIPTS = new Set([
   'test:live-regression',
   'test:native',
   'test:e2e',
-  'test:e2e:docker',
   'test:e2e:windows-smoke',
 ]);
 

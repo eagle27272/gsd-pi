@@ -44,7 +44,7 @@ for (const spec of missing) {
 }
 process.stderr.write(
   allowAnyVersion
-    ? "Publish the missing @opengsd/engine-* packages before publishing @opengsd/gsd-pi.\nRun Build Native Binaries (build-native.yml) with publish=true, platform_packages_only=true, publish_auth=token.\nPackages must exist on npm before trusted publishing can be configured — see docs/dev/ci-cd-pipeline.md.\n"
-    : "Publish the native platform packages for this version before publishing @opengsd/gsd-pi. The production NPM Publish workflow does this automatically before the main package publish.\n",
+    ? "Publish the missing @opengsd/engine-* packages before publishing gsd-pi.\nThe native platform packages must exist on npm before the main package can resolve them.\n"
+    : "Publish the native platform packages for this version before publishing gsd-pi.\n",
 );
 process.exit(1);

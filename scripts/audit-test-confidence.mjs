@@ -58,12 +58,6 @@ const CI_AUXILIARY = [
 
 const CI_CONDITIONAL = [
   {
-    ciJob: 'build / docker e2e step',
-    local: 'test:e2e:docker',
-    when: 'docker-changed=true',
-    enforcement: 'block-when-triggered',
-  },
-  {
     ciJob: 'windows-portability',
     local: 'windows-portability.test.ts (+ package tests on Windows)',
     when: 'portability-changed=true',

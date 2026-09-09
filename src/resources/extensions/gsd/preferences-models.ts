@@ -49,8 +49,8 @@ type ProviderModelRegistry = {
  * silently skip `PREFERENCES.md` in auto-mode (#801, extends #4122).
  *
  * Kept in sync with the `registerProvider(...)` calls in the bundled CLI
- * extensions (claude-code-cli). Names are lowercase for
- * direct comparison against normalized provider ids.
+ * extensions (claude-code-cli). Names are lowercase for direct comparison
+ * against normalized provider ids.
  */
 const BUILTIN_EXTENSION_PROVIDERS: ReadonlySet<string> = new Set([
   "claude-code",

@@ -38,14 +38,6 @@ const CONTRACT_SURFACES = [
     surface: "mcp",
     path: "packages/mcp-server/src/types.ts",
   },
-  {
-    surface: "web",
-    path: "src/web/bridge-service.ts",
-  },
-  {
-    surface: "webStore",
-    path: "web/lib/gsd-workspace-store.tsx",
-  },
 ];
 
 const SKIP_DIRS = new Set([

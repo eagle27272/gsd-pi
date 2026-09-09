@@ -101,10 +101,10 @@ function exitIfManagedResourcesAreNewer(currentAgentDir: string): void {
 /**
  * Print the non-interactive-mode error and exit. Called both from the early
  * TTY gate (before heavy init) and from the interactive-mode TTY gate right
- * before `InteractiveMode.run()`. The `includeWebHint` variant also lists
+ * before `InteractiveMode.run()`. The `includeHeadlessHint` variant also lists
  * `headless` as an alternative.
  */
-function printNonTtyErrorAndExit(missing: string | undefined, includeWebHint: boolean): never {
+function printNonTtyErrorAndExit(missing: string | undefined, includeHeadlessHint: boolean): never {
   const suffix = missing ? ` but ${missing} not a TTY` : ''
   process.stderr.write(`[gsd] Error: Interactive mode requires a terminal (TTY)${suffix}.\n`)
   process.stderr.write('[gsd] Non-interactive alternatives:\n')
@@ -112,7 +112,7 @@ function printNonTtyErrorAndExit(missing: string | undefined, includeWebHint: bo
   process.stderr.write('[gsd]   gsd --print "your message"     Single-shot prompt\n')
   process.stderr.write('[gsd]   gsd --mode rpc                 JSON-RPC over stdin/stdout\n')
   process.stderr.write('[gsd]   gsd --mode text "message"      Text output mode\n')
-  if (includeWebHint) {
+  if (includeHeadlessHint) {
     process.stderr.write('[gsd]   gsd headless                   Auto-mode without TUI\n')
   }
   process.exit(1)
