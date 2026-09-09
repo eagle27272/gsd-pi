@@ -17,7 +17,6 @@ import type { AuthStorage } from '@gsd/pi-coding-agent'
 import { renderGsdPiLogo, GSD_PI_BRAND, GSD_WEBSITE } from './logo.js'
 import { agentDir } from './app-paths.js'
 import { isClaudeCliReady } from './claude-cli-check.js'
-import { isAntigravityCliReady, isGeminiCliReady } from './resources/extensions/google-cli/readiness.js'
 import { isCursorAgentReady } from './resources/extensions/cursor-cli/readiness.js'
 import {
   markOnboardingComplete,
@@ -417,20 +416,6 @@ export async function runLlmStep(p: ClackModule, pc: PicoModule, authStorage: Au
     )
   }
 
-  if (isAntigravityCliReady()) {
-    authOptions.push(
-      { value: 'antigravity-cli', label: 'Use Antigravity CLI', hint: 'recommended — replaces Gemini CLI for individuals' },
-    )
-  } else if (isGeminiCliReady()) {
-    authOptions.push(
-      {
-        value: 'gemini-cli',
-        label: 'Use Google Gemini CLI (deprecated)',
-        hint: 'individual tier no longer supported — install Antigravity from https://antigravity.google',
-      },
-    )
-  }
-
   authOptions.push(
     { value: 'browser', label: 'Sign in with your browser', hint: 'GitHub Copilot or ChatGPT/Codex' },
     { value: 'api-key', label: 'Paste an API key', hint: 'from your provider dashboard' },
@@ -461,23 +446,6 @@ export async function runLlmStep(p: ClackModule, pc: PicoModule, authStorage: Au
     p.log.info('Your Cursor subscription will be used for inference. No API key needed.')
     authStorage.set('cursor-agent', { type: 'api_key', key: 'cli' })
     persistDefaultProvider('cursor-agent')
-    return true
-  }
-
-  if (method === 'gemini-cli') {
-    p.log.warn('Google Gemini CLI is deprecated for individual users — install Antigravity: https://antigravity.google')
-    p.log.success('Google Gemini CLI detected — routing through local CLI')
-    p.log.info('Your Gemini CLI session will be used for inference. No API key needed.')
-    authStorage.set('google-gemini-cli', { type: 'api_key', key: 'cli' })
-    persistDefaultProvider('google-gemini-cli')
-    return true
-  }
-
-  if (method === 'antigravity-cli') {
-    p.log.success('Antigravity CLI detected — routing through local CLI')
-    p.log.info('Your Antigravity session will be used for inference. No API key needed.')
-    authStorage.set('google-antigravity', { type: 'api_key', key: 'cli' })
-    persistDefaultProvider('google-antigravity')
     return true
   }
 
