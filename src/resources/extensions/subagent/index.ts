@@ -34,10 +34,8 @@ import {
 	readIsolationMode,
 } from "./isolation.js";
 import { registerWorker, updateWorker } from "./worker-registry.js";
-import { loadEffectiveGSDPreferences } from "../gsd/preferences.js";
 import { emitJournalEvent } from "../gsd/journal.js";
 import {
-	buildShellEnvAssignments,
 	buildSubagentProcessArgs,
 	createSubagentLaunchPlan,
 	isSubagentChildProcess,
@@ -324,16 +322,6 @@ function processSubagentEventLine(
 		currentResult.messages.push(event.message as Message);
 		emitUpdate();
 	}
-}
-
-async function waitForFile(filePath: string, signal: AbortSignal | undefined, timeoutMs = 30 * 60 * 1000): Promise<boolean> {
-	const started = Date.now();
-	while (Date.now() - started < timeoutMs) {
-		if (signal?.aborted) return false;
-		if (fs.existsSync(filePath)) return true;
-		await new Promise((resolve) => setTimeout(resolve, 150));
-	}
-	return false;
 }
 
 type OnUpdateCallback = (partial: AgentToolResult<SubagentDetails>) => void;
