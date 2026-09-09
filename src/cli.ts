@@ -342,8 +342,7 @@ if (cliFlags.messages[0] === 'config') {
 if (cliFlags.messages[0] === 'sessions') {
   const { SessionManager } = await loadPiCodingAgentModule()
   const cwd = process.cwd()
-  const safePath = `--${cwd.replace(/^[/\\]/, '').replace(/[/\\:]/g, '-')}--`
-  const projectSessionsDir = join(sessionsDir, safePath)
+  const projectSessionsDir = getProjectSessionsDir(cwd)
 
   process.stderr.write(chalk.dim(`Loading sessions for ${cwd}...\n`))
   const sessions = await SessionManager.list(cwd, projectSessionsDir)
