@@ -110,7 +110,7 @@ test("collectBaseline returns the phase-zero report shape", async () => {
   assert.equal(report.testCompile.cacheFileExists, true);
   assert.equal(report.metrics["testCompile.cacheHit"], 1);
   assert.equal(report.contracts.fixtures.total, 1);
-  assert.equal(report.metrics["contracts.fixtures.sharedBySurface"], 6);
+  assert.equal(report.metrics["contracts.fixtures.sharedBySurface"], 5);
   assert.equal(report.process.prGeneratorConsumers, 3);
   assert.equal(report.metrics["process.prGeneratorConsumers"], 3);
   assert.equal(report.metrics["process.prBodiesMissingIssue"], 0);
@@ -238,7 +238,7 @@ test("collectContractsMetrics reports fixture coverage and surface drift", async
 
   assert.equal(metrics.fixtures.total, 1);
   assert.deepEqual(metrics.fixtures.files, ["src/tests/fixtures/contracts-golden-fixtures.ts"]);
-  assert.equal(metrics.fixtures.sharedBySurface, 6);
+  assert.equal(metrics.fixtures.sharedBySurface, 5);
   assert.equal(metrics.surfaceDriftFailures, 0);
   assert.equal(metrics.legacyTypeImportsRemaining, 0);
 });
@@ -429,7 +429,6 @@ async function writeContractsSurfaceFixtures(root: string): Promise<void> {
     "packages/mcp-server/src/types.ts",
     "src/web/bridge-service.ts",
     "web/lib/gsd-workspace-store.tsx",
-    "vscode-extension/src/gsd-client.ts",
   ];
   for (const file of files) {
     await mkdir(dirname(join(root, file)), { recursive: true });

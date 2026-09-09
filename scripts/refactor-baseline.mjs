@@ -46,10 +46,6 @@ const CONTRACT_SURFACES = [
     surface: "webStore",
     path: "web/lib/gsd-workspace-store.tsx",
   },
-  {
-    surface: "vscode",
-    path: "vscode-extension/src/gsd-client.ts",
-  },
 ];
 
 const SKIP_DIRS = new Set([
@@ -288,7 +284,6 @@ export async function collectWorkspaceMetrics(root) {
     "web",
     "scripts",
     "docs",
-    "vscode-extension",
   ];
   const areas = [];
   for (const area of trackedAreas) {
