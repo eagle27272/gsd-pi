@@ -21,6 +21,16 @@ export interface HerdrReporterOptions {
 const DEFAULT_SOURCE = "custom:gsd";
 const DEFAULT_AGENT = "gsd";
 
+// Herdr's contract (spec §2.2/§6.2) is a process-lifetime monotonic integer per
+// source. This integration uses exactly one source, so the counter is shared by
+// every HerdrReporter instance — a fresh reporter must not restart at --seq 1.
+let sharedSeq = 0;
+
+/** Test-only: reset the process-global --seq counter. */
+export function __resetHerdrSeqForTest(): void {
+  sharedSeq = 0;
+}
+
 const defaultRunner: HerdrRunner = (file, args) => {
   try {
     const child = execFile(file, args, { timeout: 2000, windowsHide: true }, () => {
@@ -39,7 +49,6 @@ export class HerdrReporter {
   private readonly source: string;
   private readonly agent: string;
   private readonly runner: HerdrRunner;
-  private seq = 0;
   private lastStateKey: string | null = null;
   private lastMetaKey: string | null = null;
 
@@ -51,7 +60,7 @@ export class HerdrReporter {
   }
 
   private run(tail: string[], trailing: string[] = []): void {
-    this.seq += 1;
+    sharedSeq += 1;
     // tail is [verb, subverb, paneId, ...rest]; identity goes right after paneId,
     // --seq is emitted last, and any trailing args (e.g. --message) follow it.
     const args = [
@@ -59,7 +68,7 @@ export class HerdrReporter {
       ...this.identity(),
       ...tail.slice(3),
       "--seq",
-      String(this.seq),
+      String(sharedSeq),
       ...trailing,
     ];
     try {

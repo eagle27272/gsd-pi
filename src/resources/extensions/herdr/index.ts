@@ -94,7 +94,9 @@ export function __wire(
     });
   });
   pi.events.on(HERDR_CHANNELS.CLEAR, (payload) => {
-    void (payload as HerdrClearEvent);
+    const data = payload as HerdrClearEvent;
+    const enabled = data.preferences?.herdr?.enabled ?? prefs().enabled;
+    if (!enabled) return;
     reporter.reportMetadata({ title: null, stateLabels: {} });
   });
 }

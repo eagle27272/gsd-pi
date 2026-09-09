@@ -250,7 +250,7 @@ In `"parent"` mode, slice/task `targetRepositories` default to the declared chil
   - `enabled`: boolean — Master switch for Herdr reporting. Default: `true`.
   - `notifications`: boolean — Deliver blocked/attention notifications through Herdr (pane state) instead of the native desktop toast. Default: `true`.
   - `title`: boolean — Set the Herdr pane title and `working` state-label from auto-mode progress (e.g. `M2 S1/T3 · executing`). Default: `true`.
-  - Lifecycle reporting (`working`/`idle`/`blocked`) and native session-identity reporting for Herdr restore are always on when `enabled` and inside Herdr. Disable the whole integration with `gsd extensions disable herdr`.
+  - Lifecycle reporting (`working`/`idle`/`blocked`) and native session-identity reporting for Herdr restore are always on when `enabled` and inside Herdr. `gsd extensions disable herdr` stops only the herdr extension's lifecycle and auto-mode-context reporting; it does not touch notification routing, which lives in the gsd extension. To turn off all herdr behavior including notification routing, set `herdr.enabled: false`; to disable just the notification routing, set `herdr.notifications: false`.
 
 - `dynamic_routing`: configures the dynamic model router that adjusts model selection based on task complexity. Keys:
   - `enabled`: boolean — enable dynamic routing. Default: `false`.

@@ -55,7 +55,12 @@ export function sendDesktopNotification(
   try {
     const herdrEnv = deps.herdrEnv !== undefined ? deps.herdrEnv : detectHerdrEnv();
     const herdrPrefs = deps.herdrPrefs ?? loadedPreferences?.herdr;
-    if (herdrEnv && herdrPrefs?.enabled !== false && herdrPrefs?.notifications !== false) {
+    if (
+      kind === "attention" &&
+      herdrEnv &&
+      herdrPrefs?.enabled !== false &&
+      herdrPrefs?.notifications !== false
+    ) {
       new HerdrReporter({ env: herdrEnv, runner: deps.herdrRun }).reportMetadata({
         stateLabels: { blocked: `${title}: ${message}` },
       });

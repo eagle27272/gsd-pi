@@ -1,9 +1,13 @@
-import test from "node:test";
+import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { HerdrReporter } from "../reporter.ts";
+import { HerdrReporter, __resetHerdrSeqForTest } from "../reporter.ts";
 import type { HerdrEnv } from "../env.ts";
 
 const env: HerdrEnv = { paneId: "w1:p2", binPath: "/bin/herdr" };
+
+// --seq is a process-global counter shared by every reporter instance; reset it
+// before each test so the tests that assert exact --seq values stay stable.
+beforeEach(() => __resetHerdrSeqForTest());
 
 function spyReporter() {
   const calls: string[][] = [];
@@ -35,6 +39,18 @@ test("--seq strictly increases across mixed calls", () => {
   r.release();
   const seqs = calls.map((a) => Number(a[a.indexOf("--seq") + 1]));
   assert.deepEqual(seqs, [1, 2, 3, 4]);
+});
+
+test("--seq is process-global across separate reporter instances", () => {
+  const callsA: string[][] = [];
+  const a = new HerdrReporter({ env, runner: (_f, args) => callsA.push(args) });
+  a.reportState("working");
+  assert.equal(callsA[0][callsA[0].indexOf("--seq") + 1], "1");
+
+  const callsB: string[][] = [];
+  const b = new HerdrReporter({ env, runner: (_f, args) => callsB.push(args) });
+  b.reportState("idle");
+  assert.equal(callsB[0][callsB[0].indexOf("--seq") + 1], "2");
 });
 
 test("reportState dedups identical consecutive calls but not after a change", () => {

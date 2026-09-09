@@ -118,6 +118,14 @@ test("CLEAR → reportMetadata clears title + labels", () => {
   assert.deepEqual(rep.calls, [["metadata", { title: null, stateLabels: {} }]]);
 });
 
+test("CLEAR is a no-op when herdr.enabled is false", () => {
+  const { pi } = fakePi();
+  const rep = fakeReporter();
+  __wire(pi, rep, () => ({ enabled: false, notifications: true, title: true }));
+  pi.events.emit(HERDR_CHANNELS.CLEAR, {});
+  assert.equal(rep.calls.length, 0);
+});
+
 test("isBlockedNotification allowlist", () => {
   assert.equal(isBlockedNotification("blocked"), true);
   assert.equal(isBlockedNotification("input_needed"), true);

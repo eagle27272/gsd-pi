@@ -309,3 +309,38 @@ test("no herdrEnv → herdrRun is never called", () => {
   });
   assert.equal(calls.length, 0);
 });
+
+test("inside Herdr, non-attention kind (milestone) falls through to native — herdrRun not called", () => {
+  const calls: string[][] = [];
+  sendDesktopNotification("GSD", "Milestone done", "success", "milestone", undefined, {
+    herdrEnv,
+    herdrPrefs: { enabled: true, notifications: true },
+    herdrRun: (_f, a) => calls.push(a),
+  });
+  assert.equal(calls.length, 0);
+});
+
+test("deps.herdrEnv omitted → detectHerdrEnv() fallback is consulted from process.env", (t) => {
+  const prev = {
+    HERDR_ENV: process.env.HERDR_ENV,
+    HERDR_PANE_ID: process.env.HERDR_PANE_ID,
+    HERDR_BIN_PATH: process.env.HERDR_BIN_PATH,
+  };
+  t.after(() => {
+    for (const [k, v] of Object.entries(prev)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+  process.env.HERDR_ENV = "1";
+  process.env.HERDR_PANE_ID = "w1:p2";
+  process.env.HERDR_BIN_PATH = "/bin/herdr";
+
+  const calls: string[][] = [];
+  sendDesktopNotification("GSD", "Blocked: needs input", "warning", "attention", undefined, {
+    herdrPrefs: { enabled: true, notifications: true },
+    herdrRun: (_f, a) => calls.push(a),
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][1], "report-metadata");
+});
