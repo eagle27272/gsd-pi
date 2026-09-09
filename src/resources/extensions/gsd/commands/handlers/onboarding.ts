@@ -81,7 +81,7 @@ async function runStep(ctx: ExtensionCommandContext, stepId: OnboardingStepId): 
       return
     case "tool-keys":
       ctx.ui.notify(
-        "Tool keys setup: run /gsd keys add to save API keys for Context7, Jina, Groq voice, etc.",
+        "Tool keys setup: run /gsd keys add to save API keys for Jina, Groq, etc.",
         "info",
       )
       return

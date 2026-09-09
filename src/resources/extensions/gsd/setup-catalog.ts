@@ -42,7 +42,7 @@ export const ONBOARDING_STEPS: readonly OnboardingStepDef[] = [
   { id: "model",     label: "Default model",            required: false, hint: "Pick a default model for the chosen provider" },
   { id: "search",    label: "Web search provider",      required: false, hint: "Brave, Tavily, or Anthropic built-in" },
   { id: "remote",    label: "Remote questions",         required: false, hint: "Discord / Slack / Telegram notifications" },
-  { id: "tool-keys", label: "Tool API keys",            required: false, hint: "Context7, Jina, Groq voice, etc." },
+  { id: "tool-keys", label: "Tool API keys",            required: false, hint: "Jina, Groq, etc." },
   { id: "prefs",     label: "Global preferences",       required: false, hint: "Mode, profile, notifications" },
   { id: "skills",    label: "Skills install",           required: false, hint: "Browse and install skill plugins" },
   { id: "doctor",    label: "Validate setup",           required: false, hint: "Run provider doctor checks" },

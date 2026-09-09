@@ -20,7 +20,7 @@ export const TOOL_KEYS = [
   { id: "brave",    env: "BRAVE_API_KEY",     label: "Brave Search",      hint: "brave.com/search/api" },
   { id: "context7", env: "CONTEXT7_API_KEY",  label: "Context7 Docs",     hint: "context7.com/dashboard" },
   { id: "jina",     env: "JINA_API_KEY",      label: "Jina Page Extract", hint: "jina.ai/api" },
-  { id: "groq",     env: "GROQ_API_KEY",      label: "Groq Voice",        hint: "console.groq.com" },
+  { id: "groq",     env: "GROQ_API_KEY",      label: "Groq",              hint: "console.groq.com" },
 ] as const;
 
 export function getStoredToolKey(auth: AuthStorage, providerId: string): string | undefined {

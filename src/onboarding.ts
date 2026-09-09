@@ -83,7 +83,7 @@ const TOOL_KEYS: ToolKeyConfig[] = [
     provider: 'groq',
     envVar: 'GROQ_API_KEY',
     label: 'Groq',
-    hint: 'voice transcription — free at console.groq.com',
+    hint: 'fast inference — free at console.groq.com',
   },
 ]
 
