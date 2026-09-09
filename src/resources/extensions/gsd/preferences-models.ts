@@ -54,6 +54,9 @@ type ProviderModelRegistry = {
  */
 const BUILTIN_EXTENSION_PROVIDERS: ReadonlySet<string> = new Set([
   "claude-code",
+  "cursor-agent",
+  "google-gemini-cli",
+  "google-antigravity",
 ]);
 
 /**
