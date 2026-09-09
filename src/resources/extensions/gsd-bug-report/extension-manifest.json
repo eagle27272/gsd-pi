@@ -1,0 +1,13 @@
+{
+  "id": "gsd-bug-report",
+  "name": "gsd-pi Self-Report",
+  "version": "1.0.0",
+  "description": "Draft and file GitHub issues for defects in the gsd-pi CLI itself, with user confirmation.",
+  "tier": "bundled",
+  "requires": { "platform": ">=2.29.0" },
+  "provides": {
+    "tools": ["report_gsd_bug"],
+    "commands": ["report-gsd-bug"],
+    "hooks": ["session_start"]
+  }
+}
