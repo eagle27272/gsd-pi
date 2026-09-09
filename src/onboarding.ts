@@ -343,7 +343,7 @@ export async function runOnboarding(
     summaryLines.push(`${pc.dim('↷')} Tool keys: none configured`)
   }
 
-  // Persist completion record so re-entry, web boot probe, and shouldRunOnboarding
+  // Persist completion record so re-entry and shouldRunOnboarding
   // all agree the wizard finished. Required steps drive the "complete" semantics
   // in onboarding-state.ts; here we mark wizard-level completion regardless.
   markOnboardingComplete(completedSteps)

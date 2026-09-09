@@ -79,9 +79,6 @@ pnpm install --frozen-lockfile
 echo "── build:core ──"
 pnpm run build:core
 
-echo "── web host (stale-aware; required by validate-pack) ──"
-node scripts/build-web-if-stale.cjs
-
 echo "── typecheck:extensions ──"
 pnpm run typecheck:extensions
 

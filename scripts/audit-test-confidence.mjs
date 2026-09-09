@@ -33,7 +33,6 @@ const CI_PR_BLOCKING_MAP = [
     local: 'verify:merge',
     steps: [
       'build:core',
-      'web ci + build:web-host',
       'typecheck:extensions',
       'validate-pack',
       'verify:workspace-coverage',

@@ -25,10 +25,8 @@ import { applyModelOverride } from './cli-model-override.js'
 import {
   buildHeadlessCommandArgs,
   parseCliArgs,
-  runWebCliBranch,
   migrateLegacyFlatSessions,
-} from './cli-web-branch.js'
-import { stopWebMode } from './web-mode.js'
+} from './cli-args.js'
 import { getProjectSessionsDir } from './project-sessions.js'
 import { markStartup, printStartupTimings } from './startup-timings.js'
 import { applyRtkProcessEnv, GSD_RTK_DISABLED_ENV, isTruthy } from './rtk-shared.js'
@@ -104,7 +102,7 @@ function exitIfManagedResourcesAreNewer(currentAgentDir: string): void {
  * Print the non-interactive-mode error and exit. Called both from the early
  * TTY gate (before heavy init) and from the interactive-mode TTY gate right
  * before `InteractiveMode.run()`. The `includeWebHint` variant also lists
- * `--web` and `headless` as alternatives.
+ * `headless` as an alternative.
  */
 function printNonTtyErrorAndExit(missing: string | undefined, includeWebHint: boolean): never {
   const suffix = missing ? ` but ${missing} not a TTY` : ''
@@ -112,9 +110,6 @@ function printNonTtyErrorAndExit(missing: string | undefined, includeWebHint: bo
   process.stderr.write('[gsd] Non-interactive alternatives:\n')
   process.stderr.write('[gsd]   gsd auto                       Auto-mode (pipeable, no TUI)\n')
   process.stderr.write('[gsd]   gsd --print "your message"     Single-shot prompt\n')
-  if (includeWebHint) {
-    process.stderr.write('[gsd]   gsd --web [path]               Browser-only web mode\n')
-  }
   process.stderr.write('[gsd]   gsd --mode rpc                 JSON-RPC over stdin/stdout\n')
   process.stderr.write('[gsd]   gsd --mode mcp                 MCP server over stdin/stdout\n')
   process.stderr.write('[gsd]   gsd --mode text "message"      Text output mode\n')
@@ -385,12 +380,11 @@ const subcommandsExemptFromEarlyTtyCheck = new Set([
   'sessions',
   'update',
   'upgrade',
-  'web',
   'worktree',
   'wt',
 ])
 const isSubcommandExemptFromEarlyTtyCheck = subcommandsExemptFromEarlyTtyCheck.has(cliFlags.messages[0] ?? '')
-if (!process.stdin.isTTY && !isPrintMode && !isSubcommandExemptFromEarlyTtyCheck && !cliFlags.listModels && !cliFlags.web) {
+if (!process.stdin.isTTY && !isPrintMode && !isSubcommandExemptFromEarlyTtyCheck && !cliFlags.listModels) {
   printNonTtyErrorAndExit(undefined, false)
 }
 
@@ -445,33 +439,6 @@ if (cliFlags.messages[0] === 'config') {
   await runOnboarding(authStorage)
   process.exit(0)
 }
-
-// `gsd web stop [path|all]` — stop web server before anything else
-if (cliFlags.messages[0] === 'web' && cliFlags.messages[1] === 'stop') {
-  const webBranch = await runWebCliBranch(cliFlags, {
-    stopWebMode,
-    stderr: process.stderr,
-    baseSessionsDir: sessionsDir,
-    agentDir,
-  })
-  if (webBranch.handled) {
-    process.exit(webBranch.exitCode)
-  }
-}
-
-// `gsd --web [path]` or `gsd web [start] [path]` — launch browser-only web mode
-if (cliFlags.web || (cliFlags.messages[0] === 'web' && cliFlags.messages[1] !== 'stop')) {
-  await ensureRtkBootstrap()
-  const webBranch = await runWebCliBranch(cliFlags, {
-    stderr: process.stderr,
-    baseSessionsDir: sessionsDir,
-    agentDir,
-  })
-  if (webBranch.handled) {
-    process.exit(webBranch.exitCode)
-  }
-}
-
 
 // `gsd sessions` — list past sessions and pick one to resume
 if (cliFlags.messages[0] === 'sessions') {

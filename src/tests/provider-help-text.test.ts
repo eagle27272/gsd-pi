@@ -25,13 +25,6 @@ describe("help-text branding", () => {
     assert.ok(text.includes(GSD_WEBSITE), "help should link to opengsd.net");
   });
 
-  it("main help lists web launch flags", () => {
-    const text = captureStdout(() => printHelp("1.2.3"));
-    assert.ok(text.includes("--web [path]"), "help should list web mode");
-    assert.ok(text.includes("--no-auth"), "help should list web no-auth mode");
-    assert.ok(text.includes("external access control"), "help should warn about external access control");
-  });
-
   it("main and subcommand help document non-interactive quick tasks", () => {
     const main = captureStdout(() => printHelp("1.2.3"));
     const quick = captureStdout(() => printSubcommandHelp("quick", "1.2.3"));

@@ -1,7 +1,6 @@
 packages:
   - 'packages/*'
   - 'extensions/*'
-  - 'web'
 
 autoInstallPeers: true
 strictPeerDependencies: false
