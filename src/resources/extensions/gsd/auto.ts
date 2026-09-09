@@ -149,6 +149,7 @@ import { getInstalledSkillNames } from "./skills.js";
 import { effectiveSkillNamesForUnit } from "./skill-scope.js";
 import { getRtkSessionSavings } from "../shared/rtk-session-stats.js";
 import { deactivateGSD } from "../shared/gsd-phase-state.js";
+import { HERDR_CHANNELS } from "../shared/herdr-events.js";
 import {
   initMetrics,
   resetMetrics,
@@ -2021,6 +2022,13 @@ export async function stopAuto(
       });
     }
 
+    // ── Step 9: Herdr pane clear ──
+    try {
+      pi?.events.emit(HERDR_CHANNELS.CLEAR, { preferences: loadedPreferences });
+    } catch (e) {
+      debugLog("stop-cleanup-herdr", { error: e instanceof Error ? e.message : String(e) });
+    }
+
     // ── Step 10: Debug summary ──
     try {
       if (isDebugEnabled()) {
@@ -2415,6 +2423,20 @@ function ensureOrchestrationModule(ctx: ExtensionContext, pi: ExtensionAPI, base
 }
 
 /**
+ * Best-effort emitters for the shared Herdr event contract. Mirrors the cmux
+ * emitters removed in 9b5c992c, minus the log channel (there is no herdr log
+ * event). Exported for unit testing.
+ */
+export function makeHerdrEmitters(pi: ExtensionAPI) {
+  return {
+    syncHerdr: (preferences: GSDPreferences | undefined, state: GSDState) =>
+      pi.events.emit(HERDR_CHANNELS.SYNC, { preferences, state }),
+    clearHerdr: (preferences: GSDPreferences | undefined) =>
+      pi.events.emit(HERDR_CHANNELS.CLEAR, { preferences }),
+  };
+}
+
+/**
  * Build the LoopDeps object from auto.ts private scope.
  * This bundles all private functions that autoLoop needs without exporting them.
  */
@@ -2424,6 +2446,7 @@ function buildLoopDeps(pi: ExtensionAPI, ctx: ExtensionContext): LoopDeps {
   // (resolveDispatch, runPreDispatchHooks, etc.) delegate to the registry.
   initRegistry(convertDispatchRules(DISPATCH_RULES));
 
+  const herdr = makeHerdrEmitters(pi);
   const worktreeProjection = new WorktreeStateProjection();
 
   return {
@@ -2434,7 +2457,9 @@ function buildLoopDeps(pi: ExtensionAPI, ctx: ExtensionContext): LoopDeps {
     clearUnitTimeout,
     checkpointWorkflowDatabase,
     updateProgressWidget,
+    ...herdr,
     handleLostSessionLock: (ctx: ExtensionContext | undefined, lockStatus: SessionLockStatus | undefined) => {
+      herdr.clearHerdr(loadEffectiveGSDPreferences(s.basePath || undefined)?.preferences);
       handleLostSessionLock(ctx, lockStatus);
     },
 
@@ -2996,6 +3021,16 @@ export async function startAuto(
       });
     }
     try {
+      loopDeps.syncHerdr?.(
+        loadEffectiveGSDPreferences(s.basePath || undefined)?.preferences,
+        await deriveState(s.basePath),
+      );
+    } catch (e) {
+      debugLog("resume-herdr-sync-failed", {
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+    try {
       const report = await runGSDDoctor(s.basePath, { fix: true });
       if (report.fixesApplied.length > 0) {
         ctx.ui.notify(
@@ -3104,6 +3139,16 @@ export async function startAuto(
   if (!(await acknowledgeRequestedWedge())) {
     await cleanupAfterLoopExit(ctx);
     return;
+  }
+
+  try {
+    loopDeps.syncHerdr?.(
+      loadEffectiveGSDPreferences(s.basePath || undefined)?.preferences,
+      await deriveState(s.basePath),
+    );
+  } catch (err) {
+    // Best-effort only — Herdr sync must never block auto-mode startup
+    logWarning("engine", `herdr sync failed: ${err instanceof Error ? err.message : String(err)}`, { file: "auto.ts" });
   }
 
   try {

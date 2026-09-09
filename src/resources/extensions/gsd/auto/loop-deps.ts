@@ -143,6 +143,10 @@ export interface LoopDeps {
     unitId: string,
     state: GSDState,
   ) => void;
+  /** Emit Herdr auto-mode context sync (no-op unless the herdr extension is listening). */
+  syncHerdr?: (preferences: GSDPreferences | undefined, state: GSDState) => void;
+  /** Emit Herdr clear when auto-mode ends. */
+  clearHerdr?: (preferences: GSDPreferences | undefined) => void;
 
   // State and cache functions
   invalidateAllCaches: () => void;

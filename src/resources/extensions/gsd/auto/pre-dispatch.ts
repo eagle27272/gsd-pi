@@ -295,6 +295,7 @@ export async function runPreDispatch(
       });
     }
   }
+  deps.syncHerdr?.(prefs, state);
   let mid = state.activeMilestone?.id;
   let midTitle = state.activeMilestone?.title;
   debugLog("autoLoop", {
