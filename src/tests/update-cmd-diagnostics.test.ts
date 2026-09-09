@@ -129,7 +129,7 @@ test("update-cmd refreshes managed resources when already up to date (#52)", asy
 
   const manifest = JSON.parse(readFileSync(join(fakeAgentDir, "managed-resources.json"), "utf-8"));
   assert.equal(manifest.gsdVersion, "1.0.1");
-  assert.equal(manifest.packageName, "@opengsd/gsd-pi");
+  assert.equal(manifest.packageName, "gsd-pi");
 });
 
 test("update-cmd prints Claude Code Runtime floor advisory after normal update result", async (t) => {
