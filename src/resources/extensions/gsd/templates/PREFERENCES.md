@@ -92,6 +92,10 @@ pre_dispatch_hooks: []
 # language:
 # experimental:
 #   rtk: false
+# herdr:                  # only affects sessions running inside a Herdr pane (HERDR_ENV=1)
+#   enabled: true         # master switch for Herdr reporting
+#   notifications: true   # route blocked/attention alerts through Herdr instead of the desktop toast
+#   title: true           # show the active milestone/slice/task + phase as the Herdr pane title
 ---
 
 # GSD Skill Preferences

@@ -246,6 +246,12 @@ In `"parent"` mode, slice/task `targetRepositories` default to the declared chil
   - `on_attention`: boolean — notify when manual attention is needed. Default: `true`.
   - Terminal auto-loop errors persist an `activity/*-auto-crash-note.json` file with error/session metadata; when available, the error notification includes the crash-note path and instructs resuming with `/gsd auto`.
 
+- `herdr`: Integration with [Herdr](https://github.com/herdrdev/herdr), a terminal multiplexer for coding agents. **Inert unless GSD is running inside a Herdr pane** (`HERDR_ENV=1`). Opt-out — omitting the block leaves every sub-option on. Keys:
+  - `enabled`: boolean — Master switch for Herdr reporting. Default: `true`.
+  - `notifications`: boolean — Deliver blocked/attention notifications through Herdr (pane state) instead of the native desktop toast. Default: `true`.
+  - `title`: boolean — Set the Herdr pane title and `working` state-label from auto-mode progress (e.g. `M2 S1/T3 · executing`). Default: `true`.
+  - Lifecycle reporting (`working`/`idle`/`blocked`) and native session-identity reporting for Herdr restore are always on when `enabled` and inside Herdr. Disable the whole integration with `gsd extensions disable herdr`.
+
 - `dynamic_routing`: configures the dynamic model router that adjusts model selection based on task complexity. Keys:
   - `enabled`: boolean — enable dynamic routing. Default: `false`.
   - `tier_models`: object — model overrides per complexity tier. Keys: `light`, `standard`, `heavy`. Values are model ID strings.
