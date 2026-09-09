@@ -1100,11 +1100,11 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 - Modify: `README.md`, `package.json`, `.npmrc`, `.npmignore`
 - Delete: `docs/superpowers/plans/strip-to-cli-baseline.md`
 
-**Decision required before this task:** package `name`. Options: keep `@opengsd/gsd-pi`, unscoped `gsd-pi`, or a personal scope. If unspecified at execution time, keep `@opengsd/gsd-pi` and note that in the commit body.
+**Decision (settled):** package `name` → unscoped **`gsd-pi`**.
 
 - [ ] **Step 1: `package.json` metadata**
 
-- `name`: per the decision above.
+- `name`: `gsd-pi` (unscoped).
 - `repository.url`: `git+https://github.com/eagle27272/gsd-pi.git`
 - `homepage`: `https://github.com/eagle27272/gsd-pi#readme`
 - `bugs.url`: `https://github.com/eagle27272/gsd-pi/issues`
@@ -1253,7 +1253,7 @@ Summarize to the user: total files/dirs removed, `node_modules` size before/afte
 - Stage 5 provider trim → folded into Tasks 10, 11 (google-cli, cursor-cli); onboarding provider-list edits covered there. No separate task needed — spec Stage 5 said it "may fold into a Stage 2 commit". ✓
 - Stage 6 identity → Tasks 30–31. ✓
 - Stage 7 final sweep → Task 32. ✓
-- Open decision (package name) → surfaced in Task 30. ✓
+- Package name → settled: unscoped `gsd-pi` (Task 30). ✓
 
 **Placeholder scan:** No "TBD"/"handle edge cases"/"similar to Task N". Conditional steps (daemon reference check, copy-export-html usage, shared cli-arg helpers) give explicit branch instructions rather than deferring. ✓
 
