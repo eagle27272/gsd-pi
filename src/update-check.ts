@@ -9,7 +9,7 @@ import { isPnpmInstall } from './resources/shared/package-manager-detection.js'
 
 export { isPnpmInstall }
 
-export const GSD_PI_PACKAGE_NAME = '@opengsd/gsd-pi'
+export const GSD_PI_PACKAGE_NAME = 'gsd-pi'
 export const GSD_BROWSER_PACKAGE_NAME = '@opengsd/gsd-browser'
 
 const CACHE_FILE = join(appRoot, '.update-check')

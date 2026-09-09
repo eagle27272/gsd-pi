@@ -118,8 +118,6 @@ export function buildHeadlessCommandArgs(flags: Pick<CliFlags, 'messages' | 'mod
   return args
 }
 
-export { getProjectSessionsDir } from './project-sessions.js'
-
 export function migrateLegacyFlatSessions(baseSessionsDir: string, projectSessionsDir: string): void {
   if (!existsSync(baseSessionsDir)) return
 

@@ -12,14 +12,18 @@ import {
   fetchLatestVersionFromRegistry,
   GSD_BROWSER_PACKAGE_NAME,
   GSD_BROWSER_REGISTRY_URL,
-  GSD_PI_PACKAGE_NAME,
   pickHigherVersion,
   resolveGsdBrowserPathVersion,
   resolveInstallCommand,
   resolveInstalledPackageVersion,
 } from './update-check.js'
 
-const NPM_PACKAGE = GSD_PI_PACKAGE_NAME
+// gsd-pi is an unpublished personal fork of open-gsd/gsd-pi; there is no npm
+// self-update. `gsd update` (bare) prints how to update from git and reconciles
+// managed resources instead of running `npm install -g`.
+const FORK_UPDATE_MESSAGE =
+  'gsd-pi is a personal fork of open-gsd/gsd-pi. Update by pulling from git and rebuilding:\n' +
+  '  git pull && pnpm install && pnpm run build:core'
 
 export const MODELS_CATALOG_URL =
   'https://raw.githubusercontent.com/open-gsd/gsd-pi/main/packages/pi-ai/src/models.generated.json'
@@ -261,42 +265,10 @@ export async function runUpdate(options: RunUpdateOptions = {}): Promise<void> {
     process.exit(1)
   }
 
-  const current = process.env.GSD_VERSION || '0.0.0'
-  const bold = '\x1b[1m'
-  const dim = '\x1b[2m'
-  const green = '\x1b[32m'
-  const yellow = '\x1b[33m'
-  const reset = '\x1b[0m'
-
-  process.stdout.write(`${dim}Current version:${reset} v${current}\n`)
-  process.stdout.write(`${dim}Checking npm registry...${reset}\n`)
-
-  const latest = await fetchLatestVersionFromRegistry()
-  if (!latest) {
-    process.stderr.write(`${yellow}Failed to reach npm registry.${reset}\n`)
-    process.exit(1)
-  }
-
-  process.stdout.write(`${dim}Latest version:${reset}  v${latest}\n`)
-
-  if (compareSemver(latest, current) <= 0) {
-    process.stdout.write(`${green}Already up to date.${reset}\n`)
-    initResources(options.agentDir ?? defaultAgentDir, options.skillsDir)
-    printClaudeRuntimeFloorAdvisory(options.agentDir ?? defaultAgentDir)
-    return
-  }
-
-  process.stdout.write(`${dim}Updating:${reset} v${current} → ${bold}v${latest}${reset}\n`)
-
-  const installCmd = resolveInstallCommand(`${NPM_PACKAGE}@latest`)
-  try {
-    execSync(installCmd, {
-      stdio: 'inherit',
-    })
-    process.stdout.write(`\n${green}${bold}Updated to v${latest}${reset}\n`)
-    printClaudeRuntimeFloorAdvisory(options.agentDir ?? defaultAgentDir)
-  } catch {
-    process.stderr.write(`\n${yellow}Update failed. Try manually: ${installCmd}${reset}\n`)
-    process.exit(1)
-  }
+  // Bare `gsd update` / `gsd upgrade`: no npm self-update for the fork. Print the
+  // git-based update instructions, then still reconcile managed resources so a
+  // stale sync manifest is brought in line with this binary.
+  process.stdout.write(`${FORK_UPDATE_MESSAGE}\n`)
+  initResources(options.agentDir ?? defaultAgentDir, options.skillsDir)
+  printClaudeRuntimeFloorAdvisory(options.agentDir ?? defaultAgentDir)
 }

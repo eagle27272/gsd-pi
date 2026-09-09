@@ -10,7 +10,7 @@ This is the settings flow: present the current effective configuration and let t
    - **LLM**: provider, model, default tier — `/gsd setup llm` / `/gsd model`.
    - **Workflow**: auto-mode behavior, isolation mode, commit granularity — `/gsd prefs`.
    - **Keys**: API keys — `/gsd keys`.
-   - **Integrations**: remote, search — `/gsd setup remote|search`.
+   - **Integrations**: search — `/gsd setup search`.
    - **Onboarding**: re-run the wizard — `/gsd onboarding`.
 
 3. **Apply the selection** by routing to the matching gsd-pi command. Confirm before changing anything destructive (e.g. switching provider, wiping keys).

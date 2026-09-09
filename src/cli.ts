@@ -13,7 +13,7 @@ import { loadStoredEnvKeys } from './wizard.js'
 import { migratePiCredentials } from './pi-migration.js'
 import { shouldRunOnboarding, runOnboarding } from './onboarding.js'
 import chalk from 'chalk'
-import { checkForGsdBrowserUpdates, checkForUpdates } from './update-check.js'
+import { checkForGsdBrowserUpdates } from './update-check.js'
 import { shouldBypassManagedResourceMismatchGate } from './cli-policy.js'
 import { shouldRedirectAutoToHeadless } from './cli-auto-routing.js'
 import { resolvePrintModeExitCode } from './print-mode-exit.js'
@@ -89,7 +89,7 @@ function exitIfManagedResourcesAreNewer(currentAgentDir: string): void {
   process.stderr.write(
     `[gsd] ${chalk.yellow('Version mismatch detected')}\n` +
     `[gsd] Synced resources are from ${chalk.bold(`v${managedVersion}`)}, but this \`gsd\` binary is ${chalk.dim(`v${currentVersion}`)}.\n` +
-    `[gsd] Run ${chalk.bold('npm install -g @opengsd/gsd-pi@latest')} or ${chalk.bold('gsd upgrade')}, then try again.\n`,
+    `[gsd] Rebuild this fork from source (${chalk.bold('git pull && pnpm install && pnpm run build:core')}), then try again.\n`,
   )
   process.exit(1)
 }
@@ -555,11 +555,10 @@ if (!isPrintMode && shouldRunOnboarding(authStorage, settingsManager.getDefaultP
   process.stdin.pause()
 }
 
-// Update check — non-blocking banner check; interactive prompt deferred to avoid
-// blocking startup. The passive checkForUpdates() prints a banner if an update is
-// available (using cached data or a background fetch) without blocking the TUI.
+// Update check — non-blocking banner check for @opengsd/gsd-browser, a still-published
+// dependency of the kept browser-tools extension. gsd-pi itself is a personal fork
+// with no npm release, so there is no self-update check here.
 if (!isPrintMode) {
-  checkForUpdates().catch(() => {})
   checkForGsdBrowserUpdates().catch(() => {})
 }
 

@@ -323,7 +323,6 @@ try {
     'packages/mcp-server/bin/gsd-mcp-server.js',
     'packages/mcp-server/dist/cli.js',
     'scripts/link-workspace-packages.cjs',
-    'integrations/hermes/plugin.yaml',
   ];
 
   const retiredProductPrefixes = [
