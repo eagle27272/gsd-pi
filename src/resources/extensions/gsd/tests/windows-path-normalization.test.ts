@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 
 // ─── shellEscape + path normalization ──────────────────────────────────────
 
-// Replicate the shellEscape helper from cmux/index.ts
+// Replicate the shellEscape helper from shared/terminal.ts
 function shellEscape(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }

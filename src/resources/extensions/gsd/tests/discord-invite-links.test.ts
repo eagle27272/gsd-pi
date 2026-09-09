@@ -17,7 +17,6 @@ const VALID_INVITE = "https://discord.gg/vY2bv3FrzX";
 
 /** Files that contain user-facing Discord invite links. */
 const FILES_WITH_INVITE_LINKS: string[] = [
-  "README.md",
   "docs/dev/what-is-pi/15-pi-packages-the-ecosystem.md",
   "packages/pi-coding-agent/README.md",
 ];

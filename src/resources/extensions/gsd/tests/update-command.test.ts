@@ -101,8 +101,10 @@ test("/gsd upgrade routes through the update handler", async () => {
 
     assert.equal(handled, true);
     assert.ok(
-      ctx.notifications.some((notification) => notification.message.includes("Already up to date")),
-      "upgrade should call the shared update handler",
+      ctx.notifications.some((notification) =>
+        notification.message.includes("personal fork of open-gsd/gsd-pi"),
+      ),
+      "upgrade should call the shared update handler (fork build prints the git-rebuild message)",
     );
   } finally {
     globalThis.fetch = originalFetch;

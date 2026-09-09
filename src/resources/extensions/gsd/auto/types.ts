@@ -9,7 +9,6 @@ import type { ExtensionAPI, ExtensionContext } from "@gsd/pi-coding-agent";
 import type { AutoSession } from "./session.js";
 import type { GSDPreferences } from "../preferences.js";
 import type { GSDState } from "../types.js";
-import type { CmuxLogLevel } from "../../shared/cmux-events.js";
 import type { LoopDeps } from "./loop-deps.js";
 
 /**
@@ -29,12 +28,11 @@ export const BUDGET_THRESHOLDS: Array<{
   pct: number;
   label: string;
   notifyLevel: "info" | "warning" | "error";
-  cmuxLevel: "progress" | "warning" | "error";
 }> = [
-  { pct: 100, label: "Budget ceiling reached", notifyLevel: "error", cmuxLevel: "error" },
-  { pct: 90, label: "Budget 90%", notifyLevel: "warning", cmuxLevel: "warning" },
-  { pct: 80, label: "Approaching budget ceiling — 80%", notifyLevel: "warning", cmuxLevel: "warning" },
-  { pct: 75, label: "Budget 75%", notifyLevel: "info", cmuxLevel: "progress" },
+  { pct: 100, label: "Budget ceiling reached", notifyLevel: "error" },
+  { pct: 90, label: "Budget 90%", notifyLevel: "warning" },
+  { pct: 80, label: "Approaching budget ceiling — 80%", notifyLevel: "warning" },
+  { pct: 75, label: "Budget 75%", notifyLevel: "info" },
 ];
 
 // ─── Types ───────────────────────────────────────────────────────────────────

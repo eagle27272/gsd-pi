@@ -1,7 +1,7 @@
 // Project/App: gsd-pi
 // File Purpose: readProgressFromDb — DB-authoritative integration progress
 // reads (#2101). Pins both the values derived from the DB and the exact
-// ProgressResult key set the Hermes contract depends on.
+// ProgressResult key set external integrations depend on.
 
 import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";

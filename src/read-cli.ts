@@ -1,5 +1,5 @@
 /**
- * `gsd read` — JSON read seam for integrations (Hermes 6c).
+ * `gsd read` — JSON read seam for external integrations.
  *
  *   gsd read progress --json --project /path
  *   gsd read roadmap --json --project /path [--milestone M001]

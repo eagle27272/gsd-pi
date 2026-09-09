@@ -13,7 +13,7 @@ const SUBCOMMAND_HELP: Record<string, string> = {
     '  - LLM provider (Anthropic, OpenAI, Google, OpenRouter, Ollama, LM Studio, etc.)',
     '  - Web search provider (Brave, Tavily, built-in)',
     '  - Remote questions (Discord, Slack, Telegram)',
-    '  - Tool API keys (Context7, Jina, Groq)',
+    '  - Tool API keys (Jina, Groq)',
     '',
     'All steps are skippable and can be changed later with /login or /search-provider.',
     '',
@@ -118,51 +118,10 @@ const SUBCOMMAND_HELP: Record<string, string> = {
     '  gsd worktree remove old-branch --force  Remove even with unmerged changes',
   ].join('\n'),
 
-  graph: [
-    'Usage: gsd graph <subcommand> [options]',
-    '',
-    'Manage the GSD project knowledge graph. Reads .gsd/ artifacts and builds',
-    'a queryable graph of milestones, slices, tasks, rules, patterns, and lessons.',
-    '',
-    'Subcommands:',
-    '  build   Parse .gsd/ artifacts (STATE.md, milestone ROADMAPs, slice PLANs,',
-    '          KNOWLEDGE.md) and write .gsd/graphs/graph.json atomically.',
-    '  query   Search graph nodes by term (BFS from seed matches, budget-trimmed).',
-    '          Returns matching nodes and reachable edges within the token budget.',
-    '  status  Show whether graph.json exists, its age, node/edge counts, and',
-    '          whether it is stale (built more than 24 hours ago).',
-    '  diff    Compare current graph.json with .last-build-snapshot.json.',
-    '          Returns added, removed, and changed nodes and edges.',
-    '',
-    'Examples:',
-    '  gsd graph build                        Build the graph from .gsd/ artifacts',
-    '  gsd graph status                       Check graph age and node/edge counts',
-    '  gsd graph query auth                   Find nodes related to "auth"',
-    '  gsd graph diff                         Show changes since last snapshot',
-  ].join('\n'),
-
-  hermes: [
-    'Usage: gsd hermes install [options]',
-    '',
-    'Install the bundled open-gsd-hermes plugin into Hermes Agent.',
-    '',
-    'Options:',
-    '  --hermes-home <path>    Hermes home (default: $HERMES_HOME or ~/.hermes)',
-    '  --project <path>        Default GSD project to write into gsd.yaml',
-    '  --plugin-source <path>  Override bundled integrations/hermes source',
-    '  --skip-pip             Copy plugin only; do not pip install editable package',
-    '  --skip-enable          Do not run hermes plugins enable',
-    '  --dry-run              Print intended actions without writing',
-    '',
-    'Examples:',
-    '  gsd hermes install --project ~/code/myapp',
-    '  HERMES_HOME=~/.hermes gsd hermes install --skip-enable',
-  ].join('\n'),
-
   read: [
     'Usage: gsd read <progress|roadmap|memory> --json --project <path>',
     '',
-    'JSON read seam for external integrations (e.g. open-gsd-hermes).',
+    'JSON read seam for external integrations.',
     'Emits envelope: { integration_version, kind, projectDir, data }.',
     '',
     'Examples:',
@@ -251,7 +210,7 @@ export function printHelp(version: string): void {
   writeHelpHeader(version)
   process.stdout.write('Usage: gsd [options] [message...]\n\n')
   process.stdout.write('Options:\n')
-  process.stdout.write('  --mode <text|json|rpc|mcp> Output mode (default: interactive)\n')
+  process.stdout.write('  --mode <text|json|rpc>  Output mode (default: interactive)\n')
   process.stdout.write('  --print, -p              Single-shot print mode\n')
   process.stdout.write('  --continue, -c           Resume the most recent session\n')
   process.stdout.write('  --session <path|id>      Resume a specific session file or ID\n')
@@ -260,11 +219,6 @@ export function printHelp(version: string): void {
   process.stdout.write('  --model <id>             Override model (e.g. provider/model-id)\n')
   process.stdout.write('  --thinking <level>       Override thinking level: off, minimal, low, medium, high, xhigh, max\n')
   process.stdout.write('  --no-session             Disable session persistence\n')
-  process.stdout.write('  --web [path]             Start browser-only web mode\n')
-  process.stdout.write('  --host <host>            Web mode bind address\n')
-  process.stdout.write('  --port <port>            Web mode port\n')
-  process.stdout.write('  --allowed-origins <csv>  Additional allowed web origins\n')
-  process.stdout.write('  --no-auth                Disable web token auth; requires external access control\n')
   process.stdout.write('  --extension <path>       Load additional extension\n')
   process.stdout.write('  --tools <a,b,c>          Restrict available tools\n')
   process.stdout.write('  --list-models [search]   List available models and exit\n')
@@ -282,8 +236,6 @@ export function printHelp(version: string): void {
   process.stdout.write('  auto [args]              Run auto-mode without TUI (pipeable)\n')
   process.stdout.write('  quick <task>             Execute a quick task without TUI\n')
   process.stdout.write('  headless [cmd] [args]    Run /gsd commands without TUI (default: auto)\n')
-  process.stdout.write('  graph <subcommand>       Manage knowledge graph (build, query, status, diff)\n')
-  process.stdout.write('  hermes install           Install the Hermes Agent plugin\n')
   process.stdout.write('\nRun gsd <subcommand> --help for subcommand-specific help.\n')
 }
 

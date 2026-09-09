@@ -7,8 +7,7 @@
  *
  * Covers:
  *   - LLM providers required by the effective model preferences (per phase)
- *   - Remote questions channel if configured (Slack/Discord/Telegram token)
- *   - Optional search/tool integrations (Brave, Tavily, Jina, Context7)
+ *   - Optional search/tool integrations (Brave, Tavily, Jina)
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -17,7 +16,6 @@ import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import { AuthStorage } from "@gsd/pi-coding-agent";
 import { getEnvApiKey } from "@gsd/pi-ai";
-import { isCursorAgentReadyUncached } from "../cursor-cli/readiness.js";
 import { loadEffectiveGSDPreferences } from "./preferences.js";
 import { getAuthPath, PROVIDER_REGISTRY, supportsBrowserOAuth, type ProviderCategory } from "./key-manager.js";
 
@@ -48,9 +46,6 @@ export interface ProviderCheckResult {
  */
 const CLI_AUTH_PROVIDERS = new Set([
   "claude-code",
-  "google-gemini-cli",
-  "google-antigravity",
-  "cursor-agent",
 ]);
 
 /**
@@ -59,9 +54,8 @@ const CLI_AUTH_PROVIDERS = new Set([
  * e.g. GitHub Copilot subscriptions can access Claude and GPT models.
  */
 const PROVIDER_ROUTES: Record<string, string[]> = {
-  anthropic: ["github-copilot", "claude-code", "cursor-agent"],
-  openai: ["github-copilot", "openai-codex", "cursor-agent"],
-  google: ["google-antigravity", "google-gemini-cli", "cursor-agent"],
+  anthropic: ["github-copilot", "claude-code"],
+  openai: ["github-copilot", "openai-codex"],
 };
 
 // ── Model → Provider ID mapping ───────────────────────────────────────────────
@@ -88,7 +82,6 @@ function modelToProviderId(model: string): string | null {
       anthropic: "anthropic",
       openai: "openai",
       "github-copilot": "github-copilot",
-      "cursor-agent": "cursor-agent",
     };
     if (prefixMap[prefix]) return prefixMap[prefix];
     return rawPrefix;
@@ -98,7 +91,6 @@ function modelToProviderId(model: string): string | null {
   if (lower.startsWith("claude"))        return "anthropic";
   if (lower.startsWith("gpt-") || lower.startsWith("o1") || lower.startsWith("o3")) return "openai";
   if (lower.startsWith("gemini"))        return "google";
-  if (lower.startsWith("composer"))      return "cursor-agent";
   if (lower.startsWith("llama") || lower.startsWith("mixtral")) return "groq";
   if (lower.startsWith("grok"))          return "xai";
   if (lower.startsWith("mistral") || lower.startsWith("codestral")) return "mistral";
@@ -162,16 +154,9 @@ interface KeyLookup {
  */
 const CLI_BINARY_MAP: Record<string, string[]> = {
   "claude-code": ["claude", "claude-code"],
-  "google-gemini-cli": ["gemini"],
-  "google-antigravity": ["agy"],
-  "cursor-agent": ["cursor-agent"],
 };
 
-const CLI_AUTH_PATH_CHECK_PROVIDERS = new Set([
-  "google-gemini-cli",
-  "google-antigravity",
-  "cursor-agent",
-]);
+const CLI_AUTH_PATH_CHECK_PROVIDERS = new Set<string>([]);
 
 let asyncCliBinaryPathCache: Map<string, boolean> | null = null;
 
@@ -219,15 +204,7 @@ function isCliBinaryInPath(providerId: string): boolean {
 }
 
 function isExternalCliProviderReady(providerId: string): boolean {
-  if (providerId === "cursor-agent") return isCursorAgentReadyUncached();
   return isCliBinaryInPath(providerId);
-}
-
-function cursorAgentFailureDetail(): string {
-  if (!isCliBinaryInPath("cursor-agent")) {
-    return "Install Cursor Agent and ensure `cursor-agent` is on PATH";
-  }
-  return "Run `cursor-agent login` or set CURSOR_API_KEY";
 }
 
 async function isCliBinaryInPathAsync(providerId: string): Promise<boolean> {
@@ -354,7 +331,7 @@ function resolveKeyFromAuthOrEnv(providerId: string): KeyLookup | null {
   }
 
   // Fall back to PROVIDER_REGISTRY env var for providers not covered by getEnvApiKey
-  // (e.g., search providers like Brave, Tavily; tool providers like Jina, Context7)
+  // (e.g., search providers like Brave, Tavily; tool providers like Jina)
   if (info?.envVar && process.env[info.envVar]) {
     return { found: true, source: "env", backedOff: false };
   }
@@ -363,12 +340,6 @@ function resolveKeyFromAuthOrEnv(providerId: string): KeyLookup | null {
 }
 
 function resolveKey(providerId: string): KeyLookup {
-  if (providerId === "cursor-agent") {
-    return isExternalCliProviderReady(providerId)
-      ? { found: true, source: "env", backedOff: false }
-      : { found: false, source: "none", backedOff: false };
-  }
-
   const direct = resolveKeyFromAuthOrEnv(providerId);
   if (direct) return direct;
 
@@ -399,9 +370,7 @@ function checkLlmProviders(): ProviderCheckResult[] {
       const label = info?.label ?? providerId;
       if (CLI_AUTH_PATH_CHECK_PROVIDERS.has(providerId) && !isExternalCliProviderReady(providerId)) {
         const binaries = CLI_BINARY_MAP[providerId]?.map(binary => `\`${binary}\``).join(" or ");
-        const detail = providerId === "cursor-agent"
-          ? cursorAgentFailureDetail()
-          : binaries
+        const detail = binaries
           ? `Install ${label} and ensure ${binaries} is on PATH`
           : `Install ${label} and ensure its CLI is on PATH`;
         results.push({
@@ -409,9 +378,7 @@ function checkLlmProviders(): ProviderCheckResult[] {
           label,
           category: "llm",
           status: "error",
-          message: providerId === "cursor-agent" && isCliBinaryInPath(providerId)
-            ? `${label} — CLI not authenticated`
-            : `${label} — CLI not found`,
+          message: `${label} — CLI not found`,
           detail,
           required: true,
         });
@@ -492,55 +459,8 @@ function checkLlmProviders(): ProviderCheckResult[] {
   return results;
 }
 
-function checkRemoteQuestionsProvider(): ProviderCheckResult | null {
-  try {
-    const loaded = loadEffectiveGSDPreferences();
-    const rq = loaded?.preferences?.remote_questions;
-    if (!rq) return null;
-
-    const channel = rq.channel as string | undefined;
-    if (!channel) return null;
-
-    const providerMap: Record<string, string> = {
-      slack: "slack_bot",
-      discord: "discord_bot",
-      telegram: "telegram_bot",
-    };
-
-    const providerId = providerMap[channel.toLowerCase()];
-    if (!providerId) return null;
-
-    const info = PROVIDER_REGISTRY.find(p => p.id === providerId);
-    const label = info?.label ?? channel;
-    const lookup = resolveKey(providerId);
-
-    if (!lookup.found) {
-      return {
-        name: providerId,
-        label,
-        category: "remote",
-        status: "warning",
-        message: `${label} — channel configured but token not found`,
-        detail: info?.envVar ? `Set ${info.envVar} or run /gsd keys` : `Run /gsd keys to configure`,
-        required: true,
-      };
-    }
-
-    return {
-      name: providerId,
-      label,
-      category: "remote",
-      status: "ok",
-      message: `${label} — token present (${lookup.source})`,
-      required: true,
-    };
-  } catch {
-    return null;
-  }
-}
-
 function checkOptionalProviders(): ProviderCheckResult[] {
-  const optional = ["brave", "tavily", "jina", "context7"] as const;
+  const optional = ["brave", "tavily", "jina"] as const;
   const results: ProviderCheckResult[] = [];
 
   // Determine which search providers are configured so we can suppress
@@ -580,16 +500,13 @@ function checkOptionalProviders(): ProviderCheckResult[] {
 // ── Public API ─────────────────────────────────────────────────────────────────
 
 /**
- * Run all provider checks: required LLM keys, remote questions channel, optional tools.
+ * Run all provider checks: required LLM keys, optional tools.
  * Fast (sub-10ms) — reads auth.json and env vars only, no network I/O.
  */
 export function runProviderChecks(): ProviderCheckResult[] {
   const results: ProviderCheckResult[] = [];
 
   results.push(...checkLlmProviders());
-
-  const remoteCheck = checkRemoteQuestionsProvider();
-  if (remoteCheck) results.push(remoteCheck);
 
   results.push(...checkOptionalProviders());
 

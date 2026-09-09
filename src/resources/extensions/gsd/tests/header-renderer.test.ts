@@ -22,7 +22,7 @@ test("renderHeaderLines uses the command-center splash layout", () => {
       provider: "anthropic",
       directory: "~/projects/gsd-pi",
       branch: "feat/tui-refresh",
-      mcpServers: ["context7"],
+      mcpServers: ["jina"],
     },
     120,
   );
@@ -36,5 +36,5 @@ test("renderHeaderLines uses the command-center splash layout", () => {
   assert.match(plain, /\/gsd start/);
   assert.match(plain, /\/gsd templates/);
   assert.match(plain, /claude-sonnet-4-6/);
-  assert.match(plain, /Context7 ✓/);
+  assert.match(plain, /Jina ✓/);
 });

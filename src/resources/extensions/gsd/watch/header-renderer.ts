@@ -208,7 +208,7 @@ function formatInfoLine(label: string, value: string, availableWidth: number): s
 
 /**
  * Format MCP server names as a dot-separated row with checkmarks.
- * e.g. "Brave ✓  ·  Answers ✓  ·  Context7 ✓"
+ * e.g. "Brave ✓  ·  Answers ✓  ·  Jina ✓"
  */
 export function formatMcpRow(servers: string[], width: number): string {
   if (servers.length === 0) return "";

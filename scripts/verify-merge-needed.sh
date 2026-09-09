@@ -99,7 +99,7 @@ if [ "$PORTABILITY_CHANGED" = "true" ]; then
 fi
 
 if [ "$DOCKER_CHANGED" = "true" ]; then
-  echo "Additional note: docker-sensitive paths changed; also run pnpm run test:e2e:docker before review."
+  echo "Additional note: packaging-sensitive paths changed; also run pnpm run validate-pack before review."
 fi
 
 if [ "${VERIFY_MERGE_VERBOSE:-0}" = "1" ]; then

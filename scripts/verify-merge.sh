@@ -61,7 +61,7 @@ else
 	echo "verify:merge note: CI would run the heavy Linux build/test gate for this diff."
 fi
 if [ "$DOCKER_CHANGED" = "true" ]; then
-	echo "verify:merge note: docker paths changed; local CI parity still also needs pnpm run test:e2e:docker."
+	echo "verify:merge note: packaging paths changed; local CI parity also needs pnpm run validate-pack."
 fi
 
 echo "── native addon from source (test-fault-injection) ──"
@@ -78,9 +78,6 @@ pnpm install --frozen-lockfile
 
 echo "── build:core ──"
 pnpm run build:core
-
-echo "── web host (stale-aware; required by validate-pack) ──"
-node scripts/build-web-if-stale.cjs
 
 echo "── typecheck:extensions ──"
 pnpm run typecheck:extensions

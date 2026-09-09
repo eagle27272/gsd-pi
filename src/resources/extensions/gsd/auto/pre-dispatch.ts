@@ -295,7 +295,6 @@ export async function runPreDispatch(
       });
     }
   }
-  deps.syncCmuxSidebar(prefs, state);
   let mid = state.activeMilestone?.id;
   let midTitle = state.activeMilestone?.title;
   debugLog("autoLoop", {
@@ -402,11 +401,6 @@ export async function runPreDispatch(
       "success",
       "milestone",
       basename(s.originalBasePath || s.basePath),
-    );
-    deps.logCmuxEvent(
-      prefs,
-      `Milestone ${s.currentMilestoneId} complete. Advancing to ${mid}.`,
-      "success",
     );
 
     const vizPrefs = prefs;
@@ -560,11 +554,6 @@ export async function runPreDispatch(
         "milestone",
         basename(s.originalBasePath || s.basePath),
       );
-      deps.logCmuxEvent(
-        prefs,
-        completionStopReason,
-        "success",
-      );
       await deps.stopAuto(ctx, pi, completionStopReason, {
         completionWidget: {
           milestoneId: s.currentMilestoneId,
@@ -592,7 +581,6 @@ export async function runPreDispatch(
       await deps.pauseAuto(ctx, pi);
       ctx.ui.notify(blockedResumeMessage, "warning");
       deps.sendDesktopNotification("GSD", blockedResumeMessage, "warning", "attention", basename(s.originalBasePath || s.basePath));
-      deps.logCmuxEvent(prefs, blockedResumeMessage, "warning");
     } else {
       const ids = incomplete.map((m: { id: string }) => m.id).join(", ");
       const diag = `basePath=${s.basePath}, milestones=[${state.registry.map((m: { id: string; status: string }) => `${m.id}:${m.status}`).join(", ")}], phase=${state.phase}`;
@@ -662,11 +650,6 @@ export async function runPreDispatch(
       "milestone",
       basename(s.originalBasePath || s.basePath),
     );
-    deps.logCmuxEvent(
-      prefs,
-      `Milestone ${mid} complete.`,
-      "success",
-    );
     if (s.currentUnit) {
       await deps.closeoutUnit(
         ctx,
@@ -705,7 +688,6 @@ export async function runPreDispatch(
     await deps.pauseAuto(ctx, pi);
     ctx.ui.notify(blockedResumeMessage, "warning");
     deps.sendDesktopNotification("GSD", blockedResumeMessage, "warning", "attention", basename(s.originalBasePath || s.basePath));
-    deps.logCmuxEvent(prefs, blockedResumeMessage, "warning");
     debugLog("autoLoop", { phase: "exit", reason: "blocked" });
     deps.emitJournalEvent({ ts: new Date().toISOString(), flowId: ic.flowId, seq: ic.nextSeq(), eventType: "terminal", data: { reason: "blocked", blockers: state.blockers } });
     return { action: "break", reason: "blocked" };

@@ -13,7 +13,7 @@ import { loadStoredEnvKeys } from './wizard.js'
 import { migratePiCredentials } from './pi-migration.js'
 import { shouldRunOnboarding, runOnboarding } from './onboarding.js'
 import chalk from 'chalk'
-import { checkForGsdBrowserUpdates, checkForUpdates } from './update-check.js'
+import { checkForGsdBrowserUpdates } from './update-check.js'
 import { shouldBypassManagedResourceMismatchGate } from './cli-policy.js'
 import { shouldRedirectAutoToHeadless } from './cli-auto-routing.js'
 import { resolvePrintModeExitCode } from './print-mode-exit.js'
@@ -25,10 +25,8 @@ import { applyModelOverride } from './cli-model-override.js'
 import {
   buildHeadlessCommandArgs,
   parseCliArgs,
-  runWebCliBranch,
   migrateLegacyFlatSessions,
-} from './cli-web-branch.js'
-import { stopWebMode } from './web-mode.js'
+} from './cli-args.js'
 import { getProjectSessionsDir } from './project-sessions.js'
 import { markStartup, printStartupTimings } from './startup-timings.js'
 import { applyRtkProcessEnv, GSD_RTK_DISABLED_ENV, isTruthy } from './rtk-shared.js'
@@ -91,7 +89,7 @@ function exitIfManagedResourcesAreNewer(currentAgentDir: string): void {
   process.stderr.write(
     `[gsd] ${chalk.yellow('Version mismatch detected')}\n` +
     `[gsd] Synced resources are from ${chalk.bold(`v${managedVersion}`)}, but this \`gsd\` binary is ${chalk.dim(`v${currentVersion}`)}.\n` +
-    `[gsd] Run ${chalk.bold('npm install -g @opengsd/gsd-pi@latest')} or ${chalk.bold('gsd upgrade')}, then try again.\n`,
+    `[gsd] Rebuild this fork from source (${chalk.bold('git pull && pnpm install && pnpm run build:core')}), then try again.\n`,
   )
   process.exit(1)
 }
@@ -103,22 +101,18 @@ function exitIfManagedResourcesAreNewer(currentAgentDir: string): void {
 /**
  * Print the non-interactive-mode error and exit. Called both from the early
  * TTY gate (before heavy init) and from the interactive-mode TTY gate right
- * before `InteractiveMode.run()`. The `includeWebHint` variant also lists
- * `--web` and `headless` as alternatives.
+ * before `InteractiveMode.run()`. The `includeHeadlessHint` variant also lists
+ * `headless` as an alternative.
  */
-function printNonTtyErrorAndExit(missing: string | undefined, includeWebHint: boolean): never {
+function printNonTtyErrorAndExit(missing: string | undefined, includeHeadlessHint: boolean): never {
   const suffix = missing ? ` but ${missing} not a TTY` : ''
   process.stderr.write(`[gsd] Error: Interactive mode requires a terminal (TTY)${suffix}.\n`)
   process.stderr.write('[gsd] Non-interactive alternatives:\n')
   process.stderr.write('[gsd]   gsd auto                       Auto-mode (pipeable, no TUI)\n')
   process.stderr.write('[gsd]   gsd --print "your message"     Single-shot prompt\n')
-  if (includeWebHint) {
-    process.stderr.write('[gsd]   gsd --web [path]               Browser-only web mode\n')
-  }
   process.stderr.write('[gsd]   gsd --mode rpc                 JSON-RPC over stdin/stdout\n')
-  process.stderr.write('[gsd]   gsd --mode mcp                 MCP server over stdin/stdout\n')
   process.stderr.write('[gsd]   gsd --mode text "message"      Text output mode\n')
-  if (includeWebHint) {
+  if (includeHeadlessHint) {
     process.stderr.write('[gsd]   gsd headless                   Auto-mode without TUI\n')
   }
   process.exit(1)
@@ -263,115 +257,6 @@ if (shouldBypassManagedResourceMismatchGate(cliFlags.messages[0])) {
   process.exit(0)
 }
 
-// ---------------------------------------------------------------------------
-// Hermes integration subcommand — `gsd hermes install`
-// ---------------------------------------------------------------------------
-if (cliFlags.messages[0] === 'hermes') {
-  const { runHermesIntegrationCommand } = await import('./hermes-integration-install.js')
-  const exitCode = await runHermesIntegrationCommand(process.argv)
-  process.exit(exitCode)
-}
-
-// ---------------------------------------------------------------------------
-// Graph subcommand — `gsd graph build|status|query|diff`
-// ---------------------------------------------------------------------------
-if (cliFlags.messages[0] === 'graph') {
-  const sub = cliFlags.messages[1]
-  const { buildGraph, writeGraph, graphStatus, graphQuery, graphDiff, resolveGsdRoot } = await import('@opengsd/mcp-server')
-
-  const projectDir = process.cwd()
-  const gsdRoot = resolveGsdRoot(projectDir)
-
-  // Projection-write version gating (T003 spike, write side): `graph build`
-  // bypasses the DB, so it must consult the schema stamp and refuse to write
-  // into a newer project; read-only subcommands warn loudly but keep their
-  // read-only semantics. A missing DB keeps current behavior, and the version
-  // knowledge stays in the extension (the mcp-server graph code is untouched).
-  const { openExistingWorkflowDatabase } = await import('./resources/extensions/gsd/db-workspace.js')
-  const dbOpen = openExistingWorkflowDatabase(projectDir)
-  const schemaTooNewMessage = !dbOpen.ok && dbOpen.reason === 'schema-too-new' ? dbOpen.error.message : null
-
-  if (!sub || sub === 'build') {
-    if (schemaTooNewMessage !== null) {
-      process.stderr.write(`[gsd] graph build failed: ${schemaTooNewMessage}\n`)
-      process.exit(1)
-    }
-    try {
-      const graph = await buildGraph(projectDir)
-      await writeGraph(gsdRoot, graph)
-      process.stdout.write(`Graph built: ${graph.nodes.length} nodes, ${graph.edges.length} edges\n`)
-    } catch (err) {
-      process.stderr.write(`[gsd] graph build failed: ${err instanceof Error ? err.message : String(err)}\n`)
-      process.exit(1)
-    }
-  } else if (sub === 'status') {
-    if (schemaTooNewMessage !== null) {
-      process.stderr.write(`[gsd] Warning: ${schemaTooNewMessage}\n`)
-    }
-    try {
-      const result = await graphStatus(projectDir)
-      if (!result.exists) {
-        process.stdout.write('Graph: not built yet. Run: gsd graph build\n')
-      } else {
-        process.stdout.write(`Graph status:\n`)
-        process.stdout.write(`  exists:    ${result.exists}\n`)
-        process.stdout.write(`  nodes:     ${result.nodeCount}\n`)
-        process.stdout.write(`  edges:     ${result.edgeCount}\n`)
-        process.stdout.write(`  stale:     ${result.stale}\n`)
-        process.stdout.write(`  ageHours:  ${result.ageHours !== undefined ? result.ageHours.toFixed(2) : 'n/a'}\n`)
-        process.stdout.write(`  lastBuild: ${result.lastBuild ?? 'n/a'}\n`)
-      }
-    } catch (err) {
-      process.stderr.write(`[gsd] graph status failed: ${err instanceof Error ? err.message : String(err)}\n`)
-      process.exit(1)
-    }
-  } else if (sub === 'query') {
-    const term = cliFlags.messages[2]
-    if (!term) {
-      process.stderr.write('Usage: gsd graph query <term>\n')
-      process.exit(1)
-    }
-    if (schemaTooNewMessage !== null) {
-      process.stderr.write(`[gsd] Warning: ${schemaTooNewMessage}\n`)
-    }
-    try {
-      const result = await graphQuery(projectDir, term)
-      if (result.nodes.length === 0) {
-        process.stdout.write(`No nodes found for term: "${term}"\n`)
-      } else {
-        process.stdout.write(`Query results for "${term}" (${result.nodes.length} nodes, ${result.edges.length} edges):\n`)
-        for (const node of result.nodes) {
-          process.stdout.write(`  [${node.type}] ${node.label} (${node.confidence})\n`)
-        }
-      }
-    } catch (err) {
-      process.stderr.write(`[gsd] graph query failed: ${err instanceof Error ? err.message : String(err)}\n`)
-      process.exit(1)
-    }
-  } else if (sub === 'diff') {
-    if (schemaTooNewMessage !== null) {
-      process.stderr.write(`[gsd] Warning: ${schemaTooNewMessage}\n`)
-    }
-    try {
-      const result = await graphDiff(projectDir)
-      process.stdout.write(`Graph diff:\n`)
-      process.stdout.write(`  nodes added:    ${result.nodes.added.length}\n`)
-      process.stdout.write(`  nodes removed:  ${result.nodes.removed.length}\n`)
-      process.stdout.write(`  nodes changed:  ${result.nodes.changed.length}\n`)
-      process.stdout.write(`  edges added:    ${result.edges.added.length}\n`)
-      process.stdout.write(`  edges removed:  ${result.edges.removed.length}\n`)
-    } catch (err) {
-      process.stderr.write(`[gsd] graph diff failed: ${err instanceof Error ? err.message : String(err)}\n`)
-      process.exit(1)
-    }
-  } else {
-    process.stderr.write(`Unknown graph command: ${sub}\n`)
-    process.stderr.write('Commands: build, status, query <term>, diff\n')
-    process.exit(1)
-  }
-  process.exit(0)
-}
-
 exitIfManagedResourcesAreNewer(agentDir)
 
 // Early TTY check — must come before heavy initialization to avoid dangling
@@ -384,9 +269,7 @@ exitIfManagedResourcesAreNewer(agentDir)
 const subcommandsExemptFromEarlyTtyCheck = new Set([
   'auto',
   'config',
-  'graph',
   'headless',
-  'hermes',
   'read',
   'quick',
   'install',
@@ -395,12 +278,11 @@ const subcommandsExemptFromEarlyTtyCheck = new Set([
   'sessions',
   'update',
   'upgrade',
-  'web',
   'worktree',
   'wt',
 ])
 const isSubcommandExemptFromEarlyTtyCheck = subcommandsExemptFromEarlyTtyCheck.has(cliFlags.messages[0] ?? '')
-if (!process.stdin.isTTY && !isPrintMode && !isSubcommandExemptFromEarlyTtyCheck && !cliFlags.listModels && !cliFlags.web) {
+if (!process.stdin.isTTY && !isPrintMode && !isSubcommandExemptFromEarlyTtyCheck && !cliFlags.listModels) {
   printNonTtyErrorAndExit(undefined, false)
 }
 
@@ -455,33 +337,6 @@ if (cliFlags.messages[0] === 'config') {
   await runOnboarding(authStorage)
   process.exit(0)
 }
-
-// `gsd web stop [path|all]` — stop web server before anything else
-if (cliFlags.messages[0] === 'web' && cliFlags.messages[1] === 'stop') {
-  const webBranch = await runWebCliBranch(cliFlags, {
-    stopWebMode,
-    stderr: process.stderr,
-    baseSessionsDir: sessionsDir,
-    agentDir,
-  })
-  if (webBranch.handled) {
-    process.exit(webBranch.exitCode)
-  }
-}
-
-// `gsd --web [path]` or `gsd web [start] [path]` — launch browser-only web mode
-if (cliFlags.web || (cliFlags.messages[0] === 'web' && cliFlags.messages[1] !== 'stop')) {
-  await ensureRtkBootstrap()
-  const webBranch = await runWebCliBranch(cliFlags, {
-    stderr: process.stderr,
-    baseSessionsDir: sessionsDir,
-    agentDir,
-  })
-  if (webBranch.handled) {
-    process.exit(webBranch.exitCode)
-  }
-}
-
 
 // `gsd sessions` — list past sessions and pick one to resume
 if (cliFlags.messages[0] === 'sessions') {
@@ -549,7 +404,7 @@ if (cliFlags.messages[0] === 'sessions') {
   cliFlags._selectedSessionPath = selected.path
 }
 
-// `gsd read` — JSON read seam for integrations (Hermes 6c)
+// `gsd read` — JSON read seam for external integrations
 if (cliFlags.messages[0] === 'read') {
   const { runReadCli } = await import('./read-cli.js')
   process.exit(await runReadCli(process.argv))
@@ -700,11 +555,10 @@ if (!isPrintMode && shouldRunOnboarding(authStorage, settingsManager.getDefaultP
   process.stdin.pause()
 }
 
-// Update check — non-blocking banner check; interactive prompt deferred to avoid
-// blocking startup. The passive checkForUpdates() prints a banner if an update is
-// available (using cached data or a background fetch) without blocking the TUI.
+// Update check — non-blocking banner check for @opengsd/gsd-browser, a still-published
+// dependency of the kept browser-tools extension. gsd-pi itself is a personal fork
+// with no npm release, so there is no self-update check here.
 if (!isPrintMode) {
-  checkForUpdates().catch(() => {})
   checkForGsdBrowserUpdates().catch(() => {})
 }
 
@@ -829,30 +683,6 @@ if (isPrintMode) {
     printStartupTimings()
     await runRpcMode(session)
     process.exit(0)
-  }
-
-  if (mode === 'mcp') {
-    printStartupTimings()
-    const { startMcpServer } = await import('./mcp-server.js')
-    const { buildMcpModeTools } = await import('./mcp-mode-tools.js')
-
-    // Activate every registered tool before starting the MCP transport.
-    // `session.agent.state.tools` is the *active* subset, not the full
-    // registry — if we expose only the active set, extension-registered
-    // tools (gsd workflow, browser-tools, mac-tools, search-the-web, …)
-    // are invisible to MCP clients. Flipping the active set to every
-    // known tool name makes `state.tools` mirror the full registry for
-    // this MCP session, which is what an external client expects.
-    const allToolNames = session.getAllTools().map((t) => t.name)
-    session.setActiveToolsByName(allToolNames)
-    const tools = await buildMcpModeTools(session.agent.state.tools ?? [])
-
-    await startMcpServer({
-      tools,
-      version: process.env.GSD_VERSION || '0.0.0',
-    })
-    // MCP server runs until the transport closes; keep alive
-    await new Promise(() => {})
   }
 
   const { runPrintMode } = await loadPrintModeModule()

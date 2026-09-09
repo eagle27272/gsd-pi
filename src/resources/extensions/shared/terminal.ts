@@ -26,3 +26,7 @@ export function shortcutDesc(base: string, fallbackCmd: string): string {
   if (supportsCtrlAltShortcuts()) return base;
   return `${base} — shortcut may not work in this terminal, use ${fallbackCmd}`;
 }
+
+export function shellEscape(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}

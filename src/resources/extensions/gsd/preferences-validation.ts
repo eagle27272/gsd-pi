@@ -619,44 +619,6 @@ export function validatePreferences(preferences: GSDPreferences): {
     }
   }
 
-  // ─── Cmux ───────────────────────────────────────────────────────────────
-  if (preferences.cmux !== undefined) {
-    if (preferences.cmux && typeof preferences.cmux === "object") {
-      const cmux = preferences.cmux as Record<string, unknown>;
-      const validatedCmux: NonNullable<GSDPreferences["cmux"]> = {};
-      if (cmux.enabled !== undefined) validatedCmux.enabled = !!cmux.enabled;
-      if (cmux.notifications !== undefined) validatedCmux.notifications = !!cmux.notifications;
-      if (cmux.sidebar !== undefined) validatedCmux.sidebar = !!cmux.sidebar;
-      if (cmux.splits !== undefined) validatedCmux.splits = !!cmux.splits;
-      if (cmux.browser !== undefined) validatedCmux.browser = !!cmux.browser;
-
-      const knownCmuxKeys = new Set(["enabled", "notifications", "sidebar", "splits", "browser"]);
-      for (const key of Object.keys(cmux)) {
-        if (!knownCmuxKeys.has(key)) {
-          warnings.push(`unknown cmux key "${key}" — ignored`);
-        }
-      }
-
-      if (Object.keys(validatedCmux).length > 0) {
-        validated.cmux = validatedCmux;
-      }
-    } else {
-      errors.push("cmux must be an object");
-    }
-  }
-
-  // ─── Remote Questions ───────────────────────────────────────────────
-  if (preferences.remote_questions !== undefined) {
-    const remoteQuestions = preferences.remote_questions as unknown;
-    if (remoteQuestions === null || remoteQuestions === false) {
-      // Bare YAML stubs and explicit disable both mean absent (#1764).
-    } else if (typeof remoteQuestions === "object") {
-      validated.remote_questions = remoteQuestions as GSDPreferences["remote_questions"];
-    } else {
-      errors.push("remote_questions must be an object");
-    }
-  }
-
   // ─── Post-Unit Hooks ─────────────────────────────────────────────────
   if (preferences.post_unit_hooks && Array.isArray(preferences.post_unit_hooks)) {
     const validHooks: PostUnitHookConfig[] = [];

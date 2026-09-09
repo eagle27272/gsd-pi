@@ -50,7 +50,7 @@ describe('resolveExtensionEntries', () => {
     const dir = makeTempDir()
     t.after(() => rmSync(dir, { recursive: true, force: true }));
     writeFileSync(join(dir, 'package.json'), JSON.stringify({
-      name: '@gsd/cmux',
+      name: '@gsd/noext-lib',
       pi: {}
     }))
     writeFileSync(join(dir, 'index.js'), 'export function utility() {}')
@@ -105,16 +105,16 @@ describe('discoverExtensionEntryPaths', () => {
     mkdirSync(extDir)
     writeFileSync(join(extDir, 'index.js'), 'module.exports = function() {}')
 
-    // Library with opt-out (like cmux)
-    const libDir = join(root, 'cmux')
+    // Library with opt-out
+    const libDir = join(root, 'noext-lib')
     mkdirSync(libDir)
     writeFileSync(join(libDir, 'package.json'), JSON.stringify({ pi: {} }))
     writeFileSync(join(libDir, 'index.js'), 'export function utility() {}')
 
     const paths = discoverExtensionEntryPaths(root)
-    assert.equal(paths.length, 1, 'should discover my-ext but skip cmux')
+    assert.equal(paths.length, 1, 'should discover my-ext but skip the library')
     assert.ok(paths[0].includes('my-ext'))
-    assert.ok(!paths.some(p => p.includes('cmux')), 'cmux should not be discovered')
+    assert.ok(!paths.some(p => p.includes('noext-lib')), 'the library should not be discovered')
   })
 })
 

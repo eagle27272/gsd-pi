@@ -63,9 +63,6 @@ const ic = {
         nextAction: "complete",
       };
     },
-    syncCmuxSidebar() {
-      calls.push("sync-sidebar");
-    },
     setActiveMilestoneId(_basePath: string, mid: string) {
       calls.push(`set-active:${mid}`);
     },
@@ -157,7 +154,7 @@ if (result.action === "break") {
   assertTrue(result.reason === "merge-failed", "non-conflict merge error uses merge-failed reason");
 }
 assertTrue(
-  calls.join(" > ") === "invalidate > health > derive:/tmp/gsd-test > sync-sidebar > set-active:M001 > reconcile > preflight > merge > postflight > pause:Merge error on milestone M001: remote rejected push. Resolve and run /gsd auto to resume.",
+  calls.join(" > ") === "invalidate > health > derive:/tmp/gsd-test > set-active:M001 > reconcile > preflight > merge > postflight > pause:Merge error on milestone M001: remote rejected push. Resolve and run /gsd auto to resume.",
   `pre-dispatch pauses immediately after non-conflict merge failure (${calls.join(" > ")})`,
 );
 assertTrue(

@@ -89,9 +89,9 @@ function getBundledGsdVersion(): string {
 function getBundledPackageName(): string {
   try {
     const pkg = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf-8'))
-    return typeof pkg?.name === 'string' ? pkg.name : '@opengsd/gsd-pi'
+    return typeof pkg?.name === 'string' ? pkg.name : 'gsd-pi'
   } catch {
-    return '@opengsd/gsd-pi'
+    return 'gsd-pi'
   }
 }
 
@@ -111,8 +111,8 @@ function writeManagedResourceManifest(agentDir: string, contentHash: string): vo
         .filter(e => e.isDirectory())
         .filter(e => {
           // Track directories that are actual extensions — identified by an
-          // index.js/index.ts entry point OR an extension-manifest.json (e.g.
-          // remote-questions which uses mod.ts instead of index.ts).
+          // index.js/index.ts entry point OR an extension-manifest.json (some
+          // extensions use mod.ts instead of index.ts).
           const dirPath = join(bundledExtensionsDir, e.name)
           return existsSync(join(dirPath, 'index.js'))
             || existsSync(join(dirPath, 'index.ts'))
@@ -715,7 +715,7 @@ function pruneRemovedBundledExtensions(
  * Skips the full copy when the managed-resources.json version and content
  * fingerprint match the current install, avoiding ~128ms of synchronous cpSync
  * on steady-state startup.
- * After `npm update -g @opengsd/gsd-pi`, versions will differ and the copy
+ * After a rebuild of the fork, versions will differ and the copy
  * runs once to land the new resources.
  *
  * Inspectable: `ls ~/.gsd/agent/extensions/`

@@ -1445,8 +1445,6 @@ function makeMockDeps(
     },
     clearUnitTimeout: () => {},
     updateProgressWidget: () => {},
-    syncCmuxSidebar: () => {},
-    logCmuxEvent: () => {},
     invalidateAllCaches: () => {
       callLog.push("invalidateAllCaches");
     },
@@ -2984,9 +2982,6 @@ test("autoLoop stops before success notification when postflight stash restore n
     sendDesktopNotification: () => {
       deps.callLog.push("sendDesktopNotification");
     },
-    logCmuxEvent: () => {
-      deps.callLog.push("logCmuxEvent");
-    },
     stopAuto: async (_ctx, _pi, reason) => {
       deps.callLog.push("stopAuto");
       stopReason = reason ?? "";
@@ -3005,10 +3000,6 @@ test("autoLoop stops before success notification when postflight stash restore n
   assert.ok(
     !deps.callLog.includes("sendDesktopNotification"),
     "must not emit milestone success desktop notification after stash restore failure",
-  );
-  assert.ok(
-    !deps.callLog.includes("logCmuxEvent"),
-    "must not emit milestone success cmux event after stash restore failure",
   );
 });
 

@@ -189,7 +189,6 @@ import { getAutoWorktreeOriginalBase } from "./auto-worktree-session-registry.js
 import { syncWorktreeStateBack } from "./auto-worktree-sync.js";
 import { teardownAutoWorktree } from "./auto-worktree-teardown.js";
 import { pruneQueueOrder } from "./queue-order.js";
-import { startCommandPolling as _startCommandPolling, isRemoteConfigured } from "../remote-questions/manager.js";
 import { createDefaultMilestoneMergeTransaction } from "./milestone-merge-transaction.js";
 
 import { debugLog, isDebugEnabled, writeDebugSummary } from "./debug-logger.js";
@@ -241,7 +240,6 @@ import {
 import { markActiveForWorkerCanceled } from "./db/unit-dispatches.js";
 import { writeUnitRuntimeRecord } from "./unit-runtime.js";
 import { countPendingCaptures } from "./captures.js";
-import { CMUX_CHANNELS, type CmuxLogLevel } from "../shared/cmux-events.js";
 import { ensureDbOpen } from "./bootstrap/dynamic-tools.js";
 import { acknowledgeWedge, formatWedgeRefusalNotice, getOpenWedge } from "./auto-liveness-backstop.js";
 import { getValidationBlockMessageForBase } from "./validation-block-guard.js";
@@ -251,17 +249,6 @@ import {
   formatLockedWorkflowDatabaseNotice,
   listWorkflowDbLockHolderPids,
 } from "./workflow-db-locks.js";
-
-function makeCmuxEmitters(pi: ExtensionAPI) {
-  return {
-    syncCmuxSidebar: (preferences: GSDPreferences | undefined, state: GSDState) =>
-      pi.events.emit(CMUX_CHANNELS.SIDEBAR, { action: "sync" as const, preferences, state }),
-    logCmuxEvent: (preferences: GSDPreferences | undefined, message: string, level?: CmuxLogLevel) =>
-      pi.events.emit(CMUX_CHANNELS.LOG, { preferences, message, level: level ?? "info" }),
-    clearCmuxSidebar: (preferences: GSDPreferences | undefined) =>
-      pi.events.emit(CMUX_CHANNELS.SIDEBAR, { action: "clear" as const, preferences }),
-  };
-}
 
 // ── Extracted modules ──────────────────────────────────────────────────────
 import { startUnitSupervision } from "./auto-timers.js";
@@ -839,27 +826,6 @@ function deregisterSigtermHandler(): void {
   s.sigtermHandler = null;
 }
 
-/**
- * Wrapper: start background command polling for the configured remote channel
- * (currently Telegram only). Stores the cleanup function on the session so
- * every exit path can stop the interval via stopCommandPolling().
- * No-op when no remote channel is configured.
- */
-function startAutoCommandPolling(basePath: string): void {
-  if (!isRemoteConfigured()) return;
-  // Clear any existing interval before starting a new one (e.g. resume path).
-  stopAutoCommandPolling();
-  s.commandPollingCleanup = _startCommandPolling(basePath);
-}
-
-/** Wrapper: stop background command polling and clear the stored cleanup. */
-function stopAutoCommandPolling(): void {
-  if (s.commandPollingCleanup) {
-    s.commandPollingCleanup();
-    s.commandPollingCleanup = null;
-  }
-}
-
 export { type AutoDashboardData } from "./auto-dashboard.js";
 
 export function getAutoDashboardData(): AutoDashboardData {
@@ -1411,7 +1377,6 @@ function handleLostSessionLock(
   s.paused = false;
   deactivateGSD();
   clearUnitTimeout();
-  stopAutoCommandPolling();
   restoreProjectRootEnv();
   restoreMilestoneLockEnv();
   deregisterSigtermHandler();
@@ -1532,7 +1497,6 @@ export async function cleanupAfterLoopExit(ctx: ExtensionContext): Promise<void>
   s.active = false;
   deactivateGSD();
   clearUnitTimeout();
-  stopAutoCommandPolling();
   restoreProjectRootEnv();
   restoreMilestoneLockEnv();
   if (!preservePausedSurface) clearSessionModelOverrideForCommandSession(ctx);
@@ -1748,7 +1712,6 @@ export async function stopAuto(
     // ── Step 1: Timers and locks ──
     try {
       clearUnitTimeout();
-      stopAutoCommandPolling();
       if (lockBase()) clearLock(lockBase());
       if (lockBase()) releaseSessionLock(lockBase());
     } catch (e) {
@@ -2058,18 +2021,6 @@ export async function stopAuto(
       });
     }
 
-    // ── Step 9: Cmux sidebar / event log ──
-    try {
-      pi?.events.emit(CMUX_CHANNELS.SIDEBAR, { action: "clear" as const, preferences: loadedPreferences });
-      pi?.events.emit(CMUX_CHANNELS.LOG, {
-        preferences: loadedPreferences,
-        message: `${stopNotificationPrefix}.`,
-        level: isBlockedStopReason(reason) ? "warning" : "info",
-      });
-    } catch (e) {
-      debugLog("stop-cleanup-cmux", { error: e instanceof Error ? e.message : String(e) });
-    }
-
     // ── Step 10: Debug summary ──
     try {
       if (isDebugEnabled()) {
@@ -2244,7 +2195,6 @@ export async function pauseAuto(
   s.paused = true;
   if (options.abortActiveTurn && ctx && !ctx.isIdle()) ctx.abort();
   clearUnitTimeout();
-  stopAutoCommandPolling();
 
   // Flush queued follow-up messages (#3512).
   // Late async notifications (async_job_result, gsd-auto-wrapup) can trigger
@@ -2474,7 +2424,6 @@ function buildLoopDeps(pi: ExtensionAPI, ctx: ExtensionContext): LoopDeps {
   // (resolveDispatch, runPreDispatchHooks, etc.) delegate to the registry.
   initRegistry(convertDispatchRules(DISPATCH_RULES));
 
-  const cmux = makeCmuxEmitters(pi);
   const worktreeProjection = new WorktreeStateProjection();
 
   return {
@@ -2485,9 +2434,7 @@ function buildLoopDeps(pi: ExtensionAPI, ctx: ExtensionContext): LoopDeps {
     clearUnitTimeout,
     checkpointWorkflowDatabase,
     updateProgressWidget,
-    ...cmux,
     handleLostSessionLock: (ctx: ExtensionContext | undefined, lockStatus: SessionLockStatus | undefined) => {
-      cmux.clearCmuxSidebar(loadEffectiveGSDPreferences(s.basePath || undefined)?.preferences);
       handleLostSessionLock(ctx, lockStatus);
     },
 
@@ -3043,7 +2990,6 @@ export async function startAuto(
     await refreshResumeResourcesAndDb(s.basePath);
     try {
       await rebuildState(s.basePath);
-      pi.events.emit(CMUX_CHANNELS.SIDEBAR, { action: "sync" as const, preferences: loadEffectiveGSDPreferences(s.basePath || undefined)?.preferences, state: await deriveState(s.basePath) });
     } catch (e) {
       debugLog("resume-rebuild-state-failed", {
         error: e instanceof Error ? e.message : String(e),
@@ -3085,7 +3031,6 @@ export async function startAuto(
       );
     }
     clearPausedSession("paused-session DB cleanup failed (resume activation)");
-    pi.events.emit(CMUX_CHANNELS.LOG, { preferences: loadEffectiveGSDPreferences(s.basePath || undefined)?.preferences, message: s.stepMode ? "Step-mode resumed." : "Auto-mode resumed.", level: "progress" });
 
     try {
       const resumeResult = await s.orchestration?.resume();
@@ -3100,7 +3045,6 @@ export async function startAuto(
     } catch (err) {
       debugLog("resume-orchestration-resume", { error: err instanceof Error ? err.message : String(err) });
     }
-    startAutoCommandPolling(s.basePath);
     try {
       await runAutoLoopWithUok({
         ctx,
@@ -3161,21 +3105,12 @@ export async function startAuto(
     await cleanupAfterLoopExit(ctx);
     return;
   }
-  try {
-    pi.events.emit(CMUX_CHANNELS.SIDEBAR, { action: "sync" as const, preferences: loadEffectiveGSDPreferences(s.basePath || undefined)?.preferences, state: await deriveState(s.basePath) });
-  } catch (err) {
-    // Best-effort only — sidebar sync must never block auto-mode startup
-    logWarning("engine", `cmux sync failed: ${err instanceof Error ? err.message : String(err)}`, { file: "auto.ts" });
-  }
-  pi.events.emit(CMUX_CHANNELS.LOG, { preferences: loadEffectiveGSDPreferences(s.basePath || undefined)?.preferences, message: requestedStepMode ? "Step-mode started." : "Auto-mode started.", level: "progress" });
 
   try {
     await s.orchestration?.start({ basePath: s.basePath, trigger: "auto-loop" });
   } catch (err) {
     debugLog("start-orchestration-start", { error: err instanceof Error ? err.message : String(err) });
   }
-
-  startAutoCommandPolling(s.basePath);
 
   // Dispatch the first unit
   try {

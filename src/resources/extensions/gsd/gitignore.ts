@@ -344,7 +344,7 @@ avoid_skills:
 
 custom_instructions:
   - "Always verify with browser_assert before marking UI work done"
-  - "Use Context7 for all library/framework decisions"
+  - "Prefer well-established libraries with active maintenance"
 \`\`\`
 `;
 

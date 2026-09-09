@@ -12,7 +12,7 @@ function findRepoRoot(start: string): string {
 	for (let i = 0; i < 10; i++) {
 		try {
 			const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
-			if (pkg.name === "@opengsd/gsd-pi" && existsSync(join(dir, "pnpm-workspace.yaml"))) return dir;
+			if (pkg.name === "gsd-pi" && existsSync(join(dir, "pnpm-workspace.yaml"))) return dir;
 		} catch {
 			// Keep walking.
 		}
@@ -44,7 +44,6 @@ function assertContractsBefore(scriptName: string, laterCommand: string): void {
 test("pi build scripts compile contracts before pi-coding-agent", () => {
 	assertContractsBefore("build:pi", "pnpm run build:pi-coding-agent");
 	assertContractsBefore("build:pi-coding-agent", "pnpm --filter @gsd/pi-coding-agent run build");
-	assertContractsBefore("gsd:web", "pnpm run copy-resources");
 });
 
 test("contracts build emits dist even when incremental metadata is stale", () => {

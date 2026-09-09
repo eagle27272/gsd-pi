@@ -33,7 +33,6 @@ const CI_PR_BLOCKING_MAP = [
     local: 'verify:merge',
     steps: [
       'build:core',
-      'web ci + build:web-host',
       'typecheck:extensions',
       'validate-pack',
       'verify:workspace-coverage',
@@ -58,12 +57,6 @@ const CI_AUXILIARY = [
 ];
 
 const CI_CONDITIONAL = [
-  {
-    ciJob: 'build / docker e2e step',
-    local: 'test:e2e:docker',
-    when: 'docker-changed=true',
-    enforcement: 'block-when-triggered',
-  },
   {
     ciJob: 'windows-portability',
     local: 'windows-portability.test.ts (+ package tests on Windows)',
@@ -171,7 +164,6 @@ function buildReport() {
   const allTests = collectTestFiles(ROOT);
   const thinAreas = [
     { area: 'web/', tests: countByPrefix(allTests, 'web/'), sources: countSourceFiles(join(ROOT, 'web')) },
-    { area: 'vscode-extension/', tests: countByPrefix(allTests, 'vscode-extension/'), sources: countSourceFiles(join(ROOT, 'vscode-extension')) },
   ].filter(row => row.sources > 0 && row.tests / row.sources < 0.05);
 
   const drift = verifyMergeScriptExists(scripts);

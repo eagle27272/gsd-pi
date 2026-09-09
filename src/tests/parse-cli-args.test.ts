@@ -3,15 +3,15 @@
 
 import test, { describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildHeadlessCommandArgs, parseCliArgs } from '../cli-web-branch.ts'
+import { buildHeadlessCommandArgs, parseCliArgs } from '../cli-args.ts'
 
 function parse(...args: string[]) {
   return parseCliArgs(['node', 'gsd', ...args])
 }
 
 describe('parseCliArgs — modes', () => {
-  test('accepts mcp mode (added during refactor)', () => {
-    assert.equal(parse('--mode', 'mcp').mode, 'mcp')
+  test('mcp mode is no longer accepted (gsd --mode mcp removed)', () => {
+    assert.equal(parse('--mode', 'mcp').mode, undefined)
   })
 
   test('still accepts text/json/rpc modes', () => {
@@ -176,44 +176,6 @@ describe('parseCliArgs — list flags and accumulators', () => {
     const flags = parse('--list-models', '--print')
     assert.equal(flags.listModels, true)
     assert.equal(flags.print, true)
-  })
-})
-
-describe('parseCliArgs — web mode flags', () => {
-  test('--web with no path sets web=true', () => {
-    const flags = parse('--web')
-    assert.equal(flags.web, true)
-    assert.equal(flags.webPath, undefined)
-  })
-
-  test('--web with a path captures it', () => {
-    const flags = parse('--web', '/tmp/project')
-    assert.equal(flags.web, true)
-    assert.equal(flags.webPath, '/tmp/project')
-  })
-
-  test('--port parses valid integer', () => {
-    assert.equal(parse('--port', '8080').webPort, 8080)
-  })
-
-  test('--port rejects non-numeric', () => {
-    assert.equal(parse('--port', 'abc').webPort, undefined)
-  })
-
-  test('--port rejects out-of-range values', () => {
-    assert.equal(parse('--port', '0').webPort, undefined)
-    assert.equal(parse('--port', '70000').webPort, undefined)
-  })
-
-  test('--allowed-origins splits and trims comma list', () => {
-    assert.deepEqual(
-      parse('--allowed-origins', 'http://a.com, http://b.com ,http://c.com').webAllowedOrigins,
-      ['http://a.com', 'http://b.com', 'http://c.com'],
-    )
-  })
-
-  test('--no-auth captures opt-in web auth disablement', () => {
-    assert.equal(parse('--web', '--no-auth').webNoAuth, true)
   })
 })
 

@@ -13,7 +13,6 @@ import { handleCleanupBranches, handleCleanupSnapshots, handleSkip, handleCleanu
 import { handleExport } from "../../export.js";
 import { handleHistory } from "../../history.js";
 import { handleUndo } from "../../undo.js";
-import { handleRemote } from "../../../remote-questions/mod.js";
 import { handleShip } from "../../commands-ship.js";
 import { handleSessionReport } from "../../commands-session-report.js";
 import { handlePrBranch } from "../../commands-pr-branch.js";
@@ -253,10 +252,6 @@ Examples:
   if (trimmed === "migrate" || trimmed.startsWith("migrate ")) {
     const { handleMigrate } = await import("../../migrate/command.js");
     await handleMigrate(trimmed.replace(/^migrate\s*/, "").trim(), ctx, pi);
-    return true;
-  }
-  if (trimmed === "remote" || trimmed.startsWith("remote ")) {
-    await handleRemote(trimmed.replace(/^remote\s*/, "").trim(), ctx, pi);
     return true;
   }
   if (trimmed === "dispatch" || trimmed.startsWith("dispatch ")) {

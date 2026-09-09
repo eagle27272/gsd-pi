@@ -52,11 +52,9 @@ bun.lock
 .planning/
 # GSD research fetch cache is regenerable — do not force-add under .planning/
 .planning/research/.cache/
-# Hermes integration test fixtures (minimal tracked GSD projects)
-!integrations/hermes/tests/fixtures/minimal-project/.gsd/
-!integrations/hermes/tests/fixtures/minimal-project/.gsd/**
-# ...except the SQLite DB, which the tests generate at runtime
-integrations/hermes/tests/fixtures/minimal-project/.gsd/gsd.db
+# read-cli test fixture (minimal tracked GSD project)
+!src/tests/fixtures/read-cli-minimal-project/.gsd/
+!src/tests/fixtures/read-cli-minimal-project/.gsd/**
 .audits/
 .plans/
 docs/coherence-audit/

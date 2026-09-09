@@ -1,21 +1,20 @@
 {
-  "name": "@opengsd/gsd-pi",
+  "name": "gsd-pi",
   "version": "1.18.0",
   "description": "GSD Pi local-first coding agent",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/open-gsd/gsd-pi.git"
+    "url": "git+https://github.com/eagle27272/gsd-pi.git"
   },
-  "homepage": "https://github.com/open-gsd/gsd-pi#readme",
+  "homepage": "https://github.com/eagle27272/gsd-pi#readme",
   "bugs": {
-    "url": "https://github.com/open-gsd/gsd-pi/issues"
+    "url": "https://github.com/eagle27272/gsd-pi/issues"
   },
   "type": "module",
   "bin": {
     "gsd": "dist/bootstrap.js",
     "gsd-cli": "dist/bootstrap.js",
-    "gsd-mcp-server": "packages/mcp-server/bin/gsd-mcp-server.js",
     "gsd-pi": "scripts/install.js"
   },
   "files": [
@@ -26,8 +25,6 @@
     "packages/*/README.md",
     "pkg",
     "src/resources",
-    "integrations/hermes/plugin.yaml",
-    "integrations/hermes",
     "scripts/postinstall.js",
     "scripts/install.js",
     "scripts/install",
@@ -37,10 +34,6 @@
     "package.json",
     "README.md"
   ],
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
-  },
   "piConfig": {
     "name": "gsd",
     "configDir": ".gsd"
@@ -62,11 +55,8 @@
     "build:pi": "pnpm run build:contracts && pnpm run build:native-pkg && pnpm run build:pi-tui && pnpm run build:pi-ai && pnpm run build:pi-agent-core && pnpm run build:pi-coding-agent-bootstrap && pnpm run build:agent-core && pnpm run build:pi-coding-agent && pnpm run build:agent-modes",
     "build:pi-coding-agent-bootstrap": "node scripts/bootstrap-pi-coding-agent-build.cjs",
     "build:mcp-server": "pnpm --filter @opengsd/mcp-server run build",
-    "build:daemon": "pnpm --filter @opengsd/daemon run build",
-    "build:core": "pnpm run build:contracts && pnpm run build:pi && pnpm run build:rpc-client && pnpm run build:mcp-server && pnpm run build:daemon && tsc && pnpm run copy-resources && pnpm run copy-themes && pnpm run copy-export-html",
-    "build": "pnpm run build:core && node scripts/build-web-if-stale.cjs",
-    "stage:web-host": "node scripts/stage-web-standalone.cjs",
-    "build:web-host": "cross-env NODE_ENV=production pnpm --filter gsd-web run build && pnpm run stage:web-host",
+    "build:core": "pnpm run build:contracts && pnpm run build:pi && pnpm run build:rpc-client && pnpm run build:mcp-server && tsc && pnpm run copy-resources && pnpm run copy-themes && pnpm run copy-export-html",
+    "build": "pnpm run build:core",
     "copy-resources": "node scripts/copy-resources.cjs",
     "copy-themes": "node scripts/copy-themes.cjs",
     "copy-export-html": "node scripts/copy-export-html.cjs",
@@ -81,12 +71,11 @@
     "legacy:cleanup:gate": "node scripts/legacy-cleanup-gate.mjs",
     "legacy:cleanup:evidence": "node scripts/legacy-cleanup-evidence.mjs",
     "legacy:cleanup:proof": "node scripts/legacy-state-path-proof.mjs",
-    "test:unit:compiled": "node --import ./scripts/dist-test-resolve.mjs --experimental-test-isolation=process --test-reporter=./scripts/test-reporter-compact.mjs --test \"dist-test/src/tests/*.test.js\" \"dist-test/src/resources/extensions/gsd/tests/*.test.js\" \"dist-test/src/resources/extensions/gsd/tests/*.test.mjs\" \"dist-test/src/resources/extensions/shared/tests/*.test.js\" \"dist-test/src/resources/extensions/subagent/tests/*.test.js\" \"dist-test/src/resources/extensions/claude-code-cli/tests/*.test.js\" \"dist-test/src/resources/extensions/cursor-cli/tests/*.test.js\" \"dist-test/src/resources/extensions/github-sync/tests/*.test.js\" \"dist-test/src/resources/extensions/universal-config/tests/*.test.js\" \"dist-test/src/resources/extensions/visual-brief/tests/*.test.js\" \"dist-test/src/resources/extensions/voice/tests/*.test.js\" \"dist-test/src/resources/extensions/mcp-client/tests/*.test.js\" \"dist-test/src/resources/extensions/remote-questions/tests/*.test.js\"",
+    "test:unit:compiled": "node --import ./scripts/dist-test-resolve.mjs --experimental-test-isolation=process --test-reporter=./scripts/test-reporter-compact.mjs --test \"dist-test/src/tests/*.test.js\" \"dist-test/src/resources/extensions/gsd/tests/*.test.js\" \"dist-test/src/resources/extensions/gsd/tests/*.test.mjs\" \"dist-test/src/resources/extensions/shared/tests/*.test.js\" \"dist-test/src/resources/extensions/subagent/tests/*.test.js\" \"dist-test/src/resources/extensions/claude-code-cli/tests/*.test.js\" \"dist-test/src/resources/extensions/github-sync/tests/*.test.js\" \"dist-test/src/resources/extensions/universal-config/tests/*.test.js\" \"dist-test/src/resources/extensions/visual-brief/tests/*.test.js\" \"dist-test/src/resources/extensions/mcp-client/tests/*.test.js\"",
     "test:unit": "pnpm run test:compile && pnpm run test:unit:compiled && pnpm run test:live-workflow:unit",
     "test:changed:src": "node scripts/verify-changed-src-tests.mjs",
     "test:packages": "pnpm run test:compile && pnpm run test:packages:compiled",
     "test:packages:compiled": "node scripts/run-package-tests.cjs",
-    "test:daemon": "pnpm --filter @opengsd/daemon run test",
     "verify:workspace-coverage": "node scripts/verify-workspace-coverage.cjs",
     "verify:pi-boundary": "node scripts/verify-pi-boundary.cjs && bash scripts/check-mcp-bridge-boundary.sh",
     "verify:pi-patches": "node scripts/verify-pi-patches.cjs",
@@ -110,9 +99,6 @@
     "build:native:test": "node native/scripts/build.js --dev --test-fault-injection",
     "dev": "node scripts/dev.js",
     "gsd": "node scripts/dev-cli.js",
-    "gsd:web": "pnpm run build:contracts && pnpm run build:pi && pnpm run copy-resources && node scripts/build-web-if-stale.cjs && node scripts/dev-cli.js --web",
-    "gsd:web:stop": "node scripts/dev-cli.js web stop",
-    "gsd:web:stop:all": "node scripts/dev-cli.js web stop all",
     "update:gsd-browser": "node scripts/update-gsd-browser-local.mjs",
     "postinstall": "node scripts/install.js",
     "pi:install-global": "node scripts/install-pi-global.js",
@@ -131,7 +117,7 @@
     "audit:test-gaps": "node scripts/audit-test-gaps.mjs",
     "audit:test-matrix": "node scripts/audit-test-matrix.mjs",
     "test:evaluation": "node scripts/run-test-evaluation.mjs",
-    "test:coverage:unit": "cross-env NODE_OPTIONS=--max-old-space-size=8192 c8 --merge-async --reporter=lcovonly --report-dir=coverage/unit --temp-directory=coverage/.tmp-unit --exclude=\"**/*.test.*\" --exclude=\"**/tests/**\" --exclude=\"**/test/**\" --all node --import ./scripts/dist-test-resolve.mjs --experimental-test-isolation=process --test \"dist-test/src/tests/*.test.js\" \"dist-test/src/resources/extensions/gsd/tests/*.test.js\" \"dist-test/src/resources/extensions/gsd/tests/*.test.mjs\" \"dist-test/src/resources/extensions/shared/tests/*.test.js\" \"dist-test/src/resources/extensions/subagent/tests/*.test.js\" \"dist-test/src/resources/extensions/claude-code-cli/tests/*.test.js\" \"dist-test/src/resources/extensions/cursor-cli/tests/*.test.js\" \"dist-test/src/resources/extensions/github-sync/tests/*.test.js\" \"dist-test/src/resources/extensions/universal-config/tests/*.test.js\" \"dist-test/src/resources/extensions/visual-brief/tests/*.test.js\" \"dist-test/src/resources/extensions/voice/tests/*.test.js\" \"dist-test/src/resources/extensions/mcp-client/tests/*.test.js\" \"dist-test/src/resources/extensions/remote-questions/tests/*.test.js\"",
+    "test:coverage:unit": "cross-env NODE_OPTIONS=--max-old-space-size=8192 c8 --merge-async --reporter=lcovonly --report-dir=coverage/unit --temp-directory=coverage/.tmp-unit --exclude=\"**/*.test.*\" --exclude=\"**/tests/**\" --exclude=\"**/test/**\" --all node --import ./scripts/dist-test-resolve.mjs --experimental-test-isolation=process --test \"dist-test/src/tests/*.test.js\" \"dist-test/src/resources/extensions/gsd/tests/*.test.js\" \"dist-test/src/resources/extensions/gsd/tests/*.test.mjs\" \"dist-test/src/resources/extensions/shared/tests/*.test.js\" \"dist-test/src/resources/extensions/subagent/tests/*.test.js\" \"dist-test/src/resources/extensions/claude-code-cli/tests/*.test.js\" \"dist-test/src/resources/extensions/github-sync/tests/*.test.js\" \"dist-test/src/resources/extensions/universal-config/tests/*.test.js\" \"dist-test/src/resources/extensions/visual-brief/tests/*.test.js\" \"dist-test/src/resources/extensions/mcp-client/tests/*.test.js\"",
     "test:coverage:integration": "pnpm exec playwright install chromium && cross-env NODE_OPTIONS=--max-old-space-size=8192 c8 --reporter=lcovonly --report-dir=coverage/integration --temp-directory=coverage/.tmp-integration --exclude=\"**/*.test.*\" --exclude=\"**/tests/**\" --all node --import ./src/resources/extensions/gsd/tests/resolve-ts.mjs --experimental-strip-types --test --test-timeout=180000 \"src/tests/integration/*.test.ts\" \"src/resources/extensions/gsd/tests/integration/*.test.ts\" \"src/resources/extensions/async-jobs/*.test.ts\" \"src/resources/extensions/ollama/**/*.test.ts\" \"src/resources/extensions/ollama/*.test.ts\" \"src/resources/extensions/search-the-web/tests/*.test.ts\" \"src/resources/extensions/bg-shell/tests/*.test.ts\" \"src/resources/extensions/slash-commands/tests/*.test.ts\" \"src/resources/extensions/browser-tools/tests/*.test.mjs\" \"src/resources/extensions/mac-tools/tests/*.test.cjs\"",
     "test:coverage:packages": "node scripts/run-coverage-packages.mjs",
     "test:coverage:merge": "node scripts/merge-coverage-reports.mjs",
@@ -143,18 +129,10 @@
     "verify:merge:needed": "bash scripts/verify-merge-needed.sh",
     "verify:full": "pnpm run verify:merge",
     "pipeline:version-stamp": "node scripts/version-stamp.mjs",
-    "release:changelog": "node scripts/generate-changelog.mjs",
-    "release:bump": "node scripts/bump-version.mjs",
-    "release:update-readme-highlights": "node scripts/update-readme-release-highlights.mjs",
-    "release:update-changelog": "node scripts/update-changelog.mjs",
-    "docker:build-runtime": "docker build --target runtime -t ghcr.io/open-gsd/gsd-pi .",
-    "docker:build-builder": "docker build --target builder -t ghcr.io/open-gsd/gsd-ci-builder .",
-    "prepublishOnly": "pnpm run sync-pkg-version && pnpm run sync-platform-versions && pnpm run verify:version-sync && pnpm run verify:native-platform-packages && node scripts/prepublish-check.mjs && pnpm run build && pnpm run typecheck:extensions && pnpm run validate-pack",
     "test:live-regression": "node --experimental-strip-types tests/live-regression/run.ts",
     "test:auto-acceptance": "node tests/acceptance-bed/auto-milestone-bed.mjs",
     "test:e2e": "node --experimental-strip-types --test --test-concurrency=1 \"tests/e2e/*.e2e.test.ts\"",
-    "test:e2e:windows-smoke": "node --experimental-strip-types --test tests/e2e/sanity.e2e.test.ts tests/e2e/migration.e2e.test.ts tests/e2e/native-abi.e2e.test.ts",
-    "test:e2e:docker": "node --experimental-strip-types --test \"tests/e2e/docker/**/*.e2e.test.ts\""
+    "test:e2e:windows-smoke": "node --experimental-strip-types --test tests/e2e/sanity.e2e.test.ts tests/e2e/migration.e2e.test.ts tests/e2e/native-abi.e2e.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.2.83",
@@ -174,7 +152,6 @@
     "chalk": "^5.6.2",
     "cross-spawn": "^7.0.6",
     "diff": "^8.0.2",
-    "discord.js": "^14.26.4",
     "extract-zip": "^2.0.1",
     "get-east-asian-width": "^1.6.0",
     "glob": "^13.0.1",

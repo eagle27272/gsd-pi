@@ -6,12 +6,6 @@ import { accessSync, constants } from "node:fs";
 import { delimiter, resolve } from "node:path";
 import type { NotificationPreferences } from "./types.js";
 import { loadEffectiveGSDPreferences } from "./preferences.js";
-import { sendRemoteNotification as _sendRemoteNotification } from "../remote-questions/notify.js";
-
-/** Swappable dispatcher for remote notifications — exported so tests can mock it. */
-export const remoteNotificationDispatcher = {
-  send: _sendRemoteNotification,
-};
 
 export type NotifyLevel = "info" | "success" | "warning" | "error";
 export type NotificationKind = "complete" | "error" | "budget" | "milestone" | "attention";
@@ -49,39 +43,15 @@ export function sendDesktopNotification(
   const loadedPreferences = loadEffectiveGSDPreferences()?.preferences;
   const notifications = deps.notifications ?? loadedPreferences?.notifications;
 
-  // Remote notifications fire independently of desktop preferences.
-  // sendRemoteNotification handles "not configured" gracefully (early return).
-  void remoteNotificationDispatcher.send(title, message).catch(() => {});
-
   if (!shouldSendDesktopNotification(kind, notifications)) return;
 
-  // cmux delivery and desktop delivery are independent — if cmux import or
-  // delivery fails, we must still attempt the native desktop notification.
-  const runCmux = async () => {
-    try {
-      const { CmuxClient, emitOsc777Notification, resolveCmuxConfig } = await import("../cmux/index.js");
-      const cmux = resolveCmuxConfig(loadedPreferences);
-      if (cmux.notifications) {
-        const delivered = CmuxClient.fromPreferences(loadedPreferences).notify(title, message);
-        if (delivered) return true;
-        emitOsc777Notification(title, message);
-      }
-    } catch {
-      // cmux unavailable — fall through to desktop notification
-    }
-    return false;
-  };
-
-  void runCmux().then((deliveredByCmux) => {
-    if (deliveredByCmux) return;
-    try {
-      const command = buildDesktopNotificationCommand(process.platform, title, message, level);
-      if (!command) return;
-      launchDesktopNotification(command);
-    } catch {
-      // Non-fatal — desktop notifications are best-effort
-    }
-  }).catch(() => {});
+  try {
+    const command = buildDesktopNotificationCommand(process.platform, title, message, level);
+    if (!command) return;
+    launchDesktopNotification(command);
+  } catch {
+    // Non-fatal — desktop notifications are best-effort
+  }
 }
 
 export function launchDesktopNotification(command: NotificationCommand): void {

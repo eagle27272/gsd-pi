@@ -14,11 +14,6 @@ test("verify:merge compiles test artifacts once and reuses compiled suites", () 
   assert.doesNotMatch(verifyMergeScript, /pnpm run test:packages\b(?!:compiled)/);
 });
 
-test("verify:merge uses the stale-aware web host build path", () => {
-  assert.match(verifyMergeScript, /node scripts\/build-web-if-stale\.cjs/);
-  assert.doesNotMatch(verifyMergeScript, /pnpm run build:web-host/);
-});
-
 test("verify:merge mirrors CI portability gating for native package tests", () => {
   assert.match(verifyMergeScript, /bash scripts\/ci-classify-changes\.sh/);
   assert.ok(

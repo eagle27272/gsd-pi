@@ -5,7 +5,7 @@
  * When `runPreDispatch` observes that the active milestone (or the last one
  * the session was working on) has already been closed by another session,
  * the loop must exit cleanly with `{ action: "break", reason:
- * "milestone-complete" }` and must NOT replay merge, desktop / cmux
+ * "milestone-complete" }` and must NOT replay merge, desktop
  * notifications, unit closeout, or `stopAuto`.
  *
  * There are two `deriveState` shapes the guard must cover, and both are
@@ -22,7 +22,7 @@
  *      a guard that only inspects `mid` is unreachable in production and
  *      the loop replays `_runMilestoneMergeOnceWithStashRestore`,
  *      `sendDesktopNotification("All milestones complete!")`,
- *      `logCmuxEvent`, and `stopAuto` — exactly the duplicate side
+ *      and `stopAuto` — exactly the duplicate side
  *      effects this fix exists to prevent.
  *
  * Both fire-paths of the guard (`completionStopInProgress` and a
@@ -103,7 +103,6 @@ function makeIterationContext(overrides: ScenarioOverrides): any {
           nextAction: "complete",
         };
       },
-      syncCmuxSidebar() {},
       setActiveMilestoneId() {},
       reconcileMergeState() {
         return "clean";
@@ -125,9 +124,6 @@ function makeIterationContext(overrides: ScenarioOverrides): any {
       },
       sendDesktopNotification() {
         recordSideEffect("desktop-notify");
-      },
-      logCmuxEvent() {
-        recordSideEffect("cmux-event");
       },
       async closeoutUnit() {
         recordSideEffect("closeout-unit");

@@ -539,7 +539,7 @@ test("gsd headless query returns JSON from the built CLI", async (t) => {
 });
 
 test("gsd --mode rpc --bare is not rejected at startup (headless --bare forwarding argv)", async () => {
-  // headless.ts and the MCP/daemon session managers forward --bare to the
+  // headless.ts and the workflow MCP session manager forward --bare to the
   // spawned RPC child (`node cli.js --mode rpc ... --bare`). Regression: the
   // top-level parseCliArgs rejected --bare, so every `gsd headless --bare ...`
   // child died at startup with "Unknown option: --bare" before RPC mode began.

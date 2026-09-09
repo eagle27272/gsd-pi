@@ -291,7 +291,7 @@ test("buildResourceLoader loads extensions installed by the slash command", asyn
   );
 });
 
-test("initResources manifest tracks all bundled extension subdirectories including remote-questions (#2367)", async () => {
+test("initResources manifest tracks bundled extension subdirectories (#2367)", async () => {
   const { initResources } = await import("../resource-loader.ts");
   const tmp = mkdtempSync(join(tmpdir(), "gsd-resource-loader-manifest-"));
   const fakeAgentDir = join(tmp, "agent");
@@ -307,23 +307,22 @@ test("initResources manifest tracks all bundled extension subdirectories includi
 
     assert.equal(
       manifest.packageName,
-      "@opengsd/gsd-pi",
+      "gsd-pi",
       "managed resource manifest should be scoped to the package that wrote it",
     );
 
-    // remote-questions uses mod.ts (not index.ts) as its entry point and has an
-    // extension-manifest.json — it must still appear in the manifest so that
-    // pruneRemovedBundledExtensions can track it across upgrades.
+    // A bundled extension with an extension-manifest.json must appear in the
+    // manifest so that pruneRemovedBundledExtensions can track it across upgrades.
     assert.ok(
-      installedDirs.includes("remote-questions"),
-      `installedExtensionDirs should include remote-questions but got: [${installedDirs.join(", ")}]`,
+      installedDirs.includes("subagent"),
+      `installedExtensionDirs should include subagent but got: [${installedDirs.join(", ")}]`,
     );
 
-    // Also verify that the synced remote-questions directory actually exists in the agent dir
+    // Also verify that the synced extension directory actually exists in the agent dir
     assert.equal(
-      existsSync(join(fakeAgentDir, "extensions", "remote-questions")),
+      existsSync(join(fakeAgentDir, "extensions", "subagent")),
       true,
-      "remote-questions directory should be synced to agent extensions",
+      "subagent directory should be synced to agent extensions",
     );
   } finally {
     rmSync(tmp, { recursive: true, force: true });
@@ -433,7 +432,7 @@ test("initResources refreshes a stale managed gsd-browser package skill during r
     join(fakeAgentDir, "managed-resources.json"),
     JSON.stringify({
       gsdVersion: currentPackageVersion(),
-      packageName: "@opengsd/gsd-pi",
+      packageName: "gsd-pi",
       contentHash: "force-refresh",
     }),
   );
@@ -730,7 +729,7 @@ test("initResources restores missing top-level shared resources during resource 
       gsdVersion: process.env.GSD_VERSION && process.env.GSD_VERSION !== "0.0.0"
         ? process.env.GSD_VERSION
         : packageVersion,
-      packageName: "@opengsd/gsd-pi",
+      packageName: "gsd-pi",
       contentHash: "force-refresh",
     }),
   );
@@ -779,7 +778,7 @@ test("initResources restores missing bundled skills during resource refresh", as
       gsdVersion: process.env.GSD_VERSION && process.env.GSD_VERSION !== "0.0.0"
         ? process.env.GSD_VERSION
         : packageVersion,
-      packageName: "@opengsd/gsd-pi",
+      packageName: "gsd-pi",
       contentHash: "force-refresh",
     }),
   );

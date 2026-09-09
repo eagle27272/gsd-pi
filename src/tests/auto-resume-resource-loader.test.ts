@@ -60,14 +60,14 @@ test("dev CLI wrapper passes itself as every child-process CLI entrypoint", () =
     devCli.buildDevCliSpawnArgs({
       resolveTsPath: "/repo/src/resources/extensions/gsd/tests/resolve-ts.mjs",
       srcLoaderPath: "/repo/src/loader.ts",
-      argv: ["--web"],
+      argv: ["--print"],
     }),
     [
       "--import",
       "/repo/src/resources/extensions/gsd/tests/resolve-ts.mjs",
       "--experimental-strip-types",
       "/repo/src/loader.ts",
-      "--web",
+      "--print",
     ],
   );
 });

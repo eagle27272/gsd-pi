@@ -19,13 +19,6 @@ import { writeCrashLog } from "./crash-log.js";
 import { logWarning, isGsdExtensionStderrEnabled } from "../workflow-logger.js";
 import { UNIT_TOOL_CONTRACTS } from "../unit-tool-contracts.js";
 import { installManifestFlushOnProcessTeardown } from "../workflow-manifest.js";
-// Static import so cmux event listeners are registered synchronously during
-// extension bootstrap. Prior implementation used `void import().then()` which
-// queued listener registration as a microtask — any CMUX_CHANNELS emit fired
-// in the same event loop turn as registration (e.g. from a provider-error
-// session hook calling startAuto) would be silently dropped because Node's
-// EventEmitter does not buffer events for late subscribers.
-import { initCmuxEventListeners } from "../../cmux/index.js";
 
 export { writeCrashLog } from "./crash-log.js";
 
@@ -232,10 +225,6 @@ export function registerGsdExtension(pi: ExtensionAPI): void {
     ["exec-tools", () => registerExecTools(pi)],
     ["schedule-wakeup-tool", () => registerScheduleWakeupTool(pi)],
     ["shortcuts", () => registerShortcuts(pi)],
-    // cmux is a library (no pi), so gsd sets up the event listeners on its
-    // behalf using the shared event channel contract. Registration is
-    // synchronous — see the import comment above for the rationale.
-    ["cmux-events", () => initCmuxEventListeners(pi.events)],
     ["hooks", () => registerHooks(pi, ecosystemHandlers)],
     ["ecosystem", () => {
       void import("../ecosystem/loader.js")

@@ -21,9 +21,10 @@ const {
 } = require("../lib/npm-release-packages.cjs");
 const repoRoot = path.resolve(fileURLToPath(import.meta.url), "../../..");
 
-test("required npm set keeps daemon and excludes retired cloud products", () => {
+test("required npm set keeps the workflow MCP server and excludes retired products", () => {
   const names = getRequiredNpmPackageNames();
-  assert.ok(names.includes("@opengsd/daemon"), "daemon must be published");
+  assert.ok(names.includes("@opengsd/mcp-server"), "workflow MCP server must be published");
+  assert.ok(!names.includes("@opengsd/daemon"), "retired daemon must not be published");
   assert.ok(!names.includes("@opengsd/cloud-mcp-gateway"), "retired cloud gateway must not be published");
   assert.ok(!names.includes("@opengsd/gsd-cloud"), "retired cloud agent must not be published");
 });
@@ -36,7 +37,6 @@ test("required npm set = root + engines + every publishConfig workspace package"
     "@opengsd/contracts",
     "@opengsd/rpc-client",
     "@opengsd/mcp-server",
-    "@opengsd/daemon",
   ]) {
     assert.ok(names.includes(expected), `${expected} must be in the required npm set`);
   }

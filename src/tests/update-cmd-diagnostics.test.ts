@@ -61,18 +61,22 @@ function writeFakeNpmGlobalBin(dir: string, globalBinDir: string): void {
   if (process.platform !== "win32") chmodSync(npm, 0o755);
 }
 
-test("update-cmd prints latest version before comparison (#3445)", async (t) => {
+test("bare `gsd update` prints the fork update instructions without hitting npm", async (t) => {
   const originalFetch = globalThis.fetch;
   const originalVersion = process.env.GSD_VERSION;
   const originalStdoutWrite = process.stdout.write;
   const writes: string[] = [];
+  let fetched = false;
   const tmp = mkdtempSync(join(tmpdir(), "gsd-update-diagnostics-"));
 
   t.after(() => rmSync(tmp, { recursive: true, force: true }));
 
   try {
     process.env.GSD_VERSION = "1.2.3";
-    globalThis.fetch = async () => Response.json({ version: "1.2.3" });
+    globalThis.fetch = async () => {
+      fetched = true;
+      return Response.json({ version: "9.9.9" });
+    };
     (process.stdout as any).write = (chunk: unknown) => {
       writes.push(String(chunk));
       return true;
@@ -90,10 +94,9 @@ test("update-cmd prints latest version before comparison (#3445)", async (t) => 
   }
 
   const output = writes.join("");
-  const latestPrintIdx = output.indexOf("Latest version:");
-  const comparisonIdx = output.indexOf("Already up to date.");
-  assert.ok(latestPrintIdx !== -1, "Must print latest version");
-  assert.ok(latestPrintIdx < comparisonIdx, "Must print latest BEFORE comparison result");
+  assert.ok(output.includes("personal fork of open-gsd/gsd-pi"), "must print the fork update instructions");
+  assert.ok(output.includes("git pull && pnpm install && pnpm run build:core"), "must print the git rebuild command");
+  assert.equal(fetched, false, "bare update must not query the npm registry for the fork");
 });
 
 test("update-cmd refreshes managed resources when already up to date (#52)", async (t) => {
@@ -129,7 +132,7 @@ test("update-cmd refreshes managed resources when already up to date (#52)", asy
 
   const manifest = JSON.parse(readFileSync(join(fakeAgentDir, "managed-resources.json"), "utf-8"));
   assert.equal(manifest.gsdVersion, "1.0.1");
-  assert.equal(manifest.packageName, "@opengsd/gsd-pi");
+  assert.equal(manifest.packageName, "gsd-pi");
 });
 
 test("update-cmd prints Claude Code Runtime floor advisory after normal update result", async (t) => {
@@ -173,11 +176,11 @@ test("update-cmd prints Claude Code Runtime floor advisory after normal update r
   }
 
   const output = writes.join("");
-  const updateIdx = output.indexOf("Already up to date.");
+  const updateIdx = output.indexOf("personal fork of open-gsd/gsd-pi");
   const advisoryIdx = output.indexOf("Claude Code Runtime is below GSD's validated floor");
-  assert.ok(updateIdx !== -1, "expected normal update result");
+  assert.ok(updateIdx !== -1, "expected the fork update result");
   assert.ok(advisoryIdx !== -1, "expected Claude Code Runtime advisory");
-  assert.ok(advisoryIdx > updateIdx, "advisory should appear after the normal update result");
+  assert.ok(advisoryIdx > updateIdx, "advisory should appear after the update result");
 });
 
 test("update-cmd supports browser-only update checks", async (t) => {
@@ -356,7 +359,7 @@ test("resolveInstallCommand ignores unrelated paths with pnpm directory names", 
   }
 });
 
-test("/gsd update handler fetches latest version through the registry endpoint (#3806)", async () => {
+test("bare `/gsd update` prints fork instructions and never queries the registry (#3806)", async () => {
   const originalFetch = globalThis.fetch;
   const originalVersion = process.env.GSD_VERSION;
   const fetchUrls: string[] = [];
@@ -366,7 +369,7 @@ test("/gsd update handler fetches latest version through the registry endpoint (
     process.env.GSD_VERSION = "1.2.3";
     globalThis.fetch = async (input) => {
       fetchUrls.push(String(input));
-      return Response.json({ version: "1.2.3" });
+      return Response.json({ version: "9.9.9" });
     };
 
     await handleUpdate({
@@ -385,8 +388,11 @@ test("/gsd update handler fetches latest version through the registry endpoint (
     }
   }
 
-  assert.deepEqual(fetchUrls, ["https://registry.npmjs.org/@opengsd%2fgsd-pi/latest"]);
-  assert.ok(notifications.some((notification) => notification.message.includes("Already up to date")));
+  assert.deepEqual(fetchUrls, [], "bare `/gsd update` must not query the npm registry for the fork");
+  assert.ok(
+    notifications.some((notification) => notification.message.includes("personal fork of open-gsd/gsd-pi")),
+    "must notify with the fork update instructions",
+  );
 });
 
 test("/gsd update handler warns after update result when Claude Code Runtime is below floor", async (t) => {
@@ -436,9 +442,9 @@ test("/gsd update handler warns after update result when Claude Code Runtime is 
     }
   }
 
-  const updateIdx = notifications.findIndex((notification) => notification.message.includes("Already up to date"));
+  const updateIdx = notifications.findIndex((notification) => notification.message.includes("personal fork of open-gsd/gsd-pi"));
   const advisoryIdx = notifications.findIndex((notification) => notification.message.includes("Claude Code Runtime is below GSD's validated floor"));
-  assert.ok(updateIdx !== -1, "expected normal update result");
+  assert.ok(updateIdx !== -1, "expected the fork update result");
   assert.ok(advisoryIdx !== -1, "expected Claude Code Runtime advisory");
   assert.equal(notifications[advisoryIdx]?.level, "warning");
   assert.ok(advisoryIdx > updateIdx, "advisory should appear after the normal update result");
@@ -500,129 +506,6 @@ test("/gsd update browser handler fetches latest gsd-browser version", async () 
   assert.equal(
     notifications.some((notification) => notification.message.includes("Claude Code Runtime is below GSD's validated floor")),
     false,
-  );
-});
-
-test("/gsd update handler suggests pnpm when installed via pnpm", async () => {
-  const originalFetch = globalThis.fetch;
-  const originalVersion = process.env.GSD_VERSION;
-  const originalUserAgent = process.env.npm_config_user_agent;
-  const originalPath = process.env.PATH;
-  const notifications: Array<{ message: string; level: string }> = [];
-
-  try {
-    process.env.GSD_VERSION = "1.0.0";
-    process.env.npm_config_user_agent = "pnpm/10.12.1 npm/? node/v24.0.0";
-    process.env.PATH = "";
-    globalThis.fetch = async () => Response.json({ version: "9.9.9" });
-
-    await handleUpdate({
-      ui: {
-        notify(message: string, level: string) {
-          notifications.push({ message, level });
-        },
-      },
-    } as any);
-  } finally {
-    globalThis.fetch = originalFetch;
-    if (originalVersion === undefined) {
-      delete process.env.GSD_VERSION;
-    } else {
-      process.env.GSD_VERSION = originalVersion;
-    }
-    if (originalUserAgent === undefined) {
-      delete process.env.npm_config_user_agent;
-    } else {
-      process.env.npm_config_user_agent = originalUserAgent;
-    }
-    if (originalPath === undefined) {
-      delete process.env.PATH;
-    } else {
-      process.env.PATH = originalPath;
-    }
-  }
-
-  assert.ok(
-    notifications.some((notification) =>
-      notification.message.includes("Try manually: pnpm add -g @opengsd/gsd-pi@latest")
-    ),
-  );
-});
-
-test("/gsd update handler ignores unrelated pnpm directory names", async () => {
-  const originalFetch = globalThis.fetch;
-  const originalVersion = process.env.GSD_VERSION;
-  const originalUserAgent = process.env.npm_config_user_agent;
-  const originalExecPath = process.env.npm_execpath;
-  const originalPnpmHome = process.env.PNPM_HOME;
-  const originalBunInstall = process.env.BUN_INSTALL;
-  const originalPath = process.env.PATH;
-  const originalArgv1 = process.argv[1];
-  const originalBun = (process.versions as Record<string, string | undefined>).bun;
-  const notifications: Array<{ message: string; level: string }> = [];
-
-  try {
-    process.env.GSD_VERSION = "1.0.0";
-    delete process.env.npm_config_user_agent;
-    delete process.env.npm_execpath;
-    delete process.env.PNPM_HOME;
-    delete process.env.BUN_INSTALL;
-    delete (process.versions as Record<string, string | undefined>).bun;
-    process.env.PATH = "";
-    process.argv[1] = "/home/user/projects/pnpm/app/node_modules/@opengsd/gsd-pi/dist/loader.js";
-    globalThis.fetch = async () => Response.json({ version: "9.9.9" });
-
-    await handleUpdate({
-      ui: {
-        notify(message: string, level: string) {
-          notifications.push({ message, level });
-        },
-      },
-    } as any);
-  } finally {
-    globalThis.fetch = originalFetch;
-    if (originalVersion === undefined) {
-      delete process.env.GSD_VERSION;
-    } else {
-      process.env.GSD_VERSION = originalVersion;
-    }
-    if (originalUserAgent === undefined) {
-      delete process.env.npm_config_user_agent;
-    } else {
-      process.env.npm_config_user_agent = originalUserAgent;
-    }
-    if (originalExecPath === undefined) {
-      delete process.env.npm_execpath;
-    } else {
-      process.env.npm_execpath = originalExecPath;
-    }
-    if (originalPnpmHome === undefined) {
-      delete process.env.PNPM_HOME;
-    } else {
-      process.env.PNPM_HOME = originalPnpmHome;
-    }
-    if (originalBunInstall === undefined) {
-      delete process.env.BUN_INSTALL;
-    } else {
-      process.env.BUN_INSTALL = originalBunInstall;
-    }
-    if (originalPath === undefined) {
-      delete process.env.PATH;
-    } else {
-      process.env.PATH = originalPath;
-    }
-    process.argv[1] = originalArgv1;
-    if (originalBun === undefined) {
-      delete (process.versions as Record<string, string | undefined>).bun;
-    } else {
-      (process.versions as Record<string, string | undefined>).bun = originalBun;
-    }
-  }
-
-  assert.ok(
-    notifications.some((notification) =>
-      notification.message.includes("Try manually: npm install -g @opengsd/gsd-pi@latest")
-    ),
   );
 });
 

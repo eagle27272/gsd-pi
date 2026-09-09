@@ -16,9 +16,9 @@ function readPackageJson(path: string): {
 	return JSON.parse(readFileSync(join(projectRoot, path), "utf8"));
 }
 
-test("published npm package names use the @opengsd scope", () => {
+test("root package is the unscoped personal fork; native engines keep the @opengsd scope", () => {
 	const rootPackage = readPackageJson("package.json");
-	assert.equal(rootPackage.name, "@opengsd/gsd-pi");
+	assert.equal(rootPackage.name, "gsd-pi");
 
 	const platforms = [
 		"darwin-arm64",

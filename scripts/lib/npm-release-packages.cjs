@@ -1,7 +1,7 @@
 // gsd-pi + scripts/lib/npm-release-packages.cjs
 // Single source of truth for WHICH packages must reach npm for a release.
 //
-// Why this exists: the publish list used to be hardcoded in build-native.yml as
+// Why this exists: the publish list was once a hardcoded CI list of
 // "@opengsd/contracts @opengsd/rpc-client @opengsd/mcp-server", which silently
 // omitted publishable workspace packages — so two releases went
 // out with those packages missing from npm. This module derives the set from
@@ -9,7 +9,7 @@
 // forgotten by an out-of-date list.
 //
 // The required npm set for a release is:
-//   1. the root package (@opengsd/gsd-pi)
+//   1. the root package (gsd-pi)
 //   2. the native platform packages (@opengsd/engine-*), one per platform
 //   3. every pnpm workspace package that opts in via "publishConfig"
 //      (the @gsd/* packages have no publishConfig — they ship bundled inside the

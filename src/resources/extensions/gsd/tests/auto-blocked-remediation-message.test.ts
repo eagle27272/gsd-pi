@@ -51,7 +51,6 @@ test("blocked remediation warning uses /gsd dispatch reassess and hides internal
           registry: [{ id: "M005", status: "active" }],
         };
       },
-      syncCmuxSidebar() {},
       setActiveMilestoneId() {},
       getIsolationMode() {
         return "none";
@@ -66,7 +65,6 @@ test("blocked remediation warning uses /gsd dispatch reassess and hides internal
       sendDesktopNotification(_title: string, message: string) {
         desktopMessages.push(message);
       },
-      logCmuxEvent() {},
       emitJournalEvent() {},
     },
   } as any;

@@ -176,7 +176,7 @@ describe("subagent launch module", () => {
 		assert.equal(plan.env[SUBAGENT_RUNTIME_CONTRACT_ROOT_ENV_VAR], undefined);
 	});
 
-	it("shell-escapes cmux environment values without command execution", { skip: BASH_SKIP_REASON }, () => {
+	it("shell-escapes subagent environment values without command execution", { skip: BASH_SKIP_REASON }, () => {
 		dir = mkdtempSync(join(tmpdir(), "gsd-subagent-shell-env-"));
 		const marker = join(dir, "injected");
 		const projectRoot = `space $HOME $(touch ${marker}) \`touch ${marker}\` 'quote'\nnext`;

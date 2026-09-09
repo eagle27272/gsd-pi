@@ -52,7 +52,7 @@ is_windows_e2e_file() {
 
 is_docker_file() {
   case "$1" in
-    Dockerfile|docker/*|tests/e2e/docker/*|scripts/install.js|scripts/link-workspace-packages.cjs|scripts/prepack-resolve-workspace.cjs|scripts/postpack-restore-workspace.cjs|scripts/validate-pack.js|native/npm/*/package.json|pnpm-lock.yaml) return 0 ;;
+    scripts/install.js|scripts/link-workspace-packages.cjs|scripts/prepack-resolve-workspace.cjs|scripts/postpack-restore-workspace.cjs|scripts/validate-pack.js|native/npm/*/package.json|pnpm-lock.yaml) return 0 ;;
     *) return 1 ;;
   esac
 }

@@ -257,7 +257,7 @@ test("collectSecretsFromManifest: applied keys hydrate process.env for the runni
 	const { collectSecretsFromManifest } = await loadOrchestrator();
 
 	const tmp = makeTempDir("manifest-live-env");
-	const envKey = "CONTEXT7_API_KEY";
+	const envKey = "SAMPLE_TOOL_API_KEY";
 	const saved = process.env[envKey];
 	t.after(() => {
 		if (saved === undefined) delete process.env[envKey];
@@ -287,7 +287,7 @@ test("collectSecretsFromManifest: applied keys hydrate process.env for the runni
 
 	const result = await collectSecretsFromManifest(tmp, "M001", mockCtx as any);
 
-	assert.ok(result.applied.includes(envKey), "CONTEXT7_API_KEY should be applied");
+	assert.ok(result.applied.includes(envKey), "SAMPLE_TOOL_API_KEY should be applied");
 	assert.equal(process.env[envKey], "c7_live_test_key",
 		"applied keys should be available through process.env without restarting");
 });

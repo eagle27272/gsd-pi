@@ -72,8 +72,6 @@ function makeMockDeps(
     pauseAuto: async () => {},
     clearUnitTimeout: () => {},
     updateProgressWidget: () => {},
-    syncCmuxSidebar: () => {},
-    logCmuxEvent: () => {},
     invalidateAllCaches: () => {},
     deriveState: async () => ({
       phase: "executing",

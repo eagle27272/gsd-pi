@@ -156,13 +156,3 @@ test("validateExtensionPackage: invalid JSON in package.json returns error", (t)
   assert.equal(result.valid, false);
   assert.ok(result.errors.some(e => e.toLowerCase().includes("json")), `Expected JSON error, got: ${JSON.stringify(result.errors)}`);
 });
-
-test("validateExtensionPackage: extracted google-search package passes validation (PKG-05)", (_t) => {
-  // This test runs against the actual extensions/google-search/ directory.
-  // Use process.cwd() (project root) since relative path from import.meta.url
-  // breaks when tests run from dist-test/.
-  const googleSearchDir = join(process.cwd(), "extensions", "google-search");
-
-  const result = validateExtensionPackage(googleSearchDir);
-  assert.equal(result.valid, true, `extensions/google-search/ should be valid, errors: ${JSON.stringify(result.errors)}`);
-});

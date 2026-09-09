@@ -26,17 +26,17 @@ function makeTempDir(): string {
 }
 
 describe('resolveExtensionEntries — #1709 defence-in-depth', () => {
-  test('cmux pattern: pi: {} with an index.js returns no entries', (t) => {
+  test('library pattern: pi: {} with an index.js returns no entries', (t) => {
     const root = makeTempDir()
     t.after(() => rmSync(root, { recursive: true, force: true }))
-    const libDir = join(root, 'cmux')
+    const libDir = join(root, 'noext-lib')
     mkdirSync(libDir)
     writeFileSync(
       join(libDir, 'package.json'),
       JSON.stringify({
-        name: '@gsd/cmux',
+        name: '@gsd/noext-lib',
         description:
-          'cmux integration library — used by other extensions, not an extension itself',
+          'shared library — used by other extensions, not an extension itself',
         pi: {},
       }),
     )

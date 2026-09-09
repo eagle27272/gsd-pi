@@ -19,16 +19,6 @@ test("verify-native-platform-packages checks pinned optionalDependency versions"
   assert.doesNotMatch(script, /\$\{name\}@\$\{version\}/);
 });
 
-test("prepublish verifies matching native platform packages before publishing main package", () => {
-  const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-
-  assert.match(pkg.scripts.prepublishOnly, /verify:native-platform-packages/);
-  assert.ok(
-    pkg.scripts.prepublishOnly.indexOf("verify:native-platform-packages") <
-      pkg.scripts.prepublishOnly.indexOf("validate-pack"),
-  );
-});
-
 test("root package pins native optional dependencies to its own version", () => {
   const pkg = JSON.parse(readFileSync("package.json", "utf8"));
   const nativeDeps = Object.entries(pkg.optionalDependencies).filter(([name]) =>

@@ -37,14 +37,6 @@ function createFixture(): string {
     "pnpm-lock.yaml",
     "lockfileVersion: '9.0'\nimporters:\n  .: {}\npackages:\n  /@opengsd/gsd-pi@1.0.0:\n    resolution: {integrity: sha512-test}\n",
   );
-  writeJson(root, "extensions/google-search/package.json", {
-    name: "@gsd-extensions/google-search",
-    version: "1.0.0",
-    peerDependencies: {
-      "@gsd/pi-coding-agent": "*",
-      "@gsd/pi-tui": "*",
-    },
-  });
   writeJson(root, "packages/pi-coding-agent/package.json", {
     name: "@gsd/pi-coding-agent",
     version: "1.0.0",
@@ -99,7 +91,6 @@ test("verifyVersionSync reports every release-owned surface that drifts from roo
 
   const issues = verifyVersionSync(root);
 
-  assert.match(issues.join("\n"), /extensions\/google-search\/package\.json version is 1\.0\.0, expected 2\.0\.0/);
   assert.match(issues.join("\n"), /packages\/contracts\/package\.json version is 1\.0\.0, expected 2\.0\.0/);
   assert.match(issues.join("\n"), /packages\/pi-coding-agent\/package\.json version is 1\.0\.0, expected 2\.0\.0/);
   assert.match(
@@ -116,7 +107,6 @@ test("syncVersionSurfaces updates package, native, and bridge versions together"
   syncVersionSurfaces(root, "2.1.0-dev.abc123");
 
   assert.equal(readJson<{ version: string }>(root, "package.json").version, "2.1.0-dev.abc123");
-  assert.equal(readJson<{ version: string }>(root, "extensions/google-search/package.json").version, "2.1.0-dev.abc123");
   assert.equal(readJson<{ version: string }>(root, "packages/contracts/package.json").version, "2.1.0-dev.abc123");
   assert.equal(readJson<{ version: string }>(root, "pkg/package.json").version, "2.1.0-dev.abc123");
   assert.equal(
@@ -125,10 +115,6 @@ test("syncVersionSurfaces updates package, native, and bridge versions together"
     ],
     "workspace:*",
   );
-  assert.deepEqual(readJson<{ peerDependencies: Record<string, string> }>(root, "extensions/google-search/package.json").peerDependencies, {
-    "@gsd/pi-coding-agent": "*",
-    "@gsd/pi-tui": "*",
-  });
   assert.match(readFileSync(join(root, "native/Cargo.toml"), "utf8"), /version = "2\.1\.0-dev\.abc123"/);
   assert.match(readFileSync(join(root, "native/Cargo.lock"), "utf8"), /name = "gsd-engine"\nversion = "2\.1\.0-dev\.abc123"/);
 });

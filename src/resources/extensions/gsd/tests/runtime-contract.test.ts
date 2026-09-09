@@ -7,7 +7,6 @@ import { join } from "node:path";
 
 import type { ExtensionContext } from "@gsd/pi-coding-agent";
 
-import { resetCmuxPromptState } from "../../cmux/index.ts";
 import {
   _flushDeferredContextMaintenanceForTest,
   buildForensicsContextInjection,
@@ -1003,49 +1002,6 @@ test("accepts an entry larger than the authoritative document limit", async () =
     assert.equal(contract?.entry?.path, join(contractDir, "runtime.mjs"));
     assert.equal(contract?.entry?.size, Buffer.byteLength(entryContent));
     assert.equal(contract?.agentInstructions?.content, "# Runtime rules\n");
-  });
-});
-
-test("cmux auto-enable preserves malformed runtime contract blocking", async (t) => {
-  await withRuntimeProject(async (base, ctx) => {
-    const preferencesPath = join(base, ".gsd", "PREFERENCES.md");
-    const socketPath = join(base, "cmux.sock");
-    const originalWorkspaceId = process.env.CMUX_WORKSPACE_ID;
-    const originalSurfaceId = process.env.CMUX_SURFACE_ID;
-    const originalSocketPath = process.env.CMUX_SOCKET_PATH;
-    t.after(() => {
-      resetCmuxPromptState();
-      if (originalWorkspaceId === undefined) delete process.env.CMUX_WORKSPACE_ID;
-      else process.env.CMUX_WORKSPACE_ID = originalWorkspaceId;
-      if (originalSurfaceId === undefined) delete process.env.CMUX_SURFACE_ID;
-      else process.env.CMUX_SURFACE_ID = originalSurfaceId;
-      if (originalSocketPath === undefined) delete process.env.CMUX_SOCKET_PATH;
-      else process.env.CMUX_SOCKET_PATH = originalSocketPath;
-    });
-    const malformedPreferences = [
-      "---",
-      "runtime:",
-      "  contract:",
-      "    path: ../outside",
-      "broken: [",
-      "---",
-      "",
-    ].join("\n");
-    writeFileSync(preferencesPath, malformedPreferences, "utf-8");
-    writeFileSync(socketPath, "", "utf-8");
-    process.env.CMUX_WORKSPACE_ID = "workspace:runtime-contract";
-    process.env.CMUX_SURFACE_ID = "surface:runtime-contract";
-    process.env.CMUX_SOCKET_PATH = socketPath;
-    resetCmuxPromptState();
-    clearGSDPreferencesCache();
-
-    const result = await buildBeforeAgentStartResult(
-      { prompt: "Inspect the application", systemPrompt: "base system prompt" },
-      ctx,
-    );
-
-    assert.match(result?.systemPrompt ?? "", /Invalid project-local runtime contract/);
-    assert.equal(readFileSync(preferencesPath, "utf-8"), malformedPreferences);
   });
 });
 

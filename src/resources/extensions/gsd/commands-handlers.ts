@@ -41,7 +41,12 @@ import {
   scopeGsdWorkflowToolsForDispatch,
 } from "./bootstrap/register-hooks.js";
 
-const GSD_PI_PACKAGE = "@opengsd/gsd-pi";
+const GSD_PI_PACKAGE = "gsd-pi";
+// gsd-pi is an unpublished personal fork of open-gsd/gsd-pi — `/gsd update` (bare)
+// cannot self-update from npm; it prints how to update from git instead.
+const FORK_UPDATE_MESSAGE =
+  "gsd-pi is a personal fork of open-gsd/gsd-pi. Update by pulling from git and rebuilding:\n" +
+  "  git pull && pnpm install && pnpm run build:core";
 const GSD_BROWSER_PACKAGE = "@opengsd/gsd-browser";
 const UPDATE_REGISTRY_URL = "https://registry.npmjs.org/@opengsd%2fgsd-pi/latest";
 const BROWSER_UPDATE_REGISTRY_URL = "https://registry.npmjs.org/@opengsd%2fgsd-browser/latest";
@@ -684,6 +689,13 @@ export async function handleUpdate(ctx: ExtensionCommandContext, args = ""): Pro
   const browserUpdate = target === "browser" || target === "gsd-browser";
   if (target && !browserUpdate) {
     ctx.ui.notify("Usage: /gsd update [browser] [--models]", "warning");
+    return;
+  }
+
+  if (!browserUpdate) {
+    // Bare `/gsd update` — no npm self-update for the fork.
+    ctx.ui.notify(FORK_UPDATE_MESSAGE, "info");
+    notifyClaudeRuntimeFloorAdvisory(ctx);
     return;
   }
 

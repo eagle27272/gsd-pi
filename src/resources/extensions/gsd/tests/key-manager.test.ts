@@ -175,7 +175,6 @@ test("PROVIDER_REGISTRY includes all tool/search providers", () => {
   const ids = PROVIDER_REGISTRY.map((p) => p.id);
   assert.ok(ids.includes("tavily"));
   assert.ok(ids.includes("brave"));
-  assert.ok(ids.includes("context7"));
   assert.ok(ids.includes("jina"));
 });
 
