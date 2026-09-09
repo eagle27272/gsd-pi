@@ -41,6 +41,7 @@ const PREF_SAMPLE_VALUES: Record<string, unknown> = {
     on_milestone: true,
     on_attention: true,
   },
+  herdr: { enabled: true, notifications: true, title: true },
   git: {
     auto_push: false,
     push_branches: true,
