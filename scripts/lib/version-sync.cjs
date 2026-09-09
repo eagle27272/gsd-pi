@@ -4,7 +4,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const RELEASE_WORKSPACE_PACKAGE_DIRS = [
-  "extensions/google-search",
   "packages/contracts",
   "packages/daemon",
   "packages/gsd-agent-core",
