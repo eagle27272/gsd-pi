@@ -214,14 +214,12 @@ export async function runGuards(
             "warning",
           );
           deps.sendDesktopNotification("GSD", msg, "warning", "budget", basename(s.originalBasePath || s.basePath));
-          deps.logCmuxEvent(prefs, msg, "warning");
           await deps.pauseAuto(ctx, pi);
           debugLog("autoLoop", { phase: "exit", reason: "budget-pause" });
           return { action: "break", reason: "budget-pause", inputPayload };
         }
         ctx.ui.notify(`${msg} Continuing (enforcement: warn).`, "warning");
         deps.sendDesktopNotification("GSD", msg, "warning", "budget", basename(s.originalBasePath || s.basePath));
-        deps.logCmuxEvent(prefs, msg, "warning");
       } else if (threshold.pct < 100) {
         // Sub-100% — simple notification
         const msg = `${threshold.label}: ${deps.formatCost(totalCost)} / ${deps.formatCost(budgetCeiling)}`;
@@ -233,7 +231,6 @@ export async function runGuards(
           "budget",
           basename(s.originalBasePath || s.basePath),
         );
-        deps.logCmuxEvent(prefs, msg, threshold.cmuxLevel);
       }
     } else if (budgetAlertLevel === 0) {
       s.lastBudgetAlertLevel = 0;

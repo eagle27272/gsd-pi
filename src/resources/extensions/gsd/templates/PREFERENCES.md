@@ -78,12 +78,6 @@ notifications:
   on_budget:
   on_milestone:
   on_attention:
-cmux:
-  enabled:
-  notifications:
-  sidebar:
-  splits:
-  browser:
 uat_dispatch:
 post_unit_hooks: []
 pre_dispatch_hooks: []

@@ -21,7 +21,6 @@ import { getActiveWorktreeName, getWorktreeOriginalCwd } from "../worktree-sessi
 import { deriveState } from "../state.js";
 import { formatOverridesSection, formatShortcut, loadActiveOverrides, loadFile, parseContinue, parseSummary } from "../files.js";
 import { toPosixPath } from "../../shared/mod.js";
-import { autoEnableCmuxPreferences } from "../commands-cmux.js";
 import { gsdHome } from "../gsd-home.js";
 import { GSD_CONTEXT_MESSAGE_SENTINEL } from "../constants.js";
 
@@ -336,22 +335,7 @@ export async function buildBeforeAgentStartResult(
     shortcutDashboard: formatShortcut("Ctrl+Alt+G"),
     shortcutShell: formatShortcut("Ctrl+Alt+B"),
   });
-  let loadedPreferences = loadEffectiveGSDPreferences(basePath);
-  try {
-    const { markCmuxPromptShown, shouldPromptToEnableCmux } = await import("../../cmux/index.js");
-    if (shouldPromptToEnableCmux(loadedPreferences?.preferences)) {
-      markCmuxPromptShown();
-      if (autoEnableCmuxPreferences(basePath)) {
-        loadedPreferences = loadEffectiveGSDPreferences(basePath);
-        ctx.ui.notify(
-          "cmux detected — auto-enabled. Run /gsd cmux off to disable.",
-          "info",
-        );
-      }
-    }
-  } catch (e) {
-    logWarning("bootstrap", `cmux prompt setup skipped: ${(e as Error).message}`);
-  }
+  const loadedPreferences = loadEffectiveGSDPreferences(basePath);
 
   let preferenceBlock = "";
   if (loadedPreferences) {

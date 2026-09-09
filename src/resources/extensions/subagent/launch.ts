@@ -3,7 +3,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { SessionManager } from "@gsd/pi-coding-agent";
-import { shellEscape } from "../cmux/index.js";
+import { shellEscape } from "../shared/terminal.js";
 import type { AgentConfig } from "./agents.js";
 
 export const SUBAGENT_CHILD_ENV_VAR = "GSD_SUBAGENT_CHILD";

@@ -10,7 +10,6 @@ import { createRepositoryRegistryFromPreferences } from "../../repository-regist
 import { ensurePreferencesFile, handlePrefs, handlePrefsMode, handlePrefsWizard, handleLanguage } from "../../commands-prefs-wizard.js";
 import { runEnvironmentChecks } from "../../doctor-environment.js";
 import { deriveState } from "../../state.js";
-import { handleCmux } from "../../commands-cmux.js";
 import { setSessionModelOverride } from "../../session-model-override.js";
 import { projectRoot } from "../context.js";
 import { formattedShortcutPair } from "../../shortcut-defs.js";
@@ -149,7 +148,6 @@ export function showHelp(ctx: ExtensionCommandContext, args = ""): void {
     "  /gsd model          Switch active session model  [provider/model|model-id]",
     "  /gsd mode           Set workflow mode (solo/team)  [global|project]",
     "  /gsd prefs          Manage preferences  [global|project|status|wizard|setup|import-claude]  (alias for /gsd setup prefs)",
-    "  /gsd cmux           Manage cmux integration  [status|on|off|notifications|sidebar|splits|browser]",
     "  /gsd keys           API key manager (LLM + tool keys)  [list|add|remove|test|rotate|doctor]",
     "  /gsd config         (deprecated) Set tool API keys — use /gsd keys instead",
     "  /gsd show-config    Show effective configuration (models, routing, toggles)",
@@ -562,10 +560,6 @@ export async function handleCoreCommand(
   }
   if (trimmed === "language" || trimmed.startsWith("language ")) {
     await handleLanguage(trimmed.replace(/^language\s*/, "").trim(), ctx);
-    return true;
-  }
-  if (trimmed === "cmux" || trimmed.startsWith("cmux ")) {
-    await handleCmux(trimmed.replace(/^cmux\s*/, "").trim(), ctx);
     return true;
   }
   if (trimmed === "usage" || trimmed.startsWith("usage ")) {

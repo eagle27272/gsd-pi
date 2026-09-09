@@ -41,7 +41,6 @@ const PREF_SAMPLE_VALUES: Record<string, unknown> = {
     on_milestone: true,
     on_attention: true,
   },
-  cmux: { enabled: true },
   git: {
     auto_push: false,
     push_branches: true,

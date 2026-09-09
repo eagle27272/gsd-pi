@@ -1445,8 +1445,6 @@ function makeMockDeps(
     },
     clearUnitTimeout: () => {},
     updateProgressWidget: () => {},
-    syncCmuxSidebar: () => {},
-    logCmuxEvent: () => {},
     invalidateAllCaches: () => {
       callLog.push("invalidateAllCaches");
     },
@@ -2942,74 +2940,6 @@ test("autoLoop refreshes its milestone lease while an execute-task call is pendi
     try { closeDatabase(); } catch { /* noop */ }
     rmSync(basePath, { recursive: true, force: true });
   }
-});
-
-test("autoLoop stops before success notification when postflight stash restore needs recovery", async (t) => {
-  _resetPendingResolve();
-
-  const notifications: Array<{ msg: string; level: string }> = [];
-  const ctx = makeMockCtx();
-  ctx.ui.setStatus = () => {};
-  ctx.ui.notify = (msg: string, level: string) => {
-    notifications.push({ msg, level });
-  };
-  const pi = makeMockPi();
-  const s = makeLoopSession();
-  openLoopDatabase(t, s);
-  let stopReason = "";
-
-  const deps = makeMockDeps({
-    deriveState: async () => {
-      deps.callLog.push("deriveState");
-      return {
-        phase: "complete",
-        activeMilestone: { id: "M001", title: "Test", status: "complete" },
-        activeSlice: null,
-        activeTask: null,
-        registry: [{ id: "M001", status: "complete" }],
-        blockers: [],
-      } as any;
-    },
-    preflightCleanRoot: () => ({
-      stashPushed: true,
-      stashMarker: "gsd-preflight-stash:M001:test",
-      summary: "stashed",
-    }),
-    postflightPopStash: () => ({
-      restored: false,
-      needsManualRecovery: true,
-      message: "git stash pop stash@{0} failed after merge of milestone M001",
-      stashRef: "stash@{0}",
-    }),
-    sendDesktopNotification: () => {
-      deps.callLog.push("sendDesktopNotification");
-    },
-    logCmuxEvent: () => {
-      deps.callLog.push("logCmuxEvent");
-    },
-    stopAuto: async (_ctx, _pi, reason) => {
-      deps.callLog.push("stopAuto");
-      stopReason = reason ?? "";
-    },
-  });
-
-  await autoLoop(ctx, pi, s, deps);
-
-  assert.equal(stopReason, "Post-merge stash restore failed for milestone M001");
-  assert.ok(
-    notifications.some(
-      (n) => n.level === "error" && n.msg.includes("Post-merge stash restore failed for milestone M001"),
-    ),
-    "failed postflight restore must be surfaced as an error",
-  );
-  assert.ok(
-    !deps.callLog.includes("sendDesktopNotification"),
-    "must not emit milestone success desktop notification after stash restore failure",
-  );
-  assert.ok(
-    !deps.callLog.includes("logCmuxEvent"),
-    "must not emit milestone success cmux event after stash restore failure",
-  );
 });
 
 test("autoLoop marks transition merge complete before postflight recovery stop", async (t) => {

@@ -68,7 +68,6 @@ test("milestone transition archives completed units and rebuilds state", async (
         preDispatchHealthGate: async () => ({ proceed: true, fixesApplied: [] }),
         syncProjectRootToWorktree: () => {},
         deriveState: async () => state,
-        syncCmuxSidebar: () => {},
         preflightCleanRoot: () => ({ ok: true, stashPushed: false }),
         postflightPopStash: () => ({ ok: true, needsManualRecovery: false }),
         resolver: {
@@ -85,7 +84,6 @@ test("milestone transition archives completed units and rebuilds state", async (
           },
         },
         sendDesktopNotification: () => {},
-        logCmuxEvent: () => {},
         getIsolationMode: () => "none",
         captureIntegrationBranch: () => {},
         pruneQueueOrder: (_base: string, pending: string[]) => calls.push(`prune:${pending.join(",")}`),

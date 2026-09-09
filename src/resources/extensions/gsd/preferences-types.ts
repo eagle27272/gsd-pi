@@ -160,7 +160,6 @@ export const KNOWN_PREFERENCE_KEYS = new Set<string>([
   "budget_enforcement",
   "context_pause_threshold",
   "notifications",
-  "cmux",
   "git",
   "post_unit_hooks",
   "pre_dispatch_hooks",
@@ -402,14 +401,6 @@ export type ResolvedAutoSupervisorConfig = Omit<AutoSupervisorConfig, "model"> &
   modelFallbacks?: string[];
 };
 
-export interface CmuxPreferences {
-  enabled?: boolean;
-  notifications?: boolean;
-  sidebar?: boolean;
-  splits?: boolean;
-  browser?: boolean;
-}
-
 export type UokTurnActionMode = "commit" | "snapshot" | "status-only";
 
 export interface UokPreferences {
@@ -523,7 +514,6 @@ export interface GSDPreferences {
   budget_enforcement?: BudgetEnforcementMode;
   context_pause_threshold?: number;
   notifications?: NotificationPreferences;
-  cmux?: CmuxPreferences;
   git?: GitPreferences;
   post_unit_hooks?: PostUnitHookConfig[];
   pre_dispatch_hooks?: PreDispatchHookConfig[];

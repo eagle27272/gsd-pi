@@ -25,7 +25,6 @@ import type {
 import type { DispatchAction, DispatchContext } from "../auto-dispatch.js";
 import type { WorktreeLifecycle } from "../worktree-lifecycle.js";
 import type { WorktreeStateProjection } from "../worktree-state-projection.js";
-import type { CmuxLogLevel } from "../../shared/cmux-events.js";
 import type { JournalEntry } from "../journal.js";
 import type { MergeReconcileResult } from "../auto-recovery.js";
 import type { UokTurnObserver } from "../uok/contracts.js";
@@ -143,12 +142,6 @@ export interface LoopDeps {
     unitType: string,
     unitId: string,
     state: GSDState,
-  ) => void;
-  syncCmuxSidebar: (preferences: GSDPreferences | undefined, state: GSDState) => void;
-  logCmuxEvent: (
-    preferences: GSDPreferences | undefined,
-    message: string,
-    level?: CmuxLogLevel,
   ) => void;
 
   // State and cache functions

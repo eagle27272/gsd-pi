@@ -19,7 +19,7 @@ export interface GsdCommandDefinition {
 type CompletionMap = Record<string, readonly GsdCommandDefinition[]>;
 
 export const GSD_COMMAND_DESCRIPTION =
-  "GSD — Git Ship Done: /gsd help|start|templates|next|auto|stop|pause|status|widget|visualize|brief|report|queue|quick|discuss|capture|triage|dispatch|verdict|history|undo|undo-task|reset-slice|rate|skip|export|cleanup|closeout|recover|rebuild|db|model|mode|prefs|config|keys|hooks|run-hook|skill-health|doctor|debug|logs|forensics|changelog|migrate|steer|knowledge|memory|new-milestone|new-project|parallel|cmux|park|unpark|discard|init|setup|onboarding|inspect|extensions|update|upgrade|fast|mcp|rethink|workflow|codebase|notifications|ship|do|usage|context|session-report|backlog|pr-branch|add-tests|scan|language|worktree|eval-review";
+  "GSD — Git Ship Done: /gsd help|start|templates|next|auto|stop|pause|status|widget|visualize|brief|report|queue|quick|discuss|capture|triage|dispatch|verdict|history|undo|undo-task|reset-slice|rate|skip|export|cleanup|closeout|recover|rebuild|db|model|mode|prefs|config|keys|hooks|run-hook|skill-health|doctor|debug|logs|forensics|changelog|migrate|steer|knowledge|memory|new-milestone|new-project|parallel|park|unpark|discard|init|setup|onboarding|inspect|extensions|update|upgrade|fast|mcp|rethink|workflow|codebase|notifications|ship|do|usage|context|session-report|backlog|pr-branch|add-tests|scan|language|worktree|eval-review";
 
 export const TOP_LEVEL_SUBCOMMANDS: readonly GsdCommandDefinition[] = [
   { cmd: "help", desc: "Categorized command reference with descriptions" },
@@ -80,7 +80,6 @@ export const TOP_LEVEL_SUBCOMMANDS: readonly GsdCommandDefinition[] = [
   { cmd: "new-milestone", desc: "Create a milestone from a specification document (headless)" },
   { cmd: "new-project", desc: "Bootstrap a new project (use --deep for staged project-level discovery)" },
   { cmd: "parallel", desc: "Parallel milestone orchestration (start, status, stop, merge, watch)" },
-  { cmd: "cmux", desc: "Manage cmux integration (status, sidebar, notifications, splits)" },
   { cmd: "park", desc: "Park a milestone — skip without deleting" },
   { cmd: "unpark", desc: "Reactivate a parked milestone" },
   { cmd: "discard", desc: "Permanently discard one milestone (with confirmation)" },
@@ -454,27 +453,6 @@ export function getGsdArgumentCompletions(prefix: string) {
   }
 
   const [command, subcommand = "", third = ""] = parts;
-
-  if (command === "cmux") {
-    if (parts.length <= 2) {
-      return filterOptions(subcommand, [
-        { cmd: "status", desc: "Show cmux detection, prefs, and capabilities" },
-        { cmd: "on", desc: "Enable cmux integration" },
-        { cmd: "off", desc: "Disable cmux integration" },
-        { cmd: "notifications", desc: "Toggle cmux desktop notifications" },
-        { cmd: "sidebar", desc: "Toggle cmux sidebar metadata" },
-        { cmd: "splits", desc: "Toggle cmux visual subagent splits" },
-        { cmd: "browser", desc: "Toggle future browser integration flag" },
-      ], "cmux");
-    }
-    if (parts.length <= 3 && ["notifications", "sidebar", "splits", "browser"].includes(subcommand)) {
-      return filterOptions(third, [
-        { cmd: "on", desc: "Enable this cmux area" },
-        { cmd: "off", desc: "Disable this cmux area" },
-      ], `cmux ${subcommand}`);
-    }
-    return [];
-  }
 
   if (command === "templates" && subcommand === "info" && parts.length <= 3) {
     try {

@@ -56,7 +56,6 @@ export type {
   ResolvedModelConfig,
   SkillDiscoveryMode,
   AutoSupervisorConfig,
-  CmuxPreferences,
   UokTurnActionMode,
   UokPreferences,
   CodebaseMapPreferences,
@@ -889,9 +888,6 @@ function mergePreferences(base: GSDPreferences, override: GSDPreferences): GSDPr
     context_pause_threshold: override.context_pause_threshold ?? base.context_pause_threshold,
     notifications: (base.notifications || override.notifications)
       ? { ...(base.notifications ?? {}), ...(override.notifications ?? {}) }
-      : undefined,
-    cmux: (base.cmux || override.cmux)
-      ? { ...(base.cmux ?? {}), ...(override.cmux ?? {}) }
       : undefined,
     git: (base.git || override.git)
       ? { ...(base.git ?? {}), ...(override.git ?? {}) }

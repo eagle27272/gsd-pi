@@ -537,14 +537,12 @@ export function buildCategorySummaries(prefs: Record<string, unknown>): Record<s
   }
 
   // Integrations
-  const cmux = prefs.cmux as Record<string, unknown> | undefined;
   const github = prefs.github as Record<string, unknown> | undefined;
   let integrationsSummary = "(defaults)";
   {
     const parts: string[] = [];
     if (prefs.language) parts.push(`lang: ${prefs.language}`);
     if (prefs.search_provider) parts.push(`search: ${prefs.search_provider}`);
-    if (cmux?.enabled) parts.push("cmux");
     if (github?.enabled) parts.push("github");
     if (parts.length > 0) integrationsSummary = parts.join(", ");
   }
@@ -1559,15 +1557,6 @@ async function configureIntegrations(ctx: ExtensionCommandContext, prefs: Record
   );
   if (search !== undefined) prefs.search_provider = search;
 
-  // cmux
-  const cmux = (prefs.cmux as Record<string, unknown> | undefined) ?? {};
-  for (const field of ["enabled", "notifications", "sidebar", "splits", "browser"] as const) {
-    const val = await promptBoolean(ctx, `cmux — ${field}`, cmux[field]);
-    if (val !== undefined) cmux[field] = val;
-  }
-  if (Object.keys(cmux).length > 0) prefs.cmux = cmux;
-  else if (prefs.cmux !== undefined) delete prefs.cmux;
-
   // github sync
   await configureGitHubSync(ctx, prefs);
 }
@@ -1871,7 +1860,7 @@ export function serializePreferencesToFrontmatter(prefs: Record<string, unknown>
     "skill_rules", "custom_instructions", "models", "thinking", "skill_discovery",
     "skill_staleness_days", "auto_supervisor", "uat_dispatch", "unique_milestone_ids",
     "budget_ceiling", "budget_enforcement", "context_pause_threshold",
-    "notifications", "cmux", "git",
+    "notifications", "git",
     "stale_commit_threshold_minutes",
     "min_request_interval_ms",
     "post_unit_hooks", "pre_dispatch_hooks",

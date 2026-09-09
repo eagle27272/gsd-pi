@@ -69,11 +69,7 @@ function formatViolations(violations: Violation[]): string {
 // Every entry must have a comment explaining why it is safe.
 
 /** Pattern 1 — hardcoded /tmp */
-const ALLOW_HARDCODED_TMP: Array<[string, string]> = [
-  // cmux DEFAULT_SOCKET_PATH is a Unix-domain socket convention; cmux is
-  // macOS/Linux only and the path is overridden by $CMUX_SOCKET at runtime.
-  ["resources/extensions/cmux/index.ts", 'DEFAULT_SOCKET_PATH = "/tmp/cmux.sock"'],
-];
+const ALLOW_HARDCODED_TMP: Array<[string, string]> = [];
 
 /** Pattern 3 — rmSync without force: true */
 const ALLOW_RMSYNC_NO_FORCE: Array<[string, string]> = [

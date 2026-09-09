@@ -246,13 +246,6 @@ In `"parent"` mode, slice/task `targetRepositories` default to the declared chil
   - `on_attention`: boolean — notify when manual attention is needed. Default: `true`.
   - Terminal auto-loop errors persist an `activity/*-auto-crash-note.json` file with error/session metadata; when available, the error notification includes the crash-note path and instructs resuming with `/gsd auto`.
 
-- `cmux`: configures cmux terminal integration when GSD is running inside a cmux workspace. Keys:
-  - `enabled`: boolean — master toggle for cmux integration. Default: `false`.
-  - `notifications`: boolean — route desktop notifications through cmux. Default: `true` when enabled.
-  - `sidebar`: boolean — publish status, progress, and log metadata to the cmux sidebar. Default: `true` when enabled.
-  - `splits`: boolean — run supported subagent work in visible cmux splits. Default: `false`.
-  - `browser`: boolean — reserve the future browser integration flag. Default: `false`.
-
 - `dynamic_routing`: configures the dynamic model router that adjusts model selection based on task complexity. Keys:
   - `enabled`: boolean — enable dynamic routing. Default: `false`.
   - `tier_models`: object — model overrides per complexity tier. Keys: `light`, `standard`, `heavy`. Values are model ID strings.
@@ -695,24 +688,6 @@ notifications:
 ```
 
 Disables per-unit completion notifications (noisy in long runs) while keeping error, budget, milestone, and attention notifications enabled.
-
----
-
-## cmux Example
-
-```yaml
----
-version: 1
-cmux:
-  enabled: true
-  notifications: true
-  sidebar: true
-  splits: true
-  browser: false
----
-```
-
-Enables cmux-aware notifications, sidebar metadata, and visible subagent splits when GSD is running inside a cmux terminal.
 
 ---
 
