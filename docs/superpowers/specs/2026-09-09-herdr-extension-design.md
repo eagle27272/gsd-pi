@@ -380,15 +380,23 @@ export default function (pi: ExtensionAPI): void {
 
 Notes:
 
-- Event-name/payload accessors (`isBlockedKind`, `notifText`, `sessionIdOf`,
-  `sessionPathOf`) are thin adapters kept in `index.ts`, typed against the
-  `@gsd/pi-coding-agent` event types. If `session_start` carries no usable
-  session id/path, `reportSession` is simply skipped.
-- `blocked` classification: `notification` events with
-  `kind === "attention"` (the GSD desktop-notification kind used for blocked /
-  question / stop bells — see `NotificationKind` / `NotificationBellKind` in
-  `notifications.ts`). A conservative allowlist; anything else stays `working` /
-  `idle` from turn events.
+- Event-name/payload accessors are thin adapters kept in `index.ts`, typed
+  against the `@gsd/pi-coding-agent` event types. Concrete shapes (verified
+  against `dist/core/gsd-extension-types.d.ts` /
+  `dist/core/extensions/extension-upstream-types.d.ts`):
+  - `NotificationEvent = { type: "notification"; kind: "blocked" | "input_needed" | "milestone_ready" | "idle" | "error"; message: string; details?: Record<string, unknown> }`
+  - `StopEvent = { type: "stop"; reason: "completed" | "cancelled" | "error" | "blocked"; sessionId?: string; turnId?: string; ... }`
+  - `SessionEndEvent = { type: "session_end"; reason; sessionFile?: string }`,
+    `SessionShutdownEvent = { type: "session_shutdown"; reason; targetSessionFile?: string }`
+  - `SessionStartEvent = { type: "session_start"; reason; previousSessionFile? }`
+    — carries **no** session id/path.
+- `blocked` classification: a `notification` event with `kind === "blocked"`
+  or `kind === "input_needed"`; or a `stop` event with `reason === "blocked"`.
+  Everything else resolves to `working` / `idle` from turn events.
+- Session identity: `session_start` has no id, so the handler reads it from the
+  handler's `ctx` — `ctx.sessionManager.getSessionId()` and
+  `ctx.sessionManager.getSessionFile()` (`ReadonlySessionManager`). If both are
+  empty, `reportSession` is skipped.
 - Subscriptions to `pi.events` channels are added **synchronously** in the
   factory body (not behind an awaited `session_start`) so a `SYNC` emitted in
   the same event-loop turn as extension load is not lost — this is the exact
@@ -472,8 +480,10 @@ try {
 } catch { /* fall through to native toast */ }
 ```
 
-Only `kind === "attention"` reaches here in practice (that is what auto-mode
-sends for blocked/question). Native toast remains the fallback whenever Herdr
+In practice `sendDesktopNotification` is called with `kind === "attention"`
+(GSD's `NotificationKind`) for blocked/question events; the Herdr branch keys
+off *being inside Herdr* + the `herdr` prefs, not off the pi
+`NotificationEvent.kind`. Native toast remains the fallback whenever Herdr
 delivery is unavailable or disabled. `detectHerdrEnv` / `HerdrReporter` are
 imported from `../herdr/…` — a `gsd → herdr` import that is acceptable because
 `reporter.ts` / `env.ts` are leaf modules with no back-import of `gsd`.
@@ -605,7 +615,7 @@ Manual / integration (documented in the PR, not automated — no Herdr in CI):
 | --- | --- |
 | Subprocess per state change is chatty (several `execFile` per turn). | Dedup consecutive identical reports; `turn_start`/`turn_end` are ~2 spawns/turn; 2 s timeout; fully async. Acceptable, matches Herdr's own CLI-wrapper guidance. Socket API remains a future optimization. |
 | Herdr CLI surface drifts (flags renamed). | All argv built in one place (`reporter.ts`); failures are swallowed so drift degrades to "no status in Herdr," never a crash. Pin observed behavior in `reporter.test.ts`. |
-| `notification` event shape / `kind` values differ from assumption. | Conservative allowlist (`attention` only); unknown kinds ignored, lifecycle still driven by turn events. Adapter isolated in `index.ts`. |
+| `notification` event shape / `kind` values differ from assumption. | Verified against `gsd-extension-types.d.ts`: allowlist is `kind` ∈ {`blocked`, `input_needed`} plus `stop.reason === "blocked"`. Unknown kinds ignored; lifecycle still driven by turn events. Adapter isolated in `index.ts`. |
 | Two extensions racing on `pi.events` load order. | Consumer subscribes synchronously in factory body; emitter only fires on user-triggered `startAuto`, strictly later. |
 | `gsd → herdr` import cycle. | `env.ts` / `reporter.ts` are leaf modules (only `node:*` imports). `herdr → gsd/preferences` is the only cross-edge and is one-way. Enforced by a note + the existing `non-extension-library` / discovery tests. |
 | Session id not present on `session_start`. | `reportSession` skips when both id and path are absent; restore just won't be available, lifecycle still works. |
