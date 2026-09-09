@@ -432,8 +432,8 @@ test("runProviderChecksAsync matches sync for models.json keys and PATH CLI chec
       "    model: custom-model",
       "    provider: custom-provider",
       "  validation:",
-      "    model: gemini-2.5-pro",
-      "    provider: google-gemini-cli",
+      "    model: claude-sonnet-4-6",
+      "    provider: claude-code",
       "---",
       "",
     ].join("\n"),
@@ -449,16 +449,16 @@ test("runProviderChecksAsync matches sync for models.json keys and PATH CLI chec
     },
   }));
 
-  const fakeGemini = join(binDir, "gemini");
-  writeFileSync(fakeGemini, "#!/bin/sh\necho mock\n");
-  chmodSync(fakeGemini, 0o755);
+  const fakeClaude = join(binDir, "claude");
+  writeFileSync(fakeClaude, "#!/bin/sh\necho mock\n");
+  chmodSync(fakeClaude, 0o755);
 
   try {
     await withEnvAsync({
       HOME: tmpHome,
       CUSTOM_PROVIDER_API_KEY: undefined,
-      GEMINI_API_KEY: undefined,
-      GOOGLE_API_KEY: undefined,
+      ANTHROPIC_API_KEY: undefined,
+      ANTHROPIC_OAUTH_TOKEN: undefined,
       PATH: binDir,
     }, async () => {
       await withCwdAsync(repo, async () => {
@@ -472,9 +472,9 @@ test("runProviderChecksAsync matches sync for models.json keys and PATH CLI chec
           "models.json apiKey should satisfy custom provider auth",
         );
         assert.equal(
-          asyncResults.find(r => r.name === "google-gemini-cli")?.status,
+          asyncResults.find(r => r.name === "claude-code")?.status,
           "ok",
-          "gemini CLI binary should satisfy explicit CLI provider",
+          "claude-code CLI provider needs no API key",
         );
       });
     });
@@ -686,50 +686,7 @@ test("runProviderChecks uses object provider field for anthropic-vertex models",
   rmSync(tmpHome, { recursive: true, force: true });
 });
 
-// ─── Cross-provider routing: Codex & Gemini CLI (#2922) ────────────────────
-
-test("runProviderChecks reports ok for Google via google-gemini-cli auth.json (#2922)", () => {
-  const repo = realpathSync(mkdtempSync(join(tmpdir(), "gsd-providers-gemini-cli-repo-")));
-  mkdirSync(join(repo, ".gsd"), { recursive: true });
-  writeFileSync(
-    join(repo, ".gsd", "PREFERENCES.md"),
-    [
-      "---",
-      "models:",
-      "  execution: gemini-2.5-pro",
-      "---",
-      "",
-    ].join("\n"),
-  );
-
-  const tmpHome = realpathSync(mkdtempSync(join(tmpdir(), "gsd-providers-gemini-cli-home-")));
-  const agentDir = join(tmpHome, ".gsd", "agent");
-  mkdirSync(agentDir, { recursive: true });
-
-  // google-gemini-cli OAuth in auth.json (no google API key)
-  const authData = {
-    "google-gemini-cli": { type: "oauth", expires: Date.now() + 3_600_000 },
-  };
-  writeFileSync(join(agentDir, "auth.json"), JSON.stringify(authData));
-
-  withEnv({
-    HOME: tmpHome,
-    PATH: tmpHome,
-    GEMINI_API_KEY: undefined,
-    GOOGLE_API_KEY: undefined,
-  }, () => {
-    withCwd(repo, () => {
-      const results = runProviderChecks();
-      const google = results.find(r => r.name === "google");
-      assert.ok(google, "google result should exist");
-      assert.equal(google!.status, "ok", "should be ok when google-gemini-cli auth is available (#2922)");
-      assert.ok(google!.message.includes("Google Gemini CLI"), "should mention Gemini CLI as the source (#2922)");
-    });
-  });
-
-  rmSync(repo, { recursive: true, force: true });
-  rmSync(tmpHome, { recursive: true, force: true });
-});
+// ─── Cross-provider routing: Codex (#2922) ────────────────────
 
 test("runProviderChecks reports ok for OpenAI via openai-codex auth.json (#2922)", () => {
   const repo = realpathSync(mkdtempSync(join(tmpdir(), "gsd-providers-codex-repo-")));
@@ -812,48 +769,6 @@ test("runProviderChecks reports ok for claude-code without any API key", () => {
   rmSync(tmpHome, { recursive: true, force: true });
 });
 
-test("runProviderChecks reports errors for required Google CLI providers missing from PATH", () => {
-  const scenarios = [
-    { provider: "google-gemini-cli", label: "Google Gemini CLI", model: "gemini-2.5-pro" },
-    { provider: "google-antigravity", label: "Antigravity", model: "default" },
-  ];
-
-  for (const { provider, label, model } of scenarios) {
-    const repo = realpathSync(mkdtempSync(join(tmpdir(), `gsd-providers-${provider}-repo-`)));
-    mkdirSync(join(repo, ".gsd"), { recursive: true });
-    writeFileSync(
-      join(repo, ".gsd", "PREFERENCES.md"),
-      [
-        "---",
-        "models:",
-        "  execution:",
-        `    model: ${model}`,
-        `    provider: ${provider}`,
-        "---",
-        "",
-      ].join("\n"),
-    );
-
-    const tmpHome = realpathSync(mkdtempSync(join(tmpdir(), `gsd-providers-${provider}-home-`)));
-
-    withEnv({
-      HOME: tmpHome,
-      PATH: tmpHome,
-    }, () => {
-      withCwd(repo, () => {
-        const results = runProviderChecks();
-        const cli = results.find(r => r.name === provider);
-        assert.ok(cli, `${provider} result should exist`);
-        assert.equal(cli!.status, "error", `${provider} should error when the CLI binary is missing`);
-        assert.ok(cli!.detail?.includes(label), "should explain which CLI must be installed");
-      });
-    });
-
-    rmSync(repo, { recursive: true, force: true });
-    rmSync(tmpHome, { recursive: true, force: true });
-  }
-});
-
 test("runProviderChecks reports ok for Anthropic via claude-code binary in PATH", () => {
   // Simulate a user who has no Anthropic API key but has the claude CLI installed.
   // Their PREFERENCES use a claude model without an explicit provider, so the doctor
@@ -900,15 +815,6 @@ test("runProviderChecks ignores external CLI auth sentinels when the CLI is miss
         COPILOT_GITHUB_TOKEN: undefined,
         GH_TOKEN: undefined,
         GITHUB_TOKEN: undefined,
-      },
-    },
-    {
-      requiredProvider: "google",
-      routeProvider: "google-gemini-cli",
-      model: "gemini-2.5-pro",
-      env: {
-        GEMINI_API_KEY: undefined,
-        GOOGLE_API_KEY: undefined,
       },
     },
   ];
@@ -1014,155 +920,6 @@ test("runProviderChecks detects claude.exe in PATH on Windows (#4548)", { skip: 
   });
 });
 
-
-test("runProviderChecks reports error for required cursor-agent when binary is missing", () => {
-  const repo = realpathSync(mkdtempSync(join(tmpdir(), "gsd-providers-cursor-repo-")));
-  mkdirSync(join(repo, ".gsd"), { recursive: true });
-  writeFileSync(
-    join(repo, ".gsd", "PREFERENCES.md"),
-    [
-      "---",
-      "models:",
-      "  execution:",
-      "    model: composer-2.5",
-      "    provider: cursor-agent",
-      "---",
-      "",
-    ].join("\n"),
-  );
-
-  const tmpHome = realpathSync(mkdtempSync(join(tmpdir(), "gsd-providers-cursor-home-")));
-
-  withEnv({
-    HOME: tmpHome,
-    PATH: tmpHome,
-    CURSOR_API_KEY: undefined,
-  }, () => {
-    withCwd(repo, () => {
-      const results = runProviderChecks();
-      const cursor = results.find(r => r.name === "cursor-agent");
-      assert.ok(cursor, "cursor-agent result should exist");
-      assert.equal(cursor!.status, "error", "cursor-agent should error when the CLI binary is missing");
-      assert.ok(cursor!.detail?.includes("Cursor Agent"), "should explain Cursor Agent must be installed");
-    });
-  });
-
-  rmSync(repo, { recursive: true, force: true });
-  rmSync(tmpHome, { recursive: true, force: true });
-});
-
-test("runProviderChecks does not route OpenAI via unauthenticated cursor-agent binary in PATH", () => {
-  const repo = realpathSync(mkdtempSync(join(tmpdir(), "gsd-providers-cursor-route-repo-")));
-  mkdirSync(join(repo, ".gsd"), { recursive: true });
-  writeFileSync(
-    join(repo, ".gsd", "PREFERENCES.md"),
-    [
-      "---",
-      "models:",
-      "  execution: gpt-5.5",
-      "---",
-      "",
-    ].join("\n"),
-  );
-
-  const tmpHome = realpathSync(mkdtempSync(join(tmpdir(), "gsd-providers-cursor-route-home-")));
-  const binDir = join(tmpHome, "bin");
-  mkdirSync(binDir, { recursive: true });
-  const fakeCursor = join(binDir, "cursor-agent");
-  writeFileSync(fakeCursor, [
-    "#!/bin/sh",
-    "if [ \"$1\" = \"status\" ]; then echo \"Not logged in\"; exit 0; fi",
-    "echo mock",
-    "",
-  ].join("\n"));
-  chmodSync(fakeCursor, 0o755);
-
-  withEnv({
-    HOME: tmpHome,
-    OPENAI_API_KEY: undefined,
-    COPILOT_GITHUB_TOKEN: undefined,
-    GH_TOKEN: undefined,
-    GITHUB_TOKEN: undefined,
-    PATH: `${binDir}${delimiter}${process.env.PATH ?? ""}`,
-  }, () => {
-    try {
-      withCwd(repo, () => {
-        const results = runProviderChecks();
-        const openai = results.find(r => r.name === "openai");
-        assert.ok(openai, "openai result should exist");
-        assert.equal(openai!.status, "error", "binary-only cursor-agent must not satisfy OpenAI routing");
-        assert.ok(openai!.detail?.includes("OPENAI_API_KEY"), "should still tell the user how to configure OpenAI");
-      });
-    } finally {
-      rmSync(repo, { recursive: true, force: true });
-      rmSync(tmpHome, { recursive: true, force: true });
-    }
-  });
-});
-
-test("runProviderChecks routes OpenAI via authenticated cursor-agent CLI", () => {
-  const repo = realpathSync(mkdtempSync(join(tmpdir(), "gsd-providers-cursor-auth-route-repo-")));
-  mkdirSync(join(repo, ".gsd"), { recursive: true });
-  writeFileSync(
-    join(repo, ".gsd", "PREFERENCES.md"),
-    [
-      "---",
-      "models:",
-      "  execution: gpt-5.5",
-      "---",
-      "",
-    ].join("\n"),
-  );
-
-  const tmpHome = realpathSync(mkdtempSync(join(tmpdir(), "gsd-providers-cursor-auth-route-home-")));
-  const binDir = join(tmpHome, "bin");
-  mkdirSync(binDir, { recursive: true });
-  const fakeCursor = join(binDir, "cursor-agent");
-  writeFileSync(fakeCursor, [
-    "#!/bin/sh",
-    "if [ \"$1\" = \"--version\" ]; then echo cursor-agent 1.0; exit 0; fi",
-    "if [ \"$1\" = \"status\" ]; then echo \"Authenticated as user@example.com\"; exit 0; fi",
-    "echo mock",
-    "",
-  ].join("\n"));
-  chmodSync(fakeCursor, 0o755);
-
-  withEnv({
-    HOME: tmpHome,
-    OPENAI_API_KEY: undefined,
-    COPILOT_GITHUB_TOKEN: undefined,
-    GH_TOKEN: undefined,
-    GITHUB_TOKEN: undefined,
-    CURSOR_API_KEY: undefined,
-    PATH: `${binDir}${delimiter}${process.env.PATH ?? ""}`,
-  }, () => {
-    try {
-      withCwd(repo, () => {
-        const results = runProviderChecks();
-        const openai = results.find(r => r.name === "openai");
-        assert.ok(openai, "openai result should exist");
-        assert.equal(openai!.status, "ok", "authenticated cursor-agent should satisfy OpenAI routing");
-        assert.ok(openai!.message.toLowerCase().includes("cursor"), "should mention cursor-agent as source");
-      });
-    } finally {
-      rmSync(repo, { recursive: true, force: true });
-      rmSync(tmpHome, { recursive: true, force: true });
-    }
-  });
-});
-
-test("PROVIDER_ROUTES includes google-antigravity and google-gemini-cli as routes for google (#2922)", async () => {
-  const { readFileSync: readFS } = await import("node:fs");
-  const { dirname: dirn, join: joinPath } = await import("node:path");
-  const { fileURLToPath: fileUrl } = await import("node:url");
-  const __dir = dirn(fileUrl(import.meta.url));
-  const src = readFS(joinPath(__dir, "..", "doctor-providers.ts"), "utf-8");
-
-  assert.ok(
-    src.includes('google: ["google-antigravity", "google-gemini-cli", "cursor-agent"]'),
-    'PROVIDER_ROUTES must prefer "google-antigravity" over "google-gemini-cli" for google (#2922)',
-  );
-});
 
 test("PROVIDER_ROUTES includes openai-codex as route for openai (#2922)", async () => {
   const { readFileSync: readFS } = await import("node:fs");

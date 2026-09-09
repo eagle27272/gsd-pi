@@ -47,9 +47,6 @@ export interface ProviderCheckResult {
  */
 const CLI_AUTH_PROVIDERS = new Set([
   "claude-code",
-  "google-gemini-cli",
-  "google-antigravity",
-  "cursor-agent",
 ]);
 
 /**
@@ -58,9 +55,8 @@ const CLI_AUTH_PROVIDERS = new Set([
  * e.g. GitHub Copilot subscriptions can access Claude and GPT models.
  */
 const PROVIDER_ROUTES: Record<string, string[]> = {
-  anthropic: ["github-copilot", "claude-code", "cursor-agent"],
-  openai: ["github-copilot", "openai-codex", "cursor-agent"],
-  google: ["google-antigravity", "google-gemini-cli", "cursor-agent"],
+  anthropic: ["github-copilot", "claude-code"],
+  openai: ["github-copilot", "openai-codex"],
 };
 
 // ── Model → Provider ID mapping ───────────────────────────────────────────────
@@ -87,7 +83,6 @@ function modelToProviderId(model: string): string | null {
       anthropic: "anthropic",
       openai: "openai",
       "github-copilot": "github-copilot",
-      "cursor-agent": "cursor-agent",
     };
     if (prefixMap[prefix]) return prefixMap[prefix];
     return rawPrefix;
@@ -97,7 +92,6 @@ function modelToProviderId(model: string): string | null {
   if (lower.startsWith("claude"))        return "anthropic";
   if (lower.startsWith("gpt-") || lower.startsWith("o1") || lower.startsWith("o3")) return "openai";
   if (lower.startsWith("gemini"))        return "google";
-  if (lower.startsWith("composer"))      return "cursor-agent";
   if (lower.startsWith("llama") || lower.startsWith("mixtral")) return "groq";
   if (lower.startsWith("grok"))          return "xai";
   if (lower.startsWith("mistral") || lower.startsWith("codestral")) return "mistral";
@@ -161,16 +155,9 @@ interface KeyLookup {
  */
 const CLI_BINARY_MAP: Record<string, string[]> = {
   "claude-code": ["claude", "claude-code"],
-  "google-gemini-cli": ["gemini"],
-  "google-antigravity": ["agy"],
-  "cursor-agent": ["cursor-agent"],
 };
 
-const CLI_AUTH_PATH_CHECK_PROVIDERS = new Set([
-  "google-gemini-cli",
-  "google-antigravity",
-  "cursor-agent",
-]);
+const CLI_AUTH_PATH_CHECK_PROVIDERS = new Set<string>([]);
 
 let asyncCliBinaryPathCache: Map<string, boolean> | null = null;
 
@@ -219,13 +206,6 @@ function isCliBinaryInPath(providerId: string): boolean {
 
 function isExternalCliProviderReady(providerId: string): boolean {
   return isCliBinaryInPath(providerId);
-}
-
-function cursorAgentFailureDetail(): string {
-  if (!isCliBinaryInPath("cursor-agent")) {
-    return "Install Cursor Agent and ensure `cursor-agent` is on PATH";
-  }
-  return "Run `cursor-agent login` or set CURSOR_API_KEY";
 }
 
 async function isCliBinaryInPathAsync(providerId: string): Promise<boolean> {
@@ -361,12 +341,6 @@ function resolveKeyFromAuthOrEnv(providerId: string): KeyLookup | null {
 }
 
 function resolveKey(providerId: string): KeyLookup {
-  if (providerId === "cursor-agent") {
-    return isExternalCliProviderReady(providerId)
-      ? { found: true, source: "env", backedOff: false }
-      : { found: false, source: "none", backedOff: false };
-  }
-
   const direct = resolveKeyFromAuthOrEnv(providerId);
   if (direct) return direct;
 
@@ -397,9 +371,7 @@ function checkLlmProviders(): ProviderCheckResult[] {
       const label = info?.label ?? providerId;
       if (CLI_AUTH_PATH_CHECK_PROVIDERS.has(providerId) && !isExternalCliProviderReady(providerId)) {
         const binaries = CLI_BINARY_MAP[providerId]?.map(binary => `\`${binary}\``).join(" or ");
-        const detail = providerId === "cursor-agent"
-          ? cursorAgentFailureDetail()
-          : binaries
+        const detail = binaries
           ? `Install ${label} and ensure ${binaries} is on PATH`
           : `Install ${label} and ensure its CLI is on PATH`;
         results.push({
@@ -407,9 +379,7 @@ function checkLlmProviders(): ProviderCheckResult[] {
           label,
           category: "llm",
           status: "error",
-          message: providerId === "cursor-agent" && isCliBinaryInPath(providerId)
-            ? `${label} — CLI not authenticated`
-            : `${label} — CLI not found`,
+          message: `${label} — CLI not found`,
           detail,
           required: true,
         });
