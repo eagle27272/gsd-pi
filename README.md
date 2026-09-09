@@ -25,22 +25,6 @@ It combines a terminal agent, project workflow tools, worktree-aware Git automat
 
 See [CHANGELOG.md](./CHANGELOG.md) for release-by-release fixes and [Legacy Release History](./docs/archive/legacy-release-history.md) for archived history before the `open-gsd/gsd-pi` baseline.
 
-## Latest Release Highlights
-
-<!-- release-highlights:start -->
-Latest release: **v1.18.0**
-
-- **gsd:** Refresh models and pricing in session (#2095).
-- **models:** Refresh generated model catalog (#2120).
-- **gsd:** Remove dead Copilot catalog classification (#2094).
-- **issue:** Bug: finalize/retry lease race + gsd_task_recovery_resume missing 'remediate' handler strands completed tasks (#2113).
-- **gsd:** Make Copilot suggestions fail closed (#2093).
-- **gsd:** Preserve GitHub Copilot catalog unknowns (#2092).
-- **gsd:** Browser daemon warm-up burns its full timeout on an inherited stdio pipe (#2104).
-- **auto:** Register liveness identity on rejected unit-run claim (#2097) (#2098).
-
-<!-- release-highlights:end -->
-
 ## Status
 
 This repository is starting a new development baseline at version `1.0.0` under the `open-gsd/gsd-pi` project.
