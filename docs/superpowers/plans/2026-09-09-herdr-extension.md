@@ -410,6 +410,13 @@ test("buildHerdrTitle: milestone only", () => {
   );
 });
 
+test("buildHerdrTitle: milestone + task, no slice → space-joined (not M2/T3)", () => {
+  assert.equal(
+    buildHerdrTitle({ phase: "executing", activeMilestone: { id: "M2" }, activeTask: { id: "T3" } }),
+    "M2 T3 · executing",
+  );
+});
+
 test("buildHerdrTitle: no unit → phase only", () => {
   assert.equal(buildHerdrTitle({ phase: "researching" }), "researching");
 });
@@ -479,14 +486,22 @@ export function normalizeDisplay(value: string): string {
     .slice(0, MAX);
 }
 
-/** e.g. "M2 S1/T3 · executing", "M2 · planning", or just "researching". */
+/**
+ * e.g. "M2 S1/T3 · executing", "M2 T3 · executing" (no slice), "M2 · planning",
+ * or just "researching". The task id joins the slice with "/" ONLY when a slice
+ * is active; without a slice it joins the milestone id with a space.
+ */
 export function buildHerdrTitle(s: HerdrStateInput): string {
   const unit: string[] = [];
   if (s.activeMilestone) unit.push(s.activeMilestone.id);
   if (s.activeSlice) unit.push(s.activeSlice.id);
   if (s.activeTask) {
-    const prev = unit.pop();
-    unit.push(prev ? `${prev}/${s.activeTask.id}` : s.activeTask.id);
+    if (s.activeSlice) {
+      const prev = unit.pop();
+      unit.push(prev ? `${prev}/${s.activeTask.id}` : s.activeTask.id);
+    } else {
+      unit.push(s.activeTask.id);
+    }
   }
   const left = unit.join(" ");
   return normalizeDisplay(left ? `${left} · ${s.phase}` : s.phase);
@@ -513,7 +528,7 @@ export function buildStateLabels(s: HerdrStateInput): Partial<Record<HerdrLabelS
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `node --import ./src/resources/extensions/gsd/tests/resolve-ts.mjs --experimental-strip-types --test src/resources/extensions/herdr/tests/state-mapping.test.ts`
-Expected: PASS (6 tests).
+Expected: PASS (7 tests).
 
 - [ ] **Step 5: Typecheck**
 
@@ -1320,10 +1335,12 @@ import { HERDR_CHANNELS } from "../shared/herdr-events.js";
 ```
 
 2. Add the factory (top-level, near where `makeCmuxEmitters` used to be — see the
-   removal diff; a good home is just above `buildLoopDeps`):
+   removal diff; a good home is just above `buildLoopDeps`). It **must be
+   `export`ed** — `herdr-emit.test.ts` imports it (the removed `makeCmuxEmitters`
+   was private; this one is unit-tested):
 
 ```ts
-function makeHerdrEmitters(pi: ExtensionAPI) {
+export function makeHerdrEmitters(pi: ExtensionAPI) {
   return {
     syncHerdr: (preferences: GSDPreferences | undefined, state: GSDState) =>
       pi.events.emit(HERDR_CHANNELS.SYNC, { preferences, state }),
@@ -1454,8 +1471,18 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `detectHerdrEnv` from `../herdr/env.js`, `HerdrReporter` from `../herdr/reporter.js`.
-- Produces: `sendDesktopNotification` gains an optional `deps.herdrEnv` / `deps.herdrRun` seam:
-  `deps: { notifications?: NotificationPreferences; herdrEnv?: import("../herdr/env.js").HerdrEnv | null; herdrRun?: (file: string, args: string[]) => void } = {}`
+- Produces: `sendDesktopNotification` gains three optional test seams on `deps`:
+  ```ts
+  deps: {
+    notifications?: NotificationPreferences;
+    herdrEnv?: import("../herdr/env.js").HerdrEnv | null;
+    herdrPrefs?: { enabled?: boolean; notifications?: boolean };
+    herdrRun?: (file: string, args: string[]) => void;
+  } = {}
+  ```
+  Real runtime reads env from `detectHerdrEnv()` and the `herdr` prefs from
+  `loadedPreferences?.herdr`; `deps.herdrEnv` / `deps.herdrPrefs` override those
+  for tests, `deps.herdrRun` is the `HerdrReporter` runner seam.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1469,48 +1496,54 @@ import { sendDesktopNotification } from "../notifications.ts";
 
 const herdrEnv = { paneId: "w1:p2", binPath: "/bin/herdr" };
 
-test("inside Herdr with notifications on: delivers via herdr, no throw", () => {
+test("inside Herdr, attention notification → delivered as a blocked state-label, no throw", () => {
   const calls: string[][] = [];
   assert.doesNotThrow(() =>
     sendDesktopNotification("GSD", "Blocked: needs input", "warning", "attention", undefined, {
-      notifications: { desktop: true } as any,
       herdrEnv,
+      herdrPrefs: { enabled: true, notifications: true },
       herdrRun: (_f, a) => calls.push(a),
     }),
   );
   assert.equal(calls.length, 1);
-  assert.equal(calls[0][1], "report-metadata");
+  assert.equal(calls[0][1], "report-metadata"); // argv[1] of `pane report-metadata ...`
   assert.ok(calls[0].some((x) => x.startsWith("blocked=")));
 });
 
-test("inside Herdr but herdr.notifications=false: does not deliver via herdr", () => {
+test("inside Herdr but herdrPrefs.notifications=false → no herdr delivery", () => {
   const calls: string[][] = [];
   sendDesktopNotification("GSD", "msg", "warning", "attention", undefined, {
-    notifications: { desktop: true, herdr: { notifications: false } } as any,
     herdrEnv,
+    herdrPrefs: { enabled: true, notifications: false },
     herdrRun: (_f, a) => calls.push(a),
   });
   assert.equal(calls.length, 0);
 });
 
-test("no herdrEnv: herdrRun is never called", () => {
+test("inside Herdr but herdrPrefs.enabled=false → no herdr delivery", () => {
   const calls: string[][] = [];
-  sendDesktopNotification("GSD", "msg", "info", "complete", undefined, {
-    notifications: { desktop: false } as any,
+  sendDesktopNotification("GSD", "msg", "warning", "attention", undefined, {
+    herdrEnv,
+    herdrPrefs: { enabled: false, notifications: true },
+    herdrRun: (_f, a) => calls.push(a),
+  });
+  assert.equal(calls.length, 0);
+});
+
+test("no herdrEnv → herdrRun is never called", () => {
+  const calls: string[][] = [];
+  sendDesktopNotification("GSD", "msg", "warning", "attention", undefined, {
     herdrEnv: null,
+    herdrPrefs: { enabled: true, notifications: true },
     herdrRun: (_f, a) => calls.push(a),
   });
   assert.equal(calls.length, 0);
 });
 ```
 
-> The `herdr.notifications` flag lives on `GSDPreferences`, not
-> `NotificationPreferences`. In `sendDesktopNotification` it is read from
-> `loadEffectiveGSDPreferences()?.preferences?.herdr`. The second test passes it
-> under `notifications` only to exercise the code path via `deps`; adjust the
-> assertion/plumbing in Step 2 so the real read is from the loaded preferences and
-> the test injects via a `deps.herdrPrefs` field instead if that is cleaner. Pick
-> one shape and make test + impl agree.
+Note: `kind: "attention"` passes `shouldSendDesktopNotification` by default
+(`on_attention ?? true`), so the herdr branch is reached without a `notifications`
+entry in `deps`.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1536,14 +1569,16 @@ import { HerdrReporter } from "../herdr/reporter.js";
   deps: {
     notifications?: NotificationPreferences;
     herdrEnv?: HerdrEnv | null;
+    herdrPrefs?: { enabled?: boolean; notifications?: boolean };
     herdrRun?: (file: string, args: string[]) => void;
   } = {},
 ): void {
-  // ...existing body up to shouldSendDesktopNotification...
+  // ...existing body: title rewrite, loadedPreferences, notifications,
+  //    then `if (!shouldSendDesktopNotification(kind, notifications)) return;`
 
   try {
     const herdrEnv = deps.herdrEnv !== undefined ? deps.herdrEnv : detectHerdrEnv();
-    const herdrPrefs = loadedPreferences?.herdr;
+    const herdrPrefs = deps.herdrPrefs ?? loadedPreferences?.herdr;
     if (herdrEnv && herdrPrefs?.enabled !== false && herdrPrefs?.notifications !== false) {
       new HerdrReporter({ env: herdrEnv, runner: deps.herdrRun }).reportMetadata({
         stateLabels: { blocked: `${title}: ${message}` },
