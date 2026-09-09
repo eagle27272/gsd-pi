@@ -13,20 +13,30 @@ export interface GhResult<T> {
   error?: string;
 }
 
+/** Hard upper bound on the issue body we hand to `gh` / the prefilled URL. */
+export const MAX_ISSUE_BODY = 65_000;
+
+export function truncateBody(body: string): string {
+  return body.length <= MAX_ISSUE_BODY
+    ? body
+    : body.slice(0, MAX_ISSUE_BODY) + "\n\n---\n_Body truncated (exceeded 65k characters)._";
+}
+
 type ExecFn = (file: string, args: string[]) => string;
 
-let execImpl: ExecFn = (file, args) =>
+const realExec: ExecFn = (file, args) =>
   execFileSync(file, args, {
     encoding: "utf-8",
     stdio: ["ignore", "pipe", "pipe"],
     timeout: 15_000,
   }).trim();
 
+let execImpl: ExecFn = realExec;
+
 let availableCache: boolean | null = null;
 
 export function _setExecForTest(fn: ExecFn | null): void {
-  execImpl = fn ?? ((file, args) =>
-    execFileSync(file, args, { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], timeout: 15_000 }).trim());
+  execImpl = fn ?? realExec;
 }
 
 export function _resetGithubCacheForTest(): void {
@@ -47,11 +57,14 @@ export function ghAvailable(): boolean {
 
 export function searchIssues(repo: string, query: string): GhResult<IssueHit[]> {
   try {
+    // Strip GitHub search-syntax tokens (e.g. `foo: bar`, `#12`) so a literal
+    // title fragment doesn't zero the result set.
+    const q = query.replace(/[^\w\s-]/g, " ").replace(/\s+/g, " ").trim();
     const raw = execImpl("gh", [
       "issue", "list",
       "--repo", repo,
       "--state", "all",
-      "--search", query,
+      "--search", q,
       "--limit", "20",
       "--json", "number,title,url,state",
     ]);
@@ -72,7 +85,7 @@ export function createIssue(
       "issue", "create",
       "--repo", repo,
       "--title", input.title,
-      "--body", input.body,
+      "--body", truncateBody(input.body),
     ];
     if (input.labels.length) args.push("--label", input.labels.join(","));
     const out = execImpl("gh", args);

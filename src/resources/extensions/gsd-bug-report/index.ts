@@ -8,9 +8,10 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { basename } from "node:path";
+import { basename, dirname } from "node:path";
 import type { ExtensionAPI } from "@gsd/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { GIT_NO_PROMPT_ENV } from "../gsd/git-constants.js";
 import { isEnabled, targetRepo, SOFT_CAP } from "./config.js";
 import {
   BUG_REPORT_GUIDELINES,
@@ -25,6 +26,7 @@ import {
   ghAvailable as realGhAvailable,
   searchIssues as realSearchIssues,
   createIssue as realCreateIssue,
+  truncateBody,
 } from "./github.js";
 import { filedThisSession, recordFiled, resetSession } from "./session-state.js";
 
@@ -42,7 +44,7 @@ export interface ReportDeps {
     searchIssues: typeof realSearchIssues;
     createIssue: typeof realCreateIssue;
   };
-  confirm: (draft: string, repo: string) => Promise<boolean>;
+  confirm: (draft: string, repo: string) => Promise<boolean | "no-ui">;
   now?: () => ReportEnv;
 }
 
@@ -56,10 +58,11 @@ function defaultEnvSnapshot(env: NodeJS.ProcessEnv): ReportEnv {
   let commit: string | null = null;
   try {
     commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
-      cwd: env.GSD_BIN_PATH ? basename(env.GSD_BIN_PATH) : process.cwd(),
+      cwd: env.GSD_PKG_ROOT ?? (env.GSD_BIN_PATH ? dirname(env.GSD_BIN_PATH) : process.cwd()),
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"],
       timeout: 3_000,
+      env: GIT_NO_PROMPT_ENV,
     }).trim() || null;
   } catch {
     commit = null;
@@ -79,6 +82,34 @@ function prefilledIssueUrl(repo: string, title: string, body: string, labels: st
   return `https://github.com/${repo}/issues/new?${q.toString()}`;
 }
 
+/**
+ * The full manual-fallback payload: rendered draft, a paste-ready
+ * `gh issue create` command, and a prefilled `issues/new` URL. Used by every
+ * `status: "manual"` branch so the caller can always file the issue by hand.
+ */
+function manualInstructions(
+  repo: string,
+  title: string,
+  body: string,
+  labels: string[],
+  draft: string,
+  reason: string,
+): string {
+  const cmd =
+    `gh issue create --repo ${repo} --title ${JSON.stringify(title)} ` +
+    `--body-file - --label ${labels.join(",")}   # paste the body on stdin`;
+  return [
+    reason,
+    "",
+    draft,
+    "",
+    "Paste-ready command:",
+    cmd,
+    "",
+    prefilledIssueUrl(repo, title, truncateBody(body), labels),
+  ].join("\n");
+}
+
 export async function runReport(input: ReportInput, deps: ReportDeps): Promise<ReportResult> {
   const env = deps.env ?? process.env;
   const gh = deps.gh ?? {
@@ -86,7 +117,6 @@ export async function runReport(input: ReportInput, deps: ReportDeps): Promise<R
     searchIssues: realSearchIssues,
     createIssue: realCreateIssue,
   };
-  const snapshot = (deps.now ?? (() => defaultEnvSnapshot(env)))();
   const repo = targetRepo(env);
   const labels = categoryToLabels(input.category);
 
@@ -101,9 +131,12 @@ export async function runReport(input: ReportInput, deps: ReportDeps): Promise<R
     };
   }
 
-  const body = enrichBody(input.body, snapshot);
+  const snapshot = (deps.now ?? (() => defaultEnvSnapshot(env)))();
+  const bodyIn = input.area ? `${input.body}\n\n_Area: ${input.area}_` : input.body;
+  const body = enrichBody(bodyIn, snapshot);
 
   if (gh.ghAvailable()) {
+    let dupCheckSkipped = false;
     const search = gh.searchIssues(repo, input.title);
     if (search.ok && search.data) {
       const dup = matchExistingIssue(input.title, search.data);
@@ -113,18 +146,33 @@ export async function runReport(input: ReportInput, deps: ReportDeps): Promise<R
           message: `Likely duplicate of #${dup.number} (${dup.state}): ${dup.url} — not filed.`,
         };
       }
+    } else {
+      dupCheckSkipped = true;
     }
     const draft = renderDraft({ title: input.title, labels, body });
-    const approved = await deps.confirm(draft, repo);
+    const draftShown = dupCheckSkipped
+      ? draft + "\n\n_Duplicate check skipped (issue search failed)._"
+      : draft;
+    const approved = await deps.confirm(draftShown, repo);
+    if (approved === "no-ui") {
+      return {
+        status: "manual",
+        message: manualInstructions(
+          repo, input.title, body, labels, draftShown,
+          "No interactive UI to confirm — file it manually:",
+        ),
+      };
+    }
     if (!approved) return { status: "declined", message: "Not filed — declined by user." };
 
     const created = gh.createIssue(repo, { title: input.title, body, labels });
     if (!created.ok) {
       return {
         status: "manual",
-        message:
-          `gh issue create failed: ${created.error}\n\n` +
-          `File it manually:\n${prefilledIssueUrl(repo, input.title, body, labels)}`,
+        message: manualInstructions(
+          repo, input.title, body, labels, draftShown,
+          `gh issue create failed: ${created.error}`,
+        ),
       };
     }
     recordFiled();
@@ -134,9 +182,10 @@ export async function runReport(input: ReportInput, deps: ReportDeps): Promise<R
   const draft = renderDraft({ title: input.title, labels, body });
   return {
     status: "manual",
-    message:
-      `\`gh\` is not available. Draft below — file it manually:\n\n${draft}\n\n` +
-      `${prefilledIssueUrl(repo, input.title, body, labels)}`,
+    message: manualInstructions(
+      repo, input.title, body, labels, draft,
+      "`gh` is not available.",
+    ),
   };
 }
 
@@ -158,11 +207,16 @@ export default function gsdBugReport(pi: ExtensionAPI): void {
   });
 
   const confirmViaUi = (ctx: { hasUI?: boolean; ui?: { select?: (t: string, o: string[], opts?: unknown) => Promise<string | undefined> } }) =>
-    async (draft: string, repo: string): Promise<boolean> => {
-      if (!ctx.hasUI || !ctx.ui?.select) return false;
+    async (draft: string, repo: string): Promise<boolean | "no-ui"> => {
+      if (!ctx.hasUI || typeof ctx.ui?.select !== "function") return "no-ui";
+      // The confirm dialog is this feature's security boundary: model-authored
+      // text must not be able to emit ANSI/control sequences into it. Keep only
+      // \n and \t; drop C0/C1 control and escape characters and DEL.
+      // eslint-disable-next-line no-control-regex
+      const safeDraft = draft.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "");
       const FILE = "File it";
       const choice = await ctx.ui.select(
-        `File this issue to ${repo}?\n\n${draft}`,
+        `File this issue to ${repo}?\n\n${safeDraft}`,
         [FILE, "Don't file"],
       );
       return choice === FILE;

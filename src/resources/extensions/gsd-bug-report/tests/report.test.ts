@@ -41,6 +41,11 @@ describe("matchExistingIssue", () => {
     const hits = [hit({ number: 9, title: "Docs typo in README install section" })];
     assert.equal(matchExistingIssue("gsd auto hangs on unit phase", hits), null);
   });
+  test("an empty drafted title never matches the first hit", () => {
+    const hits = [hit({ number: 3, title: "some real issue" })];
+    assert.equal(matchExistingIssue("", hits), null);
+    assert.equal(matchExistingIssue("   ", hits), null);
+  });
 });
 
 describe("enrichBody", () => {

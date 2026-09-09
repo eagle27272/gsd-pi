@@ -1,7 +1,7 @@
 import { describe, test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import gsdBugReport, { runReport, type ReportDeps } from "../index.ts";
-import { resetSession } from "../session-state.ts";
+import { resetSession, filedThisSession } from "../session-state.ts";
 
 const baseEnvSnapshot = (): ReturnType<NonNullable<ReportDeps["now"]>> => ({
   version: "1.18.0", commit: "abc1234", platform: "darwin", arch: "arm64",
@@ -73,6 +73,36 @@ describe("runReport", () => {
     });
     assert.equal(r.status, "filed");
     assert.equal(r.url, "https://github.com/eagle27272/gsd-pi/issues/99");
+    assert.equal(filedThisSession(), 1);
+  });
+
+  test("createIssue fails after confirm → status manual, counter NOT incremented", async () => {
+    const r = await runReport(input, {
+      env: {},
+      gh: fakeGh({ createIssue: () => ({ ok: false, error: "gh: 403" }) }),
+      confirm: async () => true,
+      now: baseEnvSnapshot,
+    });
+    assert.equal(r.status, "manual");
+    assert.match(r.message, /403/);
+    assert.match(r.message, /issues\/new/);
+    // a failed create must not consume the per-session budget
+    assert.equal(filedThisSession(), 0);
+  });
+
+  test("no-UI confirm seam → status manual (not declined), nothing filed", async () => {
+    let created = 0;
+    const r = await runReport(input, {
+      env: {},
+      gh: fakeGh({ createIssue: () => { created++; return { ok: true, data: "x" }; } }),
+      confirm: async () => "no-ui",
+      now: baseEnvSnapshot,
+    });
+    assert.equal(r.status, "manual");
+    assert.match(r.message, /issues\/new/);
+    assert.match(r.message, /Paste-ready command/);
+    assert.equal(created, 0);
+    assert.equal(filedThisSession(), 0);
   });
 
   test("soft cap → 4th call returns capped without touching gh", async () => {

@@ -15,6 +15,6 @@ export function isEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
 
 export function targetRepo(env: NodeJS.ProcessEnv = process.env): string {
   const raw = env.GSD_BUG_REPORT_REPO?.trim();
-  if (raw && /^[^/\s]+\/[^/\s]+$/.test(raw)) return raw;
+  if (raw && /^[\w.-]+\/[\w.-]+$/.test(raw)) return raw;
   return DEFAULT_REPO;
 }

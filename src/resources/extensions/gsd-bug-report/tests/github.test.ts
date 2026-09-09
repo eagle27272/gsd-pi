@@ -4,6 +4,8 @@ import {
   ghAvailable,
   searchIssues,
   createIssue,
+  truncateBody,
+  MAX_ISSUE_BODY,
   _setExecForTest,
   _resetGithubCacheForTest,
 } from "../github.ts";
@@ -49,6 +51,19 @@ describe("searchIssues", () => {
   test("returns ok:false on unparseable output", () => {
     _setExecForTest(() => "not json");
     assert.equal(searchIssues("me/repo", "x").ok, false);
+  });
+});
+
+describe("truncateBody", () => {
+  test("returns a body at or under the cap unchanged", () => {
+    assert.equal(truncateBody("short body"), "short body");
+    const exact = "x".repeat(MAX_ISSUE_BODY);
+    assert.equal(truncateBody(exact), exact);
+  });
+  test("caps an oversized body and appends the truncation note", () => {
+    const out = truncateBody("x".repeat(MAX_ISSUE_BODY + 5_000));
+    assert.ok(out.length < MAX_ISSUE_BODY + 200, "trimmed near the cap");
+    assert.match(out, /_Body truncated \(exceeded 65k characters\)\._$/);
   });
 });
 

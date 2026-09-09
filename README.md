@@ -56,7 +56,7 @@ result and a meaningful exit code:
 node scripts/dev-cli.js quick --output-format json "Describe the task"
 ```
 
-### Self-report
+### Reporting gsd-pi bugs
 
 - **Self-report (`GSD_BUG_REPORT`)** — when the agent finds a defect in the gsd-pi CLI itself, it drafts a GitHub issue and, after you approve it in-session, files it to `eagle27272/gsd-pi` (override with `GSD_BUG_REPORT_REPO`). Set `GSD_BUG_REPORT=off` to disable. Run `/report-gsd-bug` to file one by hand.
 

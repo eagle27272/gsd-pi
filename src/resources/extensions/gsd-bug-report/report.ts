@@ -43,6 +43,7 @@ function jaccard(a: Set<string>, b: Set<string>): number {
 
 export function matchExistingIssue(title: string, hits: IssueHit[]): IssueHit | null {
   const t = title.trim().toLowerCase();
+  if (t.length === 0) return null;
   const tt = tokens(title);
   for (const h of hits) {
     const ht = h.title.trim().toLowerCase();
