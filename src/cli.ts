@@ -264,15 +264,6 @@ if (shouldBypassManagedResourceMismatchGate(cliFlags.messages[0])) {
 }
 
 // ---------------------------------------------------------------------------
-// Hermes integration subcommand — `gsd hermes install`
-// ---------------------------------------------------------------------------
-if (cliFlags.messages[0] === 'hermes') {
-  const { runHermesIntegrationCommand } = await import('./hermes-integration-install.js')
-  const exitCode = await runHermesIntegrationCommand(process.argv)
-  process.exit(exitCode)
-}
-
-// ---------------------------------------------------------------------------
 // Graph subcommand — `gsd graph build|status|query|diff`
 // ---------------------------------------------------------------------------
 if (cliFlags.messages[0] === 'graph') {
@@ -386,7 +377,6 @@ const subcommandsExemptFromEarlyTtyCheck = new Set([
   'config',
   'graph',
   'headless',
-  'hermes',
   'read',
   'quick',
   'install',
@@ -549,7 +539,7 @@ if (cliFlags.messages[0] === 'sessions') {
   cliFlags._selectedSessionPath = selected.path
 }
 
-// `gsd read` — JSON read seam for integrations (Hermes 6c)
+// `gsd read` — JSON read seam for external integrations
 if (cliFlags.messages[0] === 'read') {
   const { runReadCli } = await import('./read-cli.js')
   process.exit(await runReadCli(process.argv))

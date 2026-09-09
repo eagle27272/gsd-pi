@@ -6,12 +6,12 @@ import { fileURLToPath } from "node:url";
 import { runReadCli, type ReadCliSchemaPreflight } from "../read-cli.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const fixture = resolve(__dirname, "../../integrations/hermes/tests/fixtures/minimal-project");
+const fixture = resolve(__dirname, "fixtures/read-cli-minimal-project");
 
 // Hermetic probe: never opens a DB, so the DB-backed progress path stays
 // disengaged and this test pins argument parsing only. Without this, a
 // dist-test run resolves gsdRoot by walking up to the repo's own .gsd (the
-// hermes fixture is not copied into dist-test) and would depend on the
+// fixture is not copied into dist-test) and would depend on the
 // developer machine's extension bundle state.
 const probelessPreflight: ReadCliSchemaPreflight = {
 	resolveProjectRootDbPath: (basePath) => resolve(basePath, ".gsd", "gsd.db"),
@@ -55,7 +55,7 @@ test("runReadCli accepts the snapshot kind and fails closed without a DB", async
 	const stdout = captureWrite(process.stdout);
 	const stderr = captureWrite(process.stderr);
 	try {
-		// The hermes fixture has no gsd.db, so the accepted snapshot kind must
+		// The fixture has no gsd.db, so the accepted snapshot kind must
 		// refuse loudly instead of falling back to projections — arg parsing
 		// only, no DB opened, no reader reached.
 		const exitCode = await runReadCli(

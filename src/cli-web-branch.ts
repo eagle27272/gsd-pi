@@ -49,7 +49,6 @@ const PASSTHROUGH_SUBCOMMANDS = new Set([
   'config',
   'graph',
   'headless',
-  'hermes',
   'install',
   'list',
   'read',
