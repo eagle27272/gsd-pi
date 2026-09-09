@@ -17,7 +17,6 @@ import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import { AuthStorage } from "@gsd/pi-coding-agent";
 import { getEnvApiKey } from "@gsd/pi-ai";
-import { isCursorAgentReadyUncached } from "../cursor-cli/readiness.js";
 import { loadEffectiveGSDPreferences } from "./preferences.js";
 import { getAuthPath, PROVIDER_REGISTRY, supportsBrowserOAuth, type ProviderCategory } from "./key-manager.js";
 
@@ -219,7 +218,6 @@ function isCliBinaryInPath(providerId: string): boolean {
 }
 
 function isExternalCliProviderReady(providerId: string): boolean {
-  if (providerId === "cursor-agent") return isCursorAgentReadyUncached();
   return isCliBinaryInPath(providerId);
 }
 
