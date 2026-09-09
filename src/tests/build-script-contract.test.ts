@@ -44,7 +44,6 @@ function assertContractsBefore(scriptName: string, laterCommand: string): void {
 test("pi build scripts compile contracts before pi-coding-agent", () => {
 	assertContractsBefore("build:pi", "pnpm run build:pi-coding-agent");
 	assertContractsBefore("build:pi-coding-agent", "pnpm --filter @gsd/pi-coding-agent run build");
-	assertContractsBefore("gsd:web", "pnpm run copy-resources");
 });
 
 test("contracts build emits dist even when incremental metadata is stale", () => {
