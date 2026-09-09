@@ -16,6 +16,7 @@ import {
   launchDesktopNotification,
   playNotificationBell,
   shouldPlayNotificationBell,
+  sendDesktopNotification,
 } from "../notifications.js";
 import type { NotificationPreferences } from "../types.js";
 
@@ -259,4 +260,52 @@ test("buildDesktopNotificationCommand includes project name in title on macOS", 
   } else {
     assert.match(command.args[1], /GSD — my-project/);
   }
+});
+
+// ─── Task 8: route blocked notifications through Herdr ──────────────────────────
+
+const herdrEnv = { paneId: "w1:p2", binPath: "/bin/herdr" };
+
+test("inside Herdr, attention notification → delivered as a blocked state-label, no throw", () => {
+  const calls: string[][] = [];
+  assert.doesNotThrow(() =>
+    sendDesktopNotification("GSD", "Blocked: needs input", "warning", "attention", undefined, {
+      herdrEnv,
+      herdrPrefs: { enabled: true, notifications: true },
+      herdrRun: (_f, a) => calls.push(a),
+    }),
+  );
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][1], "report-metadata"); // argv[1] of `pane report-metadata ...`
+  assert.ok(calls[0].some((x) => x.startsWith("blocked=")));
+});
+
+test("inside Herdr but herdrPrefs.notifications=false → no herdr delivery", () => {
+  const calls: string[][] = [];
+  sendDesktopNotification("GSD", "msg", "warning", "attention", undefined, {
+    herdrEnv,
+    herdrPrefs: { enabled: true, notifications: false },
+    herdrRun: (_f, a) => calls.push(a),
+  });
+  assert.equal(calls.length, 0);
+});
+
+test("inside Herdr but herdrPrefs.enabled=false → no herdr delivery", () => {
+  const calls: string[][] = [];
+  sendDesktopNotification("GSD", "msg", "warning", "attention", undefined, {
+    herdrEnv,
+    herdrPrefs: { enabled: false, notifications: true },
+    herdrRun: (_f, a) => calls.push(a),
+  });
+  assert.equal(calls.length, 0);
+});
+
+test("no herdrEnv → herdrRun is never called", () => {
+  const calls: string[][] = [];
+  sendDesktopNotification("GSD", "msg", "warning", "attention", undefined, {
+    herdrEnv: null,
+    herdrPrefs: { enabled: true, notifications: true },
+    herdrRun: (_f, a) => calls.push(a),
+  });
+  assert.equal(calls.length, 0);
 });

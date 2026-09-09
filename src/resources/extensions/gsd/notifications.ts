@@ -6,6 +6,8 @@ import { accessSync, constants } from "node:fs";
 import { delimiter, resolve } from "node:path";
 import type { NotificationPreferences } from "./types.js";
 import { loadEffectiveGSDPreferences } from "./preferences.js";
+import { detectHerdrEnv, type HerdrEnv } from "../herdr/env.js";
+import { HerdrReporter } from "../herdr/reporter.js";
 
 export type NotifyLevel = "info" | "success" | "warning" | "error";
 export type NotificationKind = "complete" | "error" | "budget" | "milestone" | "attention";
@@ -33,7 +35,12 @@ export function sendDesktopNotification(
   level: NotifyLevel = "info",
   kind: NotificationKind = "complete",
   projectName?: string,
-  deps: { notifications?: NotificationPreferences } = {},
+  deps: {
+    notifications?: NotificationPreferences;
+    herdrEnv?: HerdrEnv | null;
+    herdrPrefs?: { enabled?: boolean; notifications?: boolean };
+    herdrRun?: (file: string, args: string[]) => void;
+  } = {},
 ): void {
   // When a projectName is provided and the title is the default "GSD",
   // replace it with a project-qualified title for multi-project clarity.
@@ -44,6 +51,19 @@ export function sendDesktopNotification(
   const notifications = deps.notifications ?? loadedPreferences?.notifications;
 
   if (!shouldSendDesktopNotification(kind, notifications)) return;
+
+  try {
+    const herdrEnv = deps.herdrEnv !== undefined ? deps.herdrEnv : detectHerdrEnv();
+    const herdrPrefs = deps.herdrPrefs ?? loadedPreferences?.herdr;
+    if (herdrEnv && herdrPrefs?.enabled !== false && herdrPrefs?.notifications !== false) {
+      new HerdrReporter({ env: herdrEnv, runner: deps.herdrRun }).reportMetadata({
+        stateLabels: { blocked: `${title}: ${message}` },
+      });
+      return; // Herdr surfaces attention via pane state; skip the native toast.
+    }
+  } catch {
+    // fall through to the native desktop notification
+  }
 
   try {
     const command = buildDesktopNotificationCommand(process.platform, title, message, level);
