@@ -3,6 +3,42 @@
 Deep semantic review, one subagent per file, max 10 concurrent. Every Critical below was
 independently re-verified by me against the source before inclusion.
 
+> ## ⚑ Adversarial re-verification pass (second review)
+>
+> Every Critical and every load-bearing High in this report was subsequently re-checked against
+> the source by eight independent adversarial verifiers whose instruction was to **refute** the
+> claims, not confirm them. Results are folded in below, and each affected entry now carries a
+> `[re-verified]`, `[qualified]` or `[REFUTED]` marker.
+>
+> **Headline outcomes:**
+>
+> | | |
+> |---|---|
+> | Criticals confirmed as written | 14 |
+> | Criticals confirmed but narrowed | 11 |
+> | Criticals materially wrong or overstated | 5 (C1, C3, C4, C10, C28) |
+> | Highs refuted outright | 3 (`db-provider` handle leak, `await_job` abort race, `find.ts` empty-line slice) |
+> | This report's own prior corrections that were themselves wrong | 2 (the `removeWorktree` "⛔ CORRECTION" block; "The single highest-leverage fix") |
+> | New Criticals found that this report missed | 2 (both in `get-secrets-from-user.ts`) |
+> | Open question resolved | flat-phase `resolveSlicePath` — resolved in the **Critical** direction |
+>
+> **Report-integrity problems found in this document itself:**
+>
+> - The Scan Summary claims **32 Critical**. Only **30** exist. C18 and C19 appear nowhere —
+>   not as findings, not as retractions. C13 and C29 are properly accounted for; C18/C19 are an
+>   unexplained numbering gap presented as if complete.
+> - "**All five DB schema files — clean**" is a coverage claim over **5 of 24** schema files.
+>   Worse, `db-milestone-completion-schema.ts` — not reviewed — does
+>   `DROP TRIGGER IF EXISTS trg_workflow_lifecycle_transition` and **recreates it**. The C13
+>   retraction, this report's headline methodological lesson, therefore quotes the *superseded*
+>   definition. (The conclusion survives: the v43 replacement is stricter, requiring a matching
+>   `milestone.complete` operation row, and `trg_workflow_lifecycle_causal_provenance` still owns
+>   the revision-monotonicity case the v43 `WHEN` clause factors out. But the evidence cited is
+>   the wrong trigger, which is exactly the error the retraction was written to warn about.)
+> - "Coverage: complete / Still unreviewed: 0" cannot be squared with the above.
+>
+> **23 GitHub issues** were filed from the confirmed findings: eagle27272/gsd-pi#4 through #26.
+
 ## Scan Summary
 
 | | |
@@ -12,7 +48,7 @@ independently re-verified by me against the source before inclusion.
 | **Review set agreed** | 150 files / 106k LOC |
 | **Files reviewed** | **195** — the agreed 150-file review set is **complete**, plus ~45 targeted follow-ups |
 | **Still unreviewed** | **0** |
-| **Findings** | **~407** — 32 Critical, 219 High, 174 Medium |
+| **Findings** | **~407** — ~~32~~ **30** Critical (C18/C19 do not exist), 219 High, 174 Medium. After re-verification: 2 Criticals refuted or reduced to non-findings (C3, C10), 3 materially overstated (C1, C4, C28), 2 new Criticals added (NEW-C35, and the flat-phase `resolveSlicePath` promotion) |
 | **Clean files** | 25 reviewed with zero findings (listed at the end) |
 | **Failures** | None |
 
@@ -50,8 +86,30 @@ that only shows confirmations is not trustworthy.
 |---|---|
 | **FSM validator never enforced on update** (2 reviewers, Critical) | **RETRACTED.** `trg_workflow_lifecycle_transition` is a `BEFORE UPDATE` trigger enforcing the full transition allow-list, `state_version = OLD+1`, advancing revision, and changed `updated_at`. App-level covers INSERT, the trigger covers UPDATE. |
 | **Milestone can be closed out with open work** (Critical) | **Downgraded to High — with a caveat found later.** `requireTerminalState` (per milestone, per slice, per task) plus `requireNoActiveAttempts` do block the DB *completion write*, so the original claim was wrong. **But** the same completeness gap has a separate destructive exit: `isCompletedMilestoneTerminal` (`milestone-closeout.ts:59-89`) has two early `return true` paths that never inspect slices or tasks, and its fallback checks only `slice.status`, never `getSliceTasks`. It gates `doctor-git-checks.ts:316` → `nativeBranchDelete(basePath, branch, true)`, so **`doctor --fix` force-deletes the branch of a milestone with open tasks.** Filed as a fourth destructive `doctor --fix` defect (with C20/C21/C22), not as a re-elevation of C29. |
-| **`atob` on base64url breaks login ~100% of the time** (Critical) | **Downgraded to Medium.** `atob` does reject `-`/`_`, but ASCII JSON cannot produce them except via `?`/DEL at a triplet boundary: 0/2000 plain payloads affected, 2000/2000 query-string-bearing ones. Real but latent. |
+| **`atob` on base64url breaks login ~100% of the time** (Critical) | **Downgraded to Medium — and on re-verification, further to Low.** The mechanism was stated incompletely and the numbers do not reproduce. See the corrected entry below. |
 | **`gsd_execute` escapes the MCP sandbox** (Critical) | **Qualified.** `validateProjectDir` returns early with no containment unless `GSD_WORKFLOW_PROJECT_ROOT` is set. There is no sandbox by default; the bypass matters only in a hardened deployment. |
+
+### Corrected: the `atob` entry (re-verification)
+
+Two things were wrong. **The trigger set is larger than stated:** for pure-ASCII input, base64url can
+only emit `-`/`_` when a byte at position ≡ 2 (mod 3) is one of `>`, `?`, `~`, or DEL — the report
+named only `?` and DEL. (Sextets 0–2 max out at 31, 55 and 61 respectively; only sextet 3, which is
+`b2 & 63`, can reach 62/63.)
+
+**The numbers do not reproduce.** The "2000/2000 query-string-bearing" figure is payload-dependent —
+I measured 1010/2000 on a payload with one `?`, consistent with the 1-in-3 triplet-alignment odds.
+More importantly, it was measured against the wrong shape. The real sinks are OpenAI Codex JWTs:
+
+- `packages/pi-ai/src/utils/oauth/openai-codex.ts:85` — `decodeJwt`, wrapped in try/catch returning `null`
+- `packages/pi-ai/src/providers/openai-codex-responses.ts:1321` — `extractAccountId`, throws a clear
+  `"Failed to extract accountId from token"`
+
+On 2000 realistic Codex-shaped payloads (URL-valued claims, account ids, plan type), **0/2000** contain
+`-` or `_`. And `packages/pi-ai/src/utils/oauth/anthropic.ts:27` is **not a JWT sink at all** — it
+decodes a hardcoded, obfuscated client ID, so it cannot fail on user data.
+
+**Corrected severity: Low.** It fires only if a claim value contains `>`, `?`, `~` or DEL at a
+triplet-aligned offset, and both sinks degrade gracefully rather than corrupting state.
 
 **Methodological note.** Two independent reviewers converged on the retracted FSM Critical.
 Earlier in the scan I treated independent convergence as a confidence signal — it is not,
@@ -109,7 +167,26 @@ the success path, detected `decision <id>: modified in both` conflicts are appen
 `conflicts` and then discarded by teardown before the branch is deleted.
 
 **Fix:** make `reconcileWorktreeDb` throw instead of returning a zero-shaped result; gate
-teardown on success; surface `conflicts`.
+teardown on success; surface `conflicts`. → eagle27272/gsd-pi#6
+
+> **[re-verified — with two mitigations the write-up omits].** The guard is `/['";\x00]/` and the
+> apostrophe case is confirmed; all four call sites are bare expression statements; no outer
+> path-character guard exists anywhere.
+>
+> 1. **An error *is* logged.** `reconcile.ts:110` calls
+>    `logError("db", "worktree DB reconciliation failed: path contains unsafe characters")`. It is the
+>    *command surface* that reports success, not the DB log. "while logs report success" overstates it.
+> 2. **One caller is backstopped.** `auto-worktree-merge-db-ready.ts` follows the reconcile with
+>    `assertAdoptedMilestoneCompleted` (`:140`) and `assertCloseoutProof` (`:141`), so an un-merged
+>    milestone normally fails the project-DB completion check and throws.
+>
+> **The genuinely unguarded loss is `auto-worktree-teardown.ts:93`**, which swallows the zero result
+> and proceeds to "3. Remove the worktree" a few lines later.
+>
+> Adjacent: `reconcile.ts:113` does `if (!getDbOrNull()!)` — a non-null assertion on the value being
+> tested for falsiness — and `:120` uses a double assertion `getDbOrNull()!!`. If the open at `:114`
+> "succeeds" with a still-null handle, the next line throws a raw `TypeError` caught at `:729` and
+> converted into *another* silent zero-count return.
 
 ## ⚠️ Also fix first — only the first milestone of a run ever merges (C30)
 
@@ -136,6 +213,21 @@ success.** Combined with the teardown holes above, that branch is then a deletio
 
 **Fix:** replace the boolean with `milestoneMergedInPhasesFor: string | null` and compare
 against `s.currentMilestoneId`, so the guard expires naturally on milestone change.
+→ eagle27272/gsd-pi#7
+
+> **[re-verified — and the blast radius is larger than described].** Every anchor matches (the clear
+> trio is `pre-dispatch.ts:423-425`, off by one from the write-up). `autoSession` is a module
+> singleton (`auto-runtime-state.ts:26`), so the field survives the whole process, and no write of
+> `false` exists outside tests. `pre-dispatch.ts:392-447` confirms >1 milestone per session is the
+> normal path.
+>
+> **Every recovery path is suppressed too, not just the merge.** `milestone-settlement.ts:31` —
+> `if (!input.milestoneId || input.milestoneMerged) return false;` — makes
+> `evaluateAllCompleteSettlement` return `{ok: true, reason: "settled"}` on the stale flag, so the
+> orchestrator's `mergePendingCompleteMilestone` fallback (`orchestrator.ts:1312-1313`) never fires;
+> and `auto.ts:1778`'s stopAuto fallback merge is gated on `!s.milestoneMergedInPhases` as well. So
+> milestone 2+ has **no in-session merge recovery at all**, and `emitAutoExit` (`auto.ts:1704`)
+> reports `milestoneMerged: true` for the stranded milestone.
 
 ---
 
@@ -178,18 +270,45 @@ Seven layers, each with a hole, all on the same path:
 > plausible-shaped claim survived until someone read the enforcement site (see the C13 retraction).
 
 **What the real defect turned out to be.** The data *is* preserved — it gets quarantined — but
-callers are never told. `removeWorktree` signals quarantine by returning `false`, not by throwing,
-and three of the four call sites in `commands-worktree.ts` discard the return and print success:
+callers are never told.
+
+> ### ⛔ SECOND CORRECTION — the boolean means the opposite of what this report said
+>
+> This report previously stated that `removeWorktree` "signals quarantine by returning `false`",
+> and recommended making three call sites match `handleRemove`. **Both halves are wrong.**
+> Re-verified at `worktree-manager.ts:1015-1021`:
+>
+> ```ts
+> 1015      if (!quarantinePath) {
+> 1016        return false;              // quarantine FAILED — original worktree preserved
+> 1017      }
+> 1018      deleteBranchAfterRemoval = false;
+> 1019      if (!existsSync(resolvedWtPath)) {
+> 1020        nativeWorktreePrune(basePath);
+> 1021        return true;               // quarantine SUCCEEDED — reported as ordinary success
+> ```
+>
+> `quarantineDirtyWorktree` (`:265-335`) returns the quarantine path on success and `null` only when
+> both `renameSync` and `cpSync` fail. So `false` means the quarantine *failed*, and a **successful**
+> quarantine returns `true` — indistinguishable from an ordinary removal.
+>
+> Consequently `handleRemove` is **not** the correct template. It checks the boolean, but that only
+> catches the rare failure branch; on a successful quarantine it prints a plain
+> `Removed worktree <name>.` with no mention that the tree was moved to
+> `.gsd/quarantine/worktrees/<name>-<ts>/`. The user only learns via `logError` at `:329`.
+> **Successful quarantine is invisible to all four call sites.**
+>
+> **Actual fix:** have `removeWorktree` return the quarantine path (or a result object), not a bare
+> boolean, and surface it everywhere.
+
+The four call sites in `commands-worktree.ts` (anchors corrected on re-verification):
 
 | Call site | Return checked? | What the user is told |
 |---|---|---|
-| `handleMerge` :166 | ✗ | `"Removed empty worktree …"` |
-| `handleMerge` :224 | ✗ | full `"Merged … → main"` success block |
-| `handleClean` :251 | ✗ | listed under `Removed:` in the summary |
-| `handleRemove` :317 | **✓** | correctly warns that state was quarantined |
-
-The correct version already exists, 90 lines from the broken ones, in the same file. **Actual
-stopgap: make the three call sites match `handleRemove`.**
+| `handleMerge` :168 | ✗ | `"Removed empty worktree …"` |
+| `handleMerge` :225 | ✗ | full `"Merged … → main"` success block |
+| `handleClean` :258 | ✗ | listed under `Removed:` in the summary |
+| `handleRemove` :318-330 | ✓ (failure branch only) | warns on quarantine *failure*; silent on success |
 
 Compounding it, `commands-worktree.ts:56-61` fails *open* on the same question the layer beneath
 fails *closed* on:
@@ -224,11 +343,26 @@ silently redirect every operation to a different repo or index … (Issue #4980 
 | **1237** | `git reset --hard HEAD` | **irreversibly discards uncommitted changes in an unrelated repo** |
 
 Line 1079 (`checkout -b`) passes it; line 1070 (`checkout`), the adjacent function, does not.
-**Fix: three added lines.**
+**Fix: three added lines.** → eagle27272/gsd-pi#8
+
+> **[re-verified — and *more* severe than written].** The 18 call sites are
+> `147, 178, 190, 205, 408, 418, 808, 955, 1070, 1079, 1115, 1167, 1237, 1246, 1260, 1491, 1509, 1528`;
+> set-differencing against the 15 `env:` lines confirms exactly those three omissions, with no
+> wrapper or shared options object supplying it.
+>
+> **But calling them "fallbacks" is wrong.** `native-git-bridge.ts:20` reads
+> `const NATIVE_GSD_GIT_ENABLED = process.env.GSD_ENABLE_NATIVE_GSD_GIT === "1";` and `loadNative()`
+> short-circuits at `:125` returning `null` unless that is set. Native git is **opt-in and off by
+> default** (issue #453 deliberately keeps auto-mode bookkeeping on the CLI path). These three
+> unscrubbed calls are what runs on *every* invocation.
+>
+> One nuance the "proof by adjacency" gets slightly wrong: `nativeCheckoutNewBranch` at `:1079` has
+> no native branch at all, so it is the sole implementation rather than a peer fallback. The
+> inconsistency it demonstrates still holds.
 
 ### Related root cause — failure indistinguishable from "nothing found"
 
-~17 read helpers call `gitExec(..., allowFailure=true)`, collapsing "git failed" into the same
+Read helpers call `gitExec(..., allowFailure=true)`, collapsing "git failed" into the same
 falsy value as "found nothing". Most callers fail closed. These fail **open**, into
 data-loss guards:
 
@@ -239,6 +373,30 @@ data-loss guards:
   completed unit's work is never committed
 - `nativeBranchExists` → `false` → defeats the TOCTOU guard (#4980 HIGH-3) before
   `nativeBranchForceReset`, orphaning concurrent commits
+
+> **[re-verified, two corrections].**
+>
+> **Count.** Not "~17 read helpers" — **40 `allowFailure` call sites across 33 distinct functions**,
+> of which **~20 are read helpers**. The rest are intentional best-effort writes (`merge --abort`,
+> `worktree prune`, `update-ref -d`).
+>
+> **`nativeHasChanges` is mitigated on the path that matters.** `auto-post-unit.ts:1420-1423` calls
+> `_resetHasChangesCache()` immediately before auto-commit, with a comment naming this exact hazard
+> (#1853), and `git-service.ts:1038-1040` invalidates again after a successful commit. The residual
+> is narrower: the post-invalidation *fresh* probe at `git-service.ts:1011` still routes a genuine
+> `git status --short` failure through `allowFailure` into `false`, and `autoCommit` returns `null`
+> with no error. Callers `quick.ts:381/458` and `commands-workflow-templates.ts:465/638` do not reset
+> the cache and can still see a stale `false`.
+>
+> **`nativeBranchExists` is a design gap, not a careless `true`.** The fallback is
+> `gitExec(basePath, ["show-ref","--verify",…], true)` at `:287`, and `git show-ref --verify` exits
+> non-zero for the ordinary "ref does not exist" case — so `allowFailure` is *required* for
+> correctness here. Distinguishing absent (exit 1) from broken (exit 128) needs the exit code, not a
+> boolean. The TOCTOU consequence at `auto-worktree-branch-lifecycle.ts:139` is exactly as described.
+>
+> **Missed, same shape:** `stageUntrackedExcludingDotGsd` (`native-git-bridge.ts:881`, site `:888`)
+> derives its staging set from `gitFileExec(basePath, ["status","--porcelain=v1","-z"], true)`; a
+> swallowed status failure yields an empty parse and stages nothing.
 
 ---
 
@@ -265,24 +423,58 @@ Each has one root fix, not N patches.
 | P15 | Timer callbacks re-check presence, not **identity**, after an `await` | 3 in `auto-timers.ts` (bounded — `auto-liveness-backstop` does it correctly) | — |
 | P16 | 6 of 8 workflow tools discard the `stale` signal their 2 siblings propagate | 6 | `reopen-slice.ts`, `reopen-milestone.ts` |
 
-### The single highest-leverage fix
+### ⛔ RETRACTED — "The single highest-leverage fix"
 
-A four-file compound chain collapses to **one change**:
+**This section was wrong in three places and is retracted.** It previously claimed a four-file
+compound chain: recycled PID → `isWorkerProcessAlive()` misjudges liveness → milestone lease granted
+while the original worker still runs → `settleStaleActiveDispatchForUnit` cancels its RUNNING dispatch
+→ `markCompleted` no-ops → outcome silently dropped, work duplicated.
 
-```
-recycled PID → isWorkerProcessAlive() misjudges liveness
-            → milestone lease granted while the original worker is still running
-            → settleStaleActiveDispatchForUnit cancels its RUNNING dispatch
-            → markCompleted's WHERE status IN ('claimed','running') no-ops
-            → outcome silently dropped, work duplicated
-```
+**1. The causal direction is inverted.** PID recycling produces a **false positive** — a dead worker
+that looks alive. Every consumer in this codebase reads "alive" as *do not reclaim / do not recover*:
+`canReclaimLease` returns `false` (`task-settle.ts:118`), `isDeadLocalAutoWorker` returns `false`
+(`db/auto-workers.ts:286`), `findStaleWorkerForProject` returns `null` (`:317`, `:329`, `:345`).
+All fail **closed**. The symptom is a stalled milestone awaiting TTL expiry, not a double grant. To
+grant a lease while the original worker still runs you need the opposite error — a live process judged
+dead — which `process.kill(pid, 0)` does not produce locally.
 
-`canReclaimLease` already fails closed and has no identity signal available, so the fix cannot
-live there. `db/auto-workers.ts` maintains `last_heartbeat_at`, defines
-`HEARTBEAT_TTL_SECONDS = 60`, and already uses the TTL in a query 40 lines away — but
-`isWorkerProcessAlive` is typed `Pick<AutoWorkerRow, "host" | "pid">`, so it structurally
-cannot see it. **Widen the `Pick` and short-circuit on a lapsed TTL.** A recycled PID cannot
-fake a fresh heartbeat.
+**2. The lease grant never consults `isWorkerProcessAlive`.** `claimMilestoneLease`
+(`db/milestone-leases.ts:74-193`) gates takeover at `:141-152` on
+`status IN ('expired','released') OR datetime(expires_at) < datetime('now')` or a re-entrant
+same-host-same-pid row, all inside a `transaction()` with a `changes === 1` confirmation at `:160-165`.
+`recordDispatchClaim` then re-reads the lease as `status = 'held'` with a matching fencing token
+(`db/unit-dispatches.ts:180-191`) and returns `{ok: false, error: "stale_lease"}` otherwise — before
+`settleStaleActiveDispatchForUnit` is reachable at all. The partial unique index
+`idx_unit_dispatches_active_per_unit` (`db-coordination-schema.ts:102`) is a third, DB-level backstop.
+
+**3. `markCompleted` does check its rowcount.** `db/unit-dispatches.ts:309-314` reads `changes` and
+does `if (changes < 1) return false;`, and `settleDispatchCompleted`/`settleDispatchIfNeeded`
+(`auto/workflow-dispatch-ledger.ts:38-48`, `:16-21`) thread that boolean back so an unsettled dispatch
+is retried at `loop.ts:2033`. The silent-drop claim holds at exactly one call site —
+`auto/orchestrator.ts:1689`, which discards the boolean while `recordCompletedCloseout` proceeds — and
+because `markCompleted` returns before `insertAuditEvent` on a no-op, that path leaves no audit trace.
+
+**4. The heartbeat is already consumed.** `isAutoWorkerLive` (`db/auto-workers.ts:255-261`) — the
+function `canReclaimLease` actually calls — parses `last_heartbeat_at` and rejects on
+`heartbeatAt < Date.now() - HEARTBEAT_TTL_SECONDS*1000` **before** delegating to
+`isWorkerProcessAlive`. There is no `Pick` to widen at that site.
+
+### What the real high-leverage fix is → eagle27272/gsd-pi#16
+
+**`crash-recovery.ts:316-327` — `isLockProcessAlive` has no host check, and `LockData` carries no
+`host` field at all.** A lock written by PID 1234 on host A, evaluated on host B, resolves purely
+against host B's process table. *That* is the fail-open direction — a live remote holder judged dead —
+and it feeds takeover at `auto.ts:1071/1110/1154`, `auto-start.ts:1063`, `doctor-proactive.ts:242`,
+and `migrate/safety.ts:190`.
+
+The contrast is instructive: `db/auto-workers.ts:243` has `if (candidate.host !== hostname()) return false;`
+and its primary caller gates on heartbeat freshness first. `crash-recovery.ts` has neither guard.
+
+**One place where the `Pick` argument *does* hold**, and which this report missed:
+`findStaleWorkerForProject`'s first query (`db/auto-workers.ts:308-317`) selects on status scope alone
+with **no heartbeat cutoff**, unlike the two queries below it, and relies entirely on
+`!isWorkerProcessAlive(latestActiveRow)`. Widening the `Pick` there and short-circuiting on a lapsed
+TTL is worthwhile — just not the load-bearing fix this section claimed.
 
 ---
 
@@ -293,105 +485,306 @@ Full detail for each, including the verification I ran.
 **C16** — worktree reconcile silent data loss. *See "Fix first" above.*
 **C23** — `git reset --hard` / `checkout` without env scrubbing. *See "Fix second" above.*
 
-**C1 · `bootstrap/db-tools.ts`** — All 20 `resolveWorkflowToolBasePath(_ctx, params)` sites pass
-camelCase `milestoneId`; the helper reads `scope?.milestone_id` (`dynamic-tools.ts:70`). Auto-worktree
-routing never activates; writes land in the main project's `.gsd` DB. `scope` is optional so TS
-cannot catch it. The existing test exercises the helper directly with a snake_case object.
+**C1 · `bootstrap/db-tools.ts`** — `resolveWorkflowToolBasePath(_ctx, params)` sites pass
+camelCase `milestoneId`; the helper reads `scope?.milestone_id` (`dynamic-tools.ts:70`). `scope` is
+optional so TS cannot catch it. The existing test exercises the helper directly with a snake_case
+object. → eagle27272/gsd-pi#22
+
+> **[qualified — overstated].** It is **18 of 20**, not 20/20: `gsd_summary_save` (call `:586`,
+> schema `:614`) declares snake_case `milestone_id` and routes correctly, and
+> `gsd_answer_milestone_subjective_uat` (call `:2077`) has no milestone field at all. There is
+> genuinely no normalization step anywhere.
+>
+> **"Routing never activates" is wrong.** For the 18 camelCase tools `scope?.milestone_id` is
+> `undefined`, which falls into the `else` at `dynamic-tools.ts:74-77`, and `activeWorktrees()`
+> returns the single live worktree when there is exactly one — the normal auto-worktree case. Real
+> misrouting is confined to **≥2 concurrent milestone worktrees with the agent running from the
+> project root**. Still a bug; not the blanket failure described. The test blind spot is confirmed
+> (`tests/workflow-tool-base-path.test.ts:20-23`).
 
 **C2 · `bg-shell/bg-shell-lifecycle.ts:59,405`** — Both `session_shutdown` handlers ignore
 `event.reason` and call `cleanupAll()`, which SIGKILLs everything with no `persistAcrossSessions`
-check. `reason` is `quit|reload|new|resume|fork`. The correct filter already exists at
-`process-manager.ts:442`; the contract is advertised to the model at `bg-shell-tool.ts:60`.
+check. `reason` is `quit|reload|new|resume|fork` (`extension-upstream-types.ts:617`). The correct
+filter already exists at `process-manager.ts:442`; the contract is advertised to the model at
+`bg-shell-tool.ts:60`. **[re-verified verbatim]** → eagle27272/gsd-pi#19
 
-**C3 · `tools/exec-tool.ts:206-297`** — `executeUatExec` never calls `normalizeRuntime`; it applies
-six **bash-shaped** regexes and passes params through. A `python`/`node` script bypasses the entire
-UAT policy. Also `rm -fr`, `rm --recursive --force`, and `cat ./.env` / `less .env` all bypass.
+> **Missed, same root cause:** the first handler's `cleanupAll()` ends with `processes.clear()`
+> (`process-manager.ts:413`), and the second handler then calls `persistManifest` at `:409`, which
+> maps over `processes.values()`. **The shutdown manifest is always written empty**, defeating
+> restart/rediscovery.
+
+**C3 · `tools/exec-tool.ts:206-297`** — UAT exec policy gaps. → eagle27272/gsd-pi#26
+
+> **[largely REFUTED — downgraded from Critical to Low].** Three of the four sub-claims fail:
+>
+> - **`executeUatExec` *does* reach `normalizeRuntime`.** It spreads `...params` into
+>   `executeGsdExec`, which normalizes at `:231`. The `python`/`node` bypass claim is wrong.
+> - **`cat ./.env` and `less .env` are blocked** — along with `cat ../.env`, `head -20 .env` and
+>   `grep KEY .env`. Not by the `cat \.env` rule (which does miss `./.env`) but incidentally by
+>   `/\b(?:env|printenv)\b(?:\s|$)/i` at `:212`, since `.env` at end-of-token satisfies `\benv\b` + `$`.
+>   That rule is also over-broad, blocking `docker run --env FOO` and `ls env`.
+> - **Only the `rm` bypasses hold**: `rm -fr X`, `rm -f -r X`, `rm --recursive --force X`. Additional
+>   confirmed bypasses: `npm --prefix . install`, `cat ./.env.production`, `cat "$(pwd)/.env"`,
+>   `cat $HOME/.aws/credentials`.
+>
+> **And the framing was wrong.** This is a workflow-discipline guardrail, not a security boundary:
+> `exec-tools.ts:80-126` registers an unrestricted `gsd_exec` with the identical sandbox, same
+> extension, same agent, same privilege. Its stated purpose (`exec-tools.ts:38`) is to keep the UAT
+> evidence trail clean. Worth fixing on those grounds; nothing here was holding back an adversary.
 
 **C4 · `pi-agent-core/agent-loop.ts:1112`** — `raceToolExecutionAgainstAbort` early-returns on
 `signal.aborted` *before* attaching the `.then(onFulfilled, onRejected)` guard, so an already-queued
-tool that rejects produces an unhandled rejection. Fatal under Node's default.
+tool that rejects produces an unhandled rejection. → eagle27272/gsd-pi#26
 
-**C5 · `mcp-server/workflow-tools.ts:640,762`** — Unsanitized `milestoneId` `join()`ed into a
-worktree path with no containment check; the result replaces the validated `projectDir` with no
-re-validation. *Qualified: containment only exists when `GSD_WORKFLOW_PROJECT_ROOT` is set.*
+> **[qualified].** The window is real and reachable in the parallel path: `executeToolCallsParallel`
+> pushes a deferred thunk at `:858` and only invokes it inside `Promise.all` at `:876-878`, awaiting
+> `emit(...)` in between, so the signal can abort after `prepareToolCall`'s checks (`:1015`, `:1032`).
+>
+> **"Fatal under Node's default" is wrong.** `gsd-agent-modes/src/main.ts:411` and
+> `bootstrap/register-extension.ts:127-134` both install `unhandledRejection` listeners, so
+> `--unhandled-rejections=throw` never applies. The actual outcome is `_gsdRejectionGuard` writing a
+> crash log and calling `process.exit(1)` — still a hard exit, but attributable to the repo's own guard.
 
-**C6 · `mcp-server/server.ts:1152` + `session-manager.ts:123`** — `gsd_execute`, the one tool that
-spawns an autonomous shell-capable agent, skips `validateProjectDir` that 11 sibling tools call.
-*Qualified as above.*
+**C5 · `mcp-server/workflow-tools.ts:650,762`** — Unsanitized `milestoneId` `join()`ed into a
+worktree path; the result replaces the validated `projectDir` with no re-validation.
+→ eagle27272/gsd-pi#21
+
+> **[qualified].** The sink is `:650`, not `:640` (`:640-642` is the container list). Two gates at
+> `:651-654` bound it: `if (!existsSync(wtPath)) continue; if (!existsSync(join(wtPath, ".git"))) continue;`.
+> So `milestoneId = "../../../../etc"` yields nothing; `"../../../other-repo"` yields a live redirect
+> of all subsequent workflow writes into another *existing git checkout*. Call it **cross-repo write
+> redirection**, not arbitrary path traversal.
+
+**C6 · `mcp-server/server.ts:1153-1178` + `session-manager.ts:123-131`** — `gsd_execute` skips the
+`validateProjectDir` that 11 sibling tools call (`server.ts:395,1013,1250,1282,1311,1416,1436,1456,1476,1495,1545`).
+
+> **[qualified to near-nothing].** `startSession` only rejects empty and calls `resolve(projectDir)` —
+> no absolute-path check either, so a relative path resolves against the server cwd. But
+> `validateProjectDir` (`workflow-tools.ts:559-590`) imposes **no containment by default**:
+> `getAllowedProjectRoot()` (`:533-536`) returns `null` unless `GSD_WORKFLOW_PROJECT_ROOT` is set, and
+> on `null` it returns the resolved path immediately (`:572`). So with no hardening the 11 siblings
+> that *do* call it get exactly the same non-containment. Skipping it changes nothing by default.
+> Transport is stdio-only, so the "attacker" is the local LLM client.
 
 **C7 · `tools/workflow-tool-executors.ts:679`** — `task_id` interpolated into a filename by
-`buildFlatTaskFileName`; verified `join("/proj/.gsd/M001", "S01-../../../../../../tmp/pwned-SUMMARY.md")`
-→ `/tmp/pwned-SUMMARY.md`. No containment check in the builder, `targetTaskFile`, or the projection writer.
+`buildFlatTaskFileName`. **[re-verified with a working reproduction]** → eagle27272/gsd-pi#9
 
-**C8 · `worktree-manager.ts:892` + `milestone-actions.ts:144`** — `removeWorktree` computes
-`resolvedPathSafe` but enforces it only for the tail steps; the nested-`.git` `rmSync` and
-`git add -A && commit` run unconditionally. `/gsd discard <arg>` passes the raw slash-command
-argument through with no validation.
+> `buildFlatTaskFileName("S01", "../../../../../../tmp/pwned", "SUMMARY")` →
+> `"S01-../../../../../../tmp/pwned-SUMMARY.md"`, and
+> `join("/proj/.gsd/M001", …)` → `/tmp/pwned-SUMMARY.md`. Schema is `task_id: z.string().optional()`
+> (`workflow-tools.ts:2361`) with no pattern. Reachable via `gsd_summary_save` / `gsd_save_summary`,
+> and **not** gated by `validateProjectDir` even in a hardened deployment.
+>
+> **The containment check is a known requirement this path skipped:** `db-writer.ts:852-855` and
+> `:927-931` both reject `rel.startsWith('..')`. **Second unguarded sink:**
+> `mirrorArtifactToActiveWorktreeProjection` (`workflow-tool-executors.ts:436-458`) does
+> `join(contract.worktreeGsd, relativePath)` → `saveFile`, called at `:704` with the traversing path.
 
-**C9 · `worktree-manager.ts:1268`** — On a real merge conflict the worktree and branch are
+**C8 · `worktree-manager.ts:896`** — `removeWorktree` computes `resolvedPathSafe` but enforces it
+only for the tail steps. → eagle27272/gsd-pi#12
+
+> **[first half re-verified, second half REFUTED].** Confirmed: `resolvedPathSafe` is computed at
+> `:896`; the `git add -A`/`commit` at `:944-950` and the nested-`.git` `rmSync` at `:983` are gated
+> only on `existsSync(.gitmodules)` / `nestedGitDirs.length > 0`, never on `resolvedPathSafe`, while
+> `:1004` and `:1027` do enforce it.
+>
+> **REFUTED: `/gsd discard <arg>` cannot traverse.** `discardMilestone` (`milestone-actions.ts:144-160`)
+> returns `false` at `:149` unless the id resolves to a real phase dir or DB row, and
+> `resolveMilestonePath` → `resolvePhaseDir` (`paths.ts:779`) runs the id through
+> `canonicalPhaseDirName` (`layout-policy.ts:124-133`), which cannot emit `..`. The C8a hazard is
+> reached via a symlinked or relocated worktree entry, not via the discard argument.
+
+**C9 · `worktree-manager.ts:1268-1281`** — On a merge conflict the worktree and branch are
 force-deleted **before** `GSD_MERGE_CONFLICT` is thrown, while both the CLI and the LLM-guided
 handler tell the user to resolve conflicts against a worktree that no longer exists.
+→ eagle27272/gsd-pi#12
+
+> **[qualified — and the real defect is the inverse of what was described].** The main tree *is*
+> restored first (`cleanupFailedSquashMergeState` at `:1272`) and the delete is conditional on
+> `!dirtyWorkingTree && branch.startsWith("milestone/")`, so `worktree/*` branches from
+> `/gsd worktree merge` are never deleted here.
+>
+> **But the safety is inverted.** A **dirty** worktree is quarantined with
+> `deleteBranchAfterRemoval = false` (`:1018`) — branch preserved. A **clean** worktree, i.e. one
+> where the user *committed* their milestone work, falls through to `:1080` `deleteBranchIfPresent`
+> → `nativeBranchDelete(basePath, branch, true)`, making every committed milestone commit
+> unreachable except via reflog while the conflict is still unresolved. **Committing your work makes
+> the outcome worse.**
 
 **C10 · `exec-sandbox.ts:317-337`** — `redactSecrets()` is applied to the persisted files but the
-agent-facing digest is built from the **raw** `stdoutBuf` (line 327) and returned to the model at
-`exec-tool.ts:337`. Secrets scrubbed on disk, sent verbatim to the provider.
+agent-facing digest is built from the raw `stdoutBuf` (`:327`) and returned to the model at
+`exec-tool.ts:337`.
 
-**C11 · `custom-workflow-engine.ts:169`** — The "ReDoS guard" checks elapsed time *between* loop
-iterations, so it cannot interrupt a single catastrophically-backtracking `exec()`. Author-supplied
-patterns are validated only for syntax.
+> **[REFUTED as a finding].** The buffer identification is exactly right, but the framing is not.
+> `redact-secrets.ts:1-4` states the module's purpose is **disk hygiene for the secret scanner**
+> (`.gsd/` is skipped by `.secretscanignore`), not provider egress — and `:321-323` documents the
+> digest behaviour as intended. The digest *is* redacted on the one persistence path that matters
+> (`activity-log.ts:133`). Since `bash`, `read` and `gsd_exec` all return unredacted output to the
+> provider anyway, this is not a distinguished leak channel. **Not a bug: redaction scope is
+> disk-only, deliberately.**
 
-**C12 · `commands-maintenance.ts:561` + `db-workspace.ts:852`** — `handleRecover` checks only
-`isDbAvailable()` with no project scoping, so `/gsd recover` run from project B reports and can
-mutate project A. `handleDbRestoreBackup` in the same file has the guard
-(`currentProjectId !== verified.projectId`); `deriveState` has `isSameOpenDatabase`.
+**C11 · `custom-workflow-engine.ts:169-180`** — The "ReDoS guard" checks elapsed time *between* loop
+iterations, so it cannot interrupt a single catastrophically-backtracking `exec()`.
+**[re-verified]** → eagle27272/gsd-pi#26
 
-**C14 · `subagent/index.ts:1450` + `:557`** — Single-agent isolated mode merges a **failed**
-subagent's diff into the live repo (`if (isolation)` — the parallel/background paths at 1151/1354
+> **Downgrade to Medium: self-inflicted, not remote.** Patterns come from the user's own
+> `<project>/.gsd/workflow-defs/*.yaml` (`run-manager.ts:131-132`), validated only for syntax +
+> capture-group presence (`definition-loader.ts:177-187`). Also at `:173`: a valid pattern that can
+> match empty (e.g. `(x?)`) never advances `regex.lastIndex`, so `items` grows unbounded for the
+> full 5 seconds before the check fires.
+
+**C12 · `commands-maintenance.ts:556-566` + `db-workspace.ts:853-877`** — `handleRecover` checks only
+`isDbAvailable()` (`:564`) with no project scoping. **[re-verified]** → eagle27272/gsd-pi#21
+
+> The unscoped load is `retainedRecoverApplicationId()` at `db-workspace.ts:853-877`, which builds its
+> query from `_getAdapter()` with no project predicate (`:852` is blank). The headless twin
+> `src/headless-recover.ts:199` explicitly calls `openWorkflowDatabase(basePath)` first, proving the
+> guard is expected. Trigger is a cwd change within one extension process (`projectRoot()` is
+> re-derived from `process.cwd()` per call, `commands/context.ts:38-58`) — which
+> `doctor-git-checks.ts:283` can cause, since it `process.chdir`s and never restores.
+
+**C14 · `subagent/index.ts:1450-1462` + `:557-561`** — Single-agent isolated mode merges a **failed**
+subagent's diff into the live repo (`if (isolation)` — the parallel/background paths at `:1151`/`:1354`
 correctly gate on `exitCode === 0`). Compounding: `proc.on("close", (code) => resolve(code ?? 0))`
-drops the signal arg, so a SIGKILLed subagent reports exit 0 — **adding the guard alone does not fix it.**
+drops the signal arg, so a SIGKILLed subagent reports exit 0 — **fixing either one alone does not
+fix it.** **[re-verified verbatim]** → eagle27272/gsd-pi#14
 
-**C15 · `slice-parallel-orchestrator.ts:153`** — `rmSync(wtPath, {recursive:true, force:true})` on a
-path built from unvalidated ids, before any validation, with no containment check. The repo
-*documents* this exact requirement at `commands-eval-review.ts:14` and exports `isInsideWorktreesDir`,
-used correctly at five other destructive sites.
+> **Missed:** `:572-574`'s SIGKILL escalation is **dead code** —
+> `setTimeout(() => { if (!proc.killed) proc.kill("SIGKILL"); }, 5000)`. Node sets `subprocess.killed`
+> when a signal is *sent*, and the `proc.kill("SIGTERM")` above already set it. A subagent that
+> ignores SIGTERM is never force-killed.
+>
+> **Same root cause elsewhere:** `waitForChildProcess` (`packages/pi-coding-agent/src/utils/child-process.ts:46`)
+> is typed `Promise<number | null>` and `:100` drops Node's signal argument, so
+> `core/exec.ts:104` (`code ?? (killed ? 1 : 0)`) and `core/tools/bash.ts:453`
+> (`if (exitCode !== 0 && exitCode !== null) throw`) both treat an externally-killed child as success.
+> Verified by `pkill -9`: `{code: 0, killed: false, stdout: "partial"}`.
 
-**C17 · `doctor-git-checks.ts:177`** — Conflict auto-resolve gated only on `!dryRun`, not
-`shouldFix`. `headless.ts:480` and `forensics.ts:420` call `runGSDDoctor` with no fix flag, so a
-read-only diagnostic **aborts an in-progress merge/rebase** and auto-stages resolutions. 12
-`shouldFix()` calls elsewhere in the same file.
+**C15 · `slice-parallel-orchestrator.ts:158-160`** — `rmSync(wtPath, {recursive:true, force:true})` on
+a path built from unvalidated ids, with no containment check. The repo *documents* this exact
+requirement at `commands-eval-review.ts:14` and exports `isInsideWorktreesDir`, used correctly at five
+other destructive sites (`auto-worktree-teardown.ts:142`, `worktree-manager.ts:880`, `:896`,
+`auto-start.ts:674`, `:804`). **[re-verified]** → eagle27272/gsd-pi#21
 
-**C20 · `doctor-git-checks.ts:431`** — The `gsd/*/*` glob matches
+> Line drift 6 (the report said `:153`, which is `createSliceWorktree`'s header). Verified:
+> `join("/proj/.gsd-worktrees", "M001-../../../Users/me/docs")` → `/proj/Users/me/docs`.
+>
+> **"Before any validation" needs narrowing.** `isValidSliceWorktreePath()` *is* called on the same
+> line — but it is a worktree-legitimacy test used in the negative, so it widens rather than narrows
+> the delete and constrains nothing about location. `createWorktree`'s `/^[a-zA-Z0-9_-]+$/` name check
+> (`worktree-manager.ts:557`) does run, but *after* the delete at `:162`. Reachability needs an id
+> containing `../` to reach `startSliceParallel` from the planner DB; `isValidMilestoneId`
+> (`worktree-lifecycle.ts:404`) exists but is not applied on this path.
+
+**C17 · `doctor-git-checks.ts:185`** (report said `:177`) — Conflict auto-resolve gated only on
+`!dryRun`, not `shouldFix`. `runGSDDoctor` defaults `fix = false, dryRun = false`; `headless.ts:480`
+and `forensics.ts:420` pass neither, so both reach it. 12 `shouldFix()` calls elsewhere in the same
+file. **[re-verified]** → eagle27272/gsd-pi#11
+
+> **Narrowed:** the auto-stage (`checkout --theirs` + `git add`, `git-conflict-state.ts:175-197`) is
+> unconditional on `shouldFix` for every path passing `isSafeToAutoResolve`, but `abortAndReset`
+> (`git-self-heal.ts:50-114`) only fires when *every* unmerged path was safe-resolvable and merge
+> markers remain. A mixed conflict set (`.gsd/STATE.md` + `src/app.js`) leaves the merge intact.
+> Damning nonetheless: `doctor-git-checks-autoresolve.test.ts:100` asserts a non-fix run deletes
+> `MERGE_HEAD`, and `headless.ts:470` comments *"Doctor: read-only health check"*.
+
+**C20 · `doctor-git-checks.ts:432-433`, delete at `:448`** — The `gsd/*/*` glob matches
 `gsd/submodule-rescue/<name>-<ts>` — the branches `worktree-manager.ts:941` creates specifically to
-rescue uncommitted submodule work — and force-deletes them.
+rescue uncommitted submodule work — and force-deletes them (`nativeBranchDelete(..., true)` = `git
+branch -D`). The only exclusion is `gsd/quick/`. **[re-verified]** → eagle27272/gsd-pi#11
 
-**C21 · `doctor-git-checks.ts:260`** — `orphaned_auto_worktree` force-removes on roadmap status
-alone (including `cancelled`/`skipped`) with no dirty check, while the sibling
-`worktree_branch_merged` at line 652 correctly gates on `health.safeToRemove`.
+> **Understated: a second and larger false-positive family.** `commands-workflow-templates.ts:457`
+> and `:631` create `gsd/${templateId}/${slug}` for **current, non-legacy** template runs. They match
+> the same glob and are hard-deleted with no merged check. This hits every template workflow, not
+> just the submodule edge case. No test covers `legacy_slice_branches`.
 
-**C22 · `doctor-git-checks.ts:514`** — `nativeWorktreeList` returns `[]` on transient failure →
-every on-disk worktree looks unregistered → `rmSync` on all of them, including dirty and unpushed.
+**C21 · `doctor-git-checks.ts:260-296`, remove at `:290`** — `orphaned_auto_worktree` force-removes on
+roadmap status alone with no dirty check, while the sibling `worktree_branch_merged` at `:652`
+correctly gates on `health.safeToRemove` (`worktree-health.ts:108` = `mergedIntoMain && !dirty`).
+Cancelled/skipped do reach it: `from-db.ts:53` `isStatusDone = isClosedStatus` collapses them to
+registry `status: 'complete'` at `:191-193`. **[re-verified]** → eagle27272/gsd-pi#11
 
-**C24 · `clean-root-preflight.ts:487`** — When every stashed path is `.gsd/`-owned, the stash is
-**dropped without `git stash apply`**, with no content check and no verification the merge touched
-those paths — then returns `restored: true, needsManualRecovery: false`. The sibling drop at line 271
-compares content first (`readFileSync` at 236). The comment at 484 even calls apply "the safe default".
+> **Missed:** `:283` calls `process.chdir(basePath)` with no restore on the success path, silently
+> relocating the process cwd for everything downstream including the `process.cwd()` read at `:635`.
+
+**C22 · `doctor-git-checks.ts:524-556`, rmSync at `:548`** (report said `:514`, which is the enclosing
+`try`; the `nativeWorktreeList` call is `:525`) — `[]` on transient failure → every on-disk worktree
+looks unregistered → `rmSync` on all of them, dirty and unpushed included. No `registeredPaths.size === 0`
+guard. **[re-verified]** → eagle27272/gsd-pi#11
+
+> **Missed, same shape, same file:** `worktree_empty_with_project_content` (`:219`, fix at `:231-236`).
+> `hasProjectContentOnDisk`'s git path returns `[]` when `git ls-files` exits non-zero (`:78`), and both
+> it and the fallback exclude any `.gsd` segment (`isProjectContentPath`, `:70`) — so a worktree whose
+> only content is uncommitted `.gsd/` work is force-removed and then `git reset --hard`.
+
+**C24 · `clean-root-preflight.ts:485-511`, drop at `:490`** — When every stashed path is `.gsd/`-owned,
+the stash is **dropped without `git stash apply`**, with no content check and no verification the merge
+touched those paths — then returns `restored: true, needsManualRecovery: false`. The sibling drop at
+`:265-291` compares content first (`readFileSync` at `:236`, comparison at `:232-242`). The comment at
+`:484` even calls apply "the safe default". **[re-verified]** → eagle27272/gsd-pi#12
+
+> `isGsdOwnedPath` (`:118`) is a bare `.gsd` prefix test — and `.gsd` holds user-authored ROADMAP /
+> PLAN / SUMMARY artifacts, not just machine state.
 
 **C25 / C26 · `auto-worktree-merge-pre-teardown.ts:64-92`** — The documented *"final data-loss check"*
-has three fail-open paths in 30 lines: branch-detect throws → `null !== branch` → dirty check skipped;
-`""` from failed `git status` → "clean"; and `deps.chdir(previousCwd)` throwing inside the `try`
-means the `GSDError` is never constructed and the non-GSDError is swallowed by its own handler —
-**the abort is lost after uncommitted changes were already detected.**
+(file header, `:3`) has three fail-open paths in 30 lines: branch-detect throws → `null !== branch` →
+dirty check skipped (`:64-74`); `""` from a failed `git status` → "clean" (`:77-78`); and
+`deps.chdir(previousCwd)` throwing inside the `try` means the `GSDError` is never constructed and the
+non-GSDError is swallowed by its own handler (`:76-92`) — **the abort is lost after uncommitted changes
+were already detected**, so `shouldCleanup = true` and `finalizeMilestoneCleanup()` runs in the
+`finally` at `auto-worktree-merge.ts:390-400`. **[all three re-verified]** → eagle27272/gsd-pi#12
+
+> **A fourth fail-open, missed:** the same `catch` at `:86-92` re-throws only `GSDError`, so *any*
+> other throw from `nativeWorkingTreeStatus` is downgraded to a `debugLog` and teardown continues.
+> This one does not depend on `allowFailure` at all.
+>
+> Note the `""` path (`:77-78`) has no `debugLog` whatsoever, and is distinct from the *tested* throw
+> path at `tests/auto-worktree-merge-pre-teardown.test.ts:68`.
 
 **C27 · `get-secrets-from-user.ts:558`** — Model-supplied `envFilePath` passed to `resolve()` with no
-containment. Verified `resolve("/proj","/Users/victim/.ssh/authorized_keys")` returns the absolute
-path unchanged. Arbitrary `KEY=value` file write. Same file: `isSafeEnvVarKey` guards the
-vercel/convex branch (line 370) but **not** the dotenv branch (354), so a newline in a key injects a
-second pair; and `.env` is written with no `mode`, landing at 0644.
+containment; arbitrary `KEY=value` file write. `isSafeEnvVarKey` guards the vercel/convex branch
+(`:370`) but **not** the dotenv branch (`:351-361`), so a newline in a key injects a second pair
+(verified: a key of `"KEY=v\nOTHER"` produces two lines); and `.env` is written with no `mode`
+(`:88`), landing at 0644. Schema at `:519` is a bare string. **[all four re-verified]**
+→ eagle27272/gsd-pi#10
 
-**C28 · `mcp-server/pid-registry.ts:528`** — `signalAutoLockPid` uses inline `pid <= 0`, permitting
-**PID 1**, while the shared `isSafePid` (line 237) is `pid > 1` and is used by `killPid`. It also has
-no `getProcessCommand` check at all, where `killPid` requires `isMcpServerCommand` (line 456).
-Reachable from user-initiated `cancelSessionByDir`.
+> **⚠️ This is the smaller half of the problem — see NEW-C35 below.**
+
+### ⚠️ NEW-C35 — two divergent `secure_env_collect` implementations, and the local one is unhardened
+
+**Critical. Missed entirely by the first pass.** → eagle27272/gsd-pi#10
+
+`src/resources/extensions/get-secrets-from-user.ts:490` registers `secure_env_collect` as a
+first-class coding-agent tool, making the same on-screen promise as the MCP version. It is missing
+*every* hardening `packages/mcp-server/src/env-writer.ts` has:
+
+- **No `SECURITY_SENSITIVE_KEYS` blocklist.** The MCP side's own comment (`env-writer.ts:143-160`)
+  calls setting `GSD_WORKFLOW_EXECUTORS_MODULE` / `NODE_OPTIONS` / `LD_PRELOAD` an **"RCE chain"** —
+  and `get-secrets-from-user.ts:63-67`'s `hydrateProcessEnv` sets **any** key into the live
+  `process.env` unconditionally and persists it to the env file.
+- **Plaintext secrets on the process argument list.** `:375` builds
+  `sh -c "printf %s '<secret>' | vercel env add …"` and `:381` calls
+  `pi.exec("npx", ["convex","env","set", key, value])` — both visible in `ps`.
+  `env-writer.ts:274-275` deliberately fixed exactly this by switching to `{ stdin: value }`; the
+  extension copy was never updated.
+- No `resolveProjectEnvFilePath` containment, no `O_NOFOLLOW`/symlink refusal, no 0600 temp-file +
+  `rename`.
+
+The first pass treated these two files as unrelated.
+
+**C28 · `mcp-server/pid-registry.ts:521-528`** — `signalAutoLockPid` uses inline `pid <= 0` at `:528`,
+permitting **PID 1**, while the shared `isSafePid` (`:236-238`) is `pid > 1` and is what `killPid`
+uses. It also has no `getProcessCommand`/`isMcpServerCommand` check, where `killPid` requires one
+(`:438`, `:455-456`). → eagle27272/gsd-pi#26
+
+> **[qualified — downgraded from Critical to Low].** The divergence is real and PID 1 genuinely does
+> pass (`getProcessStartTime(1)` returns boot time, never tripping the stale check at `:545-548`;
+> `getProcessCwd(1)` returns `null` for a non-root reader, which `:551` explicitly tolerates).
+>
+> **But the signal is `SIGTERM`, which yields `EPERM` for a non-root process** — only exploitable as
+> root or in a container. And two guards the finding omits *do* fire (`:545-548` start-time skew,
+> `:550-558` cwd). The lock is written by the auto-mode process itself (`session-lock.ts:103`) and is
+> gitignored (`gitignore.ts:41`), so forging it requires the same filesystem write the model already has.
 
 ---
 
@@ -406,18 +799,51 @@ co-located API key · `keys add` silently replaces stored OAuth · `keys remove`
 only the last (`set()` is `this.data[p] = c`, no array API exists) · `keys rotate`'s "Preserve any
 OAuth credentials" loop is provably overwritten by the next line.
 
-**Verification and safety nets that cannot fire**
+**Verification and safety nets that cannot fire** — **[all re-verified; four corrections below]**
+→ eagle27272/gsd-pi#17
+
 `safety_harness.auto_rollback` tests `unitResult.status === "error"`, a value assigned **nowhere**
-(14 assignments, all `cancelled`/`completed`) — and the `else` branch *deletes* the checkpoint ·
-cost-spike guard includes the outlier in its own baseline, so it can never fire on the first unit ·
-ghost-completion guard measures from a `requestDispatchedAt` never refreshed across wakeups ·
-`verify-after-write` accepts a stale `quality_gates` row · `artifact-verification.ts` has two
-fail-open catches (errored check → `return true`) beside three correct fail-closed siblings ·
-`pre-execution-checks.ts` compares task status to `"completed"` while the DB writes `'complete'` —
-**and the regression test uses the same wrong literal** · required-verification-class check is
-presence-only: text asserting *every class FAILED* satisfies it (verified) · `missing_slice_dir` in
+(exactly 14 assignments — 12 × `cancelled` in `auto/run-unit.ts`, plus `auto/resolve.ts:84`
+`completed` and `:136` `cancelled`; `rollbackToCheckpoint` has exactly one call site, inside the dead
+branch) · cost-spike guard includes the outlier in its own baseline · ghost-completion guard measures
+from a `requestDispatchedAt` never refreshed across wakeups · `verify-after-write` accepts a stale
+`quality_gates` row (`auto-post-unit.ts:1180-1200` runs the `SELECT status` and then **discards
+`status`**; no `evaluated_at` recency, no turn scoping) · `artifact-verification.ts` has two fail-open
+catches (`:342-345`, `:532-534`) beside fail-closed siblings · `pre-execution-checks.ts` compares task
+status to `"completed"` while the DB writes `'complete'` — **and the regression test uses the same
+wrong literal** · required-verification-class check is presence-only · `missing_slice_dir` in
 `doctor-state-checks.ts` is unreachable · read-only-reconnaissance classifier passes
-`find … -delete`, `git branch -D`, `git remote remove` (verified).
+`find … -delete`, `git branch -D`, `git remote remove`.
+
+> **Corrections:**
+>
+> 1. **"the `else` branch *deletes* the checkpoint" is imprecise.** The `status === "cancelled"` block
+>    at `unit-phase.ts:619-836` returns `{action: "break"}` before the checkpoint block at `:1004` is
+>    reached, and every sub-branch returns. So on a genuine failure the checkpoint is **leaked**
+>    (`s.checkpointSha` left non-null until the next unit start), not deleted. The
+>    `else` → `cleanupCheckpoint` at `:1017-1019` does destroy it for a `completed`-but-`no-artifact`
+>    unit — which is a failure in a different guise.
+> 2. **The cost-spike guard is dead for the first *three* units, not the first.** Because
+>    `rollingAvgUsd = totalCost/totalUnits` counts the outlier, firing requires `C·(N−3) ≥ 3·P`.
+>    Simulated: `[100]`, `[1,100]`, `[1,1,100]` → no pause; `[1,1,1,100]` → pause.
+> 3. **`artifact-verification.ts` has four fail-closed siblings, not three:** `:387-390`, `:398-401`,
+>    `:409-412`, `:469-472`.
+> 4. **The recon classifier is Low, not High — it is dead code.** Its only consumer,
+>    `classifyTraceProgress` (`session-forensics.ts:92-100`), has **zero production callers**; it is
+>    imported nowhere outside `tests/session-forensics-readonly-classification.test.ts`. The regex
+>    holes are real and would be High if wired up.
+>
+> **On the `"completed"` / `'complete'` mismatch** — this is the sharpest of the set and deserves
+> more than a clause. Source: `pre-execution-checks.ts:547, 774, 779, 811`. DB: `gsd-db.ts:715, 722`.
+> `status-guards.ts:23-24, 35` defines `CANONICAL_STATUSES` / `RAW_CLOSED_STATUSES` containing
+> `"complete"`; `"completed"` is not canonical, not closed, and not in `ALIAS_TO_CANONICAL`.
+> `TaskRow.status` is typed `string` (`db-task-slice-rows.ts:33`), so no compile error. **The #4071 /
+> #4572 completed-task exemptions are inert in production**, and
+> `tests/pre-execution-checks.test.ts:1942, 2020` repeat the same wrong literal.
+>
+> **Missed, same class:** `milestone-closeout.ts:337-339` swallows any throw in the
+> verification-class check and falls through to `return { action: "dispatch", … }` — a fail-open in
+> the milestone-completion gate itself.
 
 **Agent file-mutation path**
 `edit.ts` re-encodes the whole file as UTF-8, corrupting non-UTF-8 bytes outside the edited region
@@ -483,15 +909,42 @@ child-process.ts:99   const onExit = (code: number | null) => {            ← d
 exec.ts:104           code: code ?? (killed ? 1 : 0)                       ← `killed` set ONLY by our killProcess()
 ```
 A child killed by an *external* signal — OOM killer, `kill -9`, SIGSEGV — yields `code === null`
-with `killed === false`, so the expression resolves to **`0`**. An OOM-killed `git commit` is
-reported to the agent loop as having succeeded. Fix: surface `signal` from `waitForChildProcess`
-and treat a non-null signal as failure. Same file, also High: `stdout`/`stderr` accumulate into
-unbounded strings with no cap and no mandatory timeout, so a model-supplied `cat /dev/zero`
-exhausts the host CLI's memory. Two Mediums: no kill on host-process exit (orphaned children
-holding `.git/index.lock`), and a spawn `ENOENT` discarded so "git is not installed" is
-indistinguishable from "git exited 1".
+with `killed === false`, so the expression resolves to **`0`**. Verified by externally `pkill -9`-ing
+a child: `{code: 0, killed: false, stdout: "partial"}`. Fix: surface `signal` from
+`waitForChildProcess` and treat a non-null signal as failure. → eagle27272/gsd-pi#14
 
-**`db-provider.ts:99-113` — `close()` leaks both SQLite handles.** *High, verified.*
+> **[re-verified; severity Medium, not High]** — the sole production consumer of `exec.ts` is the
+> `pi.exec` extension API (`extensions/loader.ts:356`).
+>
+> **But the report missed the hotter instance of the same root cause:**
+> `packages/pi-coding-agent/src/core/tools/bash.ts:453` does
+> `if (exitCode !== 0 && exitCode !== null) throw …` — identical null-as-success semantics in the
+> main agent bash path. Timeout/abort/force-kill are caught earlier as thrown errors, so the residual
+> case (external signal, OOM killer) returns partial output as a successful command.
+> **Fixing only `exec.ts` leaves this.**
+>
+> The three sub-findings are confirmed but all Low, not High/Medium: unbounded `stdout`/`stderr`
+> (`:47-48, 87-93`) with an optional timeout (`:81`); no kill-on-host-exit registration (`:41-45`) —
+> `bash.ts:104` does this correctly via `trackDetachedChildPid`/`killTrackedDetachedChildren`
+> (`utils/shell.ts:217-229`); and a discarded spawn `ENOENT` message (`:106-113`).
+
+**`db-provider.ts:99-113` — `close()` leaks both SQLite handles.** *~~High, verified.~~*
+
+> ### ⛔ REFUTED — not a finding
+>
+> The `throw` is **not** on the normal path. It sits inside the `catch` of a probe
+> (`readOnlyGuard.prepare("PRAGMA schema_version").get()`) that succeeds in ordinary operation, so
+> neither the `PRAGMA journal_mode` read nor the `throw` executes and both `closeHandle()` calls are
+> reached.
+>
+> `tests/db-provider.test.ts:120-128` exercises this against real `node:sqlite` with
+> `PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0`, closes, and reopens — **I ran the suite:
+> 11/11 pass.** The retention-on-probe-failure behaviour is a deliberate, named contract
+> (`"keeps both handles open when the close guard probe fails"`, `:172`) and is retryable:
+> `writableClosed`/`guardClosed` stay false and a second `rawDb.close()` succeeds. There is no march
+> toward `EMFILE`.
+>
+> The original text follows for the record.
 ```ts
 try { readOnlyGuard.prepare("PRAGMA schema_version").get(); }
 catch (error) {
@@ -509,13 +962,24 @@ the catch is itself unguarded and can replace the original error. Plus one Mediu
 a throwing `readOnlyGuard.close()` during cleanup masks the real open failure.
 
 **`agent-session-runtime.ts:314-320` — `fork()` mutates live session state before shutdown fires.**
-*High.* For in-memory sessions, `fork()` calls `newSession()`/`createBranchedSession()` on the
-**shared** `SessionManager` and only then calls `teardownCurrent("fork", …)`, so `session_shutdown`
-handlers read an emptied or truncated conversation instead of the one that is ending. The shipped
-`auto-commit-on-exit.ts` example does exactly that read. The two adjacent persisted-session
-branches (`:280-292`, `:296-311`) build a *new* `SessionManager` and are unaffected — the sibling
-asymmetry again. Plus one Medium: `importFromJsonl` overwrites an existing session file with a
-colliding basename, with no existence check.
+*~~High~~ → Medium/Low.* For in-memory sessions, `fork()` calls `newSession()`/`createBranchedSession()`
+on the **shared** `SessionManager` — `newSession()` does `this.fileEntries = [header]` on the same
+instance (`session-manager.ts:209-213`) — and only then calls `teardownCurrent("fork", …)`, which
+emits `session_shutdown` at `:161-168`. Handlers therefore read an emptied conversation. The shipped
+`auto-commit-on-exit.ts` example does exactly that read. The two adjacent persisted-session branches
+(`:281-283`, `:296-301`) build a *new* `SessionManager` and are unaffected — the sibling asymmetry
+again. Plus one Medium: `importFromJsonl` overwrites an existing session file with a colliding
+basename, with no existence check. → eagle27272/gsd-pi#23
+
+> **[re-verified; downgraded].** Reachable only for `--no-session`
+> (`gsd-agent-modes/src/main.ts:239-240`), and **no in-repo `session_shutdown` handler reads the
+> conversation** — so the stated symptom is currently latent.
+>
+> **The second-order effect is worse and was missed.** `teardownCurrent` → `session.dispose()` →
+> `cleanupSessionResources(this.host.sessionId)`, and `AgentSession.sessionId` is a live getter over
+> `sessionManager.getSessionId()` (`agent-session.ts:235-237`). Because `newSession()` /
+> `createBranchedSession()` already reassigned `this.sessionId` on the shared manager, teardown cleans
+> the **new** session's resources and permanently leaks the old session's.
 
 **`slice-lifecycle-domain-operation.ts` — actor identity required on one entry point, not its
 siblings.** *Medium.* `cancelSlice:142-146` rejects a `user`-attributed call with no `actorId`;
@@ -611,19 +1075,34 @@ if (code !== 0) {
   if (!output) { settle(() => reject(new Error(errorMsg))); return; }
 }   // ← falls through, errorMsg discarded, partial listing resolved as success
 ```
-`find.ts` *constructs* the error message and then drops it. An unreadable subtree, or an
-OOM-killed `fd` partway through traversal, yields a truncated listing with no notice — and an
-agent that concludes a file does not exist. Fix: keep the reject, or attach a partial-result notice.
+`find.ts` *constructs* the error message and then drops it. Fix: keep the reject, or attach a
+partial-result notice. → eagle27272/gsd-pi#24
 
-Four Mediums across the pair. `find.ts:185-188,307-312` relativizes with
-`p.slice(searchPath.length + 1)` behind a bare `startsWith`, so `find(path: "src/foo.ts")` (where
-the path *is* the match) slices past the end and returns an empty line — losing the only result;
-`path.relative` alone handles it. Both files' `stopChild` send `SIGTERM` with no `SIGKILL`
-escalation, so a hung `rg`/`fd` leaks per aborted call — while `exec.ts:killProcess` in the same
-package already implements the escalation correctly. And `grep.ts` registers its abort listener
-only *after* `ensureTool("rg")` and `isDirectory()` resolve, so cancellation during a first-run
-ripgrep download is ignored — where `find.ts` registers before any await and rechecks after each
-one. Every one of these four is the same pair of files disagreeing with each other.
+> **[qualified — Medium, and the trigger is narrower than "an unreadable subtree"].** Probing fd
+> 10.5.0: it exits **0** for no-matches *and* for permission errors, and 1 only for hard errors that
+> emit no output (which the `if (!output)` branch already rejects on). So the genuinely reachable
+> case is **fd dying by signal mid-stream** (`code === null`) — an OOM-killed traversal returning a
+> truncated listing as complete.
+
+Four Mediums across the pair — **one of them refuted.**
+
+> **⛔ REFUTED: the empty-line slice.** `find.ts:185-188, 306-314` relativizes with
+> `p.slice(searchPath.length + 1)` behind a bare `startsWith`, but `find(path: "src/foo.ts")` never
+> reaches it: `fd` refuses a file as a search root —
+> `[fd error]: Search path … is not a directory` / exit 1 / no stdout — which lands in the
+> `if (!output) { reject }` branch and is handled correctly. The slice is only reachable via a custom
+> `FindOperations.glob` backend, and there is none in this repo.
+>
+> **A real off-by-one survives, though:** `find(path: "/")` gives `searchPath === "/"`, so
+> `"/etc/x".slice(2) === "tc/x"` — the first character of every result is stripped. `path.relative`
+> handles it.
+
+The remaining three stand. Both files' `stopChild` (`find.ts:255-259`, `grep.ts:234-239`) call
+`child.kill()` with no `SIGKILL` escalation, so a hung `rg`/`fd` is orphaned per aborted call — while
+`exec.ts:62-67` in the same package implements the escalation correctly. And `grep.ts:244` registers
+its abort listener only *after* `ensureTool("rg")` (`:170`) and `isDirectory()` (`:180`) resolve, so
+cancellation during a first-run ripgrep download is lost entirely — where `find.ts:148` registers
+before any await. Each is the same pair of files disagreeing with each other.
 
 ### `browser-tools/refs.ts` — a guard whose input is collected and never read
 
@@ -651,7 +1130,19 @@ The fix is a three-line comparison using data the code already has.
 
 ### `browser-tools/action-cache.ts` — cache key cannot distinguish page, frame, or record
 
-*High, verified — and broader than first reported.* Two independent collapses:
+*~~High~~ → **Medium**. All three collapses re-verified verbatim, but see the reachability note below.*
+→ eagle27272/gsd-pi#18
+
+> **Downgrade reason: `browser_action_cache` has zero internal callers.** `grep -rn "browser_action_cache"`
+> returns only the tool's own registration (`:24`, `:27`). The `cache` Map at `:19` is module-local
+> with no exported accessor, so `browser_find_best` and `browser_act` **cannot** consult it — the
+> docstring at `:6-7` ("Internal optimization that hooks into browser_find_best / browser_act") is
+> aspirational. The stale-selector path only opens if an agent explicitly calls `put` then `get`.
+>
+> Also frame-blind in a fourth way the write-up misses: `computeDomHash(p)` at `:86` and `:126` uses
+> the *page*, not `getActiveTarget()`.
+
+Two independent collapses:
 
 ```ts
 function buildCacheKey(url: string, domHash: string, intent: string): string   // :182 — no page/frame id
@@ -684,7 +1175,18 @@ still reporting the fill as completed.
 ### ⚠️ C33 — `browser_emulate_device` can brick the browser session (Critical, verified)
 
 `browser-tools/tools/device.ts:103-133`. It re-implements `ensureBrowser()` by hand, and gets two
-things wrong that the original gets right.
+things wrong that the original gets right. **[both re-verified verbatim]** → eagle27272/gsd-pi#15
+
+> **A third defect, missed:** `resetAllState()` at `:120` also resets `_harState` to
+> `DEFAULT_HAR_STATE` (`state.ts:289-296`, `enabled: false`) and nulls `_sessionArtifactDir`.
+> `device.ts`'s `newContext` (`:104-106`) passes no `recordHar` and never calls
+> `setSessionArtifactDir` (destructured at `:115`, never invoked), and the `ensureBrowser` fast path
+> never re-establishes them. **Every HAR export after a device-emulation call is dead for the rest of
+> the session.**
+>
+> The Chromium leak is also wider than stated: if `chromium.launch`, `newContext` or `addInitScript`
+> throws at `:103-110`, state is still null from `closeBrowser()` at `:92`, so nothing holds a
+> reference and the process is unreclaimable.
 
 **Critical — shared state is committed before the operation that can fail:**
 ```ts
@@ -724,9 +1226,21 @@ const verified = failed.length === 0;            // [] → true
 
 `browser_assert({ checks: [] })` — or a `browser_batch` step `{ action: "assert" }` with no
 `checks` field, which defaults to `step.checks ?? []` — returns `isError: false` and the text
-`"PASS (0/0 checks)"`. A verification tool reporting success for having verified nothing is the
-purest form of the defect this report keeps finding. Fix: `minItems: 1` on the schema plus an
-explicit guard.
+`"PASS (0/0 checks)"` (`core.ts:612-618`). A verification tool reporting success for having verified
+nothing is the purest form of the defect this report keeps finding. Fix: `minItems: 1` on the schema
+plus an explicit guard. **[re-verified verbatim; severity Medium rather than High]**
+→ eagle27272/gsd-pi#18
+
+> **Two related misses in the same subsystem, both worse than the entries above:**
+>
+> - **`browser_batch`'s `click_ref`/`fill_ref` skip *every* staleness guard** —
+>   `tools/assertions.ts:273-296` does `parseRef` → `getCurrentRefMap()[parsedRef.key]` →
+>   `resolveRefTarget` with no version check, no URL check, and no unversioned-ref rejection. A
+>   `@v1:e3` ref resolves against a v7 snapshot silently. Strictly worse than the `frameContext`
+>   finding above.
+> - **Every ref-tool "PASS" means "at least one heuristic fired"** — `browser-tools/utils.ts:272-283`
+>   sets `const verified = passedChecks.length > 0`. This is what lets the `Control+A` concatenation
+>   bug report success.
 
 Three more Mediums here: `browser_diff` silently substitutes the most-recent state as baseline when
 `sinceActionId` has been evicted from the 60-entry timeline, so the response looks like a normal
@@ -768,12 +1282,21 @@ navigation.ts:64,70    settle (awaits host.abort() at :42)  →  disconnectFromA
 navigation.ts:133,134  settle                               →  disconnectFromAgent()   ✓
 compaction.ts:38,39    disconnectFromAgent()                →  await host.abort()      ✗
 ```
-`handleAgentEvent` is the only thing that calls `sessionManager.appendMessage`. Disconnecting first
-means the message the agent finalizes *during* the abort is never persisted. Compaction then
-rebuilds from `getBranch()` — which lacks it — and assigns the result over
-`host.agent.state.messages`, destroying the in-memory copy that still had it. Calling `compact()`
+Disconnecting first means the message the agent finalizes *during* the abort is never persisted.
+Compaction then rebuilds from `getBranch()` — which lacks it — and assigns the result over
+`state.messages` at `:121`, destroying the in-memory copy that still had it. Calling `compact()`
 mid-turn therefore silently drops the closing assistant message from both the persisted session and
 the live context. One-line fix: swap the two statements to match the navigation siblings.
+→ eagle27272/gsd-pi#23
+
+> **[re-verified; Medium, not High. One premise corrected.]** `disconnectFromAgent` unsubscribes
+> `handleAgentEvent` (`agent-session-events.ts:249-254, 258`) and `host.abort()` is `agent.abort()` +
+> `waitForIdle()` (`agent-session-prompt.ts:479-482`), so the ordering defect is exactly as described.
+>
+> **But `handleAgentEvent` is *not* the only caller of `sessionManager.appendMessage`** —
+> `agent-session-bash.ts:61` and `:85` also call it. For *agent-produced* messages
+> `agent-session-events.ts:82` is the only path, so the conclusion survives; the premise as stated
+> does not.
 
 Same file, Medium: `appendCompaction(...)` returns the new entry's unique id and the return value is
 discarded; the code re-finds the entry with
@@ -797,10 +1320,18 @@ nesting boundary. The mapping is not injective. Executed:
 /a/b-c/d              →  --a-b-c-d--
 /a/b/c-d              →  --a-b-c-d--                collide: true
 ```
-Both projects then read and write the same session directory: each other's sessions appear in the
-picker, are resumable across projects, and can overwrite one another on colliding `.jsonl`
-filenames. Kebab-case project names are the norm, so this is ordinary rather than exotic. Fix: append
-a short hash of the resolved cwd to the readable suffix.
+Both projects then read and write the same session directory. Kebab-case project names are the norm,
+so this is ordinary rather than exotic. Fix: append a short hash of the resolved cwd to the readable
+suffix. → eagle27272/gsd-pi#23
+
+> **[qualified — Medium, not High].** The collision and cross-visibility hold, and `/Users/mike/foo:bar`
+> collides too. But **"can overwrite one another" is wrong**: every write target is
+> `join(dir, \`${fileTimestamp}_${newSessionId}.jsonl\`)` (`session-manager.ts:217, 651, 807`) with a
+> fresh session id, so colliding projects interleave files rather than clobber them.
+>
+> The real damage is that `SessionManager.list` (`:837-840`) applies **no cwd filter**, so another
+> project's sessions appear in the picker, and `continueRecent` picks the newest file regardless of
+> cwd — resuming another project's transcript under this project's cwd.
 
 Three Mediums alongside it. `isValidSessionFile:65-78` calls `closeSync(fd)` only on the success
 path, so a stray directory named `*.jsonl` makes `readSync` throw `EISDIR` and leaks the descriptor
@@ -808,11 +1339,16 @@ on every session-list refresh — needs `finally`. `buildSessionInfo:149-166` ac
 `type === "session"` alone, while the two sync validators in the same file also require
 `typeof header.id === "string"`; the async path feeding the session picker therefore admits records
 whose `id` is `undefined` despite the type declaring `id: string` — the sibling asymmetry once more.
-And `/share` (`slash-command-handlers.ts:304-326`) registers `close` but no `error` handler on the
-`gh gist create` spawn, so a spawn failure — where Node fires `error` and never `close` — leaves the
-promise unsettled and the "Creating gist…" loader hanging forever; it also writes to a fixed
-`<tmpdir>/session.html`, which collides between concurrent invocations and is symlink-attackable on
-a shared machine. `tool-definition-wrapper.ts` reviewed clean, and the reviewer correctly declined
+And `/share` (`slash-command-handlers.ts:312-325`) registers `close` but no `error` handler on the
+`gh gist create` spawn; it also writes to a fixed `<tmpdir>/session.html` (`:276`), which collides
+between concurrent invocations and is symlink-attackable on a shared machine.
+→ eagle27272/gsd-pi#23
+
+> **[qualified — it crashes, it does not hang].** Verified: on spawn `ENOENT` Node emits `error` and
+> **never** `close`; with no listener the EventEmitter throws, and GSD's `_gsdEpipeGuard`
+> (`bootstrap/register-extension.ts:114-125`) responds with
+> `writeCrashLog(err, "uncaughtException"); process.exit(1)`. So a missing `gh` takes the whole app
+> down rather than leaving the "Creating gist…" loader spinning. `tool-definition-wrapper.ts` reviewed clean, and the reviewer correctly declined
 to report its `ctxFactory?.() as ExtensionContext` cast after confirming no current caller can reach
 it with `undefined`.
 
@@ -820,7 +1356,24 @@ it with `undefined`.
 
 `pi-coding-agent/src/core/tools/edit-diff.ts:209-212, 246, 259`. The most damaging finding of the
 continuation sweep: a code-editing tool that corrupts untouched parts of the file and conceals it
-from the review surface.
+from the review surface. → eagle27272/gsd-pi#4
+
+> **[re-verified end to end with live reproductions — the strongest finding in the report].**
+> All four links hold independently:
+> (a) running `normalizeForFuzzyMatch` (`:34-55`) on
+> `"const a = 1;   \n// note — an em dash\nconst s = ‘curly’;…ﬁ…"` yields
+> `"const a = 1;\n// note - an em dash\nconst s = 'curly';…fi…"`;
+> (b) `edit.ts:342-346` writes `newContent` with no re-splice against the original;
+> (c) with only one edit needing fuzz, `baseContent !== original` **and**
+> `normalizeForFuzzyMatch(original) === baseContent`, and the preview diff showed **1** changed line
+> while the true `original → new` diff showed **5** corrupted lines;
+> (d) a repo-wide grep for `contentForReplacement` (excluding `dist`/`node_modules`) returns only the
+> declaration, its docstring and the three assignments — **zero reads**.
+>
+> One line correction: the declaration is at `:70`, not `:92` (`:92` is the docstring mention).
+> The `countOccurrences` sub-finding is also confirmed: `"foofoofoo".split("foofoo").length - 1 === 1`,
+> so `applyEditsToNormalizedContent("foofoofoo", [{oldText: "foofoo"}])` silently returns `"Xfoo"`
+> with no ambiguity error.
 
 ```ts
 const initialMatches = normalizedEdits.map((e) => fuzzyFindText(normalizedContent, e.oldText));
@@ -932,7 +1485,28 @@ minimum of **1**, so a very narrow pane throws `RangeError` out of every render 
 swallowed and replaced with a generic `"info"` notice — indistinguishable from the feature simply
 being unavailable, and any partial side effects go unreported.
 
-**`async-jobs/await-tool.ts:98-105` — a race decided before it starts.** *High, verified.*
+**`async-jobs/await-tool.ts:98-105` — a race decided before it starts.** *~~High, verified.~~*
+
+> ### ⛔ REFUTED — unreachable in production
+>
+> The code shape is exactly as described: the executor runs synchronously and `abortPromise` really is
+> pre-settled when `signal` is `undefined`. **But no production path reaches that state.**
+> `Agent.runWithLifecycle` (`pi-agent-core/src/agent.ts:470,482`) builds `new AbortController()` and
+> calls `executor(abortController.signal)`; `AgentHarness` (`harness/agent-harness.ts:554,566`) does
+> the same and threads it through `agent-loop.ts:1062-1065` →
+> `executePreparedToolCall(prepared, signal, emit)` → `prepared.tool.execute(id, args, signal, …)`.
+> `await_job` is registered only via `pi.registerTool(createAwaitTool(getManager))`
+> (`async-jobs/index.ts:103`), i.e. through that same loop.
+>
+> **Defensive dead branch, not a live defect.** Downgrade to Low; still worth writing as
+> `signal?.aborted` with the listener branch gated on `signal`.
+>
+> The two sub-findings stand: `notFound` is computed then dropped whenever ≥1 id resolved
+> (`:44-58`), and `timeout` is unbounded — verified that `setTimeout(…, 3_000_000_000)` emits
+> `TimeoutOverflowWarning` and fires in 2 ms, so `await_job` reports "Timed out after 3000000s"
+> immediately.
+>
+> The original text follows for the record.
 ```ts
 const abortPromise = new Promise((resolve) => {
   if (!signal || signal.aborted) { resolve(ABORT_SENTINEL); }   // ← runs SYNCHRONOUSLY
@@ -990,23 +1564,47 @@ for (const group of groups.values()) {
 }
 ```
 
+**[All four re-verified with live reproductions, but the root cause in item 1 is misdiagnosed — see
+the correction under it.]** → eagle27272/gsd-pi#13
+
 Four independent things have to be true for this to lose data, and all four are:
 
 1. **The group key is a constant.** `topologyGroupKey:37-46` returns the literal string
    `"project-topology"` for any file under `.gsd`, `.gsd-worktrees`, `.gsd.migrating`, or
    `$GSD_STATE_DIR`. The `M\d+` milestone id is not part of the key. Every milestone's worktree
    evidence for the entire project lands in **one** group.
+
+   > **⛔ Correction: the constant is not the root cause.** `topologyGroupKey:45` falls through to
+   > `return file.entry.root_id;` for non-`.gsd` roots, and a repro on *that* branch
+   > (`logical_path: "project"`, so key = `"arbitrary-root"`) triggered the bug just as well.
+   > **Grouping is per-root under both branches, while every contributor is per-milestone.** The
+   > constant only widens the blast radius by merging separate roots — proved separately in a repro
+   > where `.gsd-worktrees` and `.gsd` merged and `.gsd/worktrees/M002/git-marker.txt` was dropped.
+   > **Fixing only the constant would not fix this.** The group key must include the milestone id.
 2. **Dispatch is first-match-wins.** Each `continue` abandons the whole group. So one anomalous
    milestone claims the group and every other milestone's evidence is never examined.
 3. **The safety net is disarmed before it can fire.** `prepareFile:58` sets
    `file.parserId = "gsd-worktree-topology"` as its first statement — before any candidate exists.
    The unclaimed-file guard (`legacy-import-preview-supplemental.ts:68-71`) only throws for files
    still carrying the `UNCLAIMED_PARSER_ID` sentinel, so it never fires for these.
-4. **Nothing downstream notices.** A file left at its default `outcome: "mapped"` with zero
-   candidates and zero diagnoses passes every check in the pipeline. Confirmed by a dedicated
-   trace: every validation runs candidate→source (`composition.ts:243-250`, `:299-308`,
-   `preview.ts:526-570`), and **no check anywhere runs source→candidate**. There is no "every
-   captured source must be accounted for" invariant.
+4. **Nothing downstream notices.** A file left at its default `outcome: "mapped"`
+   (`legacy-import-preview-interpretation.ts:359`) with zero candidates and zero diagnoses passes
+   every check in the pipeline (`composition.ts:243-260`, `:299-309`, `preview.ts:512-560`).
+
+   > **Wording correction:** `composeSources` *is* bidirectional between the capture and the
+   > interpreted sources (`SOURCE_UNCLAIMED` for captured-but-unowned, `SOURCE_UNKNOWN` for
+   > owned-but-uncaptured). What is genuinely absent is any check that an owned source with
+   > `outcome: "mapped"` actually **produced a candidate or a diagnosis**. The load-bearing part of
+   > the claim holds; "no check anywhere runs source→candidate" was too broad.
+
+   The contributors are **not** mutually exclusive by construction — a group can legitimately hold a
+   stale-canonical M001 and a plain canonical M002, and the first claim aborts the rest. Verified.
+
+   Reproductions: `.gsd-worktrees/M001/README.txt` + `.gsd/worktrees/M001/git-marker.txt` +
+   `.gsd-worktrees/M002/git-marker.txt` → only `stale-canonical/M001/legacy` emitted, M002's marker
+   produced no candidate. And `.gsd` symlink + malformed
+   `state/projects/proj-abc/worktrees/M001/git-marker.txt` → **0 candidates, 0 diagnoses**, both files
+   `outcome=mapped`.
 
 **Concrete loss:** a project with a healthy `M1` and an `M2` carrying a duplicate-identity alias.
 `contributeDuplicateIdentity` claims the shared group for M2 and `continue`s;
@@ -1026,10 +1624,15 @@ identical malformation on the canonical/legacy path correctly produces a `"malfo
 warning via `diagnoseMalformedMarker`. The dominant pattern of this report, visible within a single
 five-line block.
 
-**Fix:** run all five contributors unconditionally and let each claim only the files it actually
+**Fix:** **key groups per milestone rather than per root** (the necessary change, per the correction
+above); run all five contributors unconditionally and let each claim only the files it actually
 handles (filter on `file.outcome === "mapped"` inside `contributeMarkerRoots`); pass `diagnoses` to
-`contributeExternalState`; and add the missing source→candidate accounting assertion, which would
-have caught this class at the seam rather than in a review.
+`contributeExternalState`; and add the missing "every owned source must produce a candidate or a
+diagnosis" assertion, which would have caught this class at the seam rather than in a review.
+
+The test path is also mis-cited: it is
+`src/resources/extensions/gsd/tests/legacy-import-preview-knowledge-root-worktree.test.ts:372-375`
+(the report omitted the `src/resources/extensions/gsd/` prefix).
 
 ### This qualifies — but does not overturn — the report's "legacy-import is the model" claim
 
@@ -1045,10 +1648,16 @@ the backup/restore path, not to everything under the `legacy-import-*` prefix.
 
 ### ⚠️ New shared-layer root cause — `resolveSlicePath` discards the slice ID
 
-*High, possibly Critical. Verified chain; one link's direction unresolved (stated below).*
+> **[RESOLVED on re-verification — promoted to Critical.]** The open question below is now settled in
+> the worse direction, with a live reproduction. Jump to **"FLAT-PHASE ANSWER (resolved)"** at the end
+> of this subsection. Two counts in the original write-up are also wrong: it is **31 call sites**, not
+> 11, and **six** sites already compensate, not one. → eagle27272/gsd-pi#5
+
+*Originally filed as High, possibly Critical. Verified chain; one link's direction unresolved
+(stated below — now resolved).*
 
 This is the most consequential item in the late batch, and it is not a per-file slip — it is a
-defect in a shared path helper with **11 call sites**.
+defect in a shared path helper.
 
 ```ts
 // paths.ts:918-929
@@ -1061,11 +1670,15 @@ Under the flat-phase layout — the default — `resolveSlicePath` returns the *
 for *any* slice ID, including one that does not exist. So `existsSync(resolveSlicePath(...))` is
 not a slice-existence check; it only proves the milestone exists.
 
-I checked all 11 callers. **`doctor-state-checks.ts` is the only one that knows**, and it
-compensates inline with two explanatory comments (`:337`, `:403`) rather than the helper being
-fixed. Every other caller null-checks the return (`if (!slicePath) …`), which fires only when the
-milestone is unresolvable. The same "one sibling has the guard" pattern as the rest of this report,
-now at the shared-helper level.
+~~I checked all 11 callers. `doctor-state-checks.ts` is the only one that knows~~ — **both counts are
+wrong.** There are **31 invocations** (28 outside `paths.ts`), and **at least six** sites already
+compensate for the flat-phase fallback inline rather than the helper being fixed:
+`doctor-state-checks.ts:340` and `:403` (the report cited `:337`, drift 3), `escalation.ts:50`,
+`tools/complete-task.ts:114`, `paths.ts:965` and `:1196`, `auto-verification.ts:133-140`.
+
+The remaining callers null-check the return (`if (!slicePath) …`), which fires only when the
+milestone is unresolvable. The "one sibling has the guard" framing is still directionally right —
+six of 31 is not a design — but the helper is more widely known-broken than the report implied.
 
 The worst downstream consequence is in **artifact verification**, a gate:
 
@@ -1081,19 +1694,64 @@ artifact-verification.ts:312  → return summaryFiles.length > 0
 The question this code intends to ask is *"does this slice have task summaries?"* On the default
 layout it cannot ask that, because the slice ID was thrown away four calls earlier.
 
-**What I could not determine, stated plainly:** whether flat-phase projects actually place
+**What I could not determine at the time:** whether flat-phase projects actually place
 `T##-SUMMARY` files in the milestone directory. `paths.ts:978` says flat-phase tasks are
-"checkboxes inside plan files," which suggests they may not exist there at all. The two branches:
+"checkboxes inside plan files," which suggested they may not exist there at all. The two branches:
 
 - If those files **are** present → the check scans milestone-wide and returns true on *another
   slice's* evidence. A verification gate passing on the wrong artifact. Critical.
 - If they are **not** → `summaryFiles` is always empty and the check always returns false. A
   verification gate that never passes. Still a defect, opposite direction.
 
-Both are wrong; the severity depends on which, and settling it needs a live flat-phase project.
-I did not have one, so I am not going to assert the worse reading. **Fix the root cause either
-way:** make `resolveSlicePath` return `null` for an unrecognized slice ID instead of silently
-falling back to `mDir`, then fix whichever call sites that newly (and correctly) fail.
+### FLAT-PHASE ANSWER (resolved)
+
+**They are present. The gate passes on another slice's evidence. This is Critical.**
+
+Four independent lines of evidence:
+
+1. **Writers.** `markdown-renderer.ts:943-959` (`writeTaskSummaryProjection` → `targetTaskFile` →
+   `paths.ts:1141-1163` → `join(milestoneDir, buildFlatTaskFileName(...))` → `<phaseDir>/S06-T03-SUMMARY.md`)
+   and `tools/complete-task.ts:119-122` (`join(phaseDir, buildFlatTaskFileName(sliceId, taskId, "SUMMARY"))`).
+2. **The reader is not slice-aware.** `paths.ts:253-258` matches `^S\d+-(T\d+)-SUMMARY\.md$` — the
+   `S\d+` is **not** anchored to the requested slice — plus a legacy unqualified
+   `^(T\d+)(?:-.*)?-SUMMARY\.md$`. `resolveTaskFiles` (`:325-336`) applies only that filter to the
+   whole directory listing.
+3. **A committed fixture builds exactly this layout.** `tests/auto-recovery.test.ts:2506-2540` creates
+   `.gsd/phases/01-test/` with `01-01-PLAN.md`, `01-02-PLAN.md` and `S01-T03-SUMMARY.md`, with S01/S02
+   sharing task id `T03`. Its comment at `:2530`: *"S02 never wrote S02-T03-SUMMARY.md; the sibling
+   S01-T03-SUMMARY.md must not change S02/T03's canonical state."* That is issue **#1343** —
+   **already fixed, but only inside `writeReactiveExecuteBlocker`, not in `artifact-verification.ts`.**
+   `tests/gsd-recover.test.ts:831` independently writes `phases/09-team/S01-T01-SUMMARY.md`.
+4. **Live reproduction.** With only `S01-T03-SUMMARY.md` on disk under `.gsd/phases/01-test`:
+
+   ```
+   sid=S01            resolveTasksDir=null  resolveTaskFiles(SUMMARY)=["S01-T03-SUMMARY.md"]
+   sid=S02            resolveTasksDir=null  resolveTaskFiles(SUMMARY)=["S01-T03-SUMMARY.md"]
+   sid=S99            …same…
+   sid=TOTAL-GARBAGE  …same…
+   ```
+
+   So `artifact-verification.ts:312` returns `true` for S02, for a nonexistent S99, and for a
+   syntactically invalid slice ID.
+
+**The `paths.ts:978` comment does not contradict this.** "Tasks live as checkboxes inside plan files"
+is about task **PLAN** artifacts only — `resolveTaskFile:999` short-circuits `suffix !== "PLAN"` to the
+flat `S##-T##-SUFFIX.md` path, and `relTaskFile:1200-1205` does the same. SUMMARY / UAT / ESCALATION /
+REOPEN are real separate files in the phase dir.
+
+**Scope.** Only the non-batch branch (`artifact-verification.ts:309-313`) is affected; the batch branch
+(`:315-322`) uses the slice-qualified `resolveTaskFile`. That branch's own fallback at `paths.ts:1002`
+(`buildTaskFileName` → unqualified `T##-SUMMARY.md`) reopens the same collision for legacy-named files.
+
+**Fix the root cause:** make `resolveSlicePath` return `null` for an unrecognized slice ID instead of
+silently falling back to `mDir`, then fix whichever call sites newly (and correctly) fail.
+
+**Two more sites in the same family, missed by the first pass:**
+
+- `escalation.ts:56` — `join(sliceDir, \`${taskId}-ESCALATION.json\`)` into the shared phase dir. Two
+  slices reusing task id `T03` overwrite each other's escalation.
+- `reopen-reason.ts:44` — same for `${taskId}-REOPEN.json`. `writeReopenReason` clobbers a sibling
+  slice's reopen reason and `readReopenReason` surfaces the wrong one at dispatch.
 
 **Also note:** this is the third confirmed site of the flat-phase fallback problem, joining the
 `doctor-state-checks.ts` entry already in this report. It should be read as a pattern, not three
@@ -1196,7 +1854,29 @@ results rather than an impression:
    order verified to close an apparent bypass. Multiple leads chased and each one refuted by an
    existing constraint.
 
-Every Critical in this report lives in TypeScript. Not one is in SQL. Two practical consequences:
+> ### ⚠️ Coverage caveat on point 3 — and on point 1
+>
+> **There are 24 schema files, not five.** The five reviewed are a 21% sample, and the phrase "all
+> five DB schema files" reads as completeness in a report that also claims "Still unreviewed: 0".
+>
+> **This matters concretely for point 1.** `db-milestone-completion-schema.ts` — *not* among the five —
+> does `DROP TRIGGER IF EXISTS trg_workflow_lifecycle_transition` at `:27` and recreates it at `:29`.
+> So the C13 retraction quotes `db-lifecycle-foundation-schema.ts:76`, a definition that is
+> **superseded at v43**.
+>
+> The conclusion happens to survive, and re-reading the actual v43 trigger strengthens it: the
+> replacement additionally requires a matching `milestone.complete` row in `workflow_operations` for
+> any milestone `ready`/`in_progress` → `completed` transition, and adds a slice `ready` → `completed`
+> path. It factors the revision-monotonicity condition out of its `WHEN` clause, but
+> `trg_workflow_lifecycle_causal_provenance` (still present, not dropped) owns that case and aborts on
+> it independently.
+>
+> So the *finding* stands. But the retraction's own lesson — "read the enforcement site" — was applied
+> one file short of the enforcement site.
+
+Every Critical in this report lives in TypeScript. Not one is in SQL. That conclusion is unchanged by
+the caveat above, and was independently reinforced: `db/writers/authority-recovery.ts` re-reviewed
+clean. Two practical consequences:
 
 - **When TS and SQL appear to disagree about an invariant, read the schema before believing the
   reviewer.** This is the specific mistake that produced the C13 false positive, and reviewer
@@ -1208,6 +1888,53 @@ Every Critical in this report lives in TypeScript. Not one is in SQL. Two practi
 
 ---
 
+## Filed issues
+
+23 issues were opened on `eagle27272/gsd-pi` from the re-verified findings.
+
+| # | Title |
+|---|---|
+| [#4](https://github.com/eagle27272/gsd-pi/issues/4) | `edit` rewrites the whole file on any fuzzy match; diff preview conceals it (C34) |
+| [#5](https://github.com/eagle27272/gsd-pi/issues/5) | Flat-phase `resolveSlicePath` — verification gate passes on another slice's summaries |
+| [#6](https://github.com/eagle27272/gsd-pi/issues/6) | `reconcileWorktreeDb` silent zero-counts; all 4 callers ignore, then delete (C16) |
+| [#7](https://github.com/eagle27272/gsd-pi/issues/7) | `milestoneMergedInPhases` has no milestone identity (C30) |
+| [#8](https://github.com/eagle27272/gsd-pi/issues/8) | 3 of 18 `execFileSync` git calls skip the env scrub, incl. `reset --hard` (C23) |
+| [#9](https://github.com/eagle27272/gsd-pi/issues/9) | Unvalidated `task_id` → arbitrary file write (C7) |
+| [#10](https://github.com/eagle27272/gsd-pi/issues/10) | Extension `secure_env_collect` lacks all MCP hardening (C27 + NEW-C35) |
+| [#11](https://github.com/eagle27272/gsd-pi/issues/11) | `doctor` destructive ops without the `shouldFix` gate (C17, C20, C21, C22, C29-caveat) |
+| [#12](https://github.com/eagle27272/gsd-pi/issues/12) | Worktree merge/teardown fail-open set + invisible quarantine (C24, C25/26, C9, C8a) |
+| [#13](https://github.com/eagle27272/gsd-pi/issues/13) | Legacy import drops milestone worktree evidence (C31) |
+| [#14](https://github.com/eagle27272/gsd-pi/issues/14) | Failed/SIGKILLed subagent reports exit 0, diff merged (C14 + `exec.ts`/`bash.ts`) |
+| [#15](https://github.com/eagle27272/gsd-pi/issues/15) | `browser_emulate_device` bricks the session (C33) |
+| [#16](https://github.com/eagle27272/gsd-pi/issues/16) | `crash-recovery` lock liveness has no host check |
+| [#17](https://github.com/eagle27272/gsd-pi/issues/17) | Auto-loop verification gates that cannot fail |
+| [#18](https://github.com/eagle27272/gsd-pi/issues/18) | browser-tools ref staleness; `browser_assert` passes on 0 checks |
+| [#19](https://github.com/eagle27272/gsd-pi/issues/19) | bg-shell ignores `event.reason`; empty manifest; restart mis-anchors selection (C2) |
+| [#20](https://github.com/eagle27272/gsd-pi/issues/20) | `secure_env_collect`: the AI chooses where the secret is written (C32) |
+| [#21](https://github.com/eagle27272/gsd-pi/issues/21) | Unvalidated identifiers at destructive sinks (C15, C5, C12) |
+| [#22](https://github.com/eagle27272/gsd-pi/issues/22) | `scope.milestone_id` vs `milestoneId` case mismatch (C1) |
+| [#23](https://github.com/eagle27272/gsd-pi/issues/23) | Session layer: non-injective cwd mapping, compaction message loss, `fork()`, `/share` |
+| [#24](https://github.com/eagle27272/gsd-pi/issues/24) | Tools reporting success on failure: ollama pull, shell-output, find |
+| [#25](https://github.com/eagle27272/gsd-pi/issues/25) | Enable `noUnusedLocals`/`noUnusedParameters`; no lint step exists |
+| [#26](https://github.com/eagle27272/gsd-pi/issues/26) | Guard gaps: post-abort rejection, ReDoS guard, `rm -fr`, PID 1 (C4, C11, C3, C28) |
+
+### Not re-verified — treat with the report's original confidence, not more
+
+The adversarial pass covered every Critical and the load-bearing Highs. These groups were **not**
+re-checked and no issues were filed for them:
+
+- **Credential storage** (the six `auth.json` / `keys add` / `keys rotate` findings)
+- **github-sync** (per-task issue creation, `ghMergePR` result discarded)
+- **MCP server** (`parseInt` selection, Telegram cursor, `ghAddToProject`, GraphQL injection)
+- **subagent isolation** (symlink dereferencing, predictable patch path, baseline commit)
+- **Slash commands** (`/gsd park`, `--force` prefix match, `--name`, `workflow uninstall`)
+- Most **P1–P16** cross-cutting pattern *counts* — the individual instances cited under Criticals were
+  checked, the aggregate counts were not (and where counts *were* checked, three were wrong: P13's
+  18 → 17, the `allowFailure` helpers' 17 → ~20, `resolveSlicePath`'s 11 → 31). **Treat every
+  unverified count in this report as approximate.**
+
+---
+
 **The legacy-import subsystem is the model.** Two thorough reviews, essentially zero findings:
 verify-before-destroy, independent re-derivation on a fresh read-only connection, identity re-checks
 around every read, consent bound into the intent hash. The worktree subsystem does equally
@@ -1216,10 +1943,26 @@ applies them rigorously in one place and barely at all next door.
 
 ---
 
-## Process recommendation
+## Process recommendation → eagle27272/gsd-pi#25
 
-No `noUnusedLocals`/`noUnusedParameters` in any of the 10 tsconfigs, and no lint step (only
-`tsc --noEmit`). That is mechanically why a never-called guard function (`hasAdoptedMilestoneHistory`)
-and two orphaned imports (`getSlice`, `getSliceTasks`) — the direct evidence of a dropped
-verification — survived four commits of churn and code review. Enabling two compiler flags would
-have caught both.
+No `noUnusedLocals`/`noUnusedParameters` in any of the **21** tsconfigs (the report said 10), and no
+lint step at all — verified: no eslint, biome or oxlint config or dependency anywhere in the repo.
+The only static check is `tsc --noEmit` (`typecheck:extensions`).
+
+That is mechanically why the following survived multiple commits of churn and code review:
+
+- `src/resources/extensions/gsd/auto-recovery.ts:456` — `hasAdoptedMilestoneHistory`, a non-exported
+  local guard function with **zero** call sites repo-wide.
+- `src/resources/extensions/gsd/auto-recovery.ts:19-20` — `getSlice` and `getSliceTasks` imported and
+  never used. **Correction:** the report attributed these vaguely, and a re-check confirmed they are
+  *not* in `milestone-closeout.ts` (which never imports them). Both orphans and the dead function are
+  in `auto-recovery.ts`.
+- `native-git-bridge.ts:8` — `execSync` imported, zero call sites.
+- `browser-tools/tools/device.ts:56` — `const suggestions = …` assigned, never read.
+- `auto-dispatch.ts:45`, `auto.ts:50`, `workspace-index.ts:8` — `resolveSlicePath` imported, zero call
+  sites in each.
+
+**The two most damaging findings in this report share a shape these flags would *not* catch:** a dead
+*field*. `browser-tools/state.ts:88`'s `frameContext` and `edit-diff.ts:70`'s `contentForReplacement`
+are both written at multiple sites and never read, and in each case the guard they exist to enable
+was never written. Worth a lint rule that flags never-read object properties, not just unused locals.
