@@ -726,6 +726,7 @@ test("model change notify in selectAndApplyModel is gated behind verbose flag", 
     } as any,
     {
       setModel: async () => true,
+      setThinkingLevel: () => {},
       emitBeforeModelSelect: async () => undefined,
       getActiveTools: () => [],
       emitAdjustToolSet: async () => undefined,

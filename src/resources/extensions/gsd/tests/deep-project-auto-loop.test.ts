@@ -183,6 +183,7 @@ function makePi(messages: unknown[]) {
       activeTools = tools;
     },
     setModel: async () => true,
+    setThinkingLevel: () => {},
     emitAdjustToolSet: async () => null,
     events: { emit: () => {} },
   };
@@ -270,6 +271,7 @@ test("deep project setup: bootstrap can start auto-mode without an active milest
       makeCtx() as any,
       {
         getThinkingLevel: () => "medium",
+        setThinkingLevel: () => {},
         getActiveTools: () => ["ask_user_questions", "read", "write", "edit", "bash"],
         events: { emit: () => {} },
       } as any,

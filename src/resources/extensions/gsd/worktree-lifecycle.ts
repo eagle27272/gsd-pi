@@ -806,7 +806,7 @@ export function _enterMilestoneCore(
   const mode =
     opts.modeOverride ??
     s.strandedRecoveryIsolationMode ??
-    getIsolationMode(basePath);
+    lifecycleGetIsolationMode(deps, basePath);
 
   if (s.isolationDegraded) {
     if (mode === "worktree" || mode === "branch") {
@@ -1478,7 +1478,7 @@ export function mergeMilestoneStandalone(
 
   const mode =
     mctx.isolationModeOverride ??
-    getIsolationMode(originalBasePath || worktreeBasePath);
+    lifecycleGetIsolationMode(deps, originalBasePath || worktreeBasePath);
   debugLog("WorktreeLifecycle", {
     action: "mergeAndExit",
     milestoneId,
