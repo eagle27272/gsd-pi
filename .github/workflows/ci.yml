@@ -13,9 +13,23 @@ jobs:
           version: 10.12.1
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.19.0
+          node-version: 22.23.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build:core
       - run: pnpm run typecheck:extensions
+      # The unit suite drives fault injection through the native engine, and the
+      # pinned @opengsd/engine-* binary lags the Rust source. Build the addon from
+      # this commit with the test-only feature so those exports exist — without it
+      # the loader silently falls back to the pinned binary and the
+      # migrate-safety-audit suite fails on setMutationBoundaryFaultForTest.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            native/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('native/**/Cargo.lock', 'native/**/Cargo.toml') }}
+          restore-keys: cargo-${{ runner.os }}-
+      - run: pnpm run build:native:test
       - run: pnpm run test:unit
