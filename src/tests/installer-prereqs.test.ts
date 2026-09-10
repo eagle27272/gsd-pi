@@ -42,8 +42,8 @@ test('runtime checks fall back when CommonJS cannot require ESM output', () => {
     throw err
   })
 
-  assert.equal(runtimeChecks.MIN_NODE_VERSION, '22.19.0')
+  assert.equal(runtimeChecks.MIN_NODE_VERSION, '22.23.0')
   assert.deepEqual(runtimeChecks.checkNodeVersion('22.18.9'), { ok: false, actualVersion: '22.18.9' })
-  assert.deepEqual(runtimeChecks.checkNodeVersion('22.19.0'), { ok: true })
+  assert.deepEqual(runtimeChecks.checkNodeVersion('22.23.0'), { ok: true })
   assert.equal(runtimeChecks.requireGit(() => undefined), true)
 })
