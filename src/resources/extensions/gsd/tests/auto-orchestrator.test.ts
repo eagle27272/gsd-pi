@@ -33,8 +33,8 @@ import { RuleRegistry, setRegistry, resetRegistry } from "../rule-registry.js";
 import type { UnifiedRule } from "../rule-types.js";
 import { supportsStructuredQuestions } from "../workflow-mcp.js";
 import {
+  _getAdapter,
   closeDatabase,
-  insertArtifact,
   insertAssessment,
   insertGateRow,
   insertMilestone,
@@ -415,13 +415,16 @@ test("#1677: advance() blocks an unproven open-task SUMMARY instead of filtering
   );
   const summary = "# T01 Summary\n\nUnproven failure-path output.\n";
   writeFileSync(summaryPath, summary);
-  insertArtifact({
-    path: summaryPath,
-    artifact_type: "SUMMARY",
-    milestone_id: "M001",
-    slice_id: "S01",
-    task_id: "T01",
-    full_content: summary,
+  // Absolute artifacts.path: insertArtifact rejects those (#3), so seed the row
+  // directly to keep covering drift detection on rows written before that.
+  _getAdapter()!.prepare(`
+    INSERT OR REPLACE INTO artifacts (
+      path, artifact_type, milestone_id, slice_id, task_id, full_content, imported_at, content_hash
+    ) VALUES (:path, 'SUMMARY', 'M001', 'S01', 'T01', :full_content, :imported_at, '')
+  `).run({
+    ":path": summaryPath,
+    ":full_content": summary,
+    ":imported_at": new Date().toISOString(),
   });
 
   const result = await f.orchestrator.advance();

@@ -29,6 +29,35 @@ afterEach(() => {
   closeDatabase();
 });
 
+/**
+ * Seed an `artifacts` row whose path escapes the projection root. insertArtifact
+ * rejects these (#3), so the only way to model a project affected before that
+ * invariant landed is to write the row directly.
+ */
+function seedEscapedArtifactRow(a: {
+  path: string;
+  artifact_type: string;
+  milestone_id: string | null;
+  slice_id: string | null;
+  task_id: string | null;
+  full_content: string;
+}): void {
+  _getAdapter()!
+    .prepare(
+      `INSERT OR REPLACE INTO artifacts (path, artifact_type, milestone_id, slice_id, task_id, full_content, imported_at, content_hash)
+       VALUES (:path, :artifact_type, :milestone_id, :slice_id, :task_id, :full_content, :imported_at, '')`,
+    )
+    .run({
+      ":path": a.path,
+      ":artifact_type": a.artifact_type,
+      ":milestone_id": a.milestone_id,
+      ":slice_id": a.slice_id,
+      ":task_id": a.task_id,
+      ":full_content": a.full_content,
+      ":imported_at": new Date().toISOString(),
+    });
+}
+
 test("filterDoctorIssues keeps project and environment issues in scoped reports", () => {
   const issues = [
     { severity: "error", code: "env_dependencies", scope: "project", unitId: "environment", message: "node_modules missing", fixable: false },
@@ -606,7 +635,7 @@ test("checkEngineHealth resolves escaped .gsd artifact rows against the project 
   writeFileSync(join(gsdDir, artifactPath), "# Assessment\n", "utf-8");
 
   openDatabase(join(gsdDir, "gsd.db"));
-  insertArtifact({
+  seedEscapedArtifactRow({
     path: `../../../Documents/Projects/project/.gsd/${artifactPath}`,
     artifact_type: "ASSESSMENT",
     milestone_id: "M001",
@@ -633,7 +662,7 @@ test("checkEngineHealth reports escaped missing artifact rows with .gsd-relative
   mkdirSync(gsdDir, { recursive: true });
 
   openDatabase(join(gsdDir, "gsd.db"));
-  insertArtifact({
+  seedEscapedArtifactRow({
     path: "../../../Documents/Projects/project/.gsd/phases/01-m001/01-01-PLAN.md",
     artifact_type: "PLAN",
     milestone_id: "M001",
@@ -833,7 +862,7 @@ test("checkEngineHealth repair prunes stale phases rows stored as escaped ../ pa
   writeFileSync(join(gsdDir, replacementPath), "# Plan\n", "utf-8");
 
   openDatabase(join(gsdDir, "gsd.db"));
-  insertArtifact({
+  seedEscapedArtifactRow({
     path: stalePath,
     artifact_type: "PLAN",
     milestone_id: "M001",
@@ -872,7 +901,7 @@ test("checkEngineHealth marks escaped phases rows fixable when a milestones repl
   writeFileSync(join(gsdDir, replacementPath), "# Plan\n", "utf-8");
 
   openDatabase(join(gsdDir, "gsd.db"));
-  insertArtifact({
+  seedEscapedArtifactRow({
     path: "../../../Documents/Projects/project/.gsd/phases/01-m001/01-01-PLAN.md",
     artifact_type: "PLAN",
     milestone_id: "M001",
