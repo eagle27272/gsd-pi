@@ -41,7 +41,7 @@ import {
   rowsToRequirementCounts,
 } from "./db-decision-requirement-rows.js";
 import { rowToGate } from "./db-gate-rows.js";
-import { rowToArtifact, rowToMilestone, type ArtifactRow, type MilestoneRow } from "./db-milestone-artifact-rows.js";
+import { rowToArtifact, rowToMilestone, type ArtifactRow, type HorizontalChecklistItem, type MilestoneRow } from "./db-milestone-artifact-rows.js";
 import { isClosedStatus, toStatus } from "./status-guards.js";
 import { rowToSlice, rowToTask, type SliceRow, type TaskRow } from "./db-task-slice-rows.js";
 
@@ -80,7 +80,7 @@ export * from "./db/queries.js";
 // Domain Write Operations (Hierarchy Status Cascades).
 export * from "./db/writers/cascades.js";
 
-export type { ArtifactRow, MilestoneRow } from "./db-milestone-artifact-rows.js";
+export type { ArtifactRow, HorizontalChecklistItem, MilestoneRow } from "./db-milestone-artifact-rows.js";
 export type { ActiveTaskSummary, IdStatusSummary, TaskStatusCounts } from "./db-lightweight-query-rows.js";
 export type { SliceRow, TaskRow } from "./db-task-slice-rows.js";
 
@@ -276,6 +276,7 @@ export interface MilestonePlanningRecord {
   verificationUat: string;
   definitionOfDone: string[];
   requirementCoverage: string;
+  horizontalChecklist: HorizontalChecklistItem[];
   boundaryMapMarkdown: string;
 }
 
@@ -315,12 +316,12 @@ export function insertMilestone(m: {
       id, title, status, depends_on, created_at,
       vision, success_criteria, key_risks, proof_strategy,
       verification_contract, verification_integration, verification_operational, verification_uat,
-      definition_of_done, requirement_coverage, boundary_map_markdown
+      definition_of_done, requirement_coverage, horizontal_checklist, boundary_map_markdown
     ) VALUES (
       :id, :title, :status, :depends_on, :created_at,
       :vision, :success_criteria, :key_risks, :proof_strategy,
       :verification_contract, :verification_integration, :verification_operational, :verification_uat,
-      :definition_of_done, :requirement_coverage, :boundary_map_markdown
+      :definition_of_done, :requirement_coverage, :horizontal_checklist, :boundary_map_markdown
     )`,
   ).run({
     ":id": m.id,
@@ -340,6 +341,7 @@ export function insertMilestone(m: {
     ":verification_uat": m.planning?.verificationUat ?? "",
     ":definition_of_done": JSON.stringify(m.planning?.definitionOfDone ?? []),
     ":requirement_coverage": m.planning?.requirementCoverage ?? "",
+    ":horizontal_checklist": JSON.stringify(m.planning?.horizontalChecklist ?? []),
     ":boundary_map_markdown": m.planning?.boundaryMapMarkdown ?? "",
   })) as { changes?: number };
   return (result.changes ?? 0) > 0;
@@ -373,6 +375,7 @@ export function upsertMilestonePlanning(milestoneId: string, planning: Partial<M
         verification_uat = COALESCE(:verification_uat, verification_uat),
         definition_of_done = COALESCE(:definition_of_done, definition_of_done),
         requirement_coverage = COALESCE(:requirement_coverage, requirement_coverage),
+        horizontal_checklist = COALESCE(:horizontal_checklist, horizontal_checklist),
         boundary_map_markdown = COALESCE(:boundary_map_markdown, boundary_map_markdown)
        WHERE id = :id`,
     ).run({
@@ -389,6 +392,7 @@ export function upsertMilestonePlanning(milestoneId: string, planning: Partial<M
       ":verification_uat": planning.verificationUat ?? null,
       ":definition_of_done": planning.definitionOfDone ? JSON.stringify(planning.definitionOfDone) : null,
       ":requirement_coverage": planning.requirementCoverage ?? null,
+      ":horizontal_checklist": planning.horizontalChecklist ? JSON.stringify(planning.horizontalChecklist) : null,
       ":boundary_map_markdown": planning.boundaryMapMarkdown ?? null,
     });
     const finalTitle = planning.title?.trim();

@@ -582,3 +582,12 @@ export function applyMigrationV48TaskToolRequirements(db: DbAdapter): void {
     "ALTER TABLE tasks ADD COLUMN required_workflow_tools TEXT NOT NULL DEFAULT '[]'",
   );
 }
+
+export function applyMigrationV49MilestoneHorizontalChecklist(db: DbAdapter): void {
+  ensureColumn(
+    db,
+    "milestones",
+    "horizontal_checklist",
+    "ALTER TABLE milestones ADD COLUMN horizontal_checklist TEXT NOT NULL DEFAULT '[]'",
+  );
+}

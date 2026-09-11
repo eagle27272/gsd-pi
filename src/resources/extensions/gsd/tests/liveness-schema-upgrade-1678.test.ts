@@ -207,13 +207,14 @@ test("#1678: opening a pre-v1.14 v46 database bootstraps liveness schema without
       userVersion: SCHEMA_VERSION,
       applicationId: stampsBefore.applicationId,
     },
-    "V47 and V48 migrations may move the version stamps to the current schema",
+    "V47 through V49 migrations may move the version stamps to the current schema",
   );
   const rowsAfter = snapshotWorkflowRows();
   assert.deepEqual(
     {
       ...rowsAfter,
       tasks: rowsAfter.tasks.map(({ required_workflow_tools: _requiredWorkflowTools, ...row }) => row),
+      milestones: rowsAfter.milestones.map(({ horizontal_checklist: _horizontalChecklist, ...row }) => row),
     },
     rowsBefore,
     "startup repair must not rewrite workflow-owned rows",
@@ -222,6 +223,11 @@ test("#1678: opening a pre-v1.14 v46 database bootstraps liveness schema without
     rowsAfter.tasks.map((row) => row.required_workflow_tools),
     ["[]"],
     "V48 adds required_workflow_tools with the empty default",
+  );
+  assert.deepEqual(
+    rowsAfter.milestones.map((row) => row.horizontal_checklist),
+    ["[]", "[]"],
+    "V49 adds horizontal_checklist with the empty default",
   );
   assert.deepEqual(getOpenWedge(basePath), { ok: true, wedge: null });
   assert.equal(fixtureHash(), sealedHash, "upgrade must not mutate its sealed source fixture");
