@@ -81,7 +81,6 @@
 | `/gsd skill-health --stale N` | 显示 N 天以上未使用的 skills |
 | `/gsd hooks` | 查看已配置的 post-unit 和 pre-dispatch hooks |
 | `/gsd run-hook` | 手动触发一个指定 hook |
-| `/gsd migrate` | 将 v1 的 `.planning` 目录迁移到 `.gsd` 格式 |
 | `/gsd recover` | 预览一次显式的旧版 markdown 导入，然后使用 `/gsd recover --preview=<sha256>` 批准所显示的精确哈希 |
 | `/gsd recover <recoveryActionId>` | 提供修复说明和验证证据后，恢复一个已修复的 Task recovery abort 或 remediation |
 

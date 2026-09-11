@@ -58,7 +58,7 @@ import { resolveUokFlags } from "./uok/flags.js";
 import { ensurePlanV2Graph, isMissingFinalizedContextResult } from "./uok/plan-v2.js";
 import { detectProjectState, hasGsdBootstrapArtifacts } from "./detection.js";
 import { isFutureMilestoneStatus } from "./status-guards.js";
-import { showProjectInit, offerMigration } from "./init-wizard.js";
+import { showProjectInit } from "./init-wizard.js";
 import { validateDirectory } from "./validate-directory.js";
 import { showConfirm } from "../shared/tui.js";
 import { debugLog } from "./debug-logger.js";
@@ -1955,18 +1955,6 @@ export async function showSmartEntry(
 
   if (!hasBootstrapArtifacts) {
     const detection = detectProjectState(basePath);
-
-    // v1 .planning/ detected — offer migration before anything else
-    if (detection.state === "v1-planning" && detection.v1) {
-      const migrationChoice = await offerMigration(ctx, detection.v1);
-      if (migrationChoice === "cancel") return;
-      if (migrationChoice === "migrate") {
-        const { handleMigrate } = await import("./migrate/command.js");
-        await handleMigrate("", ctx, pi);
-        return;
-      }
-      // "fresh" — fall through to init wizard
-    }
 
     // No .gsd/ or zombie .gsd/ — run the project init wizard
     const result = await showProjectInit(ctx, pi, basePath, detection);

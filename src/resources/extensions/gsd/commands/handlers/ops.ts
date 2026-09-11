@@ -249,11 +249,6 @@ Examples:
     ctx.ui.notify("Usage: /gsd knowledge <rule|pattern|lesson> <description>. Example: /gsd knowledge rule Use real DB for integration tests", "warning");
     return true;
   }
-  if (trimmed === "migrate" || trimmed.startsWith("migrate ")) {
-    const { handleMigrate } = await import("../../migrate/command.js");
-    await handleMigrate(trimmed.replace(/^migrate\s*/, "").trim(), ctx, pi);
-    return true;
-  }
   if (trimmed === "dispatch" || trimmed.startsWith("dispatch ")) {
     const phase = trimmed.replace(/^dispatch\s*/, "").trim();
     if (!phase) {
