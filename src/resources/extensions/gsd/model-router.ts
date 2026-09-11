@@ -5,7 +5,6 @@ import { getProviderCapabilities, type Api, type Model, type ProviderCapabilitie
 import { getToolCompatibility } from "@gsd/pi-coding-agent";
 import type { ClassificationResult, ComplexityTier, TaskMetadata } from "./complexity-classifier.js";
 import { tierOrdinal } from "./complexity-classifier.js";
-import { incrementLegacyTelemetry } from "./legacy-telemetry.js";
 import { resolveModelEconomics } from "./model-cost-table.js";
 import type { ResolvedModelConfig } from "./preferences.js";
 
@@ -1058,7 +1057,6 @@ export function resolveModelForTier(
     if (preferredModelId) {
       return normalizeResolvedTierModelId(preferredModelId, tier, routingConfig);
     }
-    incrementLegacyTelemetry("legacy.providerDefaultUsed");
     return canonicalModelForTier(tier);
   }
 

@@ -8,8 +8,7 @@
 // module as a legacy-parser consumer when it references
 // `parseLegacyRoadmap`/`parseLegacyPlan` OR imports a module named
 // `parsers-legacy`. Projection parsers live under `parseProjection*` in
-// schemas/parsers.ts and are not this path. Mirrors
-// scripts/legacy-state-path-proof.mjs.
+// schemas/parsers.ts and are not this path.
 //
 // Assertions:
 // 1. Decision-path modules must NOT consume the legacy parsers (hard ban).
