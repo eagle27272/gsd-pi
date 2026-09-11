@@ -55,8 +55,11 @@ test("prependPathEntry preserves the original PATH key casing and avoids duplica
 });
 
 test("buildRtkEnv prepends the managed bin dir and disables telemetry", () => {
-  const env = buildRtkEnv({ PATH: "/usr/bin" });
-  assert.ok(env.PATH?.startsWith(`${getManagedRtkDir()}${delimiter}`));
+  const input = { PATH: "/usr/bin" };
+  const env = buildRtkEnv(input);
+  // Resolve the expected dir from the same env buildRtkEnv was given — reading
+  // process.env here would pick up a different GSD_HOME than the call under test.
+  assert.ok(env.PATH?.startsWith(`${getManagedRtkDir(input)}${delimiter}`));
   assert.equal(env.RTK_TELEMETRY_DISABLED, "1");
 });
 

@@ -256,6 +256,36 @@ export async function ensureDistTestNodeModules(root = ROOT, distTestDir = DIST_
   return true;
 }
 
+/**
+ * packages/native resolves its addon at `<dirname>/../../../native/addon`, which
+ * from dist-test/packages/native/dist lands at dist-test/native/addon. Without
+ * this link the loader silently falls back to the pinned @opengsd/engine-*
+ * binary, which lags the Rust source and lacks test-only exports (e.g. the
+ * test-fault-injection hooks the migrate-safety-audit suite drives).
+ */
+export async function ensureDistTestNativeAddon(root = ROOT, distTestDir = DIST_TEST_DIR) {
+  const distNative = join(distTestDir, 'native');
+  let nativeStat = null;
+  try {
+    nativeStat = await lstat(distNative);
+  } catch {
+    // Missing is fine; the symlink will be created below.
+  }
+
+  if (nativeStat?.isSymbolicLink()) return false;
+
+  await mkdir(distTestDir, { recursive: true });
+  if (nativeStat) {
+    await rm(distNative, { recursive: true, force: true });
+  }
+  symlinkSync(
+    join(root, 'native'),
+    distNative,
+    process.platform === 'win32' ? 'junction' : 'dir',
+  );
+  return true;
+}
+
 async function collectInputEntries(root, files) {
   const unique = [...new Set(files.map(file => resolve(file)))].sort();
   const entries = [];
@@ -354,6 +384,7 @@ async function main() {
   const distTestExists = existsSync(DIST_TEST_DIR);
   if (isCompileCacheFresh(cache, fingerprint, distTestExists)) {
     await ensureDistTestNodeModules();
+    await ensureDistTestNativeAddon();
     const elapsedMs = Date.now() - start;
     logMetrics({
       cacheHit: true,
@@ -515,6 +546,7 @@ async function main() {
   // packageRoot from import.meta.url) resolves gsdNodeModules to a real path.
   // Without this, initResources creates dangling symlinks in test environments.
   await ensureDistTestNodeModules();
+  await ensureDistTestNativeAddon();
 
   const elapsedMs = Date.now() - start;
   await writeCache(fingerprint, {

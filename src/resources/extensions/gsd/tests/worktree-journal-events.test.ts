@@ -379,7 +379,7 @@ describe("worktree journal events", () => {
 
   test("journal entries have valid flowId, seq, and ts fields", () => {
     const s = makeSession({ basePath: tmp, originalBasePath: tmp });
-    const deps = makeDeps({ shouldUseWorktreeIsolation: () => false });
+    const deps = makeDeps({ getIsolationMode: () => "none" });
     new WorktreeLifecycle(s, deps).enterMilestone("M001", makeNotifyCtx());
 
     const entries = readJournalEntries(tmp);

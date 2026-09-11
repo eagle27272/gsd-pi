@@ -60,7 +60,7 @@ const PHASE_PROMPT_TOOL_CALLS: Record<string, readonly string[]> = {
     "gsd_exec",
     "gsd_exec_search",
     "gsd_resume",
-    "gsd_capture_thought",
+    "capture_thought",
   ],
   "reactive-execute": ["gsd_summary_save"],
   "complete-slice": [
@@ -68,7 +68,7 @@ const PHASE_PROMPT_TOOL_CALLS: Record<string, readonly string[]> = {
     "gsd_task_reopen",
     "gsd_replan_slice",
     "gsd_requirement_update",
-    "gsd_capture_thought",
+    "capture_thought",
     "gsd_slice_complete",
     "gsd_summary_save",
   ],
@@ -112,6 +112,34 @@ test("auto phase prompt tool calls are available in scoped tool surfaces", () =>
         `${unitType} phase gate blocked ${toolName}: ${scopeResult.reason ?? "unknown reason"}`,
       );
     }
+  }
+});
+
+// Issue #28: `gsd_capture_thought` is registered only by the gsd-workflow MCP
+// server; the in-process host registers `capture_thought` (bootstrap/memory-tools.ts,
+// which never registers a prefixed variant). plan-slice.md already words this
+// transport-neutrally and plan-slice-prompt.test.ts pins it; the execute-task-class
+// prompts named the prefixed form outright, so a unit that followed the prompt on a
+// native session got `Tool gsd_capture_thought not found` and had to guess the
+// unprefixed name to recover.
+test("prompts that capture memories name the host tool, not the MCP-only spelling", () => {
+  const capturingPrompts = Object.keys(PHASE_PROMPT_TOOL_CALLS).filter((unitType) =>
+    /capture_thought/.test(readPrompt(unitType)),
+  );
+  assert.ok(capturingPrompts.length > 0, "expected at least one prompt to capture memories");
+
+  for (const unitType of capturingPrompts) {
+    const prompt = readPrompt(unitType);
+    assert.match(
+      prompt,
+      /`capture_thought`/,
+      `${unitType} prompt should name the host tool \`capture_thought\``,
+    );
+    assert.doesNotMatch(
+      prompt,
+      /\bgsd_capture_thought\b/,
+      `${unitType} prompt must not request the unavailable prefixed host tool`,
+    );
   }
 });
 
