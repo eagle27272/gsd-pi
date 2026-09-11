@@ -5,6 +5,12 @@ import type { TaskRow } from "./db-task-slice-rows.js";
 import { executeDomainOperation } from "./db/domain-operation.js";
 import { getDb } from "./db/engine.js";
 import {
+  buildEscalationArtifact,
+  escalationArtifactPath,
+  readEscalationArtifact,
+  writeEscalationArtifact,
+} from "./escalation.js";
+import {
   adoptOrTransitionLifecycle,
   appendKernelCheckpoint,
   completeLegacyTaskForVerifiedAttempt,
@@ -30,11 +36,14 @@ import {
 import { readTaskRecoveryRoute } from "./task-recovery-domain-operation.js";
 import { readTaskTechnicalVerdict } from "./task-verification-domain-operation.js";
 import { loadEffectiveGSDPreferences } from "./preferences.js";
+import type { EscalationArtifact, EscalationOption } from "./types.js";
 import {
   captureVerificationSourceSnapshot,
   resolveVerificationRepositoryTargets,
 } from "./verification-source-integrity.js";
+import { logWarning } from "./workflow-logger.js";
 import { renderSummaryContent } from "./workflow-projections.js";
+import { resolveCanonicalMilestoneRoot } from "./worktree-manager.js";
 
 export interface TaskCompletionIdentity {
   milestoneId: string;
@@ -47,6 +56,14 @@ export interface StagedVerificationEvidence {
   exitCode: number;
   verdict: string;
   durationMs: number;
+}
+
+export interface StagedEscalation {
+  question: string;
+  options: EscalationOption[];
+  recommendation: string;
+  recommendationRationale: string;
+  continueWithDefault: boolean;
 }
 
 export interface StageTaskCompletionInput {
@@ -66,6 +83,7 @@ export interface StageTaskCompletionInput {
     keyDecisions: string[];
     blockerDiscovered: boolean;
     verificationEvidence: StagedVerificationEvidence[];
+    escalation?: StagedEscalation;
   };
 }
 
@@ -82,6 +100,14 @@ export interface StagedTaskCompletionReceipt {
   resultId: string;
   summaryPath: string;
   nextStage: "verify" | "route";
+  escalation?: {
+    artifactPath: string;
+    question: string;
+    options: EscalationArtifact["options"];
+    recommendation: string;
+    recommendationRationale: string;
+    continueWithDefault: boolean;
+  };
 }
 
 export interface PublishedTaskCompletionReceipt {
@@ -361,9 +387,101 @@ async function renderPublishedTaskCompletionProjections(
   return summaryPath;
 }
 
+function escalationBasePath(input: StageTaskCompletionInput): string {
+  return resolveCanonicalMilestoneRoot(input.basePath, input.task.milestoneId);
+}
+
+/**
+ * Validate the escalation payload before anything is settled. A malformed
+ * payload — or a hard blocker raised while `phases.mid_execution_escalation`
+ * is off — must reject the whole completion rather than stage a Task whose
+ * unanswered decision was silently dropped. Mirrors the legacy gating in
+ * tools/complete-task.ts so both completion authorities behave identically.
+ */
+function validateStagedEscalation(input: StageTaskCompletionInput): EscalationArtifact | null {
+  const escalation = input.completion.escalation;
+  if (!escalation) return null;
+  const { milestoneId, sliceId, taskId } = input.task;
+  const enabled =
+    loadEffectiveGSDPreferences(input.basePath)?.preferences?.phases?.mid_execution_escalation === true;
+  if (!enabled) {
+    if (escalation.continueWithDefault === false) {
+      throw new Error(
+        `complete-task received a hard-blocker escalation (continueWithDefault=false) but ` +
+        `phases.mid_execution_escalation is disabled for ${milestoneId}/${sliceId}/${taskId}`,
+      );
+    }
+    logWarning(
+      "tool",
+      `complete_task received escalation payload but phases.mid_execution_escalation is not enabled; ignoring on the canonical completion path (${milestoneId}/${sliceId}/${taskId})`,
+    );
+    return null;
+  }
+  let artifact: EscalationArtifact;
+  try {
+    artifact = buildEscalationArtifact({ ...escalation, milestoneId, sliceId, taskId });
+  } catch (error) {
+    throw new Error(
+      `complete-task escalation payload invalid for ${milestoneId}/${sliceId}/${taskId}: ${(error as Error).message}`,
+    );
+  }
+  if (!escalationArtifactPath(escalationBasePath(input), milestoneId, sliceId, taskId)) {
+    throw new Error(
+      `complete-task escalation path unavailable for ${milestoneId}/${sliceId}/${taskId}; run doctor`,
+    );
+  }
+  return artifact;
+}
+
+/**
+ * Project a validated escalation once the settlement is durable. A replay must
+ * reuse the artifact already on disk: rewriting it would erase a resolution the
+ * user recorded between the original call and the replay.
+ *
+ * The settlement is already committed here, so a projection failure only fails
+ * the call for a hard blocker, whose unanswered decision must not be lost. A
+ * soft escalation is advisory and never fails a completion.
+ */
+function recordStagedEscalation(
+  input: StageTaskCompletionInput,
+  artifact: EscalationArtifact,
+  replayed: boolean,
+): StagedTaskCompletionReceipt["escalation"] {
+  const basePath = escalationBasePath(input);
+  const { milestoneId, sliceId, taskId } = input.task;
+  const existingPath = replayed
+    ? escalationArtifactPath(basePath, milestoneId, sliceId, taskId)
+    : null;
+  const existing = existingPath ? readEscalationArtifact(existingPath) : null;
+  const recorded = existing ?? artifact;
+  let artifactPath: string;
+  try {
+    artifactPath = existing && existingPath
+      ? existingPath
+      : writeEscalationArtifact(basePath, artifact);
+  } catch (error) {
+    const message =
+      `complete-task escalation write failed for ${milestoneId}/${sliceId}/${taskId}: ${(error as Error).message}`;
+    logWarning("tool", message);
+    if (artifact.continueWithDefault === false) {
+      throw new Error(`${message}; completion remains committed and the escalation projection is stale`);
+    }
+    return undefined;
+  }
+  return {
+    artifactPath,
+    question: recorded.question,
+    options: recorded.options,
+    recommendation: recorded.recommendation,
+    recommendationRationale: recorded.recommendationRationale,
+    continueWithDefault: recorded.continueWithDefault,
+  };
+}
+
 export async function stageTaskCompletion(
   input: StageTaskCompletionInput,
 ): Promise<StagedTaskCompletionReceipt> {
+  const escalationArtifact = validateStagedEscalation(input);
   const replayAttempt = replayAttemptId(input.invocation.idempotencyKey, input.task);
   const task = requireTask(input.task);
   const legacyClosed = ["complete", "done", "closed"].includes(task.status);
@@ -405,12 +523,16 @@ export async function stageTaskCompletion(
   if (!blocked) {
     summaryPath = await renderTaskSummaryProjections(input.basePath, input.task);
   }
+  const escalation = escalationArtifact
+    ? recordStagedEscalation(input, escalationArtifact, settlement.status === "replayed")
+    : undefined;
   return {
     status: settlement.status,
     attemptId,
     resultId: settlement.resultId,
     summaryPath,
     nextStage: settlement.nextStage,
+    ...(escalation ? { escalation } : {}),
   };
 }
 

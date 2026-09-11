@@ -28,8 +28,8 @@ import {
   resolveSkillDiscoveryMode,
   getIsolationMode,
 } from "./preferences.js";
-import { ensureGsdSymlink, isInheritedRepo, validateProjectId } from "./repo-identity.js";
-import { migrateToExternalState, recoverFailedMigration } from "./migrate-external.js";
+import { isInheritedRepo, validateProjectId } from "./repo-identity.js";
+import { ensureExternalState } from "./external-state-bootstrap.js";
 import { collectSecretsFromManifest } from "../get-secrets-from-user.js";
 import { gsdRoot, resolveMilestoneFile } from "./paths.js";
 import { findMilestoneIds } from "./milestone-ids.js";
@@ -87,7 +87,6 @@ import {
 import { readMilestoneMergeObservation } from "./db/milestone-closeout-readiness.js";
 import { immediateTransaction } from "./db/engine.js";
 import {
-  closeAllWorkflowDatabases,
   getWorkflowDatabaseStatus,
   openExistingWorkflowDatabase,
   openWorkflowDatabase,
@@ -1211,22 +1210,13 @@ export async function bootstrapAutoSession(
     // Migrate legacy in-project .gsd/ to external state directory.
     // Migration MUST run before ensureGitignore to avoid adding ".gsd" to
     // .gitignore when .gsd/ is git-tracked (data-loss bug #1364).
-    recoverFailedMigration(base);
-    // startAuto's interrupted-session assessment may already have opened the
-    // database. Retire every handle before migration moves the containing
-    // directory so the WAL is checkpointed and no cached adapter remains
-    // bound to the pre-migration inode.
-    closeAllWorkflowDatabases();
-    const migration = migrateToExternalState(base);
-    if (migration.error) {
-      const isAuthoritativeStateGuard = migration.error.includes(
-        "External state already exists for this project",
+    const externalState = ensureExternalState(base);
+    if (externalState.migrationError) {
+      ctx.ui.notify(
+        `External state migration warning: ${externalState.migrationError}`,
+        externalState.migrationErrorSeverity ?? "warning",
       );
-      const severity = isAuthoritativeStateGuard ? "info" : "warning";
-      ctx.ui.notify(`External state migration warning: ${migration.error}`, severity);
     }
-    // Ensure symlink exists (handles fresh projects and post-migration)
-    ensureGsdSymlink(base);
 
     // Acquisition starts before migration so bootstrap is serialized. Once
     // .gsd points at external state, hand ownership to that physical target
