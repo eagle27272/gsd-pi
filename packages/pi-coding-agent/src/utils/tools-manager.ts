@@ -1,6 +1,16 @@
 import chalk from "chalk";
 import { type SpawnSyncReturns, spawnSync } from "child_process";
-import { chmodSync, createWriteStream, existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "fs";
+import {
+	accessSync,
+	chmodSync,
+	constants,
+	createWriteStream,
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	renameSync,
+	rmSync,
+} from "fs";
 import { arch, platform } from "os";
 import { join } from "path";
 import { Readable } from "stream";
@@ -70,6 +80,18 @@ const TOOLS: Record<string, ToolConfig> = {
 	},
 };
 
+// A managed binary that exists but lost its executable bit (interrupted extract,
+// restrictive umask) would spawn as EACCES on every call, so treat it as absent
+// and let the PATH lookup win.
+function isExecutableFile(path: string): boolean {
+	try {
+		accessSync(path, constants.X_OK);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 // Check if a command exists in PATH by trying to run it
 function commandExists(cmd: string): boolean {
 	try {
@@ -88,7 +110,7 @@ export function getToolPath(tool: "fd" | "rg"): string | null {
 
 	// Check our tools directory first
 	const localPath = join(TOOLS_DIR, config.binaryName + (platform() === "win32" ? ".exe" : ""));
-	if (existsSync(localPath)) {
+	if (isExecutableFile(localPath)) {
 		return localPath;
 	}
 
