@@ -18,8 +18,15 @@ export interface MilestoneRow {
   verification_uat: string;
   definition_of_done: string[];
   requirement_coverage: string;
+  horizontal_checklist: HorizontalChecklistItem[];
   boundary_map_markdown: string;
   sequence: number;
+}
+
+/** Cross-cutting concern the planner considered (or deliberately left open). */
+export interface HorizontalChecklistItem {
+  item: string;
+  checked: boolean;
 }
 
 export interface ArtifactRow {
@@ -52,6 +59,7 @@ export function rowToMilestone(row: DbRow): MilestoneRow {
     verification_uat: (row["verification_uat"] as string) ?? "",
     definition_of_done: JSON.parse((row["definition_of_done"] as string) || "[]"),
     requirement_coverage: (row["requirement_coverage"] as string) ?? "",
+    horizontal_checklist: JSON.parse((row["horizontal_checklist"] as string) || "[]"),
     boundary_map_markdown: (row["boundary_map_markdown"] as string) ?? "",
     sequence: Number(row["sequence"] ?? 0),
   };

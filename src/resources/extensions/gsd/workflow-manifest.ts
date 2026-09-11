@@ -184,6 +184,7 @@ export function snapshotState(): StateManifest {
     verification_operational: (r["verification_operational"] as string) ?? "",
     verification_uat: (r["verification_uat"] as string) ?? "",
     definition_of_done: JSON.parse((r["definition_of_done"] as string) || "[]"),
+    horizontal_checklist: JSON.parse((r["horizontal_checklist"] as string) || "[]"),
     requirement_coverage: (r["requirement_coverage"] as string) ?? "",
     boundary_map_markdown: (r["boundary_map_markdown"] as string) ?? "",
     sequence: Number(r["sequence"] ?? 0),

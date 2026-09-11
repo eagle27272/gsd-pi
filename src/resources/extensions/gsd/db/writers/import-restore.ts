@@ -103,8 +103,8 @@ export function restoreManifest(manifest: StateManifest): void {
       `INSERT INTO milestones (id, title, status, depends_on, created_at, completed_at,
         vision, success_criteria, key_risks, proof_strategy,
         verification_contract, verification_integration, verification_operational, verification_uat,
-        definition_of_done, requirement_coverage, boundary_map_markdown, sequence)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        definition_of_done, requirement_coverage, horizontal_checklist, boundary_map_markdown, sequence)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     for (const m of manifest.milestones) {
       msStmt.run(
@@ -113,7 +113,8 @@ export function restoreManifest(manifest: StateManifest): void {
         m.vision, JSON.stringify(m.success_criteria), JSON.stringify(m.key_risks),
         JSON.stringify(m.proof_strategy),
         m.verification_contract, m.verification_integration, m.verification_operational, m.verification_uat,
-        JSON.stringify(m.definition_of_done), m.requirement_coverage, m.boundary_map_markdown, m.sequence ?? 0,
+        JSON.stringify(m.definition_of_done), m.requirement_coverage,
+        JSON.stringify(m.horizontal_checklist ?? []), m.boundary_map_markdown, m.sequence ?? 0,
       );
     }
 

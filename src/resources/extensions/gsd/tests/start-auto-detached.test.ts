@@ -118,7 +118,8 @@ test("auto bootstrap validates blocked directories before touching .gsd migratio
   const staleCrashReadIdx = bootstrapBody.indexOf("const startupLock = readCrashLock(base)");
   const staleCrashClearIdx = bootstrapBody.indexOf("clearLock(base);");
   const lockIdx = bootstrapBody.indexOf("acquireSessionLock(base)");
-  const bootstrapMigrationIdx = bootstrapBody.indexOf("migrateToExternalState(base)");
+  // Migration runs through the shared external-state helper.
+  const bootstrapMigrationIdx = bootstrapBody.indexOf("ensureExternalState(base)");
 
   assert.ok(bootstrapIdx > -1, "bootstrapAutoSession should exist");
   assert.ok(bootstrapValidationIdx > -1, "bootstrapAutoSession should validate the base directory");

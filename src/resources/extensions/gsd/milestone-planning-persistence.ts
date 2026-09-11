@@ -2,6 +2,7 @@
 // File Purpose: Persist planned milestone roadmaps and their DB-backed projections.
 
 import type { CanonicalLifecycleStatus } from "./db/writers/lifecycle-commands.js";
+import type { HorizontalChecklistItem } from "./db-milestone-artifact-rows.js";
 import { clearParseCache } from "./files.js";
 import {
   adoptLifecycleIfMissing,
@@ -62,6 +63,7 @@ export interface PersistMilestonePlanParams {
   verificationUat?: string;
   definitionOfDone?: string[];
   requirementCoverage?: string;
+  horizontalChecklist?: HorizontalChecklistItem[];
   boundaryMapMarkdown?: string;
 }
 
@@ -175,6 +177,7 @@ function writePlanRows(params: PersistMilestonePlanParams): void {
     verificationUat: params.verificationUat,
     definitionOfDone: params.definitionOfDone,
     requirementCoverage: params.requirementCoverage,
+    horizontalChecklist: params.horizontalChecklist,
     boundaryMapMarkdown: params.boundaryMapMarkdown,
   });
 

@@ -428,6 +428,27 @@ async function writeAndStore(
   return stamped;
 }
 
+/**
+ * The bundled roadmap template writes checklist entries as "- [ ] concern", so
+ * a planner that copies it literally persists the marker inside the item text.
+ * Strip it — the renderer owns the checkbox, and an unstripped value would
+ * round-trip as "- [ ] - [ ] concern".
+ */
+function stripChecklistMarker(item: string): string {
+  return item.replace(/^\s*(?:[-*]\s*)?(?:\[[ xX]?\]\s*)?/, "").trim();
+}
+
+/** Cross-cutting concerns the planner considered, as roadmap checkbox lines. */
+function renderHorizontalChecklist(milestone: MilestoneRow): string[] {
+  const bullets: string[] = [];
+  for (const entry of milestone.horizontal_checklist ?? []) {
+    const item = meaningfulPlanningValue(stripChecklistMarker(collapseToSingleLine(entry?.item)));
+    if (!item) continue;
+    bullets.push(`- [${entry.checked ? "x" : " "}] ${item}`);
+  }
+  return bullets;
+}
+
 function renderRoadmapMarkdown(milestone: MilestoneRow, slices: SliceRow[]): string {
   const lines: string[] = [];
   const displayTitle = stripIdPrefix(milestone.title || milestone.id, milestone.id);
@@ -477,6 +498,9 @@ function renderRoadmapMarkdown(milestone: MilestoneRow, slices: SliceRow[]): str
     lines.push(demo ? `  > After this: ${demo}` : "  > After this:");
     lines.push("");
   }
+
+  // templates/roadmap.md puts the checklist between Slices and Boundary Map.
+  pushPlanningSection(lines, "Horizontal Checklist", renderHorizontalChecklist(milestone));
 
   if (milestone.boundary_map_markdown.trim()) {
     lines.push("## Boundary Map");
