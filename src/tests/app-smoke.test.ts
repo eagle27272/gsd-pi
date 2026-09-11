@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = join(fileURLToPath(import.meta.url), "..", "..", "..");
@@ -32,10 +32,21 @@ function assertExtensionIndexExists(agentDir: string, extensionName: string): vo
 // 1. app-paths
 // ═══════════════════════════════════════════════════════════════════════════
 
-test("app-paths resolve to ~/.gsd/", async () => {
-  const { appRoot, agentDir, sessionsDir, authFilePath } = await import("../app-paths.ts");
+test("app-paths resolve to ~/.gsd/", () => {
+  // app-paths derives its constants at import time from GSD_HOME, falling back
+  // to ~/.gsd. This asserts the fallback, so it must run with GSD_HOME unset —
+  // in-process the var is already fixed (and the test harness isolates it).
+  const { GSD_HOME: _unset, ...envWithoutGsdHome } = process.env;
+  const printed = execSync(
+    `node --experimental-strip-types -e "` +
+      `const p = await import('./src/app-paths.ts');` +
+      `console.log(JSON.stringify({appRoot: p.appRoot, agentDir: p.agentDir, sessionsDir: p.sessionsDir, authFilePath: p.authFilePath}));` +
+      `"`,
+    { encoding: "utf-8", cwd: projectRoot, env: envWithoutGsdHome },
+  );
+  const { appRoot, agentDir, sessionsDir, authFilePath } = JSON.parse(printed.trim().split("\n").pop()!);
+
   // Use homedir() — process.env.HOME is undefined on Windows (uses USERPROFILE instead)
-  const { homedir } = await import("node:os");
   const home = homedir();
 
   assert.equal(appRoot, join(home, ".gsd"), "appRoot is ~/.gsd/");

@@ -16,10 +16,10 @@
 // The separate `.gsd/unit-claims.db` (unit-ownership.ts) is an intentionally
 // independent store and is excluded from this invariant.
 import { createHash } from "node:crypto";
-import { dirname, join } from "node:path";
-import { renamePhaseDirOnTitleChange } from "./phase-dir-rename.js";
+import { dirname, isAbsolute, join, normalize } from "node:path";
+import { currentPhaseDirName, renamePhaseDirOnTitleChange } from "./phase-dir-rename.js";
 import type { Decision, Requirement, GateRow, GateId, GateScope, GateStatus, GateVerdict } from "./types.js";
-import { GSDError, GSD_STALE_STATE } from "./errors.js";
+import { GSDError, GSD_IO_ERROR, GSD_STALE_STATE } from "./errors.js";
 import { getGateIdsForTurn, type OwnerTurn } from "./gate-registry.js";
 import { logError, logWarning } from "./workflow-logger.js";
 import { type DbAdapter } from "./db-adapter.js";
@@ -206,6 +206,20 @@ export function clearRequirements(): void {
   try { transaction(() => getDbOrNull()!.exec("DELETE FROM requirements")); } catch (e) { logWarning("db", `clearRequirements failed: ${(e as Error).message}`); }
 }
 
+/**
+ * `artifacts.path` is the primary key and is always `.gsd`-relative. An
+ * absolute or `../`-escaping spelling is still a distinct, "valid" key, so the
+ * same logical artifact would live under two rows that drift apart
+ * independently — and a bulk cleanup of the escaping ones destroys the content
+ * that only ever landed there (#3). Reject at the write boundary instead.
+ */
+function assertProjectionRelativeArtifactPath(path: string): void {
+  const normalized = normalize(path).replace(/\\/g, "/");
+  const escapes = normalized === ".." || normalized.startsWith("../");
+  if (!escapes && !isAbsolute(path) && !/^[A-Za-z]:/.test(path)) return;
+  throw new GSDError(GSD_IO_ERROR, `gsd-db: artifacts.path must be relative to .gsd/: ${path}`);
+}
+
 export function insertArtifact(a: {
   path: string;
   artifact_type: string;
@@ -215,6 +229,7 @@ export function insertArtifact(a: {
   full_content: string;
 }): void {
   if (!getDbOrNull()!) throw new GSDError(GSD_STALE_STATE, "gsd-db: No database open");
+  assertProjectionRelativeArtifactPath(a.path);
   const contentHash = createHash("sha256").update(a.full_content).digest("hex");
   transaction(() => getDbOrNull()!.prepare(
     `INSERT OR REPLACE INTO artifacts (path, artifact_type, milestone_id, slice_id, task_id, full_content, imported_at, content_hash)
@@ -231,10 +246,15 @@ export function insertArtifact(a: {
   }));
 }
 
-function reconcileMilestonePhaseArtifactPaths(milestoneId: string, title: string): void {
+/**
+ * Re-key this milestone's artifact rows onto `targetDir`, the phase directory
+ * that actually exists on disk. Never derive `targetDir` from the title alone:
+ * when the on-disk rename is blocked or fails, title-derived keys point at a
+ * directory that is not there and rows stop corresponding to files (#2).
+ */
+function reconcileMilestonePhaseArtifactPaths(milestoneId: string, targetDir: string): void {
   const db = getDbOrNull()!;
   const phaseNumPrefix = String(milestoneIdToPhaseNum(milestoneId)).padStart(2, "0");
-  const canonicalDir = canonicalPhaseDirName(milestoneId, title);
   const staleRows = db.prepare(
     `SELECT path
        FROM artifacts
@@ -253,10 +273,10 @@ function reconcileMilestonePhaseArtifactPaths(milestoneId: string, title: string
     const parts = row.path.split("/");
     if (parts.length < 3) continue;
     if (parts[0] !== LAYOUT_SEGMENTS.level1) continue;
-    if (parts[1] === canonicalDir) continue;
+    if (parts[1] === targetDir) continue;
     if (!parts[1]?.startsWith(`${phaseNumPrefix}-`)) continue;
 
-    const newPath = [LAYOUT_SEGMENTS.level1, canonicalDir, ...parts.slice(2)].join("/");
+    const newPath = [LAYOUT_SEGMENTS.level1, targetDir, ...parts.slice(2)].join("/");
     if (existingPath.get({ ":path": newPath })) {
       deletePath.run({ ":path": row.path });
       continue;
@@ -350,6 +370,12 @@ export function upsertMilestonePlanning(milestoneId: string, planning: Partial<M
   const previousTitle = (getDbOrNull()!.prepare(
     "SELECT title FROM milestones WHERE id = :id",
   ).get({ ":id": milestoneId }) as { title?: string } | undefined)?.title;
+  const finalTitle = planning.title?.trim();
+  // The projection root is the real `.gsd` dir the DB sits in. It cannot be
+  // derived from the project root, because under managed state `.gsd` is a
+  // symlink into $GSD_STATE_DIR/projects/<hash>/ (#2).
+  const dbPath = getDbPath();
+  const projectionRoot = dbPath && dbPath !== ":memory:" ? dirname(dbPath) : null;
   transaction(() => {
     if (planning.status !== undefined && planning.status !== "") {
       applyStatusTransition({
@@ -391,18 +417,21 @@ export function upsertMilestonePlanning(milestoneId: string, planning: Partial<M
       ":requirement_coverage": planning.requirementCoverage ?? null,
       ":boundary_map_markdown": planning.boundaryMapMarkdown ?? null,
     });
-    const finalTitle = planning.title?.trim();
-    if (finalTitle) reconcileMilestonePhaseArtifactPaths(milestoneId, finalTitle);
-  });
-  const finalTitle = planning.title?.trim();
-  const dbPath = getDbPath();
-  if (finalTitle && dbPath && dbPath !== ":memory:") {
-    try {
-      renamePhaseDirOnTitleChange(dirname(dirname(dbPath)), milestoneId, previousTitle, finalTitle);
-    } catch (error) {
-      logWarning("db", `phase dir rename after title update failed: ${(error as Error).message}`);
+    if (!finalTitle) return;
+    // Rename the directory here, between the title write and the re-key, so a
+    // rejected status transition leaves the disk untouched and the rows commit
+    // against a directory name already settled on disk.
+    let targetDir = canonicalPhaseDirName(milestoneId, finalTitle);
+    if (projectionRoot) {
+      try {
+        renamePhaseDirOnTitleChange(projectionRoot, milestoneId, previousTitle, finalTitle);
+      } catch (error) {
+        logWarning("db", `phase dir rename after title update failed: ${(error as Error).message}`);
+      }
+      targetDir = currentPhaseDirName(projectionRoot, milestoneId, finalTitle);
     }
-  }
+    reconcileMilestonePhaseArtifactPaths(milestoneId, targetDir);
+  });
 }
 
 export function insertSlice(s: {

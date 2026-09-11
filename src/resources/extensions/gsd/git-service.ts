@@ -1313,7 +1313,7 @@ export function createDraftPR(
 
 /** Create a GitServiceImpl with the current effective git preferences. */
 export function createGitService(basePath: string): GitServiceImpl {
-  const gitPrefs = loadEffectiveGSDPreferences()?.preferences?.git ?? {};
+  const gitPrefs = loadEffectiveGSDPreferences(basePath)?.preferences?.git ?? {};
   return new GitServiceImpl(basePath, gitPrefs);
 }
 

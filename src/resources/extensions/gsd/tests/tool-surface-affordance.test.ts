@@ -13,6 +13,12 @@ import assert from "node:assert/strict";
 import { composeToolAffordanceReminder, composeToolSurfaceInstructions } from "../unit-context-composer.ts";
 import { UNIT_TOOL_CONTRACTS } from "../unit-tool-contracts.ts";
 import { resolveManifest } from "../unit-context-manifest.ts";
+import { isWorkflowToolSurfaceName } from "../workflow-tool-surface.ts";
+import {
+  NATIVE_WORKFLOW_TOOL_NAMES,
+  resolveWorkflowToolNameForProvider,
+} from "../workflow-tool-name-resolver.ts";
+import { collectNativeRegisteredToolNames } from "./native-tool-registry-fixture.ts";
 
 const UNITS = Object.keys(UNIT_TOOL_CONTRACTS);
 
@@ -24,9 +30,11 @@ describe("tool surface advertises the enforced contract", () => {
     const gaps: string[] = [];
     for (const unit of UNITS) {
       const surface = composeToolSurfaceInstructions(unit, { renderMode: "standalone" });
-      const missing = UNIT_TOOL_CONTRACTS[unit]!.allowedGsdTools.filter(
-        (tool) => !surface.includes(`\`${tool}\``),
-      );
+      // Advertised under the spelling this session registers, not the contract's
+      // canonical name — see the transport suite below.
+      const missing = UNIT_TOOL_CONTRACTS[unit]!.allowedGsdTools
+        .map((tool) => resolveWorkflowToolNameForProvider(tool))
+        .filter((tool) => !surface.includes(`\`${tool}\``));
       if (missing.length > 0) gaps.push(`${unit}: ${missing.join(", ")}`);
     }
     assert.deepEqual(gaps, [], `units not advertising their allowed GSD tools:\n${gaps.join("\n")}`);
@@ -124,5 +132,65 @@ describe("tail reminder puts the affordance where the model acts", () => {
 
   test("units without a tool contract get no reminder", () => {
     assert.equal(composeToolAffordanceReminder("definitely-not-a-unit"), "");
+  });
+});
+
+describe("every tool name in the surface is callable on the session's transport", () => {
+  // Issue #28: the surface is presented as the exact set of callable names
+  // ("near-miss variants are rejected"), so a name on it that the transport never
+  // registers is worse than no list at all — the unit that follows the prompt
+  // precisely fails, and the one that guesses succeeds. The three memory tools
+  // diverge by transport: the gsd-workflow MCP server registers
+  // `gsd_capture_thought` / `gsd_memory_query` / `gsd_memory_graph`, while
+  // bootstrap/memory-tools.ts registers them in-process as `capture_thought` /
+  // `memory_query` / `gsd_graph`. Prose counts, not just the derived list — the two
+  // sit in the same block and a unit cannot tell which one binds.
+
+  /** Names a workflow lifecycle tool under either transport's spelling. */
+  function isWorkflowToolMention(token: string): boolean {
+    return /^gsd_[a-z_]+$/.test(token) || Object.values(NATIVE_WORKFLOW_TOOL_NAMES).includes(token);
+  }
+
+  /**
+   * `mcp__…__gsd_exec` mentions are illustrations of the scoped form, not names
+   * the unit is expected to type verbatim — the ellipsis stands in for the server.
+   */
+  function workflowToolMentions(unit: string, sessionProvider?: string): string[] {
+    const text = [
+      composeToolSurfaceInstructions(unit, { renderMode: "standalone", sessionProvider }),
+      composeToolAffordanceReminder(unit, undefined, sessionProvider),
+    ].join("\n");
+    return [
+      ...new Set([...text.matchAll(/`([^`]+)`/g)].map((match) => match[1]!)),
+    ].filter(isWorkflowToolMention);
+  }
+
+  test("native sessions name only tools the in-process bootstrap registers", () => {
+    const registered = collectNativeRegisteredToolNames();
+    const unreachable: string[] = [];
+    for (const unit of UNITS) {
+      for (const token of workflowToolMentions(unit)) {
+        if (!registered.has(token)) unreachable.push(`${unit}: \`${token}\``);
+      }
+    }
+    assert.deepEqual(
+      unreachable,
+      [],
+      `surface names tools no native registrar provides:\n${unreachable.join("\n")}`,
+    );
+  });
+
+  test("claude-code sessions name only tools the workflow MCP registers", () => {
+    const unreachable: string[] = [];
+    for (const unit of UNITS) {
+      for (const token of workflowToolMentions(unit, "claude-code")) {
+        if (!isWorkflowToolSurfaceName(token)) unreachable.push(`${unit}: \`${token}\``);
+      }
+    }
+    assert.deepEqual(
+      unreachable,
+      [],
+      `surface names tools absent from the workflow MCP surface:\n${unreachable.join("\n")}`,
+    );
   });
 });

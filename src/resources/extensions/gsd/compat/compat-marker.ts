@@ -5,9 +5,10 @@
 // gsd-pi's own writes from external edits whose exact bytes must be preserved.
 // gsd-core is oblivious to this file and ignores it.
 
-import { existsSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join, isAbsolute, relative, resolve } from "node:path";
 import { atomicWriteSync } from "../atomic-write.js";
+import { normalizeRealPathForComparison } from "../real-path.js";
 import { computeProjectionSha } from "../projection-content-hash.js";
 import { isSafeProjectionKey, isValidCompatMarker } from "./compat-marker-validation.js";
 export { computeProjectionSha, normalizeForHash } from "../projection-content-hash.js";
@@ -77,21 +78,13 @@ export function compatMarkerPath(basePath: string): string {
 }
 
 /**
- * Normalize markdown content before hashing so cosmetic differences (trailing
- * whitespace, CRLF) don't produce false-positive drift. Conservative: only
- * transforms that are provably round-trippable through gsd-pi's projection.
+ * Key `absPath` relative to `rootPath`, or null if it is not underneath it.
+ * Both sides are canonicalized first so a file reached through a symlinked
+ * `.gsd` is compared in the same namespace as the realpath'd root.
  */
-function normalizeRealPath(p: string): string {
-  try {
-    return realpathSync.native(p);
-  } catch {
-    return resolve(p);
-  }
-}
-
 function rootRelativeKey(rootPath: string, absPath: string): string | null {
-  const root = normalizeRealPath(rootPath);
-  const abs = normalizeRealPath(absPath);
+  const root = normalizeRealPathForComparison(rootPath);
+  const abs = normalizeRealPathForComparison(absPath);
   const rel = relative(root, abs);
   if (!rel || rel === ".." || rel.startsWith(`..${sepForRelative(rel)}`) || isAbsolute(rel)) {
     return null;
@@ -103,13 +96,23 @@ function sepForRelative(rel: string): string {
   return rel.includes("\\") ? "\\" : "/";
 }
 
-export function deriveCompatProjectionKey(absPath: string, roots: readonly string[]): string {
+/**
+ * Key a projection file relative to the first root that contains it.
+ *
+ * Returns null when the path is under none of them. Emitting the bare
+ * `relative()` result instead — as an earlier fallback did — produces a
+ * `../`-escaping string that is still a "valid" primary key, so the same
+ * logical artifact ends up stored under two keys that then drift apart (#3).
+ */
+export function deriveCompatProjectionKey(
+  absPath: string,
+  roots: readonly string[],
+): string | null {
   for (const root of roots) {
     const key = rootRelativeKey(root, absPath);
     if (key) return key;
   }
-  const fallbackRoot = roots[roots.length - 1] ?? dirname(absPath);
-  return relative(fallbackRoot, absPath).replace(/\\/g, "/");
+  return null;
 }
 
 /**
@@ -196,7 +199,7 @@ export function recordCompatProjectionWrite(
   const projectionPath = deriveCompatProjectionKey(filePath, [join(basePath, ".gsd")]);
   // Projection keys are resolved under .gsd; never persist one that escapes
   // that root.
-  if (!isSafeProjectionKey(projectionPath)) return;
+  if (!projectionPath || !isSafeProjectionKey(projectionPath)) return;
   const marker = readCompatMarker(basePath);
   marker.projections[projectionPath] = {
     sha: computeProjectionSha(content),
