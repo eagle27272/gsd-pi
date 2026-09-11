@@ -2,6 +2,8 @@
  * Shared input-validation primitives for GSD tool handlers.
  */
 
+import type { HorizontalChecklistItem } from "./db-milestone-artifact-rows.js";
+
 /** Type guard: value is a string with at least one non-whitespace character. */
 export function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -42,4 +44,29 @@ export function validateStringArray(value: unknown, field: string): string[] {
     throw new Error(`${field} must contain only non-empty strings`);
   }
   return value;
+}
+
+/**
+ * Validate that `value` is an array of Horizontal Checklist entries.
+ * Throws with a message referencing `field` on failure.
+ * Returns the validated array with `checked` normalized to a boolean.
+ */
+export function validateHorizontalChecklist(value: unknown, field: string): HorizontalChecklistItem[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${field} must be an array`);
+  }
+  return value.map((entry, index) => {
+    if (!entry || typeof entry !== "object") {
+      throw new Error(`${field}[${index}] must be an object`);
+    }
+    const item = (entry as Record<string, unknown>).item;
+    const checked = (entry as Record<string, unknown>).checked;
+    if (!isNonEmptyString(item)) {
+      throw new Error(`${field}[${index}] must include a non-empty item`);
+    }
+    if (checked !== undefined && typeof checked !== "boolean") {
+      throw new Error(`${field}[${index}].checked must be a boolean`);
+    }
+    return { item, checked: checked === true };
+  });
 }

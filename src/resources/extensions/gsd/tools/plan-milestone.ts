@@ -2,7 +2,7 @@
 // File Purpose: Plans milestone roadmap state through DB-backed workflow tools.
 
 import type { HorizontalChecklistItem } from "../db-milestone-artifact-rows.js";
-import { isNonEmptyString, validateStringArray, validateTitle } from "../validation.js";
+import { isNonEmptyString, validateHorizontalChecklist, validateStringArray, validateTitle } from "../validation.js";
 import { persistMilestonePlan } from "../milestone-planning-persistence.js";
 import type { PlanningInvocation } from "../planning-invocation.js";
 
@@ -105,26 +105,6 @@ function validateProofStrategy(value: unknown): Array<{ riskOrUnknown: string; r
       throw new Error(`proofStrategy[${index}] must include non-empty riskOrUnknown, retireIn, and whatWillBeProven`);
     }
     return { riskOrUnknown, retireIn, whatWillBeProven };
-  });
-}
-
-function validateHorizontalChecklist(value: unknown): HorizontalChecklistItem[] {
-  if (!Array.isArray(value)) {
-    throw new Error("horizontalChecklist must be an array");
-  }
-  return value.map((entry, index) => {
-    if (!entry || typeof entry !== "object") {
-      throw new Error(`horizontalChecklist[${index}] must be an object`);
-    }
-    const item = (entry as Record<string, unknown>).item;
-    const checked = (entry as Record<string, unknown>).checked;
-    if (!isNonEmptyString(item)) {
-      throw new Error(`horizontalChecklist[${index}] must include a non-empty item`);
-    }
-    if (checked !== undefined && typeof checked !== "boolean") {
-      throw new Error(`horizontalChecklist[${index}].checked must be a boolean`);
-    }
-    return { item, checked: checked === true };
   });
 }
 
@@ -241,7 +221,7 @@ function validateParams(params: PlanMilestoneParams): ValidatedPlanMilestonePara
     verificationUat: params.verificationUat ?? "",
     definitionOfDone: params.definitionOfDone ? validateStringArray(params.definitionOfDone, "definitionOfDone") : [],
     requirementCoverage: params.requirementCoverage ?? "Not provided.",
-    horizontalChecklist: params.horizontalChecklist ? validateHorizontalChecklist(params.horizontalChecklist) : [],
+    horizontalChecklist: params.horizontalChecklist ? validateHorizontalChecklist(params.horizontalChecklist, "horizontalChecklist") : [],
     boundaryMapMarkdown: params.boundaryMapMarkdown ?? "Not provided.",
     slices: validateSlices(params.slices),
   };

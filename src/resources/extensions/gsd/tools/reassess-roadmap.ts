@@ -10,9 +10,10 @@ import {
   targetMilestoneFile,
 } from "../paths.js";
 import { deriveCompatProjectionKey } from "../compat/compat-marker.js";
+import type { HorizontalChecklistItem } from "../db-milestone-artifact-rows.js";
 import { clearParseCache } from "../files.js";
 import { isClosedStatus } from "../status-guards.js";
-import { isNonEmptyString, validateStringArray } from "../validation.js";
+import { isNonEmptyString, validateHorizontalChecklist, validateStringArray } from "../validation.js";
 import { removeProjectionFileSync } from "../atomic-write.js";
 import {
   adoptLifecycleIfMissing,
@@ -76,6 +77,7 @@ export interface ReassessRoadmapParams {
       verificationUat?: string;
       definitionOfDone?: string[];
       requirementCoverage?: string;
+      horizontalChecklist?: Array<{ item: string; checked?: boolean }>;
       boundaryMapMarkdown?: string;
     };
     completedSlices?: Array<{
@@ -132,7 +134,14 @@ function removeSlicePlanProjections(basePath: string, milestoneId: string, slice
   }
 }
 
-function validateParams(params: ReassessRoadmapParams): ReassessRoadmapParams {
+/** Post-validation shape: checklist `checked` has been normalized to a boolean. */
+type ValidatedReassessRoadmapParams = ReassessRoadmapParams & {
+  metadataCorrections?: NonNullable<ReassessRoadmapParams["metadataCorrections"]> & {
+    milestone?: { horizontalChecklist?: HorizontalChecklistItem[] };
+  };
+};
+
+function validateParams(params: ReassessRoadmapParams): ValidatedReassessRoadmapParams {
   if (!isNonEmptyString(params?.milestoneId)) throw new Error("milestoneId is required");
   if (!isNonEmptyString(params?.completedSliceId)) throw new Error("completedSliceId is required");
   if (!isNonEmptyString(params?.verdict)) throw new Error("verdict is required");
@@ -178,6 +187,7 @@ function validateParams(params: ReassessRoadmapParams): ReassessRoadmapParams {
         "verificationUat",
         "definitionOfDone",
         "requirementCoverage",
+        "horizontalChecklist",
         "boundaryMapMarkdown",
       ]);
       const unknownField = Object.keys(milestone).find((key) => !allowedMilestoneFields.has(key));
@@ -197,6 +207,14 @@ function validateParams(params: ReassessRoadmapParams): ReassessRoadmapParams {
         if (milestone[field] !== undefined && typeof milestone[field] !== "string") {
           throw new Error(`metadataCorrections.milestone.${field} must be a string`);
         }
+      }
+      if (milestone.horizontalChecklist !== undefined) {
+        // Normalize in place so the apply path hands upsertMilestonePlanning
+        // entries whose `checked` is a boolean, not undefined.
+        milestone.horizontalChecklist = validateHorizontalChecklist(
+          milestone.horizontalChecklist,
+          "metadataCorrections.milestone.horizontalChecklist",
+        );
       }
     }
 
@@ -266,7 +284,9 @@ function validateParams(params: ReassessRoadmapParams): ReassessRoadmapParams {
     }
   }
 
-  return params;
+  // Validation normalizes in place, so the checklist entries reached above are
+  // already HorizontalChecklistItem — a narrowing TypeScript cannot see.
+  return params as ValidatedReassessRoadmapParams;
 }
 
 export async function handleReassessRoadmap(
@@ -275,7 +295,7 @@ export async function handleReassessRoadmap(
   invocation: PlanningInvocation,
 ): Promise<ReassessRoadmapResult | { error: string }> {
   // ── Validate ──────────────────────────────────────────────────────
-  let params: ReassessRoadmapParams;
+  let params: ValidatedReassessRoadmapParams;
   try {
     params = validateParams(rawParams);
   } catch (err) {
