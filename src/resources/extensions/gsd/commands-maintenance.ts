@@ -13,6 +13,7 @@ import {
 import { createHash, randomUUID } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
 import { deriveState } from "./state.js";
+import { canonicalJson, hashValue } from "./canonical-json.js";
 import { nativeBranchList, nativeDetectMainBranch, nativeBranchListMerged, nativeBranchDelete, nativeForEachRef, nativeUpdateRef } from "./native-git-bridge.js";
 import { logWarning } from "./workflow-logger.js";
 import {
@@ -1127,13 +1128,12 @@ function readRestoreBackupIntent(path: string): RestoreBackupIntent | null {
 }
 
 async function claimRestoreBackupIntent(path: string, intent: RestoreBackupIntent): Promise<boolean> {
-  const { canonicalLegacyImportJson } = await import("./legacy-import-preview.js");
   const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
   let fd: number | undefined;
   let linkAttempted = false;
   try {
     fd = openSync(temporary, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL, 0o600);
-    writeFileSync(fd, canonicalLegacyImportJson(intent), "utf8");
+    writeFileSync(fd, canonicalJson(intent), "utf8");
     fsyncSync(fd);
     closeSync(fd);
     fd = undefined;
@@ -1158,12 +1158,11 @@ async function claimRestoreBackupIntent(path: string, intent: RestoreBackupInten
 }
 
 async function rewriteRestoreBackupIntent(path: string, intent: RestoreBackupIntent): Promise<void> {
-  const { canonicalLegacyImportJson } = await import("./legacy-import-preview.js");
   const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
   let fd: number | undefined;
   try {
     fd = openSync(temporary, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL, 0o600);
-    writeFileSync(fd, canonicalLegacyImportJson(intent), "utf8");
+    writeFileSync(fd, canonicalJson(intent), "utf8");
     fsyncSync(fd);
     closeSync(fd);
     fd = undefined;
@@ -1572,9 +1571,8 @@ export async function handleDbRestoreBackup(
     // Deterministic receipt/intent material: every field derives only from the
     // backup file and its contents, so a crash-converging re-run recomputes
     // the identical request and the receipt domain operation replays.
-    const { canonicalLegacyImportJson, hashLegacyImportValue } = await import("./legacy-import-preview.js");
     const applicationOperationId = `backup-restore/${backupSha.slice("sha256:".length, "sha256:".length + 24)}`;
-    const applicationIdentityHash = hashLegacyImportValue({
+    const applicationIdentityHash = hashValue({
       backupRestoreApplication: 1,
       applicationOperationId,
       backupSha256: backupSha,
@@ -1591,14 +1589,14 @@ export async function handleDbRestoreBackup(
       applicationResultingProjectRevision: verified.projectRevision + 1,
       applicationResultingAuthorityEpoch: verified.authorityEpoch,
     };
-    const erasedLineageJson = canonicalLegacyImportJson(erasedLineage);
-    const erasedLineageHash = hashLegacyImportValue(erasedLineage);
+    const erasedLineageJson = canonicalJson(erasedLineage);
+    const erasedLineageHash = hashValue(erasedLineage);
     const previewId = basename(backupPath);
-    const previewHash = hashLegacyImportValue({ backupRestorePreview: 1, previewId, backupSha256: backupSha });
-    const backupId = hashLegacyImportValue({ backupRestoreBackup: 1, fileName: previewId, backupSha256: backupSha, backupByteSize: byteSize });
-    const differenceHash = hashLegacyImportValue({ backupRestoreDifference: 1, backupSha256: backupSha, backupSchemaVersion: verified.schemaVersion, projectId: verified.projectId });
-    const consentHash = hashLegacyImportValue(consent);
-    const verificationHash = hashLegacyImportValue({
+    const previewHash = hashValue({ backupRestorePreview: 1, previewId, backupSha256: backupSha });
+    const backupId = hashValue({ backupRestoreBackup: 1, fileName: previewId, backupSha256: backupSha, backupByteSize: byteSize });
+    const differenceHash = hashValue({ backupRestoreDifference: 1, backupSha256: backupSha, backupSchemaVersion: verified.schemaVersion, projectId: verified.projectId });
+    const consentHash = hashValue(consent);
+    const verificationHash = hashValue({
       backupRestoreVerification: 1,
       backupSha256: backupSha,
       quickCheck: "ok",
@@ -1626,7 +1624,7 @@ export async function handleDbRestoreBackup(
       consentHash,
       verificationHash,
     };
-    const requestHash = hashLegacyImportValue({
+    const requestHash = hashValue({
       backupRestoreRequest: 1,
       backupSha256: backupSha,
       backupByteSize: byteSize,
