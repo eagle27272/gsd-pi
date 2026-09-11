@@ -4,7 +4,7 @@ import {
   getForbiddenGsdToolReason,
 } from "./unit-tool-contracts.js";
 import {
-  CANONICAL_WORKFLOW_TOOL_NAMES,
+  WORKFLOW_TOOL_ALIAS_PAIRS,
   isWorkflowSurfaceAliasTool,
   stripMcpToolPrefix,
 } from "./workflow-tool-surface.js";
@@ -35,7 +35,7 @@ const EXTRA_SCOPED_GSD_LIFECYCLE_TOOLS = [
 const SCOPED_GSD_LIFECYCLE_TOOLS = new Set(
   [
     ...Object.values(AUTO_UNIT_SCOPED_TOOLS).flat(),
-    ...CANONICAL_WORKFLOW_TOOL_NAMES,
+    ...WORKFLOW_TOOL_ALIAS_PAIRS.map(({ canonical }) => canonical),
     ...EXTRA_SCOPED_GSD_LIFECYCLE_TOOLS,
   ]
     .filter((tool) => tool.startsWith("gsd_"))
