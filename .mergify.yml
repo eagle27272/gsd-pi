@@ -1,0 +1,4 @@
+queue_rules:
+  - name: Base Rules
+merge_queue:
+  max_parallel_checks: 3
