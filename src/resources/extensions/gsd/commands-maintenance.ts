@@ -1,7 +1,7 @@
 /**
  * GSD Maintenance — cleanup, skip, dry-run, and recover handlers.
  *
- * Contains: handleCleanupBranches, handleCleanupSnapshots, handleCleanupWorktrees, handleSkip, handleDryRun, handleRecover, handleRebuild
+ * Contains: handleCleanupBranches, handleCleanupSnapshots, handleCleanupWorktrees, handleSkip, handleDryRun, handleRebuild
  */
 
 import type { ExtensionCommandContext } from "@gsd/pi-coding-agent";
@@ -16,23 +16,6 @@ import { deriveState } from "./state.js";
 import { canonicalJson, hashValue } from "./canonical-json.js";
 import { nativeBranchList, nativeDetectMainBranch, nativeBranchListMerged, nativeBranchDelete, nativeForEachRef, nativeUpdateRef } from "./native-git-bridge.js";
 import { logWarning } from "./workflow-logger.js";
-import {
-  applyPreparedVerifiedRecoverApplication,
-  loadRetainedVerifiedRecoverApplication,
-  loadVerifiedRecoverApplication,
-  prepareVerifiedRecoverApplication,
-  type PreparedVerifiedRecoverApplication,
-} from "./db-workspace.js";
-import {
-  executeLegacyImportRecoveryAction,
-  parseLegacyImportRecoveryAction,
-} from "./legacy-import-recovery-action.js";
-import {
-  formatLegacyImportForwardRepairChoice,
-  parseLegacyImportForwardRepairChoices,
-} from "./legacy-import-forward-repair-choice-token.js";
-import { LegacyImportBaseSnapshotError } from "./legacy-import-preview-base.js";
-import { LEGACY_IMPORT_RESTORE_ASSESSMENT_CONSENT_SCHEMA_VERSION, type LegacyImportRestoreAssessmentConsent } from "./legacy-import-restore-assessment.js";
 import {
   preserveProjectionChanges,
   rebuildMarkdownProjectionsFromDb,
@@ -485,225 +468,6 @@ export async function handleCleanupProjects(args: string, ctx: ExtensionCommandC
   ctx.ui.notify(lines.join("\n"), "info");
 }
 
-type HierarchyCounts = { milestones: number; slices: number; tasks: number };
-
-function requestedApplication(args: string): string | null {
-  return /(?:^|\s)--application=([^\s]+)(?=\s|$)/u.exec(args)?.[1] ?? null;
-}
-
-function requestedPreviewApproval(args: string): string | null {
-  return /(?:^|\s)--preview=(sha256:[0-9a-f]{64})(?=\s|$)/u.exec(args)?.[1] ?? null;
-}
-
-function requestedRestoreConsent(args: string): LegacyImportRestoreAssessmentConsent | undefined {
-  const evidenceHash = /(?:^|\s)--consent=proceed:destructive-database-restore:(sha256:[0-9a-f]{64})(?=\s|$)/u.exec(args)?.[1];
-  return evidenceHash ? { consentSchemaVersion: LEGACY_IMPORT_RESTORE_ASSESSMENT_CONSENT_SCHEMA_VERSION, decision: "proceed", destructiveDatabaseRestore: true, evidenceHash } : undefined;
-}
-
-async function confirmRecover(
-  ctx: ExtensionCommandContext,
-  prepared: Readonly<PreparedVerifiedRecoverApplication>,
-  approvedPreviewHash: string | null,
-  markdown: HierarchyCounts,
-  beforeDb: HierarchyCounts,
-): Promise<boolean> {
-  const warning = [
-    "gsd recover imports markdown into the database.",
-    "It applies modeled changes through one verified Import Application.",
-    "Existing database rows absent from markdown are not cleared.",
-    "Use /gsd rebuild markdown for normal DB-to-markdown realignment.",
-    "",
-    `  Markdown on disk: ${markdown.milestones}M/${markdown.slices}S/${markdown.tasks}T`,
-    `  Current DB:       ${beforeDb.milestones}M/${beforeDb.slices}S/${beforeDb.tasks}T`,
-    "",
-    prepared.authorizationText,
-  ];
-  const warningText = warning.join("\n");
-
-  if (approvedPreviewHash !== null) {
-    if (approvedPreviewHash !== prepared.preview.preview_hash) {
-      throw new Error("gsd recover approval does not match the sealed Import Preview");
-    }
-    return true;
-  }
-
-  if (typeof ctx.ui.confirm === "function") {
-    const confirmed = await ctx.ui.confirm(
-      "Import markdown into the DB?",
-      `${warningText}\n\nContinue only if the DB is lost or corrupt and markdown is the source you intend to import.`,
-    );
-    if (!confirmed) {
-      ctx.ui.notify("gsd recover cancelled. No database changes made.", "info");
-      return false;
-    }
-    return true;
-  }
-
-  ctx.ui.notify(
-    `${warningText}\n\nNo database changes made. Re-run /gsd recover --preview=${prepared.preview.preview_hash} to approve this exact Preview.`,
-    "warning",
-  );
-  return false;
-}
-
-/**
- * `gsd recover` — Explicitly import legacy markdown into canonical DB state.
- *
- * Applies one sealed Preview through the verified Import Application boundary,
- * then calls `deriveState()` to verify sanity.
- *
- * Prints counts of recovered items and the resulting project phase.
- */
-export async function handleRecover(
-  ctx: ExtensionCommandContext,
-  basePath: string,
-  args = "",
-): Promise<void> {
-  const { isDbAvailable: dbAvailable } = await import("./gsd-db.js");
-  const { invalidateStateCache } = await import("./state.js");
-  const { countDbHierarchy, countMarkdownHierarchy } = await import("./migration-auto-check.js");
-
-  if (!dbAvailable()) {
-    ctx.ui.notify("gsd recover: No database open. Run a GSD command first to initialize the DB.", "error");
-    return;
-  }
-
-  // Show both sides before the user approves the explicit import. Application
-  // updates only modeled Preview targets and never clears absent DB rows.
-  const markdown = countMarkdownHierarchy(basePath);
-  const beforeDb = countDbHierarchy();
-
-  try {
-    const action = parseLegacyImportRecoveryAction(args.trim().split(/\s+/u).filter(Boolean));
-    const applicationId = requestedApplication(args);
-    if (!applicationId && action !== "assess") {
-      throw new Error("run gsd recover assessment first, then use its --application evidence");
-    }
-    let application = applicationId
-      ? loadVerifiedRecoverApplication(applicationId)
-      : loadRetainedVerifiedRecoverApplication();
-    let appliedPreview = false;
-    if (!application) {
-      const prepared = prepareVerifiedRecoverApplication(basePath);
-      if (!(await confirmRecover(
-        ctx,
-        prepared,
-        requestedPreviewApproval(args),
-        markdown,
-        beforeDb,
-      ))) return;
-      application = applyPreparedVerifiedRecoverApplication(
-        prepared,
-        prepared.preview.preview_hash,
-      );
-      appliedPreview = true;
-    }
-    const { backup } = application;
-    const recoveryAction = executeLegacyImportRecoveryAction(
-      application,
-      action,
-      parseLegacyImportForwardRepairChoices(args),
-      requestedRestoreConsent(args),
-    );
-    const recoveryAssessment = recoveryAction.status === "assessed"
-      || recoveryAction.status === "choice-required"
-      ? recoveryAction.assessment
-      : null;
-
-    const counts = countDbHierarchy();
-    invalidateStateCache();
-    const state = await deriveState(basePath);
-    const lines = [
-      `gsd recover: ${applicationId || application.receipt.status === "replayed" ? "loaded retained" : "applied verified markdown Preview"} Import Application`,
-      `  Milestones: ${counts.milestones}`,
-      `  Slices:     ${counts.slices}`,
-      `  Tasks:      ${counts.tasks}`,
-      ``,
-      `  Phase:      ${state.phase}`,
-    ];
-    // Post-import verification: markdown that failed to parse imports as fewer
-    // rows than countMarkdownHierarchy saw on disk. Surface the shortfall.
-    if (
-      appliedPreview
-      && (counts.milestones < markdown.milestones
-        || counts.slices < markdown.slices
-        || counts.tasks < markdown.tasks)
-    ) {
-      lines.push(
-        ``,
-        `  ⚠ Imported fewer rows than markdown contained ` +
-          `(${markdown.milestones}M/${markdown.slices}S/${markdown.tasks}T on disk). ` +
-          `Some markdown may have failed to parse — review before continuing.`,
-      );
-    }
-    lines.push(``, `  Verified backup: ${backup.backup_ref}`);
-    if (recoveryAction.status === "restored") {
-      lines.push(``, `  Restored database: ${recoveryAction.result.status}`);
-    } else if (recoveryAction.status === "forward-repaired") {
-      lines.push(``, `  Forward Repair: ${recoveryAction.result.status}`);
-    } else if (recoveryAction.status === "choice-required") {
-      lines.push(
-        ``,
-        `  ${recoveryAction.assessment.recommendation.recommendationText}`,
-        ...recoveryAction.choices.map((choice) => (
-          `  Review ${choice.reasonCode} at ${choice.instructionIndex}:${choice.targetKind}:${choice.targetKey} (${choice.reviewHash}).\n`
-          + `    Current canonical value: ${choice.currentValueJson}\n`
-          + `    Proposed backup mutation: ${choice.proposedMutationJson}\n`
-          + `    Recommended: ${choice.recommendedDecision} — ${choice.recommendationRationale}\n`
-          + `Use ${formatLegacyImportForwardRepairChoice(choice, "preserve-later")} or `
-          + formatLegacyImportForwardRepairChoice(choice, "restore-backup")
-        )),
-      );
-    } else if (recoveryAssessment) {
-      lines.push(
-        ``,
-        `  ${recoveryAssessment.recommendation.recommendationText}`,
-        `  Application: ${application.receipt.operationId}`,
-      );
-      if (recoveryAssessment.decision === "restore-consent-required") {
-        lines.push(`  To consent: --application=${application.receipt.operationId} --restore --consent=proceed:destructive-database-restore:${recoveryAssessment.evidenceHash}`);
-      } else if (recoveryAssessment.decision === "forward-repair-required") {
-        lines.push(`  Use --application=${application.receipt.operationId} --forward-repair to apply the assessed action.`);
-      }
-    }
-    if (state.activeMilestone) {
-      lines.push(`  Active:     ${state.activeMilestone.id}: ${state.activeMilestone.title}`);
-    }
-    if (state.activeSlice) {
-      lines.push(`  Slice:      ${state.activeSlice.id}: ${state.activeSlice.title}`);
-    }
-    if (state.activeTask) {
-      lines.push(`  Task:       ${state.activeTask.id}: ${state.activeTask.title}`);
-    }
-
-    if (recoveryAction.status === "choice-required") {
-      ctx.ui.notify(lines.join("\n"), "warning");
-      return;
-    }
-    if (
-      recoveryAssessment?.decision === "transaction-rollback-only"
-      || recoveryAssessment?.decision === "temporarily-unavailable"
-      || recoveryAssessment?.decision === "refused"
-    ) {
-      lines.push(`  Assessment: ${recoveryAssessment.decision} (${recoveryAssessment.reasonCode})`);
-      ctx.ui.notify(lines.join("\n"), recoveryAssessment.decision === "refused" ? "error" : "warning");
-      return;
-    }
-    process.stderr.write(
-      `gsd-recover: recovered ${counts.milestones}M/${counts.slices}S/${counts.tasks}T hierarchy\n`,
-    );
-    ctx.ui.notify(lines.join("\n"), "success");
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const details = err instanceof LegacyImportBaseSnapshotError
-      ? ` [${err.code}] context=${JSON.stringify(err.context)}`
-      : "";
-    const msg = `${message}${details}`;
-    logWarning("command", `recover failed: ${msg}`);
-    ctx.ui.notify(`gsd recover failed: ${msg}`, "error");
-  }
-}
-
 type RebuildTarget = "markdown" | "database" | "usage";
 
 function parseRebuildTarget(args: string): RebuildTarget {
@@ -898,11 +662,11 @@ export async function handleRebuild(ctx: ExtensionCommandContext, basePath: stri
 
 // ─── gsd db restore-backup ──────────────────────────────────────────────────
 //
-// Explicit user-facing restore of a verified pre-migration backup
-// (`gsd.db.backup-v<N>`). The restore publishes the backup through the same
-// replacement-intent machinery as the legacy-import live restore, persists an
-// auditable receipt through the authority-recovery writers, and refuses
-// anything that fails verification or lacks an exact consent token.
+// Explicit user-facing restore of a verified backup (`gsd.db.backup-v<N>`).
+// The restore publishes the backup through the database replacement-intent
+// machinery, persists an auditable receipt through the authority-recovery
+// writer, and refuses anything that fails verification or lacks an exact
+// consent token.
 
 type RestoreBackupCandidate = {
   path: string;
@@ -965,6 +729,32 @@ function escapeRegExpLiteral(value: string): string {
 
 function sha256FileHex(path: string): string {
   return `sha256:${createHash("sha256").update(readFileSync(path)).digest("hex")}`;
+}
+
+const RESTORE_CONSENT_SCHEMA_VERSION = 1 as const;
+
+/**
+ * The key set and values here are load-bearing: the object is fed to hashValue()
+ * and the digest is persisted in the restore receipt, so changing either breaks
+ * replay of an already-recorded restore.
+ */
+interface RestoreBackupConsent {
+  readonly consentSchemaVersion: typeof RESTORE_CONSENT_SCHEMA_VERSION;
+  readonly decision: "proceed";
+  readonly destructiveDatabaseRestore: true;
+  readonly evidenceHash: string;
+}
+
+function requestedRestoreConsent(args: string): RestoreBackupConsent | undefined {
+  const evidenceHash = /(?:^|\s)--consent=proceed:destructive-database-restore:(sha256:[0-9a-f]{64})(?=\s|$)/u.exec(args)?.[1];
+  return evidenceHash
+    ? {
+      consentSchemaVersion: RESTORE_CONSENT_SCHEMA_VERSION,
+      decision: "proceed",
+      destructiveDatabaseRestore: true,
+      evidenceHash,
+    }
+    : undefined;
 }
 
 function restoreSyncFile(path: string): void {

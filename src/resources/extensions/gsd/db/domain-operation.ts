@@ -8,15 +8,7 @@ import {
   GSD_REVISION_CONFLICT,
   GSDError,
 } from "../errors.js";
-import {
-  canonicalLegacyImportJson,
-  hashLegacyImportValue,
-  isStrictLegacyImportData,
-  isValidLegacyImportPreviewArtifact,
-  type LegacyImportPreviewArtifact,
-} from "../legacy-import-preview.js";
-import type { LegacyImportForwardRepairPlan } from "../legacy-import-forward-repair-plan.js";
-import type { LegacyImportValue } from "../legacy-import-contract.js";
+import { canonicalJson, hashValue } from "../canonical-json.js";
 import { isSqliteBusyError } from "../sqlite-errors.js";
 import {
   assertDatabaseReplacementReceiptIntent,
@@ -48,21 +40,6 @@ export interface DomainOperationRequest {
   payload: DomainJsonValue;
 }
 
-export type ImportDomainOperationRequest = Omit<
-  DomainOperationRequest,
-  "operationType" | "payload"
-> & {
-  operationType: "import.apply";
-  payload: LegacyImportPreviewArtifact;
-};
-
-export type AuthorityCutoverDomainOperationRequest = Omit<
-  DomainOperationRequest,
-  "operationType"
-> & {
-  operationType: "authority.cutover";
-};
-
 export interface ImportRestoreReceiptContract {
   readonly applicationOperationId: string;
   readonly applicationIdentityHash: string;
@@ -90,20 +67,6 @@ export type ImportRestoreDomainOperationRequest = Omit<
   operationType: "import.restore";
   payload: ImportRestoreReceiptContract;
 };
-
-export type ImportForwardRepairDomainOperationRequest = Omit<
-  DomainOperationRequest,
-  "operationType" | "payload"
-> & {
-  operationType: "import.forward_repair";
-  payload: LegacyImportForwardRepairPlan;
-};
-
-interface AuthorityCutoverReceiptContract {
-  readonly authorityContractVersion: number;
-  readonly evidenceHash: string;
-  readonly consentHash: string;
-}
 
 const IMPORT_RESTORE_RECEIPT_KEYS = [
   "applicationOperationId",
@@ -226,46 +189,6 @@ function requireNonNegativeSafeInteger(value: number, field: string): void {
   }
 }
 
-function snapshotAuthorityCutoverReceiptContract(payload: unknown): AuthorityCutoverReceiptContract {
-  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new Error("authority cutover payload must be the exact receipt contract");
-  }
-  const descriptors = Object.getOwnPropertyDescriptors(payload);
-  const keys = Object.keys(descriptors);
-  const expected = ["authorityContractVersion", "evidenceHash", "consentHash"];
-  if (
-    Object.getPrototypeOf(payload) !== Object.prototype
-    || Object.getOwnPropertySymbols(payload).length !== 0
-    || keys.length !== expected.length
-    || !expected.every((key) => (
-      Object.hasOwn(descriptors, key)
-      && Object.hasOwn(descriptors[key] ?? {}, "value")
-      && descriptors[key]?.enumerable === true
-    ))
-  ) {
-    throw new Error("authority cutover payload must be the exact receipt contract");
-  }
-  const authorityContractVersion = descriptors["authorityContractVersion"]?.value as unknown;
-  const evidenceHash = descriptors["evidenceHash"]?.value as unknown;
-  const consentHash = descriptors["consentHash"]?.value as unknown;
-  if (!Number.isSafeInteger(authorityContractVersion) || Number(authorityContractVersion) < 1) {
-    throw new Error("authority cutover contract version must be a positive safe integer");
-  }
-  if (
-    typeof evidenceHash !== "string"
-    || typeof consentHash !== "string"
-    || !/^sha256:[0-9a-f]{64}$/.test(evidenceHash)
-    || !/^sha256:[0-9a-f]{64}$/.test(consentHash)
-  ) {
-    throw new Error("authority cutover receipt hashes must be canonical SHA-256 digests");
-  }
-  return Object.freeze({
-    authorityContractVersion: Number(authorityContractVersion),
-    evidenceHash,
-    consentHash,
-  });
-}
-
 function snapshotImportRestoreReceiptContract(payload: unknown): ImportRestoreReceiptContract {
   if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
     throw new Error("import restore payload must be the exact receipt contract");
@@ -340,8 +263,8 @@ function snapshotImportRestoreReceiptContract(payload: unknown): ImportRestoreRe
     || typeof lineage !== "object"
     || Array.isArray(lineage)
     || Object.getPrototypeOf(lineage) !== Object.prototype
-    || canonicalLegacyImportJson(lineage) !== value.erasedLineageJson
-    || hashLegacyImportValue(lineage) !== value.erasedLineageHash
+    || canonicalJson(lineage) !== value.erasedLineageJson
+    || hashValue(lineage) !== value.erasedLineageHash
   ) {
     throw new Error("erased import lineage must be canonical and hash-bound");
   }
@@ -473,19 +396,10 @@ function requestHash(
 
 /**
  * Recompute the hash an executor durably stored in workflow_operations
- * .request_hash. import.apply binds the operation to the sealed Preview
- * artifact hash (executeImportDomainOperation), and authority.cutover commits
- * with the epoch-advancing request hash (_executeAuthorityCutoverDomainOperation);
- * every other operation stores the conventional request hash.
+ * .request_hash.
  */
 function storedRequestHash(request: DomainOperationRequest): string {
-  if (request.operationType === "import.apply") {
-    if (!isValidLegacyImportPreviewArtifact(request.payload)) {
-      throw new Error("import.apply receipt verification requires the sealed Preview artifact payload");
-    }
-    return request.payload.preview_hash;
-  }
-  return requestHash(request, request.operationType === "authority.cutover");
+  return requestHash(request);
 }
 
 function validateMutation(mutation: DomainOperationMutation): string[] {
@@ -640,7 +554,7 @@ export function assertDomainOperationReceiptComponents(
       && row["entity_type"] === event.entityType
       && row["entity_id"] === event.entityId
       && row["caused_by_event_id"] === causedBy
-      && row["payload_json"] === canonicalLegacyImportJson(event.payload);
+      && row["payload_json"] === canonicalJson(event.payload);
   });
   const outbox = db.prepare(`
     SELECT outbox.outbox_id, event.event_index, outbox.destination
@@ -744,93 +658,6 @@ function requireCommittedProvenance(
   return operation;
 }
 
-function requireMatchingImportApplication(
-  operation: OperationRow,
-  artifact: LegacyImportPreviewArtifact,
-): void {
-  const preview = artifact.preview;
-  const row = getDb().prepare(`
-    SELECT COUNT(*) AS count
-    FROM workflow_import_applications
-    WHERE operation_id = :operation_id
-      AND project_id = :project_id
-      AND import_kind = :import_kind
-      AND importer_version = :importer_version
-      AND preview_schema_version = :preview_schema_version
-      AND preview_id = :preview_id
-      AND preview_hash = :preview_hash
-      AND base_project_revision = :base_project_revision
-      AND base_authority_epoch = :base_authority_epoch
-      AND base_database_schema_version = :base_database_schema_version
-      AND source_set_hash = :source_set_hash
-      AND change_set_hash = :change_set_hash
-      AND create_count = :create_count
-      AND update_count = :update_count
-      AND delete_count = :delete_count
-      AND preserve_count = :preserve_count
-      AND unparsed_count = :unparsed_count
-      AND unresolved_count = :unresolved_count
-      AND preview_json = :preview_json
-      AND resulting_project_revision = :resulting_project_revision
-      AND resulting_authority_epoch = :resulting_authority_epoch
-  `).get({
-    ":operation_id": operation.operation_id,
-    ":project_id": operation.project_id,
-    ":import_kind": preview.import_kind,
-    ":importer_version": preview.importer_version,
-    ":preview_schema_version": preview.preview_schema_version,
-    ":preview_id": preview.preview_id,
-    ":preview_hash": artifact.preview_hash,
-    ":base_project_revision": operation.expected_revision,
-    ":base_authority_epoch": operation.expected_authority_epoch,
-    ":base_database_schema_version": preview.base_database_schema_version,
-    ":source_set_hash": preview.source_set_hash,
-    ":change_set_hash": preview.change_set_hash,
-    ":create_count": preview.counts.create,
-    ":update_count": preview.counts.update,
-    ":delete_count": preview.counts.delete,
-    ":preserve_count": preview.counts.preserve,
-    ":unparsed_count": preview.counts.unparsed,
-    ":unresolved_count": preview.counts.unresolved,
-    ":preview_json": canonicalLegacyImportJson(preview),
-    ":resulting_project_revision": operation.resulting_revision,
-    ":resulting_authority_epoch": operation.resulting_authority_epoch,
-  });
-  if (row?.["count"] !== 1) {
-    throw new Error("import Domain Operation requires exactly one matching Application receipt");
-  }
-}
-
-function requireMatchingAuthorityCutover(
-  operation: OperationRow,
-  contract: Readonly<AuthorityCutoverReceiptContract>,
-): void {
-  const row = getDb().prepare(`
-    SELECT COUNT(*) AS count
-    FROM workflow_authority_cutovers
-    WHERE operation_id = :operation_id
-      AND project_id = :project_id
-      AND authority_contract_version = :authority_contract_version
-      AND evidence_hash = :evidence_hash
-      AND consent_hash = :consent_hash
-      AND cutover_at = :cutover_at
-      AND resulting_project_revision = :resulting_project_revision
-      AND resulting_authority_epoch = :resulting_authority_epoch
-  `).get({
-    ":operation_id": operation.operation_id,
-    ":project_id": operation.project_id,
-    ":authority_contract_version": contract.authorityContractVersion,
-    ":evidence_hash": contract.evidenceHash,
-    ":consent_hash": contract.consentHash,
-    ":cutover_at": operation.created_at,
-    ":resulting_project_revision": operation.resulting_revision,
-    ":resulting_authority_epoch": operation.resulting_authority_epoch,
-  });
-  if (row?.["count"] !== 1) {
-    throw new Error("authority cutover Domain Operation requires one exact receipt");
-  }
-}
-
 function requireMatchingImportRestore(
   operation: OperationRow,
   contract: Readonly<ImportRestoreReceiptContract>,
@@ -889,58 +716,6 @@ function requireMatchingImportRestore(
   }
 }
 
-function requireMatchingImportForwardRepair(
-  operation: OperationRow,
-  plan: Readonly<LegacyImportForwardRepairPlan>,
-): void {
-  const row = getDb().prepare(`
-    SELECT COUNT(*) AS count
-    FROM workflow_import_forward_repairs
-    WHERE operation_id = :operation_id
-      AND project_id = :project_id
-      AND application_operation_id = :application_operation_id
-      AND application_identity_hash = :application_identity_hash
-      AND preview_id = :preview_id
-      AND preview_hash = :preview_hash
-      AND backup_id = :backup_id
-      AND difference_hash = :difference_hash
-      AND plan_schema_version = :plan_schema_version
-      AND plan_hash = :plan_hash
-      AND plan_json = :plan_json
-      AND target_count = :target_count
-      AND mutation_count = :mutation_count
-      AND preserved_count = :preserved_count
-      AND rejected_count = :rejected_count
-      AND unresolved_count = :unresolved_count
-      AND repaired_at = :repaired_at
-      AND resulting_project_revision = :resulting_project_revision
-      AND resulting_authority_epoch = :resulting_authority_epoch
-  `).get({
-    ":operation_id": operation.operation_id,
-    ":project_id": operation.project_id,
-    ":application_operation_id": plan.applicationOperationId,
-    ":application_identity_hash": plan.applicationIdentityHash,
-    ":preview_id": plan.previewId,
-    ":preview_hash": plan.previewHash,
-    ":backup_id": plan.backupId,
-    ":difference_hash": plan.differenceHash,
-    ":plan_schema_version": plan.planSchemaVersion,
-    ":plan_hash": hashLegacyImportValue(plan as unknown as DomainJsonValue),
-    ":plan_json": canonicalLegacyImportJson(plan as unknown as LegacyImportValue),
-    ":target_count": plan.targetCount,
-    ":mutation_count": plan.mutationCount,
-    ":preserved_count": plan.preservedCount,
-    ":rejected_count": plan.rejectedCount,
-    ":unresolved_count": plan.unresolvedCount,
-    ":repaired_at": operation.created_at,
-    ":resulting_project_revision": operation.resulting_revision,
-    ":resulting_authority_epoch": operation.resulting_authority_epoch,
-  });
-  if (row?.["count"] !== 1) {
-    throw new Error("import Forward Repair Domain Operation requires one exact receipt");
-  }
-}
-
 function staleAuthority(request: DomainOperationRequestIdentity, authority: AuthorityRow): never {
   if (authority.revision !== request.expectedRevision) {
     throw new GSDError(
@@ -972,12 +747,9 @@ function runDomainOperationTransaction(fn: () => DomainOperationResult): DomainO
 function executeDomainOperationCore(
   request: DomainOperationRequestIdentity,
   hash: string,
-  importPreview: LegacyImportPreviewArtifact | null,
-  authorityCutover: Readonly<AuthorityCutoverReceiptContract> | null,
   importRestore: Readonly<ImportRestoreReceiptContract> | null,
   mutate: (context: Readonly<DomainOperationContext>) => DomainOperationMutation,
   preCommit: (() => void) | null = null,
-  importForwardRepair: Readonly<LegacyImportForwardRepairPlan> | null = null,
 ): DomainOperationResult {
   const result = runDomainOperationTransaction((): DomainOperationResult => {
     const db = getDb();
@@ -1003,10 +775,7 @@ function executeDomainOperationCore(
     }) as unknown as OperationRow | undefined;
     if (existing) {
       requireReplayMatch(existing, request, hash);
-      if (importPreview) requireMatchingImportApplication(existing, importPreview);
-      if (authorityCutover) requireMatchingAuthorityCutover(existing, authorityCutover);
       if (importRestore) requireMatchingImportRestore(existing, importRestore);
-      if (importForwardRepair) requireMatchingImportForwardRepair(existing, importForwardRepair);
       preCommit?.();
       return loadReceipt(existing, "replayed");
     }
@@ -1021,7 +790,7 @@ function executeDomainOperationCore(
     const now = new Date().toISOString();
     const operationId = randomUUID();
     const resultingRevision = request.expectedRevision + 1;
-    const resultingAuthorityEpoch = request.expectedAuthorityEpoch + (authorityCutover ? 1 : 0);
+    const resultingAuthorityEpoch = request.expectedAuthorityEpoch;
     const context = Object.freeze({
       operationId,
       projectId: authority.project_id,
@@ -1161,10 +930,7 @@ function executeDomainOperationCore(
       });
     });
     hitFault("after-projections", request.operationType);
-    if (importPreview) requireMatchingImportApplication(storedOperation, importPreview);
-    if (authorityCutover) requireMatchingAuthorityCutover(storedOperation, authorityCutover);
     if (importRestore) requireMatchingImportRestore(storedOperation, importRestore);
-    if (importForwardRepair) requireMatchingImportForwardRepair(storedOperation, importForwardRepair);
     hitFault("before-cas", request.operationType);
 
     const update = db.prepare(`
@@ -1211,17 +977,18 @@ export function executeDomainOperation(
 ): DomainOperationResult {
   const snapshot = snapshotDomainOperationRequest(request);
   validateRequestScalars(snapshot.identity);
-  if (snapshot.identity.operationType === "import.apply") {
-    throw new Error("import.apply requires executeImportDomainOperation");
-  }
-  if (snapshot.identity.operationType === "authority.cutover") {
-    throw new Error("authority.cutover requires the typed authority cutover operation");
-  }
   if (snapshot.identity.operationType === "import.restore") {
     throw new Error("import.restore requires the typed import restore operation");
   }
-  if (snapshot.identity.operationType === "import.forward_repair") {
-    throw new Error("import.forward_repair requires the typed Forward Repair operation");
+  // The import-kernel operation types are retired, but their receipt tables
+  // still exist in the schema. Refuse them on the generic path so no operation
+  // row can be written without the typed receipt writer that used to pair with it.
+  if (
+    snapshot.identity.operationType === "import.apply"
+    || snapshot.identity.operationType === "authority.cutover"
+    || snapshot.identity.operationType === "import.forward_repair"
+  ) {
+    throw new Error(`${snapshot.identity.operationType} is a retired operation type`);
   }
   if (isInTransaction()) {
     throw new Error("Domain Operation must own the outer transaction");
@@ -1233,71 +1000,6 @@ export function executeDomainOperation(
   return executeDomainOperationCore(
     snapshot.identity,
     requestHash(stableRequest),
-    null,
-    null,
-    null,
-    mutate,
-  );
-}
-
-export function executeImportDomainOperation(
-  request: ImportDomainOperationRequest,
-  mutate: (context: Readonly<DomainOperationContext>) => DomainOperationMutation,
-): DomainOperationResult {
-  const snapshot = snapshotDomainOperationRequest(request);
-  validateRequestScalars(snapshot.identity);
-  if (snapshot.identity.operationType !== "import.apply") {
-    throw new Error("executeImportDomainOperation requires operationType import.apply");
-  }
-  if (!isStrictLegacyImportData(snapshot.payload)) {
-    throw new Error("import.apply Preview must contain strict data without accessors");
-  }
-  const preview = structuredClone(snapshot.payload);
-  if (!isValidLegacyImportPreviewArtifact(preview)) {
-    throw new Error("import.apply requires a valid sealed Preview artifact");
-  }
-  if (snapshot.identity.expectedRevision !== preview.preview.base_project_revision) {
-    throw new Error("import.apply expectedRevision must match the sealed Preview base revision");
-  }
-  if (snapshot.identity.expectedAuthorityEpoch !== preview.preview.base_authority_epoch) {
-    throw new Error("import.apply expectedAuthorityEpoch must match the sealed Preview base Authority Epoch");
-  }
-  if (isInTransaction()) {
-    throw new Error("Domain Operation must own the outer transaction");
-  }
-  return executeDomainOperationCore(snapshot.identity, preview.preview_hash, preview, null, null, mutate);
-}
-
-/**
- * Private epoch-advancing seam for the strict project-authority cutover
- * aggregate. Public callers must use cutoverProjectAuthority, which validates
- * current Application evidence, Consent, coordination, and the durable receipt.
- */
-export function _executeAuthorityCutoverDomainOperation(
-  request: AuthorityCutoverDomainOperationRequest,
-  mutate: (context: Readonly<DomainOperationContext>) => DomainOperationMutation,
-): DomainOperationResult {
-  const snapshot = snapshotDomainOperationRequest(request);
-  validateRequestScalars(snapshot.identity);
-  if (snapshot.identity.operationType !== "authority.cutover") {
-    throw new Error("typed authority cutover requires operationType authority.cutover");
-  }
-  if (snapshot.identity.expectedAuthorityEpoch === Number.MAX_SAFE_INTEGER) {
-    throw new Error("expectedAuthorityEpoch requires safe integer increment headroom");
-  }
-  if (isInTransaction()) {
-    throw new Error("Domain Operation must own the outer transaction");
-  }
-  const stableRequest = {
-    ...snapshot.identity,
-    payload: snapshot.payload as DomainJsonValue,
-  };
-  const receipt = snapshotAuthorityCutoverReceiptContract(snapshot.payload);
-  return executeDomainOperationCore(
-    snapshot.identity,
-    requestHash(stableRequest, true),
-    null,
-    receipt,
     null,
     mutate,
   );
@@ -1337,44 +1039,9 @@ export function _executeImportRestoreDomainOperation(
     () => executeDomainOperationCore(
       snapshot.identity,
       requestHash(stableRequest),
-      null,
-      null,
       receipt,
       mutate,
       () => assertDatabaseReplacementReceiptIntent(capability),
     ),
-  );
-}
-
-/** Private transaction seam for the strict Import Forward Repair aggregate. */
-export function _executeImportForwardRepairDomainOperation(
-  request: ImportForwardRepairDomainOperationRequest,
-  mutate: (context: Readonly<DomainOperationContext>) => DomainOperationMutation,
-): DomainOperationResult {
-  const snapshot = snapshotDomainOperationRequest(request);
-  validateRequestScalars(snapshot.identity);
-  if (snapshot.identity.operationType !== "import.forward_repair") {
-    throw new Error("typed Forward Repair requires operationType import.forward_repair");
-  }
-  if (!isStrictLegacyImportData(snapshot.payload)) {
-    throw new Error("import.forward_repair plan must contain strict data without accessors");
-  }
-  if (isInTransaction()) {
-    throw new Error("Domain Operation must own the outer transaction");
-  }
-  const stableRequest = {
-    ...snapshot.identity,
-    payload: snapshot.payload as DomainJsonValue,
-  };
-  const plan = structuredClone(snapshot.payload) as LegacyImportForwardRepairPlan;
-  return executeDomainOperationCore(
-    snapshot.identity,
-    requestHash(stableRequest),
-    null,
-    null,
-    null,
-    mutate,
-    null,
-    plan,
   );
 }

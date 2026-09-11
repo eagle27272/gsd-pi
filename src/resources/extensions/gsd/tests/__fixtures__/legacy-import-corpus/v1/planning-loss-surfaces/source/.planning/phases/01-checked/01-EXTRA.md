@@ -1,3 +1,0 @@
-# Notes
-
-Unsupported phase attachment.

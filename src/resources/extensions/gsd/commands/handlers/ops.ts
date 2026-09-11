@@ -9,7 +9,7 @@ import { handleDoctor, handleCapture, handleKnowledge, handleRunHook, handleSkil
 import { handleInspect } from "../../commands-inspect.js";
 import { handleLogs } from "../../commands-logs.js";
 import { handleDebug } from "../../commands-debug.js";
-import { handleCleanupBranches, handleCleanupSnapshots, handleSkip, handleCleanupProjects, handleCleanupWorktrees, handleRecover, handleRebuild, handleSync, handleDbRestoreBackup } from "../../commands-maintenance.js";
+import { handleCleanupBranches, handleCleanupSnapshots, handleSkip, handleCleanupProjects, handleCleanupWorktrees, handleRebuild, handleSync, handleDbRestoreBackup } from "../../commands-maintenance.js";
 import { handleExport } from "../../export.js";
 import { handleHistory } from "../../history.js";
 import { handleUndo } from "../../undo.js";
@@ -137,12 +137,12 @@ export async function handleOpsCommand(trimmed: string, ctx: ExtensionCommandCon
   }
   if (trimmed === "recover" || trimmed.startsWith("recover ")) {
     const args = trimmed.replace(/^recover\s*/, "").trim();
-    if (args && !args.startsWith("--")) {
-      const { handleTaskRecoveryResume } = await import("../../commands-task-recovery.js");
-      await handleTaskRecoveryResume(args, ctx, projectRoot());
-    } else {
-      await handleRecover(ctx, projectRoot(), args);
+    if (!args || args.startsWith("--")) {
+      ctx.ui.notify("Usage: /gsd recover <task-id>  Example: /gsd recover M001/S01/T03", "warning");
+      return true;
     }
+    const { handleTaskRecoveryResume } = await import("../../commands-task-recovery.js");
+    await handleTaskRecoveryResume(args, ctx, projectRoot());
     return true;
   }
   if (trimmed === "rebuild" || trimmed.startsWith("rebuild ")) {

@@ -195,8 +195,7 @@ export function atomicWriteSyncWithOps(
 }
 
 // Windows fsync (FlushFileBuffers) requires a handle with GENERIC_WRITE, so
-// sync handles open read-write there; POSIX keeps O_RDONLY (same convention as
-// legacy-import-backup.ts hashSnapshotPass).
+// sync handles open read-write there; POSIX keeps O_RDONLY.
 function fsyncFileSyncImpl(path: string): void {
   const access = process.platform === "win32" ? fsConstants.O_RDWR : fsConstants.O_RDONLY;
   const fd = openSync(path, access);
@@ -216,8 +215,8 @@ async function fsyncFileAsyncImpl(path: string): Promise<void> {
   }
 }
 
-// Same convention as legacy-import-backup.ts syncDirectory: POSIX opens the
-// directory and fsyncs it; win32 goes through the native directory entry sync.
+// POSIX opens the directory and fsyncs it; win32 goes through the native
+// directory entry sync.
 function fsyncDirectorySyncImpl(path: string): void {
   if (process.platform === "win32") {
     syncDirectoryEntry(path);
