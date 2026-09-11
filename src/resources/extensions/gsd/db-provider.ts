@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 
 export type DbProviderName = "node:sqlite";
 
-export const MIN_SQLITE_NODE_VERSION = "22.18.0";
+export const MIN_SQLITE_NODE_VERSION = "22.23.0";
 
 export interface SqliteProviderDeps {
   tryRequireNodeSqlite(): unknown;

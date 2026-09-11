@@ -27,9 +27,21 @@ import {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Tests here redirect HOME at a temp dir to control which `.gsd/agent/auth.json`
+ * the provider checks read. GSD_HOME takes precedence over HOME, so it has to be
+ * cleared alongside or the redirect is silently a no-op.
+ */
+function withGsdHomeCleared(
+  vars: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+  if (!("HOME" in vars) || "GSD_HOME" in vars) return vars;
+  return { ...vars, GSD_HOME: undefined };
+}
+
 function withEnv(vars: Record<string, string | undefined>, fn: () => void): void {
   const saved: Record<string, string | undefined> = {};
-  for (const [k, v] of Object.entries(vars)) {
+  for (const [k, v] of Object.entries(withGsdHomeCleared(vars))) {
     saved[k] = process.env[k];
     if (v === undefined) {
       delete process.env[k];
@@ -49,7 +61,7 @@ function withEnv(vars: Record<string, string | undefined>, fn: () => void): void
 
 async function withEnvAsync(vars: Record<string, string | undefined>, fn: () => Promise<void>): Promise<void> {
   const saved: Record<string, string | undefined> = {};
-  for (const [k, v] of Object.entries(vars)) {
+  for (const [k, v] of Object.entries(withGsdHomeCleared(vars))) {
     saved[k] = process.env[k];
     if (v === undefined) {
       delete process.env[k];

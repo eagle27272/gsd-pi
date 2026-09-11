@@ -17,6 +17,7 @@ import { spawnSync } from "node:child_process";
 import { nativeScanGsdTree, type GsdTreeEntry } from "./native-parser-bridge.js";
 import { DIR_CACHE_MAX } from "./constants.js";
 import { gsdHome } from "./gsd-home.js";
+import { normalizeRealPath } from "./real-path.js";
 import { findWorktreeSegment, isGsdWorktreePath, resolveExternalStateProjectGsdFromWorktreePath, resolveWorktreeProjectRoot } from "./worktree-root.js";
 import {
   LAYOUT_SEGMENTS,
@@ -459,18 +460,7 @@ export function _clearGsdRootCache(): void {
   gsdRootCache.clear();
 }
 
-/**
- * Resolve a path to its canonical real path using the native resolver.
- * On macOS case-insensitive (HFS+/APFS) volumes, realpathSync.native normalizes
- * case — ensuring that /foo/Bar and /foo/bar resolve to the same string.
- * Falls back to resolve(p) for non-existent paths.
- *
- * Use this helper everywhere a path is used as an identity/cache key so that
- * all callers agree on the canonical form.
- */
-export function normalizeRealPath(p: string): string {
-  try { return realpathSync.native(p); } catch { return resolve(p); }
-}
+export { normalizeRealPath };
 
 /** Normalize a path for use as a gsdRootCache key (realpath + trailing-slash strip). */
 function normCacheKey(p: string): string {
@@ -646,14 +636,18 @@ function probeGsdRoot(rawBasePath: string): string {
   // 4. Fallback for init/creation
   return local;
 }
-function legacyMilestonesHasSubdirs(basePath: string): boolean {
-  const legacy = join(gsdProjectionRoot(basePath), "milestones");
+function legacyMilestonesHasSubdirsIn(projectionRoot: string): boolean {
+  const legacy = join(projectionRoot, "milestones");
   if (!existsSync(legacy)) return false;
   try {
     return readdirSync(legacy).some(e => statSync(join(legacy, e)).isDirectory() && dirIsContentBearingLegacyMilestone(join(legacy, e)));
   } catch {
     return false;
   }
+}
+
+function legacyMilestonesHasSubdirs(basePath: string): boolean {
+  return legacyMilestonesHasSubdirsIn(gsdProjectionRoot(basePath));
 }
 
 /**
@@ -714,13 +708,21 @@ export function isLegacyMilestonesLayout(basePath: string): boolean {
   return legacyMilestonesHasSubdirs(basePath);
 }
 
-export function milestonesDir(basePath: string): string {
+/** isLegacyMilestonesLayout for callers that already hold the projection root. */
+export function isLegacyMilestonesLayoutIn(projectionRoot: string): boolean {
+  return legacyMilestonesHasSubdirsIn(projectionRoot);
+}
+
+export function milestonesDirIn(projectionRoot: string): string {
   // Layout-aware: return milestones/ when it has legacy content, otherwise phases/.
-  const root = gsdProjectionRoot(basePath);
-  if (legacyMilestonesHasSubdirs(basePath)) {
-    return join(root, "milestones");
+  if (legacyMilestonesHasSubdirsIn(projectionRoot)) {
+    return join(projectionRoot, "milestones");
   }
-  return join(root, LAYOUT_SEGMENTS.level1);
+  return join(projectionRoot, LAYOUT_SEGMENTS.level1);
+}
+
+export function milestonesDir(basePath: string): string {
+  return milestonesDirIn(gsdProjectionRoot(basePath));
 }
 
 /**
@@ -776,10 +778,16 @@ export function phaseDirMatchesMilestoneId(
   return true;
 }
 
-function resolvePhaseDir(basePath: string, milestoneId: string): string | null {
+/**
+ * resolvePhaseDir for callers that already hold the projection root — notably
+ * anything deriving it from the open DB path, where the project root cannot be
+ * recovered by string surgery because `.gsd` may be a symlink into the external
+ * state dir (#2).
+ */
+export function resolvePhaseDirIn(projectionRoot: string, milestoneId: string): string | null {
   // Try flat-phase layout first: phases/NN-slug/ (always scan phases/, even when
   // legacy milestones/ coexists during partial migration).
-  const phasesDir = join(gsdProjectionRoot(basePath), LAYOUT_SEGMENTS.level1);
+  const phasesDir = join(projectionRoot, LAYOUT_SEGMENTS.level1);
   if (existsSync(phasesDir)) {
     const phaseNum = milestoneIdToPhaseNum(milestoneId);
     const canonical = canonicalPhaseDirName(milestoneId);
@@ -817,7 +825,7 @@ function resolvePhaseDir(basePath: string, milestoneId: string): string | null {
   // milestone dir legacy if it actually carries content — git-service.ts creates
   // milestones/<MID>/ for integration-branch metadata even in flat-phase
   // projects, so a metadata-only dir must not flip the layout (#852 follow-up).
-  const legacyDir = legacyMilestonesDir(basePath);
+  const legacyDir = join(projectionRoot, "milestones");
   if (existsSync(legacyDir)) {
     const candidate = resolveDir(legacyDir, milestoneId);
     if (candidate && dirIsContentBearingLegacyMilestone(join(legacyDir, candidate))) {
@@ -825,6 +833,10 @@ function resolvePhaseDir(basePath: string, milestoneId: string): string | null {
     }
   }
   return null;
+}
+
+function resolvePhaseDir(basePath: string, milestoneId: string): string | null {
+  return resolvePhaseDirIn(gsdProjectionRoot(basePath), milestoneId);
 }
 
 export function resolveRuntimeFile(basePath: string): string {

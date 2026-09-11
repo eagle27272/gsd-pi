@@ -19,6 +19,7 @@ import { gsdProjectionRoot, gsdRoot } from "./paths.js";
 import { withProjectionMutationSync } from "./database-maintenance-fence.js";
 import { recordManagedProjectionFile } from "./managed-projection-history.js";
 import { removeProjectionFileSync } from "./atomic-write.js";
+import { logWarning } from "./workflow-logger.js";
 
 export interface OperationFencedProjectionCleanupInput {
   artifactPath: string;
@@ -81,6 +82,14 @@ export function removeProjectionIfCurrent(input: OperationFencedProjectionCleanu
 
 export function removeOwnedPlanProjection(basePath: string, planPath: string): boolean {
   const projectionKey = deriveCompatProjectionKey(planPath, [gsdProjectionRoot(basePath), gsdRoot(basePath)]);
+  if (!projectionKey) {
+    // No key means the plan is not under the projection root, so nothing here
+    // owns it. Deleting on a guessed key would target another artifact (#3).
+    logWarning("projection", `plan projection resolves outside .gsd; refusing to remove: ${planPath}`, {
+      fn: "removeOwnedPlanProjection",
+    });
+    return false;
+  }
   const artifact = getArtifact(projectionKey);
   const marker = readCompatMarker(basePath);
 
