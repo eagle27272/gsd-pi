@@ -599,7 +599,7 @@ export function buildLoopRemediationSteps(
       const phase = unitType === "plan-slice" ? "plan" : "research";
       return [
         `   1. Review the failure and the current ${artifactRel} projection for what the unit could not produce`,
-        `   2. Re-run the phase against the authoritative DB with \`gsd dispatch ${phase} ${mid}/${sid}\``,
+        `   2. Re-run the phase against the authoritative DB with \`gsd dispatch ${phase} ${mid}\``,
         `   3. Resume auto-mode`,
       ].join("\n");
     }

@@ -5,7 +5,8 @@ import { execFileSync } from "node:child_process";
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
 	artifactsFor,
@@ -14,6 +15,8 @@ import {
 	parseJsonEvents,
 	writeTranscript,
 } from "./_shared/index.ts";
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 function binaryAvailable(): { ok: boolean; reason?: string } {
 	const bin = process.env.GSD_SMOKE_BINARY;
@@ -43,11 +46,65 @@ function nodeOutput(dir: string, args: string[]): string {
 	return execFileSync(process.execPath, args, { cwd: dir, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" }).trim();
 }
 
-function recoverFixture(dir: string): ReturnType<typeof gsdSync> {
-	const preview = gsdSync(["headless", "recover"], { cwd: dir, timeoutMs: 30_000 });
-	const previewHash = /re-run with --preview=(sha256:[0-9a-f]{64})/u.exec(preview.stderrClean)?.[1];
-	assert.ok(previewHash, `expected recovery preview approval command, got:\n${preview.stderrClean.slice(0, 800)}`);
-	return gsdSync(["headless", "recover", `--preview=${previewHash}`], { cwd: dir, timeoutMs: 30_000 });
+interface SeedHierarchyCounts {
+	milestones: number;
+	slices: number;
+	tasks: number;
+}
+
+interface SeedCounts {
+	hierarchy: SeedHierarchyCounts;
+}
+
+/**
+ * Load the fixture's on-disk markdown into the project database.
+ *
+ * This used to shell out to the two-step `gsd headless recover`, the
+ * operator-facing markdown→DB import. That command and the kernel behind it
+ * are gone: the database is the sole authority and no production path adopts
+ * markdown. What survives for exactly this purpose is md-importer's
+ * `migrateFromMarkdown`, the explicitly test-only scaffolding importer.
+ *
+ * `minimum` is the floor the calling fixture needs. Seeding that silently
+ * imported nothing would leave `headless auto` running against an empty
+ * project, where the pause/blocked assertions below would pass for the wrong
+ * reason.
+ *
+ * Runs in a child process so the test never holds a SQLite handle on the
+ * project `headless auto` is about to run against.
+ */
+function seedDatabaseFromMarkdown(dir: string, minimum: SeedHierarchyCounts): SeedCounts {
+	const moduleUrl = (name: string) =>
+		JSON.stringify(pathToFileURL(join(REPO_ROOT, "dist", "resources", "extensions", "gsd", name)).href);
+	const script = [
+		`const { migrateFromMarkdown } = await import(${moduleUrl("md-importer.js")});`,
+		`const { closeDatabase } = await import(${moduleUrl("gsd-db.js")});`,
+		"const counts = migrateFromMarkdown(process.argv[1]);",
+		"closeDatabase();",
+		"process.stdout.write(JSON.stringify(counts));",
+	].join("\n");
+
+	let raw: string;
+	try {
+		raw = execFileSync(process.execPath, ["--input-type=module", "-e", script, dir], {
+			cwd: dir,
+			encoding: "utf8",
+			timeout: 60_000,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+	} catch (err) {
+		const detail = (err as { stderr?: string })?.stderr ?? String(err);
+		throw new Error(`fixture DB seeding failed:\n${detail.slice(0, 1200)}`);
+	}
+
+	const counts = JSON.parse(raw) as SeedCounts;
+	for (const kind of ["milestones", "slices", "tasks"] as const) {
+		assert.ok(
+			counts.hierarchy[kind] >= minimum[kind],
+			`fixture DB seeding imported ${counts.hierarchy[kind]} ${kind}, expected at least ${minimum[kind]}: ${raw}`,
+		);
+	}
+	return counts;
 }
 
 function commitRecoveredMilestone(dir: string): void {
@@ -140,16 +197,16 @@ function writeCompletedConflictMilestone(dir: string): void {
 /**
  * Mint the completed-but-unmerged survivor state the fixture needs.
  *
- * The recover import adopts every created hierarchy row into the canonical
- * lifecycle (#1657), so a generic legacy write to `complete` is refused while
- * the canonical lifecycle still reads `ready`. Complete the Milestone the way
- * the canonical seam does: transition the lifecycle inside one
- * `milestone.complete` Domain Operation (the only operation type
+ * The markdown seeder writes legacy hierarchy rows only — it never adopts them
+ * into the canonical lifecycle (#1657) — so the DB-authoritative readers the
+ * merge guard consults still see no Milestone lifecycle at all. Complete the
+ * Milestone the way the canonical seam does: adopt/transition the lifecycle
+ * inside one `milestone.complete` Domain Operation (the only operation type
  * trg_workflow_lifecycle_transition accepts for a completed Milestone), then
  * project that status onto the legacy row. The event stays fixture-named so it
  * is never mistaken for a real closeout receipt.
  */
-async function markRecoveredMilestoneComplete(dir: string): Promise<void> {
+async function markSeededMilestoneComplete(dir: string): Promise<void> {
 	const { closeAllWorkflowDatabases, openWorkflowDatabase } = await import(
 		"../../dist/resources/extensions/gsd/db-workspace.js"
 	);
@@ -235,15 +292,16 @@ describe("headless auto pause e2e (fake LLM)", () => {
 		writeRecoveredMilestone(project.dir);
 		commitRecoveredMilestone(project.dir);
 
-		const recover = recoverFixture(project.dir);
-		assert.equal(
-			recover.code,
-			0,
-			`expected recover exit 0, got ${recover.code}. stderr=${recover.stderrClean.slice(0, 800)}`,
-		);
+		// tasks: 0 is the real import result, not an oversight. parseProjectionPlan
+		// drops a checkbox task whose id is repeated by a `### T01: ...` detail
+		// heading (the heading branch sees a known id and clears the pending
+		// entry), and this PLAN has both. The pause path only needs the
+		// milestone/slice pair: auto dispatches the unplanned slice, the fake LLM
+		// answers 429, and the run pauses before any task would be read.
+		seedDatabaseFromMarkdown(project.dir, { milestones: 1, slices: 1, tasks: 0 });
 		assert.ok(
 			existsSync(join(project.dir, ".gsd", "milestones", "M001", "M001-ROADMAP.md")),
-			"recovered ROADMAP must stay on disk so auto pass-0 cannot emit roadmap-missing",
+			"seeded ROADMAP must stay on disk so auto pass-0 cannot emit roadmap-missing",
 		);
 
 		const transcript = writeTranscript([
@@ -318,13 +376,10 @@ describe("headless auto pause e2e (fake LLM)", () => {
 		commitPaths(project.dir, [".gitignore", "package.json", "src/conflict.js"], "test: seed merge conflict fixture");
 		writeCompletedConflictMilestone(project.dir);
 
-		const recover = recoverFixture(project.dir);
-		assert.equal(
-			recover.code,
-			0,
-			`expected recover exit 0, got ${recover.code}. stderr=${recover.stderrClean.slice(0, 800)}`,
-		);
-		await markRecoveredMilestoneComplete(project.dir);
+		// No slice PLAN in this fixture, so the import yields no tasks: the
+		// milestone/slice pair is the whole survivor state the merge guard needs.
+		seedDatabaseFromMarkdown(project.dir, { milestones: 1, slices: 1, tasks: 0 });
+		await markSeededMilestoneComplete(project.dir);
 
 		git(project.dir, ["checkout", "-b", "milestone/M001"]);
 		writeFileSync(join(project.dir, "src/conflict.js"), "export const value = \"milestone\";\n");
