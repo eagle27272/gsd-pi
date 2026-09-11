@@ -438,16 +438,12 @@ function stripChecklistMarker(item: string): string {
   return item.replace(/^\s*(?:[-*]\s*)?(?:\[[ xX]?\]\s*)?/, "").trim();
 }
 
-/**
- * Cross-cutting concerns the planner considered. Entries reach the projection
- * straight from the planner's payload, so unsubstituted template tokens are
- * dropped here — the roadmap validator rejects any section containing them.
- */
+/** Cross-cutting concerns the planner considered, as roadmap checkbox lines. */
 function renderHorizontalChecklist(milestone: MilestoneRow): string[] {
   const bullets: string[] = [];
   for (const entry of milestone.horizontal_checklist ?? []) {
-    const item = stripChecklistMarker((entry?.item ?? "").replace(/\r?\n+/g, " ").replace(/\s+/g, " "));
-    if (!item || /\{\{[^}]*\}\}/.test(item)) continue;
+    const item = meaningfulPlanningValue(stripChecklistMarker(collapseToSingleLine(entry?.item)));
+    if (!item) continue;
     bullets.push(`- [${entry.checked ? "x" : " "}] ${item}`);
   }
   return bullets;
@@ -503,16 +499,8 @@ function renderRoadmapMarkdown(milestone: MilestoneRow, slices: SliceRow[]): str
     lines.push("");
   }
 
-  // Section order follows templates/roadmap.md, which puts the checklist
-  // between Slices and Boundary Map. Omitted when empty so the frozen byte
-  // format for a milestone planned without one is unchanged.
-  const horizontalChecklist = renderHorizontalChecklist(milestone);
-  if (horizontalChecklist.length > 0) {
-    lines.push("## Horizontal Checklist");
-    lines.push("");
-    lines.push(...horizontalChecklist);
-    lines.push("");
-  }
+  // templates/roadmap.md puts the checklist between Slices and Boundary Map.
+  pushPlanningSection(lines, "Horizontal Checklist", renderHorizontalChecklist(milestone));
 
   if (milestone.boundary_map_markdown.trim()) {
     lines.push("## Boundary Map");
