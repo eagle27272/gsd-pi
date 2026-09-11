@@ -162,19 +162,81 @@ Each of these matched a `legacy`/`migrat` search and is *not* obsolete.
 
 ## Verification
 
-The baseline was established before any deletion, in this worktree:
+The baseline was established before any deletion, in this worktree.
 
-- `pnpm run typecheck:extensions` — **green**, after building the workspace
-  packages in order: `build:contracts`, `build:pi`, `build:rpc-client`,
-  `build:mcp-server`. `packages/rpc-client/dist` was missing, which had
-  previously made this gate look permanently broken in a nested worktree.
+### Worktree setup this required
+
+A nested worktree starts out unable to run either gate. Both were fixable:
+
+- **Typecheck.** `pnpm run typecheck:extensions` is **green** after building
+  the workspace packages in order: `build:contracts`, `build:pi`,
+  `build:rpc-client`, `build:mcp-server`. `packages/rpc-client/dist` was
+  missing, which had made this gate look permanently broken here.
+- **Native addon.** The Rust addon had never been compiled in this worktree —
+  no `.node` binary existed — so every test touching the native file-identity
+  engine failed on `handle.setMutationBoundaryFaultForTest is not a function`
+  or `native projection root identity locking failed`.
+
+  Two separate things were missing. `build:native-pkg` only compiles the
+  TypeScript wrapper; it does not build the addon at all. And a plain
+  `build:native:dev` still leaves the tests red, because
+  `set_mutation_boundary_fault_for_test` is gated behind
+  `#[cfg(feature = "test-fault-injection")]`
+  (`native/crates/engine/src/projection_root_identity_lock.rs:1583`), an
+  opt-in cargo feature. The command that actually produces a test-capable
+  addon is:
+
+  ```
+  node native/scripts/build.js --dev --test-fault-injection
+  ```
+
+  Confirmed by checking that `setMutationBoundaryFaultForTest` appears on
+  `ProjectionRootIdentityLock.prototype` in the built `.node` file. Anyone
+  setting up a fresh worktree for this repo needs this step, and it is not
+  wired into `test:unit`.
+- **Root `dist/`.** `bootstrap-links.test.ts` imports `dist/bootstrap.js`, so
+  it fails with `ERR_MODULE_NOT_FOUND` until the root build has run. Use
+  `pnpm run build:core`, **not** a bare `npx tsc`: `app-smoke.test.ts` prefers
+  `dist/resources/extensions` over `src/` whenever `dist/resources` exists, so
+  a half-built `dist` is worse than no `dist` at all — bare `tsc` made that
+  test fail with `expected >=10 extensions, found 7` when it had been passing.
+  `build:core` adds `copy-resources`, `copy-themes`, and `copy-export-html`,
+  after which `dist` and `src` both discover 18 extensions.
 - `pnpm run test:compile` — green, 6070 files.
-- `pnpm run test:unit` — baseline recorded before wave 1.
 
-Each wave must leave both `typecheck:extensions` and `test:unit` at or above
-the baseline. Test files are deleted in the same commit as their subject, so
-the suite's test count drops by design; what must not change is the set of
-*failures*.
+### The unit baseline is green
+
+`pnpm run test:unit` — **14689 passed, 0 failed, 29 skipped.**
+
+Getting there took some untangling, and the intermediate readings are recorded
+because they were actively misleading. Three runs of an unchanged tree gave 24,
+26, and 25 failures, which looked like test flakiness. It was not. Every one of
+those failures was a missing build artifact, and the varying count came from
+process-isolated tests racing over artifacts that were absent rather than from
+nondeterministic logic:
+
+- 23 native-engine tests (`tree publication …`, `tree deletion …`,
+  `tree retirement …`, `native exact …`) — the addon was never compiled, and
+  then was compiled without `--test-fault-injection`
+- 1 `bootstrap-links.test.js` — no root `dist/`
+- the `write-gate:` pair and `missing host command … (#1943)`, which surfaced
+  in some runs and not others, all cleared once the artifacts were in place
+
+The lesson for anyone repeating this: do not accept a red baseline in a fresh
+worktree as "pre-existing failures". Chase each one to an artifact first.
+
+### The contract
+
+Each wave must satisfy, before its commit:
+
+1. `pnpm run typecheck:extensions` exits 0.
+2. `pnpm run test:unit` reports zero failures.
+3. The passing count drops only by the number of tests in files that wave
+   deleted. An unexplained drop is a regression signal, not a win.
+
+Because the baseline is green, any failure appearing during a wave is caused by
+that wave. This is the main reason the setup work above was worth doing rather
+than proceeding against a 24-failure baseline.
 
 ## Risks
 
