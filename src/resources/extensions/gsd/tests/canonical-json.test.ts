@@ -31,3 +31,81 @@ test("hashBytes returns a sha256-prefixed digest", () => {
 test("hashValue is stable across key orderings", () => {
   assert.equal(hashValue({ a: 1, b: 2 }), hashValue({ b: 2, a: 1 }));
 });
+
+test("canonicalJson throws on an object cycle", () => {
+  const cyclic: Record<string, unknown> = {};
+  cyclic["self"] = cyclic;
+  assert.throws(() => canonicalJson(cyclic), {
+    message: "legacy import identity requires acyclic strict JSON",
+  });
+});
+
+test("canonicalJson throws on an array cycle", () => {
+  const cyclic: unknown[] = [];
+  cyclic.push(cyclic);
+  assert.throws(() => canonicalJson(cyclic), {
+    message: "legacy import identity requires acyclic strict JSON",
+  });
+});
+
+test("canonicalJson escapes control characters and passes through unicode", () => {
+  const value = "😀\t\n\"\\";
+  assert.equal(canonicalJson(value), "\"😀\\t\\n\\\"\\\\\"");
+});
+
+test("canonicalJson rejects non-finite numbers", () => {
+  for (const value of [NaN, Infinity, -Infinity]) {
+    assert.throws(() => canonicalJson(value), {
+      message: "legacy import identity requires strict JSON with finite numbers",
+    });
+  }
+});
+
+test("canonicalJson rejects sparse arrays", () => {
+  const sparse = [1, 2, 3];
+  delete sparse[1];
+  assert.throws(() => canonicalJson(sparse), {
+    message: "legacy import identity requires dense JSON arrays without extra keys",
+  });
+});
+
+test("canonicalJson rejects symbol keys on objects", () => {
+  const withSymbol: Record<string | symbol, unknown> = {};
+  withSymbol[Symbol("x")] = 1;
+  assert.throws(() => canonicalJson(withSymbol), {
+    message: "legacy import identity requires strict JSON without symbol keys",
+  });
+});
+
+test("canonicalJson rejects non-plain prototypes", () => {
+  assert.throws(() => canonicalJson(new Date()), {
+    message: "legacy import identity requires plain JSON objects",
+  });
+});
+
+test("canonicalJson accepts null-prototype objects", () => {
+  const nullProto = Object.create(null) as Record<string, unknown>;
+  nullProto["a"] = 1;
+  assert.equal(canonicalJson(nullProto), '{"a":1}');
+});
+
+test("canonicalJson rejects non-object, non-array values", () => {
+  assert.throws(() => canonicalJson(undefined), {
+    message: "legacy import identity requires strict JSON values",
+  });
+});
+
+test("canonicalJson normalizes negative zero to 0", () => {
+  assert.equal(canonicalJson(-0), "0");
+});
+
+test("canonicalJson emits scientific notation for 1e21", () => {
+  assert.equal(canonicalJson(1e21), "1e+21");
+});
+
+test("hashValue produces a pinned digest for strings with unicode and escapes", () => {
+  assert.equal(
+    hashValue("😀\t\n\"\\"),
+    "sha256:f1f7d5637adebfd110c697ca0fcb3ecf88b629819297fb4eb2f67fefbda08d4e",
+  );
+});
