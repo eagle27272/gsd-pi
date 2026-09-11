@@ -8,14 +8,6 @@ concurrency:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    env:
-      # ubuntu-latest spans several CPU generations, and the cache below carries
-      # native/target between them. The default `-C target-cpu=native` from
-      # native/.cargo/config.toml bakes the builder's ISA into proc-macro .so
-      # files that rustc dlopens and *executes* during macro expansion, so a
-      # libnapi_derive built on a wider-ISA runner crashes rustc with SIGILL when
-      # restored onto a narrower one. Pin a baseline every runner supports.
-      RUSTFLAGS: -C target-cpu=x86-64-v2
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -39,9 +31,16 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             native/target
-          # The RUSTFLAGS baseline is part of the key: entries built under the
-          # old `target-cpu=native` flags are not portable and must not restore.
-          key: cargo-${{ runner.os }}-x86-64-v2-${{ hashFiles('native/**/Cargo.lock', 'native/**/Cargo.toml') }}
-          restore-keys: cargo-${{ runner.os }}-x86-64-v2-
+          key: cargo-${{ runner.os }}-${{ hashFiles('native/**/Cargo.lock', 'native/**/Cargo.toml') }}
+          restore-keys: cargo-${{ runner.os }}-
+      # native/.cargo/config.toml builds with `-C target-cpu=native` for local dev
+      # and expects CI to override it via RUSTFLAGS. Without that override the
+      # cached native/target above is not portable: the runner fleet is
+      # heterogeneous, so a proc-macro .so built with one runner's instruction set
+      # gets restored onto a narrower one, and rustc dies with SIGILL when it
+      # dlopens napi_derive to expand the macro. Any non-empty RUSTFLAGS replaces
+      # the config.toml rustflags wholesale, which drops target-cpu=native.
       - run: pnpm run build:native:test
+        env:
+          RUSTFLAGS: -C debuginfo=0
       - run: pnpm run test:unit
