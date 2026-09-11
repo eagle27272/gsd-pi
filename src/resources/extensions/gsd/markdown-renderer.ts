@@ -64,6 +64,7 @@ import {
   readMilestoneCompletionProjection,
   renderMilestoneSummaryMarkdown,
 } from "./milestone-summary-projection.js";
+import { GSDError, GSD_IO_ERROR } from "./errors.js";
 
 // ─── Compat marker invalidation ───────────────────────────────────────────
 // Every successful projection write pushes its (basePath, projectionPath,
@@ -202,10 +203,21 @@ function stampProjectionContent(content: string): string {
 /**
  * Convert an absolute file path to a .gsd-relative artifact path.
  * E.g. "/project/.gsd/milestones/M001/M001-ROADMAP.md" → "milestones/M001/M001-ROADMAP.md"
+ *
+ * Throws rather than keying an artifact by a `../`-escaping path: that string
+ * is an acceptable `artifacts.path` primary key, so the same logical artifact
+ * silently accumulates a second, independently drifting row (#3).
  */
 function toArtifactPath(absPath: string, basePath: string): string {
   const projectionRoot = gsdProjectionRoot(basePath);
-  return deriveCompatProjectionKey(absPath, [projectionRoot, gsdRoot(basePath)]);
+  const key = deriveCompatProjectionKey(absPath, [projectionRoot, gsdRoot(basePath)]);
+  if (!key) {
+    throw new GSDError(
+      GSD_IO_ERROR,
+      `artifact projection resolves outside ${projectionRoot}: ${absPath}`,
+    );
+  }
+  return key;
 }
 
 /**

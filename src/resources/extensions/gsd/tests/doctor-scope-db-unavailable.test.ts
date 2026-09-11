@@ -29,6 +29,35 @@ afterEach(() => {
   closeDatabase();
 });
 
+/**
+ * Seed an `artifacts` row whose path escapes the projection root. insertArtifact
+ * rejects these (#3), so the only way to model a project affected before that
+ * invariant landed is to write the row directly.
+ */
+function seedEscapedArtifactRow(a: {
+  path: string;
+  artifact_type: string;
+  milestone_id: string | null;
+  slice_id: string | null;
+  task_id: string | null;
+  full_content: string;
+}): void {
+  _getAdapter()!
+    .prepare(
+      `INSERT OR REPLACE INTO artifacts (path, artifact_type, milestone_id, slice_id, task_id, full_content, imported_at, content_hash)
+       VALUES (:path, :artifact_type, :milestone_id, :slice_id, :task_id, :full_content, :imported_at, '')`,
+    )
+    .run({
+      ":path": a.path,
+      ":artifact_type": a.artifact_type,
+      ":milestone_id": a.milestone_id,
+      ":slice_id": a.slice_id,
+      ":task_id": a.task_id,
+      ":full_content": a.full_content,
+      ":imported_at": new Date().toISOString(),
+    });
+}
+
 test("filterDoctorIssues keeps project and environment issues in scoped reports", () => {
   const issues = [
     { severity: "error", code: "env_dependencies", scope: "project", unitId: "environment", message: "node_modules missing", fixable: false },
@@ -606,7 +635,7 @@ test("checkEngineHealth resolves escaped .gsd artifact rows against the project 
   writeFileSync(join(gsdDir, artifactPath), "# Assessment\n", "utf-8");
 
   openDatabase(join(gsdDir, "gsd.db"));
-  insertArtifact({
+  seedEscapedArtifactRow({
     path: `../../../Documents/Projects/project/.gsd/${artifactPath}`,
     artifact_type: "ASSESSMENT",
     milestone_id: "M001",
@@ -633,7 +662,7 @@ test("checkEngineHealth reports escaped missing artifact rows with .gsd-relative
   mkdirSync(gsdDir, { recursive: true });
 
   openDatabase(join(gsdDir, "gsd.db"));
-  insertArtifact({
+  seedEscapedArtifactRow({
     path: "../../../Documents/Projects/project/.gsd/phases/01-m001/01-01-PLAN.md",
     artifact_type: "PLAN",
     milestone_id: "M001",
@@ -833,7 +862,7 @@ test("checkEngineHealth repair prunes stale phases rows stored as escaped ../ pa
   writeFileSync(join(gsdDir, replacementPath), "# Plan\n", "utf-8");
 
   openDatabase(join(gsdDir, "gsd.db"));
-  insertArtifact({
+  seedEscapedArtifactRow({
     path: stalePath,
     artifact_type: "PLAN",
     milestone_id: "M001",
@@ -872,7 +901,7 @@ test("checkEngineHealth marks escaped phases rows fixable when a milestones repl
   writeFileSync(join(gsdDir, replacementPath), "# Plan\n", "utf-8");
 
   openDatabase(join(gsdDir, "gsd.db"));
-  insertArtifact({
+  seedEscapedArtifactRow({
     path: "../../../Documents/Projects/project/.gsd/phases/01-m001/01-01-PLAN.md",
     artifact_type: "PLAN",
     milestone_id: "M001",
@@ -1252,4 +1281,76 @@ test("checkEngineHealth clears artifact_file_missing after projection re-render 
   const contextIssue = issues.find((issue) => issue.code === "artifact_user_content_missing" && issue.file === "phases/01-foundation/01-CONTEXT.md");
   assert.ok(contextIssue, "doctor should still report missing user content that projection repair did not recreate");
   assert.equal(contextIssue.severity, "warning");
+});
+
+test("checkEngineHealth flags artifact rows split across two phase directories (#2)", async (t) => {
+  const base = mkdtempSync(join(tmpdir(), "gsd-doctor-phase-dir-split-"));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+
+  const gsdDir = join(base, ".gsd");
+  mkdirSync(join(gsdDir, "phases", "03-new-milestone-m003"), { recursive: true });
+  mkdirSync(join(gsdDir, "phases", "03-brand-foundation"), { recursive: true });
+  writeFileSync(join(gsdDir, "phases", "03-new-milestone-m003", "03-ROADMAP.md"), "# Roadmap\n");
+  writeFileSync(join(gsdDir, "phases", "03-brand-foundation", "03-CONTEXT.md"), "# Context\n");
+
+  openDatabase(join(gsdDir, "gsd.db"));
+  insertMilestone({ id: "M003", title: "Brand foundation", status: "active" });
+  insertArtifact({
+    path: "phases/03-new-milestone-m003/03-ROADMAP.md",
+    artifact_type: "ROADMAP",
+    milestone_id: "M003",
+    slice_id: null,
+    task_id: null,
+    full_content: "# Roadmap\n",
+  });
+  insertArtifact({
+    path: "phases/03-brand-foundation/03-CONTEXT.md",
+    artifact_type: "CONTEXT",
+    milestone_id: "M003",
+    slice_id: null,
+    task_id: null,
+    full_content: "# Context\n",
+  });
+
+  const issues: any[] = [];
+  await checkEngineHealth(base, issues, []);
+
+  const split = issues.find((issue) => issue.code === "artifact_phase_dir_split");
+  assert.ok(split, "doctor should flag rows spread over two phase dirs even though every file exists");
+  assert.equal(split.unitId, "M003");
+  assert.match(split.message, /03-brand-foundation, 03-new-milestone-m003/);
+});
+
+test("checkEngineHealth does not flag a milestone whose rows share one phase directory", async (t) => {
+  const base = mkdtempSync(join(tmpdir(), "gsd-doctor-phase-dir-single-"));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+
+  const gsdDir = join(base, ".gsd");
+  mkdirSync(join(gsdDir, "phases", "03-brand-foundation"), { recursive: true });
+  writeFileSync(join(gsdDir, "phases", "03-brand-foundation", "03-ROADMAP.md"), "# Roadmap\n");
+  writeFileSync(join(gsdDir, "phases", "03-brand-foundation", "03-CONTEXT.md"), "# Context\n");
+
+  openDatabase(join(gsdDir, "gsd.db"));
+  insertMilestone({ id: "M003", title: "Brand foundation", status: "active" });
+  insertArtifact({
+    path: "phases/03-brand-foundation/03-ROADMAP.md",
+    artifact_type: "ROADMAP",
+    milestone_id: "M003",
+    slice_id: null,
+    task_id: null,
+    full_content: "# Roadmap\n",
+  });
+  insertArtifact({
+    path: "phases/03-brand-foundation/03-CONTEXT.md",
+    artifact_type: "CONTEXT",
+    milestone_id: "M003",
+    slice_id: null,
+    task_id: null,
+    full_content: "# Context\n",
+  });
+
+  const issues: any[] = [];
+  await checkEngineHealth(base, issues, []);
+
+  assert.equal(issues.some((issue) => issue.code === "artifact_phase_dir_split"), false);
 });

@@ -16,13 +16,32 @@ import { tmpdir } from 'node:os';
 
 const GIT_TEST_ENV_DIR = join(tmpdir(), `gsd-test-git-env-${process.pid}`);
 mkdirSync(GIT_TEST_ENV_DIR, { recursive: true });
-process.env.GIT_CONFIG_GLOBAL = join(GIT_TEST_ENV_DIR, 'global.gitconfig');
+const gitGlobalConfig = join(GIT_TEST_ENV_DIR, 'global.gitconfig');
+// core.excludesFile defaults to $XDG_CONFIG_HOME/git/ignore even when the global
+// config is empty, so a developer's personal ignore list (e.g. ".gsd") would still
+// apply inside test fixture repos. Point it at an empty file to fully isolate.
+const gitExcludesFile = join(GIT_TEST_ENV_DIR, 'excludes');
+writeFileSync(gitExcludesFile, '');
+writeFileSync(gitGlobalConfig, `[core]\n\texcludesFile = ${gitExcludesFile}\n`);
+process.env.GIT_CONFIG_GLOBAL = gitGlobalConfig;
 process.env.GIT_CONFIG_SYSTEM = join(GIT_TEST_ENV_DIR, 'system.gitconfig');
 const gitTemplateDir = join(GIT_TEST_ENV_DIR, 'templates');
 mkdirSync(join(gitTemplateDir, 'hooks'), { recursive: true });
 mkdirSync(join(gitTemplateDir, 'info'), { recursive: true });
 writeFileSync(join(gitTemplateDir, 'info', 'exclude'), '');
 process.env.GIT_TEMPLATE_DIR = gitTemplateDir;
+
+// Same hermeticity concern for GSD's own config: without an override the global
+// scope resolves to the developer's ~/.gsd/PREFERENCES.md, so their personal
+// thinking levels and git prefs (snapshots, isolation) silently override what
+// fixtures set up. CI has no ~/.gsd, which is why this only bites locally.
+if (!process.env.GSD_HOME) {
+  // Named `.gsd` so paths derived from it keep the shape callers expect
+  // (e.g. agentDir ending in `.gsd/agent`).
+  const gsdHome = join(tmpdir(), `gsd-test-home-${process.pid}`, '.gsd');
+  mkdirSync(gsdHome, { recursive: true });
+  process.env.GSD_HOME = gsdHome;
+}
 
 // dist-test root — everything compiled lands here
 const DIST_TEST = new URL('../dist-test/', import.meta.url).href;
