@@ -16,10 +16,10 @@
 // The separate `.gsd/unit-claims.db` (unit-ownership.ts) is an intentionally
 // independent store and is excluded from this invariant.
 import { createHash } from "node:crypto";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, normalize } from "node:path";
 import { currentPhaseDirName, renamePhaseDirOnTitleChange } from "./phase-dir-rename.js";
 import type { Decision, Requirement, GateRow, GateId, GateScope, GateStatus, GateVerdict } from "./types.js";
-import { GSDError, GSD_STALE_STATE } from "./errors.js";
+import { GSDError, GSD_IO_ERROR, GSD_STALE_STATE } from "./errors.js";
 import { getGateIdsForTurn, type OwnerTurn } from "./gate-registry.js";
 import { logError, logWarning } from "./workflow-logger.js";
 import { type DbAdapter } from "./db-adapter.js";
@@ -206,6 +206,20 @@ export function clearRequirements(): void {
   try { transaction(() => getDbOrNull()!.exec("DELETE FROM requirements")); } catch (e) { logWarning("db", `clearRequirements failed: ${(e as Error).message}`); }
 }
 
+/**
+ * `artifacts.path` is the primary key and is always `.gsd`-relative. An
+ * absolute or `../`-escaping spelling is still a distinct, "valid" key, so the
+ * same logical artifact would live under two rows that drift apart
+ * independently — and a bulk cleanup of the escaping ones destroys the content
+ * that only ever landed there (#3). Reject at the write boundary instead.
+ */
+function assertProjectionRelativeArtifactPath(path: string): void {
+  const normalized = normalize(path).replace(/\\/g, "/");
+  const escapes = normalized === ".." || normalized.startsWith("../");
+  if (!escapes && !isAbsolute(path) && !/^[A-Za-z]:/.test(path)) return;
+  throw new GSDError(GSD_IO_ERROR, `gsd-db: artifacts.path must be relative to .gsd/: ${path}`);
+}
+
 export function insertArtifact(a: {
   path: string;
   artifact_type: string;
@@ -215,6 +229,7 @@ export function insertArtifact(a: {
   full_content: string;
 }): void {
   if (!getDbOrNull()!) throw new GSDError(GSD_STALE_STATE, "gsd-db: No database open");
+  assertProjectionRelativeArtifactPath(a.path);
   const contentHash = createHash("sha256").update(a.full_content).digest("hex");
   transaction(() => getDbOrNull()!.prepare(
     `INSERT OR REPLACE INTO artifacts (path, artifact_type, milestone_id, slice_id, task_id, full_content, imported_at, content_hash)

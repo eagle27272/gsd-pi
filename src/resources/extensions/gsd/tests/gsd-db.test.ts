@@ -1432,6 +1432,57 @@ describe('gsd-db', () => {
     });
   });
 
+  describe('insertArtifact: artifacts.path containment (#3)', () => {
+    test('rejects a ../-escaping path instead of keying a second row for the same artifact', () => {
+      openDatabase(':memory:');
+      assert.throws(
+        () => insertArtifact({
+          path: '../../elsewhere/repo/.gsd/phases/01-example/01-01-PLAN.md',
+          artifact_type: 'PLAN',
+          milestone_id: 'M001',
+          slice_id: 'S01',
+          task_id: null,
+          full_content: '# plan\n',
+        }),
+        /artifacts\.path must be relative to \.gsd/,
+      );
+      closeDatabase();
+    });
+
+    test('rejects an absolute path', () => {
+      openDatabase(':memory:');
+      assert.throws(
+        () => insertArtifact({
+          path: '/tmp/repo/.gsd/phases/01-example/01-01-PLAN.md',
+          artifact_type: 'PLAN',
+          milestone_id: 'M001',
+          slice_id: 'S01',
+          task_id: null,
+          full_content: '# plan\n',
+        }),
+        /artifacts\.path must be relative to \.gsd/,
+      );
+      closeDatabase();
+    });
+
+    test('accepts a projection-relative path', () => {
+      openDatabase(':memory:');
+      insertArtifact({
+        path: 'phases/01-example/01-01-PLAN.md',
+        artifact_type: 'PLAN',
+        milestone_id: 'M001',
+        slice_id: 'S01',
+        task_id: null,
+        full_content: '# plan\n',
+      });
+      const row = _getAdapter()!
+        .prepare('SELECT path FROM artifacts WHERE path = :path')
+        .get({ ':path': 'phases/01-example/01-01-PLAN.md' }) as { path: string };
+      assert.strictEqual(row.path, 'phases/01-example/01-01-PLAN.md');
+      closeDatabase();
+    });
+  });
+
   // ─── Final Report ──────────────────────────────────────────────────────────
 
 });
