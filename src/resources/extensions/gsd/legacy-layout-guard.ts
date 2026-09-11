@@ -1,14 +1,14 @@
 // Project/App: gsd-pi
 // File Purpose: Fails closed when a project still uses a pre-migration on-disk layout.
 
-import { existsSync, lstatSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const LEGACY_MILESTONE_RUNTIME_DIRS = new Set(["anchors"]);
 const LAST_MIGRATING_VERSION = "v1.18.0";
 
 export type LegacyLayoutFinding = {
-  kind: "milestones-layout" | "in-repo-state";
+  kind: "milestones-layout";
   path: string;
 };
 
@@ -59,24 +59,12 @@ export function detectLegacyLayout(basePath: string): LegacyLayoutFinding | null
     }
   }
 
-  if (existsSync(gsd)) {
-    try {
-      if (lstatSync(gsd).isDirectory()) {
-        return { kind: "in-repo-state", path: gsd };
-      }
-    } catch {
-      // An unreadable .gsd is not evidence of a legacy layout.
-    }
-  }
-
   return null;
 }
 
 const REMEDIES: Record<LegacyLayoutFinding["kind"], string> = {
   "milestones-layout":
     "This project uses the pre-flat-phase milestones/<MID>/ layout.",
-  "in-repo-state":
-    "This project keeps its state in an in-repo .gsd directory rather than a symlink to ~/.gsd/projects/<hash>/.",
 };
 
 export function assertNoLegacyLayout(basePath: string): void {

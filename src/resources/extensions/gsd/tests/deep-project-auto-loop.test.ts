@@ -138,8 +138,8 @@ function makeRepo(): string {
   execFileSync("git", ["init"], { cwd: base, stdio: "ignore" });
   execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: base });
   execFileSync("git", ["config", "user.name", "Test"], { cwd: base });
-  // Auto-start rejects a real in-repo .gsd/, so link external state before
-  // seeding any project files.
+  // Mirror the production external-state layout, and keep the fixture's writes
+  // out of the operator's real ~/.gsd. Must precede any project files.
   linkExternalGsdState(base);
   mkdirSync(join(base, ".gsd", "milestones"), { recursive: true });
   writeFileSync(join(base, ".gsd", "PREFERENCES.md"), "---\nplanning_depth: deep\n---\n");

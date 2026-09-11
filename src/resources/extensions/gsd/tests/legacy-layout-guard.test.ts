@@ -1,5 +1,5 @@
 // Project/App: gsd-pi
-// File Purpose: Tests detection of the two pre-migration on-disk layouts.
+// File Purpose: Tests detection of the pre-flat-phase milestones/<MID>/ layout.
 
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
@@ -26,32 +26,40 @@ test("detects a content-bearing milestones/<MID>/ layout", () => {
 
 test("ignores an empty milestones/ directory", () => {
   const root = makeRoot();
-  const external = makeRoot();
-  mkdirSync(join(external, "milestones"), { recursive: true });
-  mkdirSync(join(external, "phases"), { recursive: true });
-  symlinkSync(external, join(root, ".gsd"));
+  mkdirSync(join(root, ".gsd", "milestones"), { recursive: true });
+  mkdirSync(join(root, ".gsd", "phases"), { recursive: true });
 
   assert.equal(detectLegacyLayout(root), null);
 });
 
 test("ignores a milestones/<MID>/ holding only META json", () => {
   const root = makeRoot();
-  const external = makeRoot();
-  const milestone = join(external, "milestones", "M001");
+  const milestone = join(root, ".gsd", "milestones", "M001");
   mkdirSync(milestone, { recursive: true });
   writeFileSync(join(milestone, "M001-META.json"), "{}\n");
-  symlinkSync(external, join(root, ".gsd"));
 
   assert.equal(detectLegacyLayout(root), null);
 });
 
-test("detects an in-repo .gsd that is a real directory", () => {
+test("accepts a real in-repo .gsd holding flat-phase state", () => {
   const root = makeRoot();
   mkdirSync(join(root, ".gsd", "phases"), { recursive: true });
+  writeFileSync(join(root, ".gsd", "gsd.db"), "");
+
+  assert.equal(detectLegacyLayout(root), null);
+});
+
+test("detects a content-bearing milestones/<MID>/ behind a .gsd symlink", () => {
+  const root = makeRoot();
+  const external = makeRoot();
+  const milestone = join(external, "milestones", "M001");
+  mkdirSync(milestone, { recursive: true });
+  writeFileSync(join(milestone, "ROADMAP.md"), "# roadmap\n");
+  symlinkSync(external, join(root, ".gsd"));
 
   const finding = detectLegacyLayout(root);
 
-  assert.equal(finding?.kind, "in-repo-state");
+  assert.equal(finding?.kind, "milestones-layout");
 });
 
 test("accepts a .gsd symlink pointing at external state", () => {

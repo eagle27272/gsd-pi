@@ -34,8 +34,9 @@ function runGit(base: string, args: string[]): string {
 
 /**
  * Fresh git repo whose `.gsd` is already a symlink into external state — the
- * only layout auto-start accepts. State written under `<base>/.gsd/...`
- * afterwards lands in the external directory through the symlink.
+ * layout auto-start produces for a fresh project. State written under
+ * `<base>/.gsd/...` afterwards lands in the external directory through the
+ * symlink.
  */
 function makeLinkedRepo(prefix: string): string {
   const base = mkdtempSync(join(tmpdir(), prefix));

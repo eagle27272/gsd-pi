@@ -712,11 +712,10 @@ function ensureGsdSymlinkCore(projectPath: string): { path: string; identity: st
     }
 
     if (stat.isDirectory()) {
-      // Real directory — left in place. Replacing a git-tracked .gsd directory
-      // with a symlink makes git think tracked planning files were deleted, and
-      // in worktrees syncGsdStateToWorktree refreshes the directory's contents.
-      // In the main repo the legacy-layout guard rejects this before startup
-      // gets here; runtime no longer relocates it.
+      // Real directory — left in place, which is a supported layout. Replacing
+      // a git-tracked .gsd directory with a symlink makes git think tracked
+      // planning files were deleted, and in worktrees syncGsdStateToWorktree
+      // refreshes the directory's contents. Runtime no longer relocates it.
       return { path: localGsd, identity: resolved.identity };
     }
   } catch {

@@ -75,10 +75,9 @@ export function makeTempDir(prefix: string = "gsd-test-"): string {
 let sharedExternalStateRoot: string | null = null;
 
 /**
- * Give a fixture repo the only supported state layout: `<base>/.gsd` as a
- * symlink into the external state root. Auto-start refuses to run against a
- * real in-repo `.gsd/` directory, so a bootstrap fixture must be linked
- * before it writes any state — everything written to `<base>/.gsd/...`
+ * Give a fixture repo the layout auto-start produces for a fresh project:
+ * `<base>/.gsd` as a symlink into the external state root. Link before the
+ * fixture writes any state — everything written to `<base>/.gsd/...`
  * afterwards lands in the external directory, exactly as in production.
  *
  * Redirects GSD_STATE_DIR into a temp root so no fixture reaches the real

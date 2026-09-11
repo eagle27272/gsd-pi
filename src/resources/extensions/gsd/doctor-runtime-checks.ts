@@ -519,8 +519,9 @@ export async function checkRuntimeHealth(
   }
 
   // ── Pre-migration on-disk layout ───────────────────────────────────────
-  // Runtime no longer converts these layouts. Doctor reports so the operator
-  // can act; the auto-start guard is the one that refuses to run.
+  // Runtime no longer converts the pre-flat-phase milestones/<MID>/ layout.
+  // Doctor reports so the operator can act; the auto-start guard is the one
+  // that refuses to run.
   {
     const legacyLayout = detectLegacyLayout(basePath);
     if (legacyLayout) {
@@ -529,9 +530,7 @@ export async function checkRuntimeHealth(
         code: "legacy_layout",
         scope: "project",
         unitId: "project",
-        message: legacyLayout.kind === "milestones-layout"
-          ? `Found the pre-flat-phase milestones/<MID>/ layout at ${legacyLayout.path}. Support for converting it was removed; GSD v1.18.0 is the last version that can.`
-          : `Project state lives in an in-repo .gsd directory at ${legacyLayout.path} rather than a symlink to ~/.gsd/projects/<hash>/. Support for relocating it was removed; GSD v1.18.0 is the last version that can.`,
+        message: `Found the pre-flat-phase milestones/<MID>/ layout at ${legacyLayout.path}. Support for converting it was removed; GSD v1.18.0 is the last version that can.`,
         file: ".gsd",
         fixable: false,
       });

@@ -254,7 +254,7 @@ const DOCTOR_FIX_HINTS: Partial<Record<DoctorIssueCode, string>> = {
     "Merge the listed .gsd/phases/NN-* directories into the one path resolution picks (the newest), then re-render with `/gsd doctor fix`. Nothing is deleted automatically because the duplicate directories may hold different content.",
   uat_retry_exhausted: "Review the failing UAT criteria via `/gsd status`, fix the issue, then re-run `/gsd auto`.",
   legacy_layout:
-    "Runtime cannot convert this layout. GSD v1.18.0 is the last version that can — run it once in this project, or move the project's state under ~/.gsd/projects/<hash>/ and symlink .gsd to it by hand.",
+    "Runtime cannot convert the pre-flat-phase milestones/<MID>/ layout. GSD v1.18.0 is the last version that can — run it once in this project, or move each milestone's files under .gsd/phases/ by hand.",
 };
 
 export function doctorFixHint(code: DoctorIssueCode): string | undefined {

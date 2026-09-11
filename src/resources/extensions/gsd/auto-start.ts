@@ -1213,8 +1213,8 @@ export async function bootstrapAutoSession(
     // checkpointed and no cached adapter remains bound to a stale inode.
     closeAllWorkflowDatabases();
     // Fail closed on a pre-migration on-disk layout: every resolver below
-    // assumes external state behind the .gsd symlink and flat-phase
-    // projections, so continuing would silently corrupt later checks.
+    // assumes flat-phase projections, so continuing would silently corrupt
+    // later checks.
     assertNoLegacyLayout(base);
     // Ensure symlink exists (handles fresh projects)
     ensureGsdSymlink(base);
