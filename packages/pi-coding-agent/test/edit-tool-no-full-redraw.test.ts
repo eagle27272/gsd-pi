@@ -1,12 +1,12 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Container, type Terminal, Text, TUI } from "@earendil-works/pi-tui";
+import { Container, type Terminal, Text, TUI } from "@gsd/pi-tui";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { ToolExecutionComponent } from "@gsd/agent-modes/modes/interactive/components/tool-execution.js";
 import { createEditToolDefinition } from "../src/core/tools/edit.ts";
 import { computeEditsDiff, type Edit } from "../src/core/tools/edit-diff.ts";
-import { ToolExecutionComponent } from "../src/modes/interactive/components/tool-execution.ts";
-import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { initTheme } from "../src/theme/theme.ts";
 
 class FakeTerminal implements Terminal {
 	columns = 80;
@@ -102,13 +102,13 @@ describe("edit tool TUI rendering", () => {
 
 		const component = new ToolExecutionComponent(
 			"edit",
-			"tool-call-1",
 			{ path: filePath, edits },
 			{},
 			createEditToolDefinition(process.cwd()),
 			tui,
 			process.cwd(),
 		);
+		component.setExpanded(true);
 		root.addChild(component);
 		tui.addChild(root);
 		tui.start();
@@ -171,13 +171,13 @@ describe("edit tool TUI rendering", () => {
 		const tui = new TUI(terminal);
 		const component = new ToolExecutionComponent(
 			"edit",
-			"tool-call-replay",
 			{ path: filePath, edits },
 			{},
 			createEditToolDefinition(process.cwd()),
 			tui,
 			process.cwd(),
 		);
+		component.setExpanded(true);
 		tui.addChild(component);
 		tui.start();
 		await waitForRender();
@@ -208,13 +208,13 @@ describe("edit tool TUI rendering", () => {
 		const tui = new TUI(terminal);
 		const component = new ToolExecutionComponent(
 			"edit",
-			"tool-call-2",
 			{ path: filePath, edits: [{ oldText: "does not exist", newText: "replacement" }] },
 			{},
 			createEditToolDefinition(process.cwd()),
 			tui,
 			process.cwd(),
 		);
+		component.setExpanded(true);
 		tui.addChild(component);
 		tui.start();
 		await waitForRender();

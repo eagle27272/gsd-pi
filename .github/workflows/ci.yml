@@ -9,11 +9,11 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 10.12.1
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22.23.0
           cache: pnpm
@@ -25,7 +25,7 @@ jobs:
       # this commit with the test-only feature so those exports exist — without it
       # the loader silently falls back to the pinned binary and the
       # migrate-safety-audit suite fails on setMutationBoundaryFaultForTest.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -33,5 +33,14 @@ jobs:
             native/target
           key: cargo-${{ runner.os }}-${{ hashFiles('native/**/Cargo.lock', 'native/**/Cargo.toml') }}
           restore-keys: cargo-${{ runner.os }}-
+      # native/.cargo/config.toml builds with `-C target-cpu=native` for local dev
+      # and expects CI to override it via RUSTFLAGS. Without that override the
+      # cached native/target above is not portable: the runner fleet is
+      # heterogeneous, so a proc-macro .so built with one runner's instruction set
+      # gets restored onto a narrower one, and rustc dies with SIGILL when it
+      # dlopens napi_derive to expand the macro. Any non-empty RUSTFLAGS replaces
+      # the config.toml rustflags wholesale, which drops target-cpu=native.
       - run: pnpm run build:native:test
+        env:
+          RUSTFLAGS: -C debuginfo=0
       - run: pnpm run test:unit
