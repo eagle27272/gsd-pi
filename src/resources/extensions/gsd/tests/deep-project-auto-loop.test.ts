@@ -33,6 +33,7 @@ import {
 } from "../gsd-db.ts";
 import type { GSDPreferences } from "../preferences.ts";
 import type { GSDState } from "../types.ts";
+import { linkExternalGsdState } from "./test-utils.ts";
 
 function makeBase(): string {
   const base = join(tmpdir(), `gsd-deep-project-loop-${randomUUID()}`);
@@ -132,10 +133,17 @@ function writeValidProjectAndRequirements(base: string): void {
 }
 
 function makeRepo(): string {
-  const base = makeBase();
+  const base = join(tmpdir(), `gsd-deep-project-loop-${randomUUID()}`);
+  mkdirSync(base, { recursive: true });
   execFileSync("git", ["init"], { cwd: base, stdio: "ignore" });
   execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: base });
   execFileSync("git", ["config", "user.name", "Test"], { cwd: base });
+  // Auto-start rejects a real in-repo .gsd/, so link external state before
+  // seeding any project files.
+  linkExternalGsdState(base);
+  mkdirSync(join(base, ".gsd", "milestones"), { recursive: true });
+  writeFileSync(join(base, ".gsd", "PREFERENCES.md"), "---\nplanning_depth: deep\n---\n");
+  writeFileSync(join(base, ".gitignore"), ".gsd\n");
   writeFileSync(join(base, "README.md"), "# test\n");
   execFileSync("git", ["add", "-A"], { cwd: base, stdio: "ignore" });
   execFileSync("git", ["commit", "-m", "init"], { cwd: base, stdio: "ignore" });

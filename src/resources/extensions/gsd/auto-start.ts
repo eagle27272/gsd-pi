@@ -29,7 +29,7 @@ import {
   getIsolationMode,
 } from "./preferences.js";
 import { ensureGsdSymlink, isInheritedRepo, validateProjectId } from "./repo-identity.js";
-import { migrateToExternalState, recoverFailedMigration } from "./migrate-external.js";
+import { assertNoLegacyLayout } from "./legacy-layout-guard.js";
 import { collectSecretsFromManifest } from "../get-secrets-from-user.js";
 import { gsdRoot, resolveMilestoneFile } from "./paths.js";
 import { findMilestoneIds } from "./milestone-ids.js";
@@ -1208,32 +1208,23 @@ export async function bootstrapAutoSession(
       nativeInit(base, mainBranch);
     }
 
-    // Migrate legacy in-project .gsd/ to external state directory.
-    // Migration MUST run before ensureGitignore to avoid adding ".gsd" to
-    // .gitignore when .gsd/ is git-tracked (data-loss bug #1364).
-    recoverFailedMigration(base);
     // startAuto's interrupted-session assessment may already have opened the
-    // database. Retire every handle before migration moves the containing
-    // directory so the WAL is checkpointed and no cached adapter remains
-    // bound to the pre-migration inode.
+    // database. Retire every handle before the symlink step so the WAL is
+    // checkpointed and no cached adapter remains bound to a stale inode.
     closeAllWorkflowDatabases();
-    const migration = migrateToExternalState(base);
-    if (migration.error) {
-      const isAuthoritativeStateGuard = migration.error.includes(
-        "External state already exists for this project",
-      );
-      const severity = isAuthoritativeStateGuard ? "info" : "warning";
-      ctx.ui.notify(`External state migration warning: ${migration.error}`, severity);
-    }
-    // Ensure symlink exists (handles fresh projects and post-migration)
+    // Fail closed on a pre-migration on-disk layout: every resolver below
+    // assumes external state behind the .gsd symlink and flat-phase
+    // projections, so continuing would silently corrupt later checks.
+    assertNoLegacyLayout(base);
+    // Ensure symlink exists (handles fresh projects)
     ensureGsdSymlink(base);
 
-    // Acquisition starts before migration so bootstrap is serialized. Once
-    // .gsd points at external state, hand ownership to that physical target
-    // before any later process can observe or contend on the new path.
-    const migratedLockResult = acquireSessionLock(base);
-    if (!migratedLockResult.acquired) {
-      ctx.ui.notify(migratedLockResult.reason, "error");
+    // The first acquisition above serialized bootstrap against the pre-symlink
+    // path. Now that .gsd points at external state, hand ownership to that
+    // physical target before any later process can observe or contend on it.
+    const externalStateLockResult = acquireSessionLock(base);
+    if (!externalStateLockResult.acquired) {
+      ctx.ui.notify(externalStateLockResult.reason, "error");
       return releaseLockAndReturn();
     }
 

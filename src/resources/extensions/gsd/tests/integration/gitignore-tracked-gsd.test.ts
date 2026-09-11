@@ -2,8 +2,7 @@
  * gitignore-tracked-gsd.test.ts — Regression tests for #1364.
  *
  * Verifies that ensureGitignore() does NOT add ".gsd" to .gitignore
- * when .gsd/ contains git-tracked files, and that migrateToExternalState()
- * aborts migration for tracked .gsd/ directories.
+ * when .gsd/ contains git-tracked files.
  *
  * Uses real temporary git repos — no mocks.
  */
@@ -23,7 +22,6 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { ensureGitignore, hasGitTrackedGsdFiles } from "../../gitignore.ts";
-import { migrateToExternalState } from "../../migrate-external.ts";
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -248,64 +246,6 @@ test("hasGitTrackedGsdFiles returns true (fail-safe) when git is not available",
     // (The index lock causes git ls-files to fail; rev-parse also fails → true)
     const result = hasGitTrackedGsdFiles(dir);
     assert.equal(result, true, "Should return true (fail-safe) when git is unavailable");
-  } finally {
-    cleanup(dir);
-  }
-});
-
-// ─── migrateToExternalState — tracked .gsd/ protection ──────────────
-
-test("migrateToExternalState aborts when .gsd/ has tracked files (#1364)", (t) => {
-  const dir = makeTempRepo();
-  try {
-    // Create tracked .gsd/ files
-    mkdirSync(join(dir, ".gsd", "milestones"), { recursive: true });
-    writeFileSync(join(dir, ".gsd", "PROJECT.md"), "# Project\n");
-    git(dir, "add", ".gsd/");
-    git(dir, "commit", "-m", "track gsd state");
-
-    // Attempt migration — should abort without moving anything
-    const result = migrateToExternalState(dir);
-
-    assert.equal(result.migrated, false, "Should NOT migrate tracked .gsd/");
-    assert.equal(result.error, undefined, "Should not report an error — just skip");
-
-    // .gsd/ should still be a real directory, not a symlink
-    assert.ok(existsSync(join(dir, ".gsd", "PROJECT.md")), ".gsd/PROJECT.md should still exist");
-
-    // No .gsd.migrating should exist
-    assert.ok(
-      !existsSync(join(dir, ".gsd.migrating")),
-      ".gsd.migrating should not exist",
-    );
-  } finally {
-    cleanup(dir);
-  }
-});
-
-test("migrateToExternalState cleans git index so tracked files don't show as deleted (#1364 path 2)", (t) => {
-  const dir = makeTempRepo();
-  try {
-    // Track .gsd/ files, then untrack them so migration proceeds
-    mkdirSync(join(dir, ".gsd", "milestones", "M001"), { recursive: true });
-    writeFileSync(join(dir, ".gsd", "PROJECT.md"), "# Project\n");
-    writeFileSync(join(dir, ".gsd", "milestones", "M001", "PLAN.md"), "# Plan\n");
-    git(dir, "add", ".gsd/");
-    git(dir, "commit", "-m", "track gsd state");
-    git(dir, "rm", "-r", "--cached", ".gsd/");
-    git(dir, "commit", "-m", "untrack gsd (simulates pre-migration project)");
-
-    const result = migrateToExternalState(dir);
-    assert.equal(result.migrated, true, "Migration should succeed");
-
-    // git status must show NO deleted files after migration
-    const status = git(dir, "status", "--porcelain");
-    const deletions = status.split("\n").filter((l) => /^\s*D\s/.test(l) || /^D\s/.test(l));
-    assert.equal(
-      deletions.length,
-      0,
-      `Expected no deleted files after migration, but found:\n${deletions.join("\n")}`,
-    );
   } finally {
     cleanup(dir);
   }

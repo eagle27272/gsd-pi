@@ -108,9 +108,8 @@ function seedDatabaseFromMarkdown(dir: string, minimum: SeedHierarchyCounts): Se
 }
 
 function commitRecoveredMilestone(dir: string): void {
-	// Track projections so auto-start's migrateToExternalState aborts (#1364).
-	// An ignored in-project .gsd/ is eligible for that move, and pass-0
-	// reconciliation then flakes on roadmap-missing instead of the provider error.
+	// Track projections so pass-0 reconciliation resolves them (#1364) and
+	// flakes on neither roadmap-missing nor the provider error.
 	commitPaths(dir, [
 		".gsd/milestones/M001/M001-CONTEXT.md",
 		".gsd/milestones/M001/M001-ROADMAP.md",

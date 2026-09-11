@@ -95,22 +95,16 @@ test("guided execute uses auto step bootstrap when worktree isolation is enabled
   );
 });
 
-test("auto bootstrap validates blocked directories before touching .gsd migration state", () => {
+test("auto bootstrap validates blocked directories before touching .gsd layout state", () => {
   const autoSrc = readGsdFile("auto.ts");
   const autoStartSrc = readGsdFile("auto-start.ts");
 
   const startAutoIdx = autoSrc.indexOf("export async function startAuto(");
   const startAutoBody = autoSrc.slice(startAutoIdx);
   const startAutoValidationIdx = startAutoBody.indexOf("validateDirectory(base)");
-  const startAutoRecoveryIdx = startAutoBody.indexOf("recoverFailedMigration(base)");
 
   assert.ok(startAutoIdx > -1, "startAuto should exist");
   assert.ok(startAutoValidationIdx > -1, "startAuto should validate the base directory");
-  assert.ok(startAutoRecoveryIdx > -1, "startAuto should still recover failed migrations for safe projects");
-  assert.ok(
-    startAutoValidationIdx < startAutoRecoveryIdx,
-    "startAuto must reject blocked directories before recovering or migrating .gsd state",
-  );
 
   const bootstrapIdx = autoStartSrc.indexOf("export async function bootstrapAutoSession(");
   const bootstrapBody = autoStartSrc.slice(bootstrapIdx);
@@ -118,17 +112,17 @@ test("auto bootstrap validates blocked directories before touching .gsd migratio
   const staleCrashReadIdx = bootstrapBody.indexOf("const startupLock = readCrashLock(base)");
   const staleCrashClearIdx = bootstrapBody.indexOf("clearLock(base);");
   const lockIdx = bootstrapBody.indexOf("acquireSessionLock(base)");
-  const bootstrapMigrationIdx = bootstrapBody.indexOf("migrateToExternalState(base)");
+  const bootstrapLayoutGuardIdx = bootstrapBody.indexOf("assertNoLegacyLayout(base)");
 
   assert.ok(bootstrapIdx > -1, "bootstrapAutoSession should exist");
   assert.ok(bootstrapValidationIdx > -1, "bootstrapAutoSession should validate the base directory");
   assert.ok(lockIdx > -1, "bootstrapAutoSession should acquire a session lock for safe projects");
-  assert.ok(bootstrapMigrationIdx > -1, "bootstrapAutoSession should still migrate safe projects");
+  assert.ok(bootstrapLayoutGuardIdx > -1, "bootstrapAutoSession should reject pre-migration on-disk layouts");
   assert.ok(staleCrashReadIdx > -1, "bootstrapAutoSession should probe stale crash lock state before lock acquisition");
   assert.ok(staleCrashClearIdx > -1, "bootstrapAutoSession should clear stale crash lock state when detected");
   assert.ok(
-    bootstrapValidationIdx < lockIdx && bootstrapValidationIdx < bootstrapMigrationIdx,
-    "fresh bootstrap must reject blocked directories before locking or migrating .gsd state",
+    bootstrapValidationIdx < lockIdx && bootstrapValidationIdx < bootstrapLayoutGuardIdx,
+    "fresh bootstrap must reject blocked directories before locking or inspecting .gsd layout state",
   );
   assert.ok(
     staleCrashReadIdx < lockIdx && staleCrashClearIdx < lockIdx,

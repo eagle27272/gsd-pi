@@ -14,12 +14,16 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+
+import { externalGsdRoot } from "../repo-identity.ts";
 
 /**
  * Shell-free git helper — uses execFileSync to bypass shell entirely.
@@ -66,6 +70,34 @@ export function makeTempRepo(prefix: string = "gsd-test-"): string {
  */
 export function makeTempDir(prefix: string = "gsd-test-"): string {
   return mkdtempSync(join(tmpdir(), prefix));
+}
+
+let sharedExternalStateRoot: string | null = null;
+
+/**
+ * Give a fixture repo the only supported state layout: `<base>/.gsd` as a
+ * symlink into the external state root. Auto-start refuses to run against a
+ * real in-repo `.gsd/` directory, so a bootstrap fixture must be linked
+ * before it writes any state — everything written to `<base>/.gsd/...`
+ * afterwards lands in the external directory, exactly as in production.
+ *
+ * Redirects GSD_STATE_DIR into a temp root so no fixture reaches the real
+ * ~/.gsd. Test files run one per process, so the override is process-local.
+ *
+ * @param base - Project root; must already be a git repo
+ * @returns absolute path to the external state directory
+ */
+export function linkExternalGsdState(base: string): string {
+  if (!sharedExternalStateRoot) {
+    sharedExternalStateRoot = realpathSync(mkdtempSync(join(tmpdir(), "gsd-external-state-")));
+    process.env.GSD_STATE_DIR = sharedExternalStateRoot;
+  }
+  const localGsd = join(base, ".gsd");
+  const externalPath = externalGsdRoot(base);
+  mkdirSync(externalPath, { recursive: true });
+  rmSync(localGsd, { recursive: true, force: true });
+  symlinkSync(externalPath, localGsd, "junction");
+  return externalPath;
 }
 
 /**

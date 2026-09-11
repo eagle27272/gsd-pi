@@ -21,6 +21,8 @@ import {
   insertMilestone,
   openDatabase,
 } from "../gsd-db.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
+import { linkExternalGsdState } from "./test-utils.ts";
 
 function runGit(base: string, args: string[]): string {
   return execFileSync("git", args, {
@@ -30,16 +32,28 @@ function runGit(base: string, args: string[]): string {
   }).trim();
 }
 
+/**
+ * Fresh git repo whose `.gsd` is already a symlink into external state — the
+ * only layout auto-start accepts. State written under `<base>/.gsd/...`
+ * afterwards lands in the external directory through the symlink.
+ */
+function makeLinkedRepo(prefix: string): string {
+  const base = mkdtempSync(join(tmpdir(), prefix));
+  runGit(base, ["init"]);
+  runGit(base, ["config", "user.email", "test@test.com"]);
+  runGit(base, ["config", "user.name", "Test"]);
+  linkExternalGsdState(base);
+  writeFileSync(join(base, ".gitignore"), ".gsd\n");
+  return base;
+}
+
 function makeRepoWithUnmergedCompletedMilestone(): string {
-  const base = mkdtempSync(join(tmpdir(), "gsd-orphan-bootstrap-"));
+  const base = makeLinkedRepo("gsd-orphan-bootstrap-");
   mkdirSync(join(base, ".gsd", "milestones"), { recursive: true });
   writeFileSync(
     join(base, ".gsd", "PREFERENCES.md"),
     "---\ngit:\n  isolation: \"branch\"\n---\n",
   );
-  runGit(base, ["init"]);
-  runGit(base, ["config", "user.email", "test@test.com"]);
-  runGit(base, ["config", "user.name", "Test"]);
   writeFileSync(join(base, "README.md"), "# test\n");
   runGit(base, ["add", "-A"]);
   runGit(base, ["commit", "-m", "init"]);
@@ -60,7 +74,7 @@ function makeRepoWithUnmergedCompletedMilestone(): string {
 }
 
 function makeRepoWithStrandedActiveMilestone(options: { deepPlanning?: boolean } = {}): string {
-  const base = mkdtempSync(join(tmpdir(), "gsd-stranded-bootstrap-"));
+  const base = makeLinkedRepo("gsd-stranded-bootstrap-");
   mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
   writeFileSync(
     join(base, ".gsd", "PREFERENCES.md"),
@@ -68,9 +82,6 @@ function makeRepoWithStrandedActiveMilestone(options: { deepPlanning?: boolean }
       ? "---\nplanning_depth: deep\ngit:\n  isolation: \"none\"\n---\n"
       : "---\ngit:\n  isolation: \"none\"\n---\n",
   );
-  runGit(base, ["init"]);
-  runGit(base, ["config", "user.email", "test@test.com"]);
-  runGit(base, ["config", "user.name", "Test"]);
   writeFileSync(join(base, "README.md"), "# test\n");
   runGit(base, ["add", "-A"]);
   runGit(base, ["commit", "-m", "init"]);
@@ -90,16 +101,13 @@ function makeRepoWithStrandedActiveMilestone(options: { deepPlanning?: boolean }
 }
 
 function makeRepoWithMultipleStrandedMilestones(): string {
-  const base = mkdtempSync(join(tmpdir(), "gsd-multiple-stranded-bootstrap-"));
+  const base = makeLinkedRepo("gsd-multiple-stranded-bootstrap-");
   mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
   mkdirSync(join(base, ".gsd", "milestones", "M002"), { recursive: true });
   writeFileSync(
     join(base, ".gsd", "PREFERENCES.md"),
     "---\ngit:\n  isolation: \"none\"\n---\n",
   );
-  runGit(base, ["init"]);
-  runGit(base, ["config", "user.email", "test@test.com"]);
-  runGit(base, ["config", "user.name", "Test"]);
   writeFileSync(join(base, "README.md"), "# test\n");
   runGit(base, ["add", "-A"]);
   runGit(base, ["commit", "-m", "init"]);
@@ -130,22 +138,18 @@ function makeRepoWithOnlySiblingStrandedAndLockedActive(): string {
   // milestone branch. A sibling milestone (M001) has a stranded branch.
   // A parallel worker locked to M002 must skip the sibling's stranded
   // action entirely — neither block on it nor adopt it.
-  const base = mkdtempSync(join(tmpdir(), "gsd-locked-no-stranded-bootstrap-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
-  mkdirSync(join(base, ".gsd", "milestones", "M002"), { recursive: true });
+  const base = makeLinkedRepo("gsd-locked-no-stranded-bootstrap-");
   // M002 has CONTEXT so bootstrap's pre-planning gate doesn't route to
   // showSmartEntry and the test reaches the post-lock session-init path.
-  writeFileSync(
-    join(base, ".gsd", "milestones", "M002", "M002-CONTEXT.md"),
-    "# M002 context\n",
+  const m002PhaseDir = join(
+    base, ".gsd", "phases", canonicalPhaseDirName("M002", "Locked milestone"),
   );
+  mkdirSync(m002PhaseDir, { recursive: true });
+  writeFileSync(join(m002PhaseDir, "02-CONTEXT.md"), "# M002 context\n");
   writeFileSync(
     join(base, ".gsd", "PREFERENCES.md"),
     "---\ngit:\n  isolation: \"none\"\n---\n",
   );
-  runGit(base, ["init"]);
-  runGit(base, ["config", "user.email", "test@test.com"]);
-  runGit(base, ["config", "user.name", "Test"]);
   writeFileSync(join(base, "README.md"), "# test\n");
   runGit(base, ["add", "-A"]);
   runGit(base, ["commit", "-m", "init"]);
@@ -171,16 +175,13 @@ function makeRepoWithOnlySiblingStrandedAndLockedActive(): string {
 }
 
 function makeRepoWithActiveMismatchAndStrandedTarget(): string {
-  const base = mkdtempSync(join(tmpdir(), "gsd-targeted-stranded-bootstrap-"));
+  const base = makeLinkedRepo("gsd-targeted-stranded-bootstrap-");
   mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
   mkdirSync(join(base, ".gsd", "milestones", "M002"), { recursive: true });
   writeFileSync(
     join(base, ".gsd", "PREFERENCES.md"),
     "---\ngit:\n  isolation: \"worktree\"\n---\n",
   );
-  runGit(base, ["init"]);
-  runGit(base, ["config", "user.email", "test@test.com"]);
-  runGit(base, ["config", "user.name", "Test"]);
   writeFileSync(join(base, "README.md"), "# test\n");
   runGit(base, ["add", "-A"]);
   runGit(base, ["commit", "-m", "init"]);
@@ -202,16 +203,13 @@ function makeRepoWithActiveMismatchAndStrandedTarget(): string {
 }
 
 function makeRepoWithRecoveredCleanupAndStrandedMismatch(): string {
-  const base = mkdtempSync(join(tmpdir(), "gsd-headless-stranded-bootstrap-"));
+  const base = makeLinkedRepo("gsd-headless-stranded-bootstrap-");
   mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
   mkdirSync(join(base, ".gsd", "milestones", "M002"), { recursive: true });
   writeFileSync(
     join(base, ".gsd", "PREFERENCES.md"),
     "---\ngit:\n  isolation: \"none\"\n---\n",
   );
-  runGit(base, ["init"]);
-  runGit(base, ["config", "user.email", "test@test.com"]);
-  runGit(base, ["config", "user.name", "Test"]);
   writeFileSync(join(base, "README.md"), "# test\n");
   runGit(base, ["add", "-A"]);
   runGit(base, ["commit", "-m", "init"]);
