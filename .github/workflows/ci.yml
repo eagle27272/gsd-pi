@@ -1,8 +1,10 @@
 name: CI
 on:
-  push:
-    branches: [main, "personal/**"]
   pull_request:
+    types: [synchronize, opened, reopened, edited]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
