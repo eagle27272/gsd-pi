@@ -23,7 +23,7 @@ With #1657–#1660 fixed it prints `COMPLETED` at HEAD (it printed `WEDGED` on v
    the LLM tokens are scripted.
 4. Prints a JSON verdict and preserves all artifacts in the run dir (never deleted):
    `transcript.jsonl`, `stdout.jsonl`, `stderr.log`, `notifications.log`,
-   `verdict.json`, recover logs, and a `gsd-state/` copy of the project's `.gsd/`.
+   `verdict.json`, `db-seed-counts.json`, and a `gsd-state/` copy of the project's `.gsd/`.
 
 ## Running it
 

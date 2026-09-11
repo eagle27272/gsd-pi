@@ -231,10 +231,15 @@ function writeRecoveredMilestone(dir) {
  * markdown. What survives for exactly this purpose is md-importer's
  * `migrateFromMarkdown`, the explicitly test-only scaffolding importer.
  *
+ * `minimum` is the floor this fixture is expected to produce. Mirrors
+ * tests/e2e/headless-auto-pause-blocked.e2e.test.ts's seedDatabaseFromMarkdown,
+ * whose fixture shape (milestones/slices present, zero tasks) hits the same
+ * parseProjectionPlan checkbox/heading-id collision as this bed's fixture.
+ *
  * Runs in a child process so the bed never holds a SQLite handle on the
  * project `headless auto` is about to run against.
  */
-function seedDatabaseFromMarkdown(dir) {
+function seedDatabaseFromMarkdown(dir, minimum) {
 	const moduleUrl = (name) =>
 		JSON.stringify(pathToFileURL(join(REPO_ROOT, "dist", "resources", "extensions", "gsd", name)).href);
 	const script = [
@@ -258,8 +263,10 @@ function seedDatabaseFromMarkdown(dir) {
 	}
 
 	const counts = JSON.parse(raw);
-	if (counts.hierarchy.milestones < 1 || counts.hierarchy.slices < 1 || counts.hierarchy.tasks < 1) {
-		throw new Error(`DB seeding imported an empty hierarchy: ${raw}`);
+	for (const kind of ["milestones", "slices", "tasks"]) {
+		if (counts.hierarchy[kind] < minimum[kind]) {
+			throw new Error(`DB seeding imported ${counts.hierarchy[kind]} ${kind}, expected at least ${minimum[kind]}: ${raw}`);
+		}
 	}
 	return counts;
 }
@@ -465,7 +472,12 @@ async function main() {
 	const projectDir = scaffoldProject(runDir);
 	writeRecoveredMilestone(projectDir);
 
-	const seedCounts = seedDatabaseFromMarkdown(projectDir);
+	// tasks: 0 is the real import result, not an oversight. parseProjectionPlan
+	// drops a checkbox task whose id is repeated by a `### T01: ...` detail
+	// heading (the heading branch sees a known id and clears the pending
+	// entry), and this fixture's T01-PLAN.md has both. The bed's transcript
+	// still dispatches and completes T01 through the real engine regardless.
+	const seedCounts = seedDatabaseFromMarkdown(projectDir, { milestones: 1, slices: 1, tasks: 0 });
 	writeFileSync(join(runDir, "db-seed-counts.json"), JSON.stringify(seedCounts, null, 2) + "\n");
 	console.error(
 		`[bed] DB seeded (${seedCounts.hierarchy.milestones}M/${seedCounts.hierarchy.slices}S/${seedCounts.hierarchy.tasks}T)`,

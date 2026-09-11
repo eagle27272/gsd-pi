@@ -219,7 +219,7 @@ async function markSeededMilestoneComplete(dir: string): Promise<void> {
 	const { projectCanonicalStatusToLegacy } = await import("../../dist/resources/extensions/gsd/gsd-db.js");
 	try {
 		const opened = openWorkflowDatabase(dir);
-		assert.equal(opened.ok, true, "recovered fixture database should open");
+		assert.equal(opened.ok, true, "seeded fixture database should open");
 		const fence = readDomainOperationFence();
 		executeDomainOperation(
 			{
