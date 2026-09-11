@@ -1282,3 +1282,75 @@ test("checkEngineHealth clears artifact_file_missing after projection re-render 
   assert.ok(contextIssue, "doctor should still report missing user content that projection repair did not recreate");
   assert.equal(contextIssue.severity, "warning");
 });
+
+test("checkEngineHealth flags artifact rows split across two phase directories (#2)", async (t) => {
+  const base = mkdtempSync(join(tmpdir(), "gsd-doctor-phase-dir-split-"));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+
+  const gsdDir = join(base, ".gsd");
+  mkdirSync(join(gsdDir, "phases", "03-new-milestone-m003"), { recursive: true });
+  mkdirSync(join(gsdDir, "phases", "03-brand-foundation"), { recursive: true });
+  writeFileSync(join(gsdDir, "phases", "03-new-milestone-m003", "03-ROADMAP.md"), "# Roadmap\n");
+  writeFileSync(join(gsdDir, "phases", "03-brand-foundation", "03-CONTEXT.md"), "# Context\n");
+
+  openDatabase(join(gsdDir, "gsd.db"));
+  insertMilestone({ id: "M003", title: "Brand foundation", status: "active" });
+  insertArtifact({
+    path: "phases/03-new-milestone-m003/03-ROADMAP.md",
+    artifact_type: "ROADMAP",
+    milestone_id: "M003",
+    slice_id: null,
+    task_id: null,
+    full_content: "# Roadmap\n",
+  });
+  insertArtifact({
+    path: "phases/03-brand-foundation/03-CONTEXT.md",
+    artifact_type: "CONTEXT",
+    milestone_id: "M003",
+    slice_id: null,
+    task_id: null,
+    full_content: "# Context\n",
+  });
+
+  const issues: any[] = [];
+  await checkEngineHealth(base, issues, []);
+
+  const split = issues.find((issue) => issue.code === "artifact_phase_dir_split");
+  assert.ok(split, "doctor should flag rows spread over two phase dirs even though every file exists");
+  assert.equal(split.unitId, "M003");
+  assert.match(split.message, /03-brand-foundation, 03-new-milestone-m003/);
+});
+
+test("checkEngineHealth does not flag a milestone whose rows share one phase directory", async (t) => {
+  const base = mkdtempSync(join(tmpdir(), "gsd-doctor-phase-dir-single-"));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+
+  const gsdDir = join(base, ".gsd");
+  mkdirSync(join(gsdDir, "phases", "03-brand-foundation"), { recursive: true });
+  writeFileSync(join(gsdDir, "phases", "03-brand-foundation", "03-ROADMAP.md"), "# Roadmap\n");
+  writeFileSync(join(gsdDir, "phases", "03-brand-foundation", "03-CONTEXT.md"), "# Context\n");
+
+  openDatabase(join(gsdDir, "gsd.db"));
+  insertMilestone({ id: "M003", title: "Brand foundation", status: "active" });
+  insertArtifact({
+    path: "phases/03-brand-foundation/03-ROADMAP.md",
+    artifact_type: "ROADMAP",
+    milestone_id: "M003",
+    slice_id: null,
+    task_id: null,
+    full_content: "# Roadmap\n",
+  });
+  insertArtifact({
+    path: "phases/03-brand-foundation/03-CONTEXT.md",
+    artifact_type: "CONTEXT",
+    milestone_id: "M003",
+    slice_id: null,
+    task_id: null,
+    full_content: "# Context\n",
+  });
+
+  const issues: any[] = [];
+  await checkEngineHealth(base, issues, []);
+
+  assert.equal(issues.some((issue) => issue.code === "artifact_phase_dir_split"), false);
+});

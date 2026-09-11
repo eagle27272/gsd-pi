@@ -6,11 +6,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { WORKFLOW_TOOL_CONTRACTS } from "@opengsd/contracts";
-import { registerDbTools } from "../bootstrap/db-tools.ts";
-import { registerExecTools } from "../bootstrap/exec-tools.ts";
-import { registerJournalTools } from "../bootstrap/journal-tools.ts";
-import { registerMemoryTools } from "../bootstrap/memory-tools.ts";
-import { registerQueryTools } from "../bootstrap/query-tools.ts";
+import { collectNativeRegisteredToolNames } from "./native-tool-registry-fixture.ts";
+import { NATIVE_WORKFLOW_TOOL_NAMES } from "../workflow-tool-name-resolver.ts";
 import {
   buildMinimalAutoGsdToolSet,
   MINIMAL_AUTO_BASE_TOOL_NAMES,
@@ -50,11 +47,9 @@ const MCP_TRANSPORT = {
 };
 
 /** Native Pi registers some contract names under legacy aliases. */
-const NATIVE_TOOL_EQUIVALENTS: Readonly<Record<string, readonly string[]>> = {
-  gsd_capture_thought: ["capture_thought", "gsd_capture_thought"],
-  gsd_memory_query: ["memory_query", "gsd_memory_query"],
-  gsd_memory_graph: ["gsd_graph", "gsd_memory_graph"],
-};
+const NATIVE_TOOL_EQUIVALENTS: Readonly<Record<string, readonly string[]>> = Object.fromEntries(
+  Object.entries(NATIVE_WORKFLOW_TOOL_NAMES).map(([canonical, native]) => [canonical, [native, canonical]]),
+);
 
 const REGISTERED_SURFACE_TOOL_NAMES = [
   ...new Set([
@@ -64,26 +59,6 @@ const REGISTERED_SURFACE_TOOL_NAMES = [
     ...WORKFLOW_TOOL_SURFACE_NAMES,
   ]),
 ];
-
-function makeMockPi() {
-  const tools: Array<{ name: string }> = [];
-  return {
-    registerTool(tool: { name: string }) {
-      tools.push(tool);
-    },
-    tools,
-  } as const;
-}
-
-function collectNativeRegisteredToolNames(): Set<string> {
-  const pi = makeMockPi();
-  registerDbTools(pi as never);
-  registerExecTools(pi as never);
-  registerQueryTools(pi as never);
-  registerJournalTools(pi as never);
-  registerMemoryTools(pi as never);
-  return new Set(pi.tools.map((tool) => tool.name));
-}
 
 function workflowToolsForUnit(unitType: string): string[] {
   return getRequiredWorkflowToolsForUnit(unitType).filter(

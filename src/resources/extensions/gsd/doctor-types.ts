@@ -87,6 +87,7 @@ export type DoctorIssueCode =
   | "db_done_task_no_summary"
   | "artifact_file_missing"
   | "artifact_path_escapes_projection_root"
+  | "artifact_phase_dir_split"
   | "artifact_user_content_missing"
   | "artifact_db_status_divergence"
   | "checkbox_db_status_divergence"

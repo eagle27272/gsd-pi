@@ -976,6 +976,45 @@ export async function checkEngineHealth(
         }
       }
 
+      // f2. One milestone's artifact rows are spread over two phases/NN-* dirs.
+      //     Path resolution only ever picks one of them, so every read against
+      //     the other silently misses content — including *-VERIFY.json gate
+      //     evidence. Invisible otherwise: both prefixes look well-formed (#2).
+      try {
+        const dirsByMilestone = new Map<string, Set<string>>();
+        const rows = adapter
+          .prepare(
+            `SELECT DISTINCT milestone_id, path
+             FROM artifacts
+             WHERE path != '' AND milestone_id IS NOT NULL`,
+          )
+          .all() as Array<{ milestone_id: string; path: string }>;
+
+        for (const row of rows) {
+          const parts = artifactPathRelativeToGsd(row.path).split("/");
+          if (parts.length < 3 || parts[0] !== LAYOUT_SEGMENTS.level1) continue;
+          const dirs = dirsByMilestone.get(row.milestone_id) ?? new Set<string>();
+          dirs.add(parts[1]!);
+          dirsByMilestone.set(row.milestone_id, dirs);
+        }
+
+        for (const [milestoneId, dirs] of dirsByMilestone) {
+          if (dirs.size < 2) continue;
+          const names = [...dirs].sort().join(", ");
+          issues.push({
+            severity: "warning",
+            code: "artifact_phase_dir_split",
+            scope: "milestone",
+            unitId: milestoneId,
+            message: `Artifact rows for ${milestoneId} are split across ${dirs.size} phase directories (${names}) — the phase directory drifted from the milestone title, so reads resolve to only one of them`,
+            file: `.gsd/${LAYOUT_SEGMENTS.level1}`,
+            fixable: false,
+          });
+        }
+      } catch {
+        // Non-fatal — phase-dir split check must never block doctor
+      }
+
       // g. Completion artifacts disagree with open DB hierarchy rows.
       try {
         const rows = adapter

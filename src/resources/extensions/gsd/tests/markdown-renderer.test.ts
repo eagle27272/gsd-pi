@@ -1831,6 +1831,149 @@ test('── markdown-renderer: renderRoadmapFromDb renders milestone with visio
   }
 });
 
+test('── markdown-renderer: roadmap projects every persisted planning field (#1) ──', async () => {
+  const tmpDir = makeTmpDir();
+  const dbPath = path.join(tmpDir, '.gsd', 'gsd.db');
+  openDatabase(dbPath);
+  clearAllCaches();
+
+  try {
+    insertMilestone({
+      id: 'M018',
+      title: 'Fully planned',
+      status: 'active',
+      planning: {
+        vision: 'A milestone planned with every field populated',
+        successCriteria: ['Users can import a project end-to-end'],
+        keyRisks: [{ risk: 'Native parser drift', whyItMatters: 'Silent projection loss' }],
+        proofStrategy: [{ riskOrUnknown: 'Native parser drift', retireIn: 'S01', whatWillBeProven: 'round-trip parity' }],
+        verificationContract: 'unit tests over the renderer',
+        verificationIntegration: 'render → parse → re-render on a real project',
+        verificationOperational: 'none',
+        verificationUat: 'reviewer reads ROADMAP.md',
+        definitionOfDone: ['Every planning field appears in the projection'],
+        requirementCoverage: '- Covers: R001\n- Leaves for later: R002',
+        boundaryMapMarkdown: '### S01 → S02\n\nProduces:\n- the rendered roadmap',
+      },
+    });
+    insertSlice({ id: 'S01', milestoneId: 'M018', title: 'First slice', status: 'pending' });
+    scaffoldDirs(tmpDir, 'M018', ['S01']);
+
+    const result = await renderRoadmapFromDb(tmpDir, 'M018');
+    assert.ok(!('skipped' in result), 'planned milestone renders');
+    const content = (result as { content: string }).content;
+
+    const headings = content.split('\n').filter(l => l.startsWith('## '));
+    assert.deepStrictEqual(
+      headings,
+      [
+        '## Success Criteria',
+        '## Key Risks / Unknowns',
+        '## Proof Strategy',
+        '## Verification Classes',
+        '## Milestone Definition of Done',
+        '## Requirement Coverage',
+        '## Slices',
+        '## Boundary Map',
+      ],
+      'roadmap sections match the bundled template order',
+    );
+
+    assert.match(content, /^- Native parser drift — Silent projection loss$/m, 'key risk bullet');
+    assert.match(
+      content,
+      /^- Native parser drift → retire in S01 by proving round-trip parity$/m,
+      'proof strategy bullet',
+    );
+    assert.match(content, /^- Contract verification: unit tests over the renderer$/m, 'contract class');
+    assert.match(content, /^- Integration verification: render → parse → re-render on a real project$/m, 'integration class');
+    assert.match(content, /^- Operational verification: none$/m, 'operational class');
+    assert.match(content, /^- UAT \/ human verification: reviewer reads ROADMAP\.md$/m, 'uat class');
+    assert.match(content, /^- Every planning field appears in the projection$/m, 'definition of done bullet');
+    assert.match(content, /^- Covers: R001$/m, 'requirement coverage body');
+    assert.ok(!/[ \t]$/m.test(content), 'roadmap content has no trailing whitespace');
+
+    // The added sections must not disturb slice/boundary parsing.
+    clearAllCaches();
+    const parsed = parseRoadmap(content);
+    assert.deepStrictEqual(parsed.slices.map(s => s.id), ['S01'], 'slices still parse');
+    assert.deepStrictEqual(parsed.successCriteria, ['Users can import a project end-to-end'], 'success criteria still parse');
+    assert.deepStrictEqual(parsed.boundaryMap.length, 1, 'boundary map still parses');
+  } finally {
+    closeDatabase();
+    cleanupDir(tmpDir);
+  }
+});
+
+test('── markdown-renderer: roadmap omits planning sections with no persisted data (#1) ──', async () => {
+  const tmpDir = makeTmpDir();
+  const dbPath = path.join(tmpDir, '.gsd', 'gsd.db');
+  openDatabase(dbPath);
+  clearAllCaches();
+
+  try {
+    insertMilestone({
+      id: 'M019',
+      title: 'Partially planned',
+      status: 'active',
+      planning: {
+        vision: 'Only some planning fields were supplied',
+        verificationUat: 'none',
+        // The planner left these as template placeholders / "not provided".
+        verificationContract: '{{tests}}',
+        verificationOperational: 'Not provided.',
+        requirementCoverage: '   ',
+      },
+    });
+    insertSlice({ id: 'S01', milestoneId: 'M019', title: 'First slice', status: 'pending' });
+    scaffoldDirs(tmpDir, 'M019', ['S01']);
+
+    const result = await renderRoadmapFromDb(tmpDir, 'M019');
+    const content = (result as { content: string }).content;
+
+    const headings = content.split('\n').filter(l => l.startsWith('## '));
+    assert.deepStrictEqual(
+      headings,
+      ['## Verification Classes', '## Slices'],
+      'only sections with real data are emitted',
+    );
+    assert.match(content, /^- UAT \/ human verification: none$/m, 'the one supplied class renders');
+    assert.ok(!content.includes('{{'), 'template placeholders never reach the projection');
+    assert.ok(!content.includes('Contract verification'), 'placeholder-only class is dropped');
+  } finally {
+    closeDatabase();
+    cleanupDir(tmpDir);
+  }
+});
+
+test('── markdown-renderer: roadmap demo line does not double the "After this:" prefix (#1) ──', async () => {
+  const tmpDir = makeTmpDir();
+  const dbPath = path.join(tmpDir, '.gsd', 'gsd.db');
+  openDatabase(dbPath);
+  clearAllCaches();
+
+  try {
+    insertMilestone({ id: 'M020', title: 'Prefixed demo', status: 'active' });
+    insertSlice({
+      id: 'S01',
+      milestoneId: 'M020',
+      title: 'First slice',
+      status: 'pending',
+      demo: 'After this: users can log in',
+    });
+    scaffoldDirs(tmpDir, 'M020', ['S01']);
+
+    const result = await renderRoadmapFromDb(tmpDir, 'M020');
+    const content = (result as { content: string }).content;
+
+    assert.match(content, /^ {2}> After this: users can log in$/m, 'prefix is written exactly once');
+    assert.ok(!content.includes('After this: After this:'), 'no doubled prefix');
+  } finally {
+    closeDatabase();
+    cleanupDir(tmpDir);
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // State-version stamp (T008)
 // ═══════════════════════════════════════════════════════════════════════════
