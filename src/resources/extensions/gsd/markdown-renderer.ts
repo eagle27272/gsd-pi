@@ -428,6 +428,31 @@ async function writeAndStore(
   return stamped;
 }
 
+/**
+ * The bundled roadmap template writes checklist entries as "- [ ] concern", so
+ * a planner that copies it literally persists the marker inside the item text.
+ * Strip it — the renderer owns the checkbox, and an unstripped value would
+ * round-trip as "- [ ] - [ ] concern".
+ */
+function stripChecklistMarker(item: string): string {
+  return item.replace(/^\s*(?:[-*]\s*)?(?:\[[ xX]?\]\s*)?/, "").trim();
+}
+
+/**
+ * Cross-cutting concerns the planner considered. Entries reach the projection
+ * straight from the planner's payload, so unsubstituted template tokens are
+ * dropped here — the roadmap validator rejects any section containing them.
+ */
+function renderHorizontalChecklist(milestone: MilestoneRow): string[] {
+  const bullets: string[] = [];
+  for (const entry of milestone.horizontal_checklist ?? []) {
+    const item = stripChecklistMarker((entry?.item ?? "").replace(/\r?\n+/g, " ").replace(/\s+/g, " "));
+    if (!item || /\{\{[^}]*\}\}/.test(item)) continue;
+    bullets.push(`- [${entry.checked ? "x" : " "}] ${item}`);
+  }
+  return bullets;
+}
+
 function renderRoadmapMarkdown(milestone: MilestoneRow, slices: SliceRow[]): string {
   const lines: string[] = [];
   const displayTitle = stripIdPrefix(milestone.title || milestone.id, milestone.id);
@@ -475,6 +500,17 @@ function renderRoadmapMarkdown(milestone: MilestoneRow, slices: SliceRow[]): str
     lines.push(`- [${done}] **${slice.id}: ${safeTitle}** ${sketchBadge}\`risk:${safeRisk}\` \`depends:${depends}\``);
     const demo = stripDemoPrefix(slice.demo);
     lines.push(demo ? `  > After this: ${demo}` : "  > After this:");
+    lines.push("");
+  }
+
+  // Section order follows templates/roadmap.md, which puts the checklist
+  // between Slices and Boundary Map. Omitted when empty so the frozen byte
+  // format for a milestone planned without one is unchanged.
+  const horizontalChecklist = renderHorizontalChecklist(milestone);
+  if (horizontalChecklist.length > 0) {
+    lines.push("## Horizontal Checklist");
+    lines.push("");
+    lines.push(...horizontalChecklist);
     lines.push("");
   }
 

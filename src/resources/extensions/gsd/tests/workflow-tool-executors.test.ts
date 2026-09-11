@@ -1122,6 +1122,55 @@ test("executePlanMilestone writes roadmap state and rendered roadmap path", asyn
   }
 });
 
+test("executePlanMilestone persists the Horizontal Checklist into the roadmap projection", async () => {
+  const base = makeTmpBase();
+  try {
+    openTestDb(base);
+
+    const result = await inProjectDir(base, () => executePlanMilestone({
+      ...validMilestonePlan(),
+      horizontalChecklist: [
+        { item: "Auth boundary documented — what is protected vs public", checked: true },
+        { item: "Reconnection / retry strategy verified for every external dependency" },
+      ],
+    }, base));
+
+    assert.equal(result.details.operation, "plan_milestone");
+    const stored = _getAdapter()!
+      .prepare("SELECT horizontal_checklist FROM milestones WHERE id = 'M001'")
+      .get()?.horizontal_checklist;
+    assert.deepEqual(JSON.parse(String(stored)), [
+      { item: "Auth boundary documented — what is protected vs public", checked: true },
+      { item: "Reconnection / retry strategy verified for every external dependency", checked: false },
+    ]);
+    const roadmap = readFileSync(String(result.details.roadmapPath), "utf-8");
+    assert.match(roadmap, /## Horizontal Checklist/);
+    assert.match(roadmap, /- \[x\] Auth boundary documented — what is protected vs public/);
+    assert.match(roadmap, /- \[ \] Reconnection \/ retry strategy verified for every external dependency/);
+  } finally {
+    closeDatabase();
+    cleanup(base);
+  }
+});
+
+test("executePlanMilestone rejects a malformed Horizontal Checklist entry", async () => {
+  const base = makeTmpBase();
+  try {
+    openTestDb(base);
+
+    const result = await inProjectDir(base, () => executePlanMilestone({
+      ...validMilestonePlan(),
+      horizontalChecklist: [{ item: "" }],
+    }, base));
+
+    assert.equal(result.isError, true);
+    assert.match(result.details.error as string, /horizontalChecklist\[0\] must include a non-empty item/);
+  } finally {
+    closeDatabase();
+    cleanup(base);
+  }
+});
+
 test("executePlanMilestone refuses a same-milestone lease conflict", async () => {
   const base = makeTmpBase();
   try {

@@ -122,6 +122,7 @@ history below explains each migration without duplicating that live value.
 | V46 | **State-DB cutover stamp**: records schema version 46 and stamps `PRAGMA application_id` and `PRAGMA user_version`; adds no tables |
 | V47 | **Same-lease Attempt settlement** (#1740): extends the Attempt dispatch-scope transition trigger so a worker holding its own milestone lease can settle its own running Attempt after its coordination dispatch is gone; adds no tables |
 | V48 | **Task execution-tool requirements**: adds `tasks.required_workflow_tools` as a non-null JSON-array column defaulting to `[]`; planning and replanning persist the workflow tools each Task expects its execution unit to expose |
+| V49 | **Milestone horizontal checklist**: adds `milestones.horizontal_checklist` as a non-null JSON-array column defaulting to `[]`; `gsd_plan_milestone` persists the cross-cutting concerns the planner considered and the roadmap projection renders them |
 
 ---
 
@@ -209,6 +210,7 @@ verification_operational TEXT NOT NULL DEFAULT ''          ← V8
 verification_uat        TEXT NOT NULL DEFAULT ''           ← V8
 definition_of_done      TEXT NOT NULL DEFAULT '[]'         ← V8, JSON
 requirement_coverage    TEXT NOT NULL DEFAULT ''           ← V8
+horizontal_checklist    TEXT NOT NULL DEFAULT '[]'         ← V49, JSON [{item, checked}]
 boundary_map_markdown   TEXT NOT NULL DEFAULT ''           ← V8
 sequence                INTEGER DEFAULT 0                  ← V23
 ```
