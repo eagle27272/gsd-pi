@@ -1124,6 +1124,22 @@ export function registerDbTools(pi: ExtensionAPI): void {
 			requirementCoverage: Type.Optional(
 				Type.String({ description: "Requirement coverage text" }),
 			),
+			horizontalChecklist: Type.Optional(
+				Type.Array(
+					Type.Object({
+						item: Type.String({ description: "Cross-cutting concern considered" }),
+						checked: Type.Optional(
+							Type.Boolean({
+								description: "True when the concern was considered and handled",
+							}),
+						),
+					}),
+					{
+						description:
+							"Cross-cutting concerns checked across all slices; omit for trivial milestones",
+					},
+				),
+			),
 			boundaryMapMarkdown: Type.Optional(
 				Type.String({ description: "Boundary map markdown block" }),
 			),

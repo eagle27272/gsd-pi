@@ -32,6 +32,7 @@ function milestone(overrides: Partial<MilestoneRow>): MilestoneRow {
     verification_uat: '',
     definition_of_done: [],
     requirement_coverage: '',
+    horizontal_checklist: [],
     boundary_map_markdown: '',
     sequence: 1,
     ...overrides,

@@ -28,6 +28,7 @@ const CONTENT_COLUMNS = [
   "verification_uat",
   "definition_of_done",
   "requirement_coverage",
+  "horizontal_checklist",
   "boundary_map_markdown",
 ] as const;
 

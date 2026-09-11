@@ -228,6 +228,7 @@ export function reconcileWorktreeDb(
       const wtMilestoneInfo = wtTableInfo("milestones");
       const hasWtMilestones = wtMilestoneInfo.length > 0;
       const hasMilestoneSequence = wtMilestoneInfo.some((col) => col["name"] === "sequence");
+      const hasMilestoneHorizontalChecklist = wtMilestoneInfo.some((col) => col["name"] === "horizontal_checklist");
       const wtSliceInfo = wtTableInfo("slices");
       const hasWtSlices = wtSliceInfo.length > 0;
       const hasIsSketch = wtSliceInfo.some((col) => col["name"] === "is_sketch");
@@ -420,7 +421,7 @@ export function reconcileWorktreeDb(
               id, title, status, depends_on, created_at, completed_at,
               vision, success_criteria, key_risks, proof_strategy,
               verification_contract, verification_integration, verification_operational, verification_uat,
-              definition_of_done, requirement_coverage, boundary_map_markdown, sequence
+              definition_of_done, requirement_coverage, horizontal_checklist, boundary_map_markdown, sequence
             )
             SELECT w.id, w.title,
                    CASE
@@ -441,7 +442,9 @@ export function reconcileWorktreeDb(
                    END,
                    w.vision, w.success_criteria, w.key_risks, w.proof_strategy,
                    w.verification_contract, w.verification_integration, w.verification_operational, w.verification_uat,
-                   w.definition_of_done, w.requirement_coverage, w.boundary_map_markdown,
+                   w.definition_of_done, w.requirement_coverage,
+                   ${hasMilestoneHorizontalChecklist ? "w.horizontal_checklist" : "COALESCE(m.horizontal_checklist, '[]')"},
+                   w.boundary_map_markdown,
                    ${hasMilestoneSequence ? "COALESCE(w.sequence, 0)" : "COALESCE(m.sequence, 0)"}
             FROM wt.milestones w
             LEFT JOIN milestones m ON m.id = w.id
@@ -462,6 +465,7 @@ export function reconcileWorktreeDb(
               verification_uat = excluded.verification_uat,
               definition_of_done = excluded.definition_of_done,
               requirement_coverage = excluded.requirement_coverage,
+              horizontal_checklist = excluded.horizontal_checklist,
               boundary_map_markdown = excluded.boundary_map_markdown,
               sequence = excluded.sequence
           `).run());
