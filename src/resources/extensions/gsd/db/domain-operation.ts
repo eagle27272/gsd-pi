@@ -501,25 +501,6 @@ function loadReceipt(operation: OperationRow, status: DomainOperationResult["sta
   };
 }
 
-export function inspectDomainOperationReceipt(
-  operationType: string,
-  idempotencyKey: string,
-): DomainOperationResult | null {
-  const operation = getDb().prepare(`
-    SELECT operation_id, project_id, operation_type, idempotency_key,
-           expected_revision, resulting_revision,
-           expected_authority_epoch, resulting_authority_epoch,
-           actor_type, actor_id, source_transport, trace_id, turn_id, request_hash,
-           created_at
-    FROM workflow_operations
-    WHERE operation_type = :operation_type AND idempotency_key = :idempotency_key
-  `).get({
-    ":operation_type": operationType,
-    ":idempotency_key": idempotencyKey,
-  }) as unknown as OperationRow | undefined;
-  return operation ? loadReceipt(operation, "replayed") : null;
-}
-
 export function assertDomainOperationReceiptComponents(
   receipt: DomainOperationResult,
   request: DomainOperationRequest,

@@ -1,11 +1,8 @@
 // Project/App: gsd-pi
 // File Purpose: Workspace-facing Interface for opening and maintaining the workflow database.
 
-import { createHash } from "node:crypto";
-import { closeSync, cpSync, existsSync, fsyncSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
-
-import { syncDirectoryEntry } from "@gsd/native/directory-sync";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 import type { GsdWorkspace, MilestoneScope } from "./workspace.js";
 import type { DbAdapter } from "./db-adapter.js";
@@ -19,7 +16,6 @@ import {
   getDbProvider,
   isDbAvailable,
   isSchemaTooNewError,
-  _getAdapter,
   openDatabase,
   openExistingDatabase,
   openDatabaseByScope,
@@ -31,7 +27,6 @@ import {
 } from "./gsd-db.js";
 import { resolveGsdPathContract, gsdRoot } from "./paths.js";
 import { logWarning, setLogBasePath } from "./workflow-logger.js";
-import { parseDecisionsTable } from "./decision-markdown-parser.js";
 import { isSqliteBusyError } from "./sqlite-errors.js";
 
 export interface WorkflowDatabaseLocation {
