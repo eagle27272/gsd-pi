@@ -359,6 +359,9 @@ export class ToolExecutionComponent extends Container {
 	private explicitlyCollapsed = false;
 	private showImages: boolean;
 	private isPartial = true;
+	// Args finish streaming well before the result settles; renderCall's pre-execution
+	// preview is gated on this, so it must not be derived from isPartial.
+	private argsComplete = false;
 	private toolDefinition?: ToolDefinition;
 	private ui: TUI;
 	private cwd: string;
@@ -405,7 +408,7 @@ export class ToolExecutionComponent extends Container {
 			state: this.toolRenderState,
 			cwd: this.cwd,
 			executionStarted: true,
-			argsComplete: !this.isPartial,
+			argsComplete: this.argsComplete || !this.isPartial,
 			isPartial: this.isPartial,
 			expanded: this.expanded,
 			showImages: this.showImages,
@@ -636,6 +639,7 @@ export class ToolExecutionComponent extends Container {
 	 * This triggers diff computation for edit tool.
 	 */
 	setArgsComplete(): void {
+		this.argsComplete = true;
 		if (this.toolName === "write") {
 			const rawPath = str(this.args?.file_path ?? this.args?.path);
 			const fileContent = str(this.args?.content);
@@ -644,6 +648,7 @@ export class ToolExecutionComponent extends Container {
 			}
 		}
 		this.maybeComputeEditDiff();
+		this.updateDisplay();
 	}
 
 	/**

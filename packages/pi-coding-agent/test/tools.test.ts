@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync }
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { executeBashWithOperations } from "../src/core/bash-executor.ts";
+import { executeBashWithOperations } from "@gsd/agent-core/bash-executor.js";
 import { type BashOperations, createBashTool, createLocalBashOperations } from "../src/core/tools/bash.ts";
 import { computeEditsDiff } from "../src/core/tools/edit-diff.ts";
 import {
@@ -13,7 +13,7 @@ import {
 	createLsTool,
 	createReadTool,
 	createWriteTool,
-} from "../src/index.ts";
+} from "../src/core/tools/index.ts";
 import * as shellModule from "../src/utils/shell.ts";
 
 const readTool = createReadTool(process.cwd());
@@ -44,6 +44,9 @@ describe("Coding Agent Tools", () => {
 	});
 
 	afterEach(() => {
+		// Spies on shell config leak across tests otherwise: vi.spyOn returns the
+		// already-installed mock, call history included.
+		vi.restoreAllMocks();
 		// Clean up test directory
 		rmSync(testDir, { recursive: true, force: true });
 	});
@@ -144,12 +147,16 @@ describe("Coding Agent Tools", () => {
 			expect(output).toContain("[40 more lines in file. Use offset=61 to continue.]");
 		});
 
-		it("should show error when offset is beyond file length", async () => {
+		it("should clamp and report an offset beyond file length", async () => {
 			const testFile = join(testDir, "short.txt");
 			writeFileSync(testFile, "Line 1\nLine 2\nLine 3");
 
-			await expect(readTool.execute("test-call-8", { path: testFile, offset: 100 })).rejects.toThrow(
-				/Offset 100 is beyond end of file \(3 lines total\)/,
+			const result = await readTool.execute("test-call-8", { path: testFile, offset: 100 });
+			const output = getTextOutput(result);
+
+			expect(output).toContain("Line 3");
+			expect(output).toContain(
+				"[Requested offset 100 was beyond the end of the file (3 lines total), so it was clamped to line 3.]",
 			);
 		});
 
