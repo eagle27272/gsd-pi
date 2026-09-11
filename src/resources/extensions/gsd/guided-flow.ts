@@ -2091,7 +2091,7 @@ export async function showSmartEntry(
           clearMarkdownAutoRebuildBackoff();
           ctx.ui.notify(
             result.message ??
-              `Markdown planning artifacts do not match the authoritative DB. Run \`${result.recoveryCommand ?? "/gsd recover"}\` to preview an explicit markdown import.`,
+              `Markdown planning artifacts do not match the authoritative DB. Run \`${result.recoveryCommand ?? "/gsd doctor"}\` to diagnose the drift.`,
             "warning",
           );
         }

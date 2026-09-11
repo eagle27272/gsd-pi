@@ -611,7 +611,7 @@ test("migrateToFlatPhase still rejects legacy projections with unknown identitie
 
   await assert.rejects(
     () => migrateToFlatPhase(base),
-    /Recommended: run `\/gsd recover`/,
+    /Recommended: run `\/gsd doctor`/,
   );
 
   assert.equal(existsSync(join(base, ".gsd", "phases")), false);
@@ -624,7 +624,7 @@ test("migrateToFlatPhase rejects structurally unknown slice identities", async (
   mkdirSync(unknownSlice, { recursive: true });
   writeFileSync(join(unknownSlice, "S99-CONTEXT.md"), "# Unknown Slice\n", "utf-8");
 
-  await assert.rejects(() => migrateToFlatPhase(base), /Recommended: run `\/gsd recover`/);
+  await assert.rejects(() => migrateToFlatPhase(base), /Recommended: run `\/gsd doctor`/);
 
   assert.equal(existsSync(join(base, ".gsd", "phases")), false);
   assert.equal(existsSync(join(unknownSlice, "S99-CONTEXT.md")), true);
@@ -636,7 +636,7 @@ test("migrateToFlatPhase rejects content-bearing unparseable milestone directori
   mkdirSync(unknownMilestone, { recursive: true });
   writeFileSync(join(unknownMilestone, "CONTEXT.md"), "# Unknown Milestone\n", "utf-8");
 
-  await assert.rejects(() => migrateToFlatPhase(base), /Recommended: run `\/gsd recover`/);
+  await assert.rejects(() => migrateToFlatPhase(base), /Recommended: run `\/gsd doctor`/);
 
   assert.equal(existsSync(join(base, ".gsd", "phases")), false);
   assert.equal(existsSync(join(unknownMilestone, "CONTEXT.md")), true);
@@ -672,7 +672,7 @@ test("migrateToFlatPhase aligns a legacy milestone with a zero-padded numeric DB
 test("migrateToFlatPhase rejects ambiguous numeric milestone aliases", async () => {
   const base = makeAliasTmp(["1", "001"]);
 
-  await assert.rejects(() => migrateToFlatPhase(base), /Recommended: run `\/gsd recover`/);
+  await assert.rejects(() => migrateToFlatPhase(base), /Recommended: run `\/gsd doctor`/);
 
   assert.equal(existsSync(join(base, ".gsd", "milestones", "M001")), true);
   assert.equal(existsSync(join(base, ".gsd", "phases")), false);
@@ -681,7 +681,7 @@ test("migrateToFlatPhase rejects ambiguous numeric milestone aliases", async () 
 test("migrateToFlatPhase rejects ambiguous bare milestone aliases", async () => {
   const base = makeAliasTmp(["M001-abc123", "M001-def456"]);
 
-  await assert.rejects(() => migrateToFlatPhase(base), /Recommended: run `\/gsd recover`/);
+  await assert.rejects(() => migrateToFlatPhase(base), /Recommended: run `\/gsd doctor`/);
 
   assert.equal(existsSync(join(base, ".gsd", "milestones", "M001")), true);
   assert.equal(existsSync(join(base, ".gsd", "phases")), false);

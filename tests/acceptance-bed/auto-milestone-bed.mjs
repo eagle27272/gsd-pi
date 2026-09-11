@@ -222,17 +222,46 @@ function writeRecoveredMilestone(dir) {
 	);
 }
 
-function recoverWithApproval(dir) {
-	const preview = gsd(["headless", "recover"], { cwd: dir, timeoutMs: 60_000 });
-	const previewHash = /re-run with --preview=(sha256:[0-9a-f]{64})/u.exec(preview.stderrClean)?.[1];
-	if (!previewHash) {
-		throw new Error(`no recovery preview hash. stderr:\n${preview.stderrClean.slice(0, 2000)}`);
+/**
+ * Load the bed's on-disk markdown milestone into the project database.
+ *
+ * This used to shell out to the two-step `gsd headless recover`, the
+ * operator-facing markdown→DB import. That command and the kernel behind it
+ * are gone: the database is the sole authority and no production path adopts
+ * markdown. What survives for exactly this purpose is md-importer's
+ * `migrateFromMarkdown`, the explicitly test-only scaffolding importer.
+ *
+ * Runs in a child process so the bed never holds a SQLite handle on the
+ * project `headless auto` is about to run against.
+ */
+function seedDatabaseFromMarkdown(dir) {
+	const moduleUrl = (name) =>
+		JSON.stringify(pathToFileURL(join(REPO_ROOT, "dist", "resources", "extensions", "gsd", name)).href);
+	const script = [
+		`const { migrateFromMarkdown } = await import(${moduleUrl("md-importer.js")});`,
+		`const { closeDatabase } = await import(${moduleUrl("gsd-db.js")});`,
+		"const counts = migrateFromMarkdown(process.argv[1]);",
+		"closeDatabase();",
+		"process.stdout.write(JSON.stringify(counts));",
+	].join("\n");
+
+	let raw;
+	try {
+		raw = execFileSync(process.execPath, ["--input-type=module", "-e", script, dir], {
+			cwd: dir,
+			encoding: "utf8",
+			timeout: 60_000,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+	} catch (err) {
+		throw new Error(`DB seeding failed:\n${String(err?.stderr ?? err).slice(0, 2000)}`);
 	}
-	const approved = gsd(["headless", "recover", `--preview=${previewHash}`], { cwd: dir, timeoutMs: 60_000 });
-	if (approved.code !== 0) {
-		throw new Error(`recover approval exit ${approved.code}. stderr:\n${approved.stderrClean.slice(0, 2000)}`);
+
+	const counts = JSON.parse(raw);
+	if (counts.hierarchy.milestones < 1 || counts.hierarchy.slices < 1 || counts.hierarchy.tasks < 1) {
+		throw new Error(`DB seeding imported an empty hierarchy: ${raw}`);
 	}
-	return { preview, approved };
+	return counts;
 }
 
 async function computeTestedSourceRevision(dir) {
@@ -436,10 +465,11 @@ async function main() {
 	const projectDir = scaffoldProject(runDir);
 	writeRecoveredMilestone(projectDir);
 
-	const { preview, approved } = recoverWithApproval(projectDir);
-	writeFileSync(join(runDir, "recover-preview.stderr.log"), preview.stderr);
-	writeFileSync(join(runDir, "recover-approved.stderr.log"), approved.stderr);
-	console.error("[bed] recover approved (exit 0)");
+	const seedCounts = seedDatabaseFromMarkdown(projectDir);
+	writeFileSync(join(runDir, "db-seed-counts.json"), JSON.stringify(seedCounts, null, 2) + "\n");
+	console.error(
+		`[bed] DB seeded (${seedCounts.hierarchy.milestones}M/${seedCounts.hierarchy.slices}S/${seedCounts.hierarchy.tasks}T)`,
+	);
 
 	const testedSourceRevision = await computeTestedSourceRevision(projectDir);
 	const turns = buildTranscript(testedSourceRevision, projectDir);

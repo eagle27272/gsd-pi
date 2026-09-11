@@ -71,7 +71,7 @@ test("session_start rejects legacy Markdown identities absent from the DB with e
 
   await assert.rejects(
     () => Promise.resolve(sessionStart({}, makeContext(base))),
-    /flat-phase migration.*\/gsd recover/,
+    /flat-phase migration.*\/gsd doctor/,
   );
   assert.ok(existsSync(join(base, ".gsd", "milestones", "M001")), "legacy layout should remain for recovery");
   assert.ok(existsSync(join(base, ".gsd", "milestones", "M999")), "unknown identity should remain for recovery");

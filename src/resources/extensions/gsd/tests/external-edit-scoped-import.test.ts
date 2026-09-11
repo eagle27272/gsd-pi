@@ -253,7 +253,7 @@ test("external-markdown-edit blocks instead of importing a drifted milestone", a
   assert.deepEqual(drift[0].entities, ["M001"]);
 
   const blocker = await externalMarkdownEditHandler.blocker?.(drift[0], ctx);
-  assert.match(blocker ?? "", /\/gsd recover/);
+  assert.match(blocker ?? "", /cannot import the edited markdown into the DB/);
   assert.throws(
     () => externalMarkdownEditHandler.repair(drift[0], ctx),
     /modeled projection repair must remain blocked/,

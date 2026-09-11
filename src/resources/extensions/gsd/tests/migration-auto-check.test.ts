@@ -102,8 +102,8 @@ test("migration auto-check preserves empty DB and reports explicit recovery", as
     assert.equal(result.action, "recovery-required");
     assert.equal(result.reason, "db-empty");
     assert.deepEqual(result.afterDb, { milestones: 0, slices: 0, tasks: 0 });
-    assert.equal(result.recoveryCommand, "/gsd recover");
-    assert.match(result.message ?? "", /run `\/gsd recover`/);
+    assert.equal(result.recoveryCommand, "/gsd doctor");
+    assert.match(result.message ?? "", /Run `\/gsd doctor`/);
     assert.equal(getAllMilestones().length, 0);
     assert.equal(getSliceTasks("M001", "S01").length, 0);
   } finally {
@@ -125,7 +125,7 @@ test("migration auto-check preserves DB on hierarchy count mismatch", async () =
     assert.equal(result.reason, "count-mismatch");
     assert.deepEqual(result.beforeDb, { milestones: 1, slices: 1, tasks: 0 });
     assert.deepEqual(result.afterDb, { milestones: 1, slices: 1, tasks: 0 });
-    assert.equal(result.recoveryCommand, "/gsd recover");
+    assert.equal(result.recoveryCommand, "/gsd doctor");
     assert.equal(getSliceTasks("M001", "S01").length, 0);
   } finally {
     cleanup(base);
@@ -264,11 +264,11 @@ test("migration auto-check flags a populated DB with missing markdown and points
     const result = await checkMarkdownHierarchyAgainstDb(base);
     assert.equal(result.action, "recovery-required");
     assert.equal(result.reason, "markdown-missing");
-    // The DB is the richer side, so recover (md → DB) would DELETE rows. The
-    // safe repair is to re-project from the DB.
+    // The DB is the richer side, so the safe repair is to re-project from it.
     assert.equal(result.recoveryCommand, "/gsd rebuild markdown");
     assert.match(result.message ?? "", /rebuild markdown/);
-    assert.match(result.message ?? "", /Do NOT run/);
+    assert.match(result.message ?? "", /Runtime never imports markdown into the database/);
+    assert.doesNotMatch(result.message ?? "", /\/gsd recover/);
     // The check must not mutate the DB.
     assert.equal(getAllMilestones().length, 1);
     assert.equal(getSliceTasks("M001", "S01").length, 1);
@@ -294,11 +294,11 @@ test("migration auto-check detects identity drift even when counts match", async
     assert.notEqual(result.reason, "in-sync");
     assert.deepEqual(result.markdown, { milestones: 1, slices: 1, tasks: 1 });
     assert.deepEqual(result.beforeDb, { milestones: 1, slices: 1, tasks: 1 });
-    // The DB holds S99 (which markdown lacks), so recover would DELETE it. Even
-    // at equal counts the safe recommendation must be rebuild, not recover.
+    // The DB holds S99 (which markdown lacks). Even at equal counts the safe
+    // recommendation must be to re-project from the DB.
     assert.equal(result.recoveryCommand, "/gsd rebuild markdown");
     assert.match(result.recoveryFingerprint ?? "", /^[a-f0-9]{64}$/);
-    assert.match(result.message ?? "", /Do NOT run/);
+    assert.match(result.message ?? "", /Runtime never imports markdown into the database/);
   } finally {
     cleanup(base);
   }
@@ -493,7 +493,7 @@ test("migration auto-check still reports real drift with scratch dirs excluded f
     const result = await checkMarkdownHierarchyAgainstDb(base);
     assert.equal(result.action, "recovery-required");
     assert.equal(result.reason, "db-empty");
-    assert.equal(result.recoveryCommand, "/gsd recover");
+    assert.equal(result.recoveryCommand, "/gsd doctor");
     // The scratch dir must not inflate the reported markdown count.
     assert.deepEqual(result.markdown, { milestones: 1, slices: 1, tasks: 1 });
   } finally {

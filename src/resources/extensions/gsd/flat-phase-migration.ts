@@ -35,7 +35,8 @@ import {
 const LEGACY_MIGRATING_SEGMENT = "milestones.migrating";
 const EXPLICIT_RECOVERY_REQUIRED =
   "flat-phase migration skipped: legacy markdown contains state absent from the canonical DB. " +
-  "Recommended: run `/gsd recover` and approve its exact Preview hash to import explicitly.";
+  "Runtime has no markdown-to-database import path. Recommended: run `/gsd doctor` to diagnose, " +
+  "then either remove the orphaned legacy directories or restore a verified backup with `/gsd db restore-backup`.";
 const RM_RETRY_OPTIONS = { recursive: true, force: true, maxRetries: 5, retryDelay: 100 } as const;
 type FlatPhaseMigrationStage = "before-remove" | "after-remove" | "before-move" | "after-move";
 let flatPhaseMigrationBoundaryForTest: ((stage: FlatPhaseMigrationStage, path: string) => void) | null = null;

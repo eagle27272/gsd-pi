@@ -11,9 +11,9 @@
 // which stages, hashes, and fences the write before applying it. These two
 // functions bypass all of that and currently have ZERO production callers —
 // they exist solely so test scaffolding can exercise legacy import semantics.
-// Guarded by tests/implicit-import-startup-authority.test.ts ("no production
-// module imports the legacy markdown importer"). Do not import this module
-// from any non-test file; extend the Import Application instead.
+// Guarded by tests/md-importer-production-import-authority.test.ts ("no
+// production module imports the legacy markdown importer"). Do not import this
+// module from any non-test file; extend the Import Application instead.
 
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join, relative, basename, dirname } from 'node:path';

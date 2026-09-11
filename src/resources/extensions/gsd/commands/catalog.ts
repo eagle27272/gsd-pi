@@ -49,7 +49,7 @@ export const TOP_LEVEL_SUBCOMMANDS: readonly GsdCommandDefinition[] = [
   { cmd: "export", desc: "Alias for /gsd report" },
   { cmd: "cleanup", desc: "Remove merged branches or snapshots" },
   { cmd: "closeout", desc: "Recover failed git closeout actions (status, retry, resolve)" },
-  { cmd: "recover", desc: "Resume a repaired Task abort by id, or recover a lost database from markdown" },
+  { cmd: "recover", desc: "Resume a repaired Task recovery abort by id" },
   { cmd: "rebuild", desc: "Rebuild markdown projections from the canonical DB" },
   { cmd: "db", desc: "Database maintenance — restore-backup lists and restores verified pre-migration backups" },
   { cmd: "task", desc: "Task operations — settle reconciles an orphaned running Attempt (dry-run first)" },

@@ -612,7 +612,7 @@ export async function handleRebuild(ctx: ExtensionCommandContext, basePath: stri
         "gsd rebuild database is reserved for DB-native rebuilds.",
         "It will not import markdown projections into the DB.",
         "For normal realignment, run /gsd rebuild markdown.",
-        "If the DB is lost or corrupt and markdown is the source to import, run /gsd recover and approve its exact Preview hash.",
+        "If the DB is lost or corrupt, run /gsd doctor to diagnose, or restore a verified backup with /gsd db restore-backup.",
       ].join("\n"),
       "warning",
     );

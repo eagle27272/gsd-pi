@@ -138,7 +138,7 @@ export async function handleOpsCommand(trimmed: string, ctx: ExtensionCommandCon
   if (trimmed === "recover" || trimmed.startsWith("recover ")) {
     const args = trimmed.replace(/^recover\s*/, "").trim();
     if (!args || args.startsWith("--")) {
-      ctx.ui.notify("Usage: /gsd recover <task-id>  Example: /gsd recover M001/S01/T03", "warning");
+      ctx.ui.notify("Usage: /gsd recover <recoveryActionId>", "warning");
       return true;
     }
     const { handleTaskRecoveryResume } = await import("../../commands-task-recovery.js");

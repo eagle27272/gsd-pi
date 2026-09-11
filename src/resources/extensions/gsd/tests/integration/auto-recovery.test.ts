@@ -206,7 +206,7 @@ test("buildLoopRemediationSteps returns steps for plan-slice", (t) => {
   const steps = buildLoopRemediationSteps("plan-slice", "M001/S01", base);
   assert.ok(steps);
   assert.ok(steps!.includes("PLAN"));
-  assert.ok(steps!.includes("gsd recover"));
+  assert.ok(steps!.includes("gsd dispatch plan M001/S01"));
 });
 
 test("buildLoopRemediationSteps returns steps for complete-slice", (t) => {
