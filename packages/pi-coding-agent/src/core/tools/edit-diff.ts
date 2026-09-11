@@ -32,13 +32,19 @@ export function restoreLineEndings(text: string, ending: "\r\n" | "\n"): string 
  * - Normalize special Unicode spaces to regular space
  */
 export function normalizeForFuzzyMatch(text: string): string {
+	return replaceFuzzyEquivalentChars(stripTrailingWhitespacePerLine(text.normalize("NFKC")));
+}
+
+function stripTrailingWhitespacePerLine(text: string): string {
+	return text
+		.split("\n")
+		.map((line) => line.trimEnd())
+		.join("\n");
+}
+
+function replaceFuzzyEquivalentChars(text: string): string {
 	return (
 		text
-			.normalize("NFKC")
-			// Strip trailing whitespace per line
-			.split("\n")
-			.map((line) => line.trimEnd())
-			.join("\n")
 			// Smart single quotes → '
 			.replace(/[\u2018\u2019\u201A\u201B]/g, "'")
 			// Smart double quotes → "
@@ -54,21 +60,141 @@ export function normalizeForFuzzyMatch(text: string): string {
 	);
 }
 
-export interface FuzzyMatchResult {
+/**
+ * The source range behind each code unit of a fuzzy-normalized text. This map is
+ * what lets a fuzzy match be spliced back into the *source* text: without it the
+ * only way to apply a fuzzy match is to overwrite the source with its normalized
+ * form, silently rewriting every unrelated line the normalizer touched.
+ */
+interface FuzzySourceMap {
+	/** Start offset in the source of the region that produced normalized unit i. */
+	sourceStart: Int32Array;
+	/** End offset (exclusive) in the source of the region that produced normalized unit i. */
+	sourceEnd: Int32Array;
+}
+
+let graphemeSegmenter: Intl.Segmenter | undefined;
+
+/**
+ * NFKC-normalize `source`, recording the source range behind each output code unit.
+ *
+ * Canonical composition only joins characters inside one grapheme cluster, so
+ * normalizing cluster by cluster keeps offsets attributable. It does not always
+ * reproduce whole-string `normalize("NFKC")` though: compatibility decomposition
+ * can turn characters in *separate* clusters into conjoining Hangul jamo that then
+ * compose across the boundary (U+3131 U+314F -> U+AC00). buildFuzzySourceMap's
+ * reconstruction check is what catches that.
+ *
+ * Clusters whose normalized form has a different length map every output unit to
+ * the whole cluster.
+ */
+function nfkcWithSourceRanges(source: string): { text: string; start: number[]; end: number[] } {
+	const start: number[] = [];
+	const end: number[] = [];
+
+	if (source.normalize("NFKC") === source) {
+		for (let i = 0; i < source.length; i++) {
+			start.push(i);
+			end.push(i + 1);
+		}
+		return { text: source, start, end };
+	}
+
+	graphemeSegmenter ??= new Intl.Segmenter("en", { granularity: "grapheme" });
+	const chunks: string[] = [];
+	let offset = 0;
+	for (const { segment } of graphemeSegmenter.segment(source)) {
+		const normalized = segment.normalize("NFKC");
+		chunks.push(normalized);
+		if (normalized.length === segment.length) {
+			for (let i = 0; i < segment.length; i++) {
+				start.push(offset + i);
+				end.push(offset + i + 1);
+			}
+		} else {
+			for (let i = 0; i < normalized.length; i++) {
+				start.push(offset);
+				end.push(offset + segment.length);
+			}
+		}
+		offset += segment.length;
+	}
+	return { text: chunks.join(""), start, end };
+}
+
+/**
+ * Map every code unit of `normalized` (which must be `normalizeForFuzzyMatch(source)`)
+ * back to the source range that produced it.
+ *
+ * Returns undefined when the reconstruction does not reproduce `normalized`
+ * exactly. Fuzzy matching is then disabled for this content rather than splicing
+ * against a map that cannot be trusted; exact matching still works.
+ */
+function buildFuzzySourceMap(source: string, normalized: string): FuzzySourceMap | undefined {
+	const nfkc = nfkcWithSourceRanges(source);
+
+	const chars: string[] = [];
+	const start: number[] = [];
+	const end: number[] = [];
+	let lineStart = 0;
+	for (;;) {
+		const newlineIndex = nfkc.text.indexOf("\n", lineStart);
+		const lineEnd = newlineIndex === -1 ? nfkc.text.length : newlineIndex;
+		const kept = nfkc.text.slice(lineStart, lineEnd).trimEnd().length;
+		for (let i = lineStart; i < lineStart + kept; i++) {
+			chars.push(nfkc.text[i]);
+			start.push(nfkc.start[i]);
+			end.push(nfkc.end[i]);
+		}
+		if (newlineIndex === -1) break;
+		chars.push("\n");
+		start.push(nfkc.start[newlineIndex]);
+		end.push(nfkc.end[newlineIndex]);
+		lineStart = newlineIndex + 1;
+	}
+
+	// replaceFuzzyEquivalentChars is one-to-one per code unit, so it leaves the map intact.
+	if (replaceFuzzyEquivalentChars(chars.join("")) !== normalized) return undefined;
+
+	return { sourceStart: Int32Array.from(start), sourceEnd: Int32Array.from(end) };
+}
+
+/**
+ * Lazily-computed fuzzy view of one piece of content. Both parts are expensive on
+ * large files and most edits need neither, so nothing is computed until asked for.
+ */
+interface FuzzyView {
+	text(): string;
+	sourceMap(): FuzzySourceMap | undefined;
+}
+
+function createFuzzyView(content: string): FuzzyView {
+	let text: string | undefined;
+	const getText = (): string => (text ??= normalizeForFuzzyMatch(content));
+
+	let sourceMap: FuzzySourceMap | undefined;
+	let sourceMapBuilt = false;
+	const getSourceMap = (): FuzzySourceMap | undefined => {
+		if (!sourceMapBuilt) {
+			sourceMapBuilt = true;
+			sourceMap = buildFuzzySourceMap(content, getText());
+		}
+		return sourceMap;
+	};
+
+	return { text: getText, sourceMap: getSourceMap };
+}
+
+interface FuzzyMatchResult {
 	/** Whether a match was found */
 	found: boolean;
-	/** The index where the match starts (in the content that should be used for replacement) */
+	/** Index where the match starts, in the original content */
 	index: number;
-	/** Length of the matched text */
+	/** Length of the matched region, in the original content */
 	matchLength: number;
-	/** Whether fuzzy matching was used (false = exact match) */
-	usedFuzzyMatch: boolean;
-	/**
-	 * The content to use for replacement operations.
-	 * When exact match: original content. When fuzzy match: normalized content.
-	 */
-	contentForReplacement: string;
 }
+
+const NO_MATCH: FuzzyMatchResult = { found: false, index: -1, matchLength: 0 };
 
 export interface Edit {
 	oldText: string;
@@ -83,54 +209,47 @@ interface MatchedEdit {
 }
 
 export interface AppliedEditsResult {
+	/**
+	 * The content the edits were applied to, unchanged. Diff against this so the
+	 * preview can never understate what is about to be written.
+	 */
 	baseContent: string;
 	newContent: string;
 }
 
 /**
  * Find oldText in content, trying exact match first, then fuzzy match.
- * When fuzzy matching is used, the returned contentForReplacement is the
- * fuzzy-normalized version of the content (trailing whitespace stripped,
- * Unicode quotes/dashes normalized to ASCII).
+ * Both kinds of match are reported as offsets into `content` itself, so the
+ * caller replaces the matched region of the original text and leaves every
+ * other byte alone.
  */
-export function fuzzyFindText(content: string, oldText: string): FuzzyMatchResult {
-	// Try exact match first
+function findTextInContent(content: string, oldText: string, fuzzy: FuzzyView): FuzzyMatchResult {
 	const exactIndex = content.indexOf(oldText);
 	if (exactIndex !== -1) {
-		return {
-			found: true,
-			index: exactIndex,
-			matchLength: oldText.length,
-			usedFuzzyMatch: false,
-			contentForReplacement: content,
-		};
+		return { found: true, index: exactIndex, matchLength: oldText.length };
 	}
 
-	// Try fuzzy match - work entirely in normalized space
-	const fuzzyContent = normalizeForFuzzyMatch(content);
 	const fuzzyOldText = normalizeForFuzzyMatch(oldText);
-	const fuzzyIndex = fuzzyContent.indexOf(fuzzyOldText);
+	if (fuzzyOldText.length === 0) return NO_MATCH;
 
-	if (fuzzyIndex === -1) {
-		return {
-			found: false,
-			index: -1,
-			matchLength: 0,
-			usedFuzzyMatch: false,
-			contentForReplacement: content,
-		};
-	}
+	const fuzzyIndex = fuzzy.text().indexOf(fuzzyOldText);
+	if (fuzzyIndex === -1) return NO_MATCH;
 
-	// When fuzzy matching, we work in the normalized space for replacement.
-	// This means the output will have normalized whitespace/quotes/dashes,
-	// which is acceptable since we're fixing minor formatting differences anyway.
-	return {
-		found: true,
-		index: fuzzyIndex,
-		matchLength: fuzzyOldText.length,
-		usedFuzzyMatch: true,
-		contentForReplacement: fuzzyContent,
-	};
+	const sourceMap = fuzzy.sourceMap();
+	if (!sourceMap) return NO_MATCH;
+
+	// Map the normalized match range back onto the original content. A match may
+	// begin or end partway through a source character that normalization expanded
+	// (the "i" of an "fi" ligature, say); replacing it would drop the half that was
+	// not matched, so decline instead and let the caller report not-found.
+	const last = fuzzyIndex + fuzzyOldText.length - 1;
+	const { sourceStart, sourceEnd } = sourceMap;
+	const startsOnBoundary = fuzzyIndex === 0 || sourceStart[fuzzyIndex] !== sourceStart[fuzzyIndex - 1];
+	const endsOnBoundary = last === fuzzy.text().length - 1 || sourceEnd[last] !== sourceEnd[last + 1];
+	if (!startsOnBoundary || !endsOnBoundary) return NO_MATCH;
+
+	const index = sourceStart[fuzzyIndex];
+	return { found: true, index, matchLength: sourceEnd[last] - index };
 }
 
 /** Strip UTF-8 BOM if present, return both the BOM (if any) and the text without it */
@@ -138,10 +257,24 @@ export function stripBom(content: string): { bom: string; text: string } {
 	return content.startsWith("\uFEFF") ? { bom: "\uFEFF", text: content.slice(1) } : { bom: "", text: content };
 }
 
-function countOccurrences(content: string, oldText: string): number {
-	const fuzzyContent = normalizeForFuzzyMatch(content);
+function countSubstring(haystack: string, needle: string): number {
+	let count = 0;
+	// Advance by one so overlapping occurrences are counted; the caller rejects
+	// any oldText that appears more than once.
+	for (let i = haystack.indexOf(needle); i !== -1; i = haystack.indexOf(needle, i + 1)) {
+		count++;
+	}
+	return count;
+}
+
+/**
+ * Count how many places `oldText` could match, in the same space the match was
+ * found. Whitespace-only oldText disappears under normalization, so it can only
+ * ever match exactly and has to be counted against the raw content.
+ */
+function countOccurrences(content: string, fuzzy: FuzzyView, oldText: string): number {
 	const fuzzyOldText = normalizeForFuzzyMatch(oldText);
-	return fuzzyContent.split(fuzzyOldText).length - 1;
+	return fuzzyOldText.length === 0 ? countSubstring(content, oldText) : countSubstring(fuzzy.text(), fuzzyOldText);
 }
 
 function getNotFoundError(path: string, editIndex: number, totalEdits: number): Error {
@@ -185,10 +318,10 @@ function getNoChangeError(path: string, totalEdits: number): Error {
 /**
  * Apply one or more exact-text replacements to LF-normalized content.
  *
- * All edits are matched against the same original content. Replacements are
- * then applied in reverse order so offsets remain stable. If any edit needs
- * fuzzy matching, the operation runs in fuzzy-normalized content space to
- * preserve current single-edit behavior.
+ * All edits are matched against the same original content, and every match --
+ * exact or fuzzy -- is expressed as a range in that original content, so only
+ * the matched regions change. Replacements are applied in reverse order so
+ * offsets remain stable.
  */
 export function applyEditsToNormalizedContent(
 	normalizedContent: string,
@@ -206,20 +339,17 @@ export function applyEditsToNormalizedContent(
 		}
 	}
 
-	const initialMatches = normalizedEdits.map((edit) => fuzzyFindText(normalizedContent, edit.oldText));
-	const baseContent = initialMatches.some((match) => match.usedFuzzyMatch)
-		? normalizeForFuzzyMatch(normalizedContent)
-		: normalizedContent;
+	const fuzzy = createFuzzyView(normalizedContent);
 
 	const matchedEdits: MatchedEdit[] = [];
 	for (let i = 0; i < normalizedEdits.length; i++) {
 		const edit = normalizedEdits[i];
-		const matchResult = fuzzyFindText(baseContent, edit.oldText);
+		const matchResult = findTextInContent(normalizedContent, edit.oldText, fuzzy);
 		if (!matchResult.found) {
 			throw getNotFoundError(path, i, normalizedEdits.length);
 		}
 
-		const occurrences = countOccurrences(baseContent, edit.oldText);
+		const occurrences = countOccurrences(normalizedContent, fuzzy, edit.oldText);
 		if (occurrences > 1) {
 			throw getDuplicateError(path, i, normalizedEdits.length, occurrences);
 		}
@@ -243,7 +373,7 @@ export function applyEditsToNormalizedContent(
 		}
 	}
 
-	let newContent = baseContent;
+	let newContent = normalizedContent;
 	for (let i = matchedEdits.length - 1; i >= 0; i--) {
 		const edit = matchedEdits[i];
 		newContent =
@@ -252,11 +382,11 @@ export function applyEditsToNormalizedContent(
 			newContent.substring(edit.matchIndex + edit.matchLength);
 	}
 
-	if (baseContent === newContent) {
+	if (normalizedContent === newContent) {
 		throw getNoChangeError(path, normalizedEdits.length);
 	}
 
-	return { baseContent, newContent };
+	return { baseContent: normalizedContent, newContent };
 }
 
 /** Generate a standard unified patch. */
