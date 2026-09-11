@@ -84,7 +84,16 @@ The v1 `.planning/` → DB-backed `.gsd/` converter.
   `validator.ts`, `writer.ts`)
 - the `migrate` entry in `commands/catalog.ts:75` and its mention in the
   command string at `commands/catalog.ts:22`
-- `src/resources/extensions/gsd/tests/migrate-*.ts`
+- the two dynamic dispatch sites, `commands/handlers/ops.ts:253` and
+  `guided-flow.ts:1964` — the directory has no static importers at all
+- six tests: `migrate-{parser,plan,presentation,transformer,validator-parsers,writer}.test.ts`
+
+Three files match `migrate-*` but are **not** part of this cluster and survive
+all four waves: `migrate-safety-audit.test.ts` covers the native
+tree-publication engine (`atomic-write.ts`, `database-maintenance-fence.ts`,
+`db/domain-operation.ts`, `db/engine.ts`), `migrate-hierarchy.test.ts` covers
+`gsd-db.ts` and the live `md-importer.ts`, and the two
+`migrate-external-*.test.ts` files belong to wave 4.
 
 ### Wave 3 — the legacy-import kernel (~83k LOC incl. tests, + 2.5MB fixtures)
 
