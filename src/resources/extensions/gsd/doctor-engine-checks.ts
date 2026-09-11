@@ -3,6 +3,7 @@ import { hostname } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 
 import type { DoctorIssue } from "./doctor-types.js";
+import { isSafeProjectionKey } from "./compat/compat-marker-validation.js";
 import {
   deleteArtifactByPath,
   getAllMilestones,
@@ -879,6 +880,40 @@ export async function checkEngineHealth(
         }
       } catch {
         // Non-fatal — completed-milestone reopen check failed
+      }
+
+      // f0. Artifact rows keyed by a path that escapes the projection root.
+      // Written before the insertArtifact invariant landed (#3): the same
+      // logical artifact can exist under both the clean and the escaping key,
+      // and readers only ever resolve the clean one. Not auto-fixable — the two
+      // key spaces are not a clean primary/shadow split, so repair means
+      // reconciling each row against the file on disk.
+      try {
+        const candidateRows = adapter
+          .prepare(
+            `SELECT path, artifact_type, milestone_id, slice_id, task_id
+             FROM artifacts
+             WHERE path != ''
+             ORDER BY path`,
+          )
+          .all() as ArtifactRow[];
+
+        for (const row of candidateRows) {
+          if (isSafeProjectionKey(row.path)) continue;
+          issues.push({
+            severity: "error",
+            code: "artifact_path_escapes_projection_root",
+            scope: artifactScope(row),
+            unitId: artifactUnitId(row),
+            message:
+              `Artifact row is keyed by ${row.path}, which is not relative to the .gsd projection root. ` +
+              `The same artifact may also exist under its clean key, and only the clean one is read. ` +
+              `Reconcile this row against the file on disk before deleting it — it may be the only copy.`,
+            fixable: false,
+          });
+        }
+      } catch {
+        // Non-fatal — artifact path containment check failed
       }
 
       // f. Artifact rows reference files that no longer exist on disk.

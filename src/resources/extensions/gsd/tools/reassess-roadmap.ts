@@ -103,12 +103,13 @@ export interface ReassessRoadmapResult {
 
 function assessmentDbPathForRenderedFile(basePath: string, absPath: string): string {
   // Derive the .gsd-relative key with the shared helper, which realpath-normalizes
-  // both the roots and the target (falling back to resolve() for not-yet-written
-  // files). A prior implementation realpath-normalized only basePath and left
-  // absPath raw, so on Windows the two sides used divergent drive/short-name/junction
-  // forms and the .gsd/ prefix check spuriously failed (#windows-portability).
+  // both the roots and the target (a not-yet-written file through its longest
+  // existing ancestor). A prior implementation realpath-normalized only basePath
+  // and left absPath raw, so on Windows the two sides used divergent
+  // drive/short-name/junction forms and the .gsd/ prefix check spuriously failed
+  // (#windows-portability).
   const key = deriveCompatProjectionKey(absPath, [gsdProjectionRoot(basePath), gsdRoot(basePath)]);
-  if (key === ".." || key.startsWith("../") || isAbsolute(key)) {
+  if (key === null) {
     throw new Error(`assessment projection must be inside .gsd: ${absPath}`);
   }
   return `.gsd/${key}`;

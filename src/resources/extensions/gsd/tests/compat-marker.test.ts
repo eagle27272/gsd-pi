@@ -2,7 +2,7 @@
 // File Purpose: Unit tests for the gsd-core compat marker (`.gsd/.compat.json`).
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readdirSync, readFileSync, realpathSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -14,6 +14,7 @@ import {
   normalizeForHash,
   computeProjectionSha,
   pruneOrphanedProjectionEntries,
+  deriveCompatProjectionKey,
   EMPTY_MARKER,
   compatMarkerPath,
 } from "../compat/compat-marker.ts";
@@ -29,6 +30,21 @@ function makeTmpBase(): string {
   mkdirSync(join(base, ".gsd"), { recursive: true });
   tmpDirs.push(base);
   return base;
+}
+
+/**
+ * Project whose `.gsd` is a symlink into a central store — the default gsd-pi
+ * layout, where the projection root's realpath lives outside the repo.
+ */
+function makeSymlinkedGsdBase(): { base: string; store: string } {
+  const tmp = mkdtempSync(join(tmpdir(), `gsd-compat-${randomUUID()}`));
+  tmpDirs.push(tmp);
+  const base = join(tmp, "repo");
+  const store = join(tmp, "store", "projects", "abc123");
+  mkdirSync(base, { recursive: true });
+  mkdirSync(store, { recursive: true });
+  symlinkSync(store, join(base, ".gsd"));
+  return { base, store };
 }
 
 afterEach(() => {
@@ -391,4 +407,27 @@ test("hostile marker makes the drift detector read nothing outside the project",
     !drift.some((d) => d.projectionPath.includes(sentinelName)),
     "detector must not reference the out-of-project sentinel",
   );
+});
+
+test("deriveCompatProjectionKey keys a not-yet-written file under a symlinked .gsd relative to the projection root (#3)", () => {
+  const { base, store } = makeSymlinkedGsdBase();
+  // Every caller realpath-normalizes the root (gsdProjectionRoot/gsdRoot do).
+  const roots = [realpathSync.native(store)];
+  // Projection keys are derived BEFORE writeAndStore writes the file, and
+  // markdown-renderer builds the absolute path as basePath + ".gsd/..." — i.e.
+  // through the symlink, in a different namespace from the realpath'd root.
+  const unwritten = join(base, ".gsd", "phases", "01-example", "01-01-PLAN.md");
+
+  assert.equal(
+    deriveCompatProjectionKey(unwritten, roots),
+    "phases/01-example/01-01-PLAN.md",
+  );
+});
+
+test("deriveCompatProjectionKey returns null instead of a traversal key for a path outside every root (#3)", () => {
+  const { base, store } = makeSymlinkedGsdBase();
+  const outside = join(base, "outside.md");
+  writeFileSync(outside, "# outside\n", "utf-8");
+
+  assert.equal(deriveCompatProjectionKey(outside, [realpathSync.native(store)]), null);
 });

@@ -17,6 +17,7 @@ import { spawnSync } from "node:child_process";
 import { nativeScanGsdTree, type GsdTreeEntry } from "./native-parser-bridge.js";
 import { DIR_CACHE_MAX } from "./constants.js";
 import { gsdHome } from "./gsd-home.js";
+import { normalizeRealPath } from "./real-path.js";
 import { findWorktreeSegment, isGsdWorktreePath, resolveExternalStateProjectGsdFromWorktreePath, resolveWorktreeProjectRoot } from "./worktree-root.js";
 import {
   LAYOUT_SEGMENTS,
@@ -459,18 +460,7 @@ export function _clearGsdRootCache(): void {
   gsdRootCache.clear();
 }
 
-/**
- * Resolve a path to its canonical real path using the native resolver.
- * On macOS case-insensitive (HFS+/APFS) volumes, realpathSync.native normalizes
- * case — ensuring that /foo/Bar and /foo/bar resolve to the same string.
- * Falls back to resolve(p) for non-existent paths.
- *
- * Use this helper everywhere a path is used as an identity/cache key so that
- * all callers agree on the canonical form.
- */
-export function normalizeRealPath(p: string): string {
-  try { return realpathSync.native(p); } catch { return resolve(p); }
-}
+export { normalizeRealPath };
 
 /** Normalize a path for use as a gsdRootCache key (realpath + trailing-slash strip). */
 function normCacheKey(p: string): string {
