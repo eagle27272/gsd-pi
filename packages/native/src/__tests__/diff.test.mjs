@@ -40,94 +40,16 @@ if (!native) {
   process.exit(1);
 }
 
-// ── normalizeForFuzzyMatch ──────────────────────────────────────────────
+// ── fuzzy matching is intentionally absent ──────────────────
+// A native fuzzy matcher cannot just return a normalized copy of the content:
+// applying the match requires source ranges back into the original text. See
+// issue #4 and buildFuzzySourceMap in
+// packages/pi-coding-agent/src/core/tools/edit-diff.ts.
 
-describe("normalizeForFuzzyMatch", () => {
-  test("strips trailing whitespace per line", () => {
-    assert.equal(native.normalizeForFuzzyMatch("hello   \nworld  "), "hello\nworld");
-  });
-
-  test("normalizes smart quotes to ASCII", () => {
-    assert.equal(
-      native.normalizeForFuzzyMatch("\u201Chello\u201D \u2018world\u2019"),
-      '"hello" \'world\'',
-    );
-  });
-
-  test("normalizes dashes to ASCII hyphen", () => {
-    assert.equal(native.normalizeForFuzzyMatch("a\u2013b\u2014c"), "a-b-c");
-  });
-
-  test("normalizes special spaces to regular space", () => {
-    assert.equal(native.normalizeForFuzzyMatch("a\u00A0b\u3000c"), "a b c");
-  });
-
-  test("handles empty string", () => {
-    assert.equal(native.normalizeForFuzzyMatch(""), "");
-  });
-
-  test("preserves leading whitespace", () => {
-    assert.equal(native.normalizeForFuzzyMatch("  hello  "), "  hello");
-  });
-});
-
-// ── fuzzyFindText ───────────────────────────────────────────────────────
-
-describe("fuzzyFindText", () => {
-  test("finds exact match", () => {
-    const result = native.fuzzyFindText("hello world", "world");
-    assert.equal(result.found, true);
-    assert.equal(result.index, 6);
-    assert.equal(result.matchLength, 5);
-    assert.equal(result.usedFuzzyMatch, false);
-    assert.equal(result.contentForReplacement, "hello world");
-  });
-
-  test("finds fuzzy match with smart quotes", () => {
-    const content = 'let x = \u201Chello\u201D;';
-    const oldText = 'let x = "hello";';
-    const result = native.fuzzyFindText(content, oldText);
-    assert.equal(result.found, true);
-    assert.equal(result.usedFuzzyMatch, true);
-  });
-
-  test("returns not found for missing text", () => {
-    const result = native.fuzzyFindText("hello world", "xyz");
-    assert.equal(result.found, false);
-    assert.equal(result.index, -1);
-    assert.equal(result.matchLength, 0);
-  });
-
-  test("returns correct UTF-16 index for non-ASCII content", () => {
-    // Emoji U+1F600 is 2 UTF-16 code units (surrogate pair), 4 UTF-8 bytes
-    const content = "\u{1F600}hello";
-    const result = native.fuzzyFindText(content, "hello");
-    assert.equal(result.found, true);
-    // Emoji is 2 UTF-16 code units, so "hello" starts at index 2
-    assert.equal(result.index, 2);
-    assert.equal(result.matchLength, 5);
-  });
-
-  test("index is compatible with JS substring()", () => {
-    const content = "abc\u{1F600}def";
-    const result = native.fuzzyFindText(content, "def");
-    assert.equal(result.found, true);
-    // "abc" = 3, emoji = 2 UTF-16 code units → index 5
-    assert.equal(result.index, 5);
-    // Verify substring works correctly with the returned index
-    const extracted = result.contentForReplacement.substring(
-      result.index,
-      result.index + result.matchLength,
-    );
-    assert.equal(extracted, "def");
-  });
-
-  test("fuzzy match with trailing whitespace differences", () => {
-    const content = "hello   \nworld  ";
-    const oldText = "hello\nworld";
-    const result = native.fuzzyFindText(content, oldText);
-    assert.equal(result.found, true);
-    assert.equal(result.usedFuzzyMatch, true);
+describe("fuzzy matching", () => {
+  test("is not exported by the addon", () => {
+    assert.equal(native.normalizeForFuzzyMatch, undefined);
+    assert.equal(native.fuzzyFindText, undefined);
   });
 });
 
