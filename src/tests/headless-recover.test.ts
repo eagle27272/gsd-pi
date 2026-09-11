@@ -41,6 +41,7 @@ import { invalidateStateCache } from "../resources/extensions/gsd/state.ts";
 import { captureCurrentLegacyImportBaseSnapshot } from "../resources/extensions/gsd/legacy-import-preview-base.ts";
 import { createLegacyImportPreview } from "../resources/extensions/gsd/legacy-import-preview.ts";
 import { recordSchemaVersion } from "../resources/extensions/gsd/db-schema-metadata.ts";
+import { SCHEMA_VERSION } from "../resources/extensions/gsd/db/engine.ts";
 import { executeDomainOperation } from "../resources/extensions/gsd/db/domain-operation.ts";
 import { fingerprintLegacyImportCorpusTree } from "../resources/extensions/gsd/tests/helpers/legacy-import-corpus.ts";
 
@@ -746,8 +747,10 @@ test("headless recover choice-required prints full executable forward-repair com
   );
 });
 
-const V49_MESSAGE =
-  "gsd.db schema is v49, newer than the v48 this gsd-pi supports. " +
+/** Derived from SCHEMA_VERSION so a schema bump does not retarget this test. */
+const NEWER_VERSION = SCHEMA_VERSION + 1;
+const NEWER_MESSAGE =
+  `gsd.db schema is v${NEWER_VERSION}, newer than the v${SCHEMA_VERSION} this gsd-pi supports. ` +
   "Update gsd-pi (npm i -g @opengsd/gsd-pi) before opening this project.";
 
 test("headless recover forwards the exact refuse-newer message for a newer-schema project", async (t) => {
@@ -761,7 +764,7 @@ test("headless recover forwards the exact refuse-newer message for a newer-schem
   });
 
   assert.equal(await ensureDbOpen(base), true);
-  recordSchemaVersion(_getAdapter()!, 49);
+  recordSchemaVersion(_getAdapter()!, NEWER_VERSION);
   closeDatabase();
   process.stderr.write = ((chunk: string | Uint8Array) => {
     stderr.push(String(chunk));
@@ -772,7 +775,7 @@ test("headless recover forwards the exact refuse-newer message for a newer-schem
 
   assert.equal(result.exitCode, 1, "a newer-schema project is a recover failure");
   assert.ok(
-    stderr.join("").includes(V49_MESSAGE),
+    stderr.join("").includes(NEWER_MESSAGE),
     `recover must forward the exact refuse-newer message:\n${stderr.join("")}`,
   );
   assert.doesNotMatch(

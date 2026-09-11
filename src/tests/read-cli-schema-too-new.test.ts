@@ -32,8 +32,10 @@ import {
 import { SCHEMA_VERSION, SchemaTooNewError } from "../resources/extensions/gsd/db/engine.ts";
 import { readProgressFromDb } from "../resources/extensions/gsd/state/progress-from-db.ts";
 
-const V49_MESSAGE =
-  "gsd.db schema is v49, newer than the v48 this gsd-pi supports. " +
+/** Derived from SCHEMA_VERSION so a schema bump does not retarget these tests. */
+const NEWER_VERSION = SCHEMA_VERSION + 1;
+const NEWER_MESSAGE =
+  `gsd.db schema is v${NEWER_VERSION}, newer than the v${SCHEMA_VERSION} this gsd-pi supports. ` +
   "Update gsd-pi (npm i -g @opengsd/gsd-pi) before opening this project.";
 
 // Real preflight probe: the same pieces the production jiti loader wires up,
@@ -88,14 +90,14 @@ test("gsd read progress --json on a newer-schema project exits non-zero with the
     assert.equal(openDatabase(join(base, ".gsd", "gsd.db")), true);
     const db = _getAdapter();
     assert.ok(db);
-    recordSchemaVersion(db, 49);
+    recordSchemaVersion(db, NEWER_VERSION);
     closeDatabase();
 
     const run = await captureReadCli(readProgressArgv(base));
     assert.notEqual(run.exitCode, 0);
     assert.equal(run.stdout, "");
     assert.ok(
-      run.stderr.includes(V49_MESSAGE),
+      run.stderr.includes(NEWER_MESSAGE),
       `stderr should contain the exact engine message, got: ${run.stderr}`,
     );
   } finally {
@@ -112,13 +114,13 @@ test("gsd read progress checks the project DB schema from a canonical milestone 
   assert.equal(openDatabase(join(base, ".gsd", "gsd.db")), true);
   const db = _getAdapter();
   assert.ok(db);
-  recordSchemaVersion(db, 49);
+  recordSchemaVersion(db, NEWER_VERSION);
   closeDatabase();
 
   const run = await captureReadCli(readProgressArgv(worktree));
 
   assert.notEqual(run.exitCode, 0);
-  assert.match(run.stderr, new RegExp(V49_MESSAGE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(run.stderr, new RegExp(NEWER_MESSAGE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
 test("gsd read progress --json on a current-schema project serves the DB-backed payload", async () => {
