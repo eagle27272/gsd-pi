@@ -250,6 +250,8 @@ const DOCTOR_FIX_HINTS: Partial<Record<DoctorIssueCode, string>> = {
     "If GSD's pre-merge auto-commit captured unintended files, run `git reset --mixed HEAD^` to preserve them as working-tree changes, remove or ignore unwanted files, then retry. Otherwise re-run `/gsd validate-milestone <id>` against the intended content before `/gsd auto`.",
   artifact_user_content_missing:
     "Doctor cannot recreate user-authored content from the database. Re-run `/gsd discuss` for CONTEXT artifacts or `/gsd auto` for RESEARCH artifacts in that milestone.",
+  artifact_phase_dir_split:
+    "Merge the listed .gsd/phases/NN-* directories into the one path resolution picks (the newest), then re-render with `/gsd doctor fix`. Nothing is deleted automatically because the duplicate directories may hold different content.",
   uat_retry_exhausted: "Review the failing UAT criteria via `/gsd status`, fix the issue, then re-run `/gsd auto`.",
 };
 

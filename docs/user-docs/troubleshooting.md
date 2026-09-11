@@ -406,6 +406,14 @@ In these states GSD does not auto-stash and does not auto-fix; it stops so you c
 
 **Fix:** If the database is still the source of truth, run `/gsd rebuild markdown` to re-render missing artifact projections from the DB, then rerun `/gsd doctor`. If the file represented work that should still exist but rebuild cannot recreate it, restore the file from git/backups or rerun the GSD workflow that generates that artifact. Use `/gsd recover` and its exact Preview-hash approval only when the database is lost or corrupt and the markdown on disk is the source you intentionally want to import; it is not the normal fix for a dangling artifact reference. See [Migration from v1](./migration.md#post-migration) for the recovery contract.
 
+### `/gsd doctor` reports `artifact_path_escapes_projection_root`
+
+**Symptoms:** `/gsd doctor` shows an error with issue code `artifact_path_escapes_projection_root` and a path like `../../../home/you/code/myrepo/.gsd/phases/01-example/01-01-PLAN.md` instead of `phases/01-example/01-01-PLAN.md`.
+
+**What it means:** `artifacts.path` is the table's primary key and is always relative to the `.gsd` projection root. Older versions could key an artifact by a filesystem-escaping relative path when the file did not exist yet and `.gsd` was a symlink into a central store, so the same logical artifact could end up stored under two keys that then drifted apart independently. New writes are now rejected at the database boundary, but rows written before that cannot self-heal: readers only ever resolve the clean key, so any content that landed only under the escaping key is invisible.
+
+**Fix:** Reconcile each reported row against the file on disk before touching it — do **not** bulk-delete rows matching `../%`. The two key spaces are not a clean primary/shadow split: some escaping rows are the only record of their artifact, some duplicate a clean row exactly, and some are stale copies of one. For each row, compare its content with the file at the equivalent clean path and keep whichever is current. Once the content is safe under the clean key, delete the escaping row.
+
 ### `/gsd doctor` reports `artifact_db_status_divergence`
 
 **Symptoms:** `/gsd doctor` shows an error with issue code `artifact_db_status_divergence` for a completion artifact such as `S01-T01-SUMMARY.md` (or legacy `T01-SUMMARY.md` in older flat projects), while the database still shows that task as open or missing.
