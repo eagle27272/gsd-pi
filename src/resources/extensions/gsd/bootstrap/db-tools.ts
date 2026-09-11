@@ -2488,6 +2488,10 @@ export function registerDbTools(pi: ExtensionAPI): void {
 					verificationUat: Type.Optional(Type.String({ description: "Corrected UAT verification language" })),
 					definitionOfDone: Type.Optional(Type.Array(Type.String(), { description: "Corrected definition-of-done criteria" })),
 					requirementCoverage: Type.Optional(Type.String({ description: "Corrected requirement coverage text" })),
+					horizontalChecklist: Type.Optional(Type.Array(Type.Object({
+						item: Type.String({ description: "Cross-cutting concern considered" }),
+						checked: Type.Optional(Type.Boolean({ description: "True when the concern was considered and handled" })),
+					}), { description: "Corrected cross-cutting concern checklist" })),
 					boundaryMapMarkdown: Type.Optional(Type.String({ description: "Corrected boundary-map markdown" })),
 				}, { description: "Audited milestone acceptance-metadata corrections" })),
 				completedSlices: Type.Optional(Type.Array(Type.Object({
