@@ -26,7 +26,6 @@ import { clearParseCache } from "../files.js";
 import {
   _getAdapter,
   closeDatabase,
-  insertArtifact,
   openDatabase,
 } from "../gsd-db.js";
 import { stripProjectionStamp } from "../markdown-renderer.js";
@@ -131,6 +130,36 @@ function db() {
   const adapter = _getAdapter();
   assert.ok(adapter);
   return adapter;
+}
+
+/**
+ * Seed an `artifacts` row keyed by an absolute path. insertArtifact rejects
+ * those (#3), so the only way to keep covering the classifier's tolerance of
+ * rows written before that invariant is to write the row directly.
+ */
+function seedAbsolutePathArtifactRow(a: {
+  path: string;
+  artifact_type: string;
+  milestone_id: string | null;
+  slice_id: string | null;
+  task_id: string | null;
+  full_content: string;
+}): void {
+  db().prepare(`
+    INSERT OR REPLACE INTO artifacts (
+      path, artifact_type, milestone_id, slice_id, task_id, full_content, imported_at, content_hash
+    ) VALUES (
+      :path, :artifact_type, :milestone_id, :slice_id, :task_id, :full_content, :imported_at, ''
+    )
+  `).run({
+    ":path": a.path,
+    ":artifact_type": a.artifact_type,
+    ":milestone_id": a.milestone_id,
+    ":slice_id": a.slice_id,
+    ":task_id": a.task_id,
+    ":full_content": a.full_content,
+    ":imported_at": new Date().toISOString(),
+  });
 }
 
 function row(sql: string): Record<string, unknown> {
@@ -821,7 +850,7 @@ test("#1677: an in-progress Task SUMMARY without an Attempt remains fail-closed"
     )
   `).run({ ":summary": taskSummary });
   writeFileSync(summaryPath, artifactContent);
-  insertArtifact({
+  seedAbsolutePathArtifactRow({
     path: summaryPath,
     artifact_type: "SUMMARY",
     milestone_id: "M001",
@@ -938,7 +967,7 @@ test("#1983: a reopened Task SUMMARY with no Attempt lineage does not wedge", as
       '2026-07-12T00:01:00.000Z', 2
     )
   `).run();
-  insertArtifact({
+  seedAbsolutePathArtifactRow({
     path: summaryPath,
     artifact_type: "SUMMARY",
     milestone_id: "M001",
@@ -976,7 +1005,7 @@ test("#1983: an unreopened pending Task SUMMARY with no Attempt lineage stays fa
       'M001', 'S01', 'T02', 'Unproven summary', 'pending', 2
     )
   `).run();
-  insertArtifact({
+  seedAbsolutePathArtifactRow({
     path: summaryPath,
     artifact_type: "SUMMARY",
     milestone_id: "M001",

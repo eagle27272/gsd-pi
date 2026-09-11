@@ -64,6 +64,7 @@ import {
   readMilestoneCompletionProjection,
   renderMilestoneSummaryMarkdown,
 } from "./milestone-summary-projection.js";
+import { GSDError, GSD_IO_ERROR } from "./errors.js";
 
 // ─── Compat marker invalidation ───────────────────────────────────────────
 // Every successful projection write pushes its (basePath, projectionPath,
@@ -202,10 +203,21 @@ function stampProjectionContent(content: string): string {
 /**
  * Convert an absolute file path to a .gsd-relative artifact path.
  * E.g. "/project/.gsd/milestones/M001/M001-ROADMAP.md" → "milestones/M001/M001-ROADMAP.md"
+ *
+ * Throws rather than keying an artifact by a `../`-escaping path: that string
+ * is an acceptable `artifacts.path` primary key, so the same logical artifact
+ * silently accumulates a second, independently drifting row (#3).
  */
 function toArtifactPath(absPath: string, basePath: string): string {
   const projectionRoot = gsdProjectionRoot(basePath);
-  return deriveCompatProjectionKey(absPath, [projectionRoot, gsdRoot(basePath)]);
+  const key = deriveCompatProjectionKey(absPath, [projectionRoot, gsdRoot(basePath)]);
+  if (!key) {
+    throw new GSDError(
+      GSD_IO_ERROR,
+      `artifact projection resolves outside ${projectionRoot}: ${absPath}`,
+    );
+  }
+  return key;
 }
 
 /**
@@ -258,12 +270,98 @@ function normalizeRiskLevel(value: string | null | undefined): RiskLevel {
   return "medium";
 }
 
+function collapseToSingleLine(value: string | null | undefined): string {
+  return (value ?? "").replace(/\r?\n+/g, " ").replace(/\s+/g, " ").trim();
+}
+
 function sanitizeInlineRoadmapText(value: string | null | undefined): string {
-  return (value ?? "")
-    .replace(/\r?\n+/g, " ")
-    .replace(/[|`]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return collapseToSingleLine((value ?? "").replace(/[|`]/g, " "));
+}
+
+/**
+ * Planning fields reach the roadmap projection straight from the planner's
+ * payload. Unlike meaningfulSection(), "none" survives — the roadmap template
+ * asks for it explicitly ("Operational verification: ... or none"), so it is an
+ * answer rather than a blank. Unsubstituted template tokens are dropped
+ * because the roadmap validator rejects any section containing them.
+ */
+function meaningfulPlanningValue(value: string | null | undefined): string {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) return "";
+  if (/^(not provided\.?|n\/a)$/i.test(trimmed)) return "";
+  if (/\{\{[^}]*\}\}/.test(trimmed)) return "";
+  return trimmed;
+}
+
+function pushPlanningSection(lines: string[], heading: string, body: string[]): void {
+  if (body.length === 0) return;
+  lines.push(`## ${heading}`);
+  lines.push("");
+  lines.push(...body);
+  lines.push("");
+}
+
+function renderKeyRisks(milestone: MilestoneRow): string[] {
+  const bullets: string[] = [];
+  for (const entry of milestone.key_risks ?? []) {
+    const risk = meaningfulPlanningValue(collapseToSingleLine(entry?.risk));
+    if (!risk) continue;
+    const why = meaningfulPlanningValue(collapseToSingleLine(entry?.whyItMatters));
+    bullets.push(why ? `- ${risk} — ${why}` : `- ${risk}`);
+  }
+  return bullets;
+}
+
+function renderProofStrategy(milestone: MilestoneRow): string[] {
+  const bullets: string[] = [];
+  for (const entry of milestone.proof_strategy ?? []) {
+    const subject = meaningfulPlanningValue(collapseToSingleLine(entry?.riskOrUnknown));
+    if (!subject) continue;
+    const retireIn = meaningfulPlanningValue(collapseToSingleLine(entry?.retireIn));
+    const proves = meaningfulPlanningValue(collapseToSingleLine(entry?.whatWillBeProven));
+    const clauses = [
+      retireIn ? `retire in ${retireIn}` : "",
+      proves ? `by proving ${proves}` : "",
+    ].filter(Boolean);
+    bullets.push(clauses.length > 0 ? `- ${subject} → ${clauses.join(" ")}` : `- ${subject}`);
+  }
+  return bullets;
+}
+
+function renderVerificationClasses(milestone: MilestoneRow): string[] {
+  const classes: Array<[string, string]> = [
+    ["Contract verification", milestone.verification_contract],
+    ["Integration verification", milestone.verification_integration],
+    ["Operational verification", milestone.verification_operational],
+    ["UAT / human verification", milestone.verification_uat],
+  ];
+  const bullets: string[] = [];
+  for (const [label, raw] of classes) {
+    const value = meaningfulPlanningValue(collapseToSingleLine(raw));
+    if (value) bullets.push(`- ${label}: ${value}`);
+  }
+  return bullets;
+}
+
+function renderDefinitionOfDone(milestone: MilestoneRow): string[] {
+  const bullets: string[] = [];
+  for (const item of milestone.definition_of_done ?? []) {
+    const value = meaningfulPlanningValue(collapseToSingleLine(item));
+    if (value) bullets.push(`- ${value}`);
+  }
+  if (bullets.length === 0) return [];
+  return ["This milestone is complete only when all are true:", "", ...bullets];
+}
+
+/**
+ * The bundled roadmap template writes demo lines as "> After this: ...", so a
+ * planner that copies it literally persists the prefix inside slice.demo. Strip
+ * it at render time — the renderer owns the prefix, and the roadmap parser
+ * strips only one occurrence, so an unstripped value round-trips as a doubled
+ * prefix forever.
+ */
+function stripDemoPrefix(demo: string | null | undefined): string {
+  return (demo ?? "").replace(/^\s*(?:>\s*)?After this:\s*/i, "").trim();
 }
 
 function isMilestoneFlatPhaseLayout(basePath: string, milestoneId: string): boolean {
@@ -348,6 +446,19 @@ function renderRoadmapMarkdown(milestone: MilestoneRow, slices: SliceRow[]): str
     lines.push("");
   }
 
+  // Section order follows templates/roadmap.md — the projection is the only
+  // human-readable view of these rows, so every persisted planning field is
+  // rendered here rather than living solely in the milestones table.
+  pushPlanningSection(lines, "Key Risks / Unknowns", renderKeyRisks(milestone));
+  pushPlanningSection(lines, "Proof Strategy", renderProofStrategy(milestone));
+  pushPlanningSection(lines, "Verification Classes", renderVerificationClasses(milestone));
+  pushPlanningSection(lines, "Milestone Definition of Done", renderDefinitionOfDone(milestone));
+
+  const requirementCoverage = meaningfulPlanningValue(milestone.requirement_coverage);
+  if (requirementCoverage) {
+    pushPlanningSection(lines, "Requirement Coverage", [requirementCoverage]);
+  }
+
   lines.push("## Slices");
   lines.push("");
   for (const slice of slices) {
@@ -362,7 +473,8 @@ function renderRoadmapMarkdown(milestone: MilestoneRow, slices: SliceRow[]): str
     // truncate the line.
     const sketchBadge = slice.is_sketch === 1 ? "`[sketch]` " : "";
     lines.push(`- [${done}] **${slice.id}: ${safeTitle}** ${sketchBadge}\`risk:${safeRisk}\` \`depends:${depends}\``);
-    lines.push(slice.demo ? `  > After this: ${slice.demo}` : "  > After this:");
+    const demo = stripDemoPrefix(slice.demo);
+    lines.push(demo ? `  > After this: ${demo}` : "  > After this:");
     lines.push("");
   }
 

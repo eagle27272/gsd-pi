@@ -48,6 +48,7 @@ import {
 } from "./unit-context-manifest.js";
 import { resolveEffectivePlanningToolsPolicy } from "./planning-subagent-policy.js";
 import { resolveSubagentRoleForProvider } from "./subagent-role-resolver.js";
+import { resolveWorkflowToolNameForProvider } from "./workflow-tool-name-resolver.js";
 import { getUnitToolSurfaceContract } from "./unit-tool-contracts.js";
 import type { UnitPromptContextContract } from "./tool-contract.js";
 
@@ -215,11 +216,17 @@ export interface ComposeToolSurfaceInstructionOptions {
   readonly sessionProvider?: string;
 }
 
-const TOOL_SURFACE_GUIDANCE_BY_UNIT: Record<string, string> = {
+/**
+ * Guidance may depend on the session provider when it names a tool whose
+ * registered spelling differs by transport — see {@link resolveWorkflowToolNameForProvider}.
+ */
+type UnitToolSurfaceGuidance = string | ((sessionProvider?: string) => string);
+
+const TOOL_SURFACE_GUIDANCE_BY_UNIT: Record<string, UnitToolSurfaceGuidance> = {
   "run-uat":
     "Do not call `gsd_exec`, `Bash`, `Write`, or `Edit` — they are unavailable in this unit. Run every automated check through `gsd_uat_exec` with the appropriate `intent`. For browser UAT modes, use `browser_*` tools when presented; if browser automation fails, record the failure honestly and use `gsd_uat_exec` for the best objective substitute.",
-  "complete-slice":
-    "Run slice-level verification through `gsd_exec` (or MCP-scoped `mcp__…__gsd_exec`), not direct `bash`. Capture learnings through `gsd_capture_thought` (or MCP-scoped `mcp__…__gsd_capture_thought`), not bare `capture_thought`, when workflow MCP tools are presented. Do not call `gsd_uat_result_save` — run-uat owns persisted UAT assessment. On verification failure, do not edit user source files in this unit.",
+  "complete-slice": (sessionProvider) =>
+    `Run slice-level verification through \`gsd_exec\` (or MCP-scoped \`mcp__…__gsd_exec\`), not direct \`bash\`. Capture learnings through \`${resolveWorkflowToolNameForProvider("gsd_capture_thought", sessionProvider)}\`, not by appending to the knowledge files. Do not call \`gsd_uat_result_save\` — run-uat owns persisted UAT assessment. On verification failure, do not edit user source files in this unit.`,
   "gate-evaluate":
     "Dispatch only **tester** subagents via `subagent`. Persist each gate with `gsd_save_gate_result`. Do not use `ToolSearch` — it is not available.",
   "reactive-execute":
@@ -233,6 +240,11 @@ const TOOL_SURFACE_GUIDANCE_BY_UNIT: Record<string, string> = {
   "replan-slice":
     "Persist replans through `gsd_replan_slice` only. Do not edit `PLAN.md` or task plans directly.",
 };
+
+function unitToolSurfaceGuidance(unitType: string, sessionProvider?: string): string | undefined {
+  const guidance = TOOL_SURFACE_GUIDANCE_BY_UNIT[unitType];
+  return typeof guidance === "function" ? guidance(sessionProvider) : guidance;
+}
 
 function resolveAllowedAgentTypes(agents: readonly string[], sessionProvider?: string): string[] {
   return Array.from(new Set(
@@ -341,7 +353,10 @@ function formatAllowedToolsLine(
   const agentLabel = style === "surface" ? "Subagent types available here" : "Subagents";
   const parts: string[] = [];
   if (allowedGsdTools.length > 0) {
-    parts.push(`${toolLabel}: ${allowedGsdTools.map((t) => `\`${t}\``).join(", ")}.`);
+    // Contract names are canonical; the memory tools are registered in-process
+    // under different tokens, so advertise what this session can actually call.
+    const resolvedTools = allowedGsdTools.map((t) => resolveWorkflowToolNameForProvider(t, sessionProvider));
+    parts.push(`${toolLabel}: ${resolvedTools.map((t) => `\`${t}\``).join(", ")}.`);
   }
   if (subagents.length > 0) {
     const resolvedSubagents = resolveAllowedAgentTypes(subagents, sessionProvider);
@@ -391,8 +406,9 @@ export function composeToolSurfaceInstructions(
     : null;
   const allowedLine = formatAllowedToolsLine(unitType, effectiveTools, "surface", opts.sessionProvider);
   const unitGuidance = effectiveTools
-    ? guidanceForUnitToolsPolicy(unitType, effectiveTools, opts.sessionProvider) ?? TOOL_SURFACE_GUIDANCE_BY_UNIT[unitType]
-    : TOOL_SURFACE_GUIDANCE_BY_UNIT[unitType];
+    ? guidanceForUnitToolsPolicy(unitType, effectiveTools, opts.sessionProvider)
+      ?? unitToolSurfaceGuidance(unitType, opts.sessionProvider)
+    : unitToolSurfaceGuidance(unitType, opts.sessionProvider);
   const policyGuidance = unitGuidance || !effectiveTools ? null : guidanceForToolsPolicy(effectiveTools, opts.sessionProvider);
   const forbiddenLine = formatForbiddenWorkflowToolsLine(unitType, unitGuidance);
   const parts = [unitGuidance, policyGuidance, forbiddenLine].filter(

@@ -226,6 +226,8 @@ function isAbandonedStagedTaskSummary(
     projectionPath,
     [gsdProjectionRoot(basePath), join(basePath, ".gsd")],
   );
+  // Outside the projection root there is no marker entry that could own it.
+  if (!projectionKey) return false;
   return readCompatMarker(basePath).projections[projectionKey]?.sha === computeProjectionSha(content);
 }
 

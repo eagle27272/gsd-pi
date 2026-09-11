@@ -18,7 +18,6 @@ import {
   openDatabase,
   closeDatabase,
   _getAdapter,
-  insertArtifact,
   insertMilestone,
   insertSlice,
   insertTask,
@@ -87,6 +86,35 @@ function cleanup(base: string): void {
   } catch {
     /* noop */
   }
+}
+
+/**
+ * Seed an `artifacts` row keyed by an absolute path. insertArtifact rejects
+ * those (#3), so the only way to keep covering the reader's tolerance of rows
+ * written before that invariant is to write the row directly.
+ */
+function seedAbsolutePathArtifactRow(a: {
+  path: string;
+  artifact_type: string;
+  milestone_id: string | null;
+  slice_id: string | null;
+  task_id: string | null;
+  full_content: string;
+}): void {
+  _getAdapter()!
+    .prepare(
+      `INSERT OR REPLACE INTO artifacts (path, artifact_type, milestone_id, slice_id, task_id, full_content, imported_at, content_hash)
+       VALUES (:path, :artifact_type, :milestone_id, :slice_id, :task_id, :full_content, :imported_at, '')`,
+    )
+    .run({
+      ":path": a.path,
+      ":artifact_type": a.artifact_type,
+      ":milestone_id": a.milestone_id,
+      ":slice_id": a.slice_id,
+      ":task_id": a.task_id,
+      ":full_content": a.full_content,
+      ":imported_at": new Date().toISOString(),
+    });
 }
 
 test("ADR-017 (#5700): sketch-flag drift detected and repaired end-to-end", async (t) => {
@@ -2034,7 +2062,7 @@ test("ADR-017: orphan task completion artifact fails closed", async (t) => {
   insertMilestone({ id: "M001", title: "Milestone", status: "active" });
   insertSlice({ id: "S01", milestoneId: "M001", title: "Slice", status: "pending" });
   insertTask({ id: "T01", sliceId: "S01", milestoneId: "M001", title: "Task", status: "pending" });
-  insertArtifact({
+  seedAbsolutePathArtifactRow({
     path: join(base, ".gsd", "phases", "01-test", "T99-SUMMARY.md"),
     artifact_type: "SUMMARY",
     milestone_id: "M001",
@@ -2064,7 +2092,7 @@ test("ADR-017 (#414): an unproven failure-path summary remains a blocker", async
   insertMilestone({ id: "M001", title: "Milestone", status: "active" });
   insertSlice({ id: "S04", milestoneId: "M001", title: "Slice", status: "pending" });
   insertTask({ id: "T01", sliceId: "S04", milestoneId: "M001", title: "Task", status: "pending" });
-  insertArtifact({
+  seedAbsolutePathArtifactRow({
     path: join(base, ".gsd", "phases", "01-test", "T01-SUMMARY.md"),
     artifact_type: "SUMMARY",
     milestone_id: "M001",
@@ -2093,7 +2121,7 @@ test("ADR-017 (#414): a summary artifact without DB tasks remains a blocker", as
   insertMilestone({ id: "M001", title: "Milestone", status: "active" });
   insertSlice({ id: "S04", milestoneId: "M001", title: "Slice", status: "pending" });
   // No tasks inserted — slice has SUMMARY artifacts for a task that no longer exists.
-  insertArtifact({
+  seedAbsolutePathArtifactRow({
     path: join(base, ".gsd", "phases", "01-test", "T01-SUMMARY.md"),
     artifact_type: "SUMMARY",
     milestone_id: "M001",
