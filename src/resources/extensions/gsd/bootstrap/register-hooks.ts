@@ -1181,50 +1181,6 @@ export function registerHooks(
     await applyCompactionThresholdOverride(ctx);
     await prepareWorkflowMcpForHookContext(ctx, basePath);
 
-    // Migrate legacy .gsd/milestones/ to flat-phase .gsd/phases/ when detected.
-    // Fail closed on migration errors: resolvers assume flat-phase paths after
-    // startup, so continuing with nested disk state corrupts later checks.
-    try {
-      const { isInAutoWorktree } = await import("../auto-worktree.js");
-      if (!isInAutoWorktree(basePath)) {
-        const { needsFlatPhaseMigration } = await import("../flat-phase-migration.js");
-        if (needsFlatPhaseMigration(basePath)) {
-          const { ensureDbOpen } = await import("./dynamic-tools.js");
-          const opened = await ensureDbOpen(basePath);
-          if (opened) {
-            const { migrateToFlatPhase } = await import("../flat-phase-migration.js");
-            await migrateToFlatPhase(basePath);
-          } else {
-            safetyLogWarning(
-              "bootstrap",
-              "flat-phase migration required: legacy .gsd/milestones/ layout detected but the workflow database could not be opened — fix database access before starting GSD",
-            );
-            throw new Error(
-              "flat-phase migration required but the workflow database could not be opened; fix database access before starting GSD",
-            );
-          }
-        }
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      safetyLogWarning("bootstrap", `flat-phase migration failed: ${message}`);
-      throw new Error(`flat-phase migration failed: ${message}`);
-    }
-
-    try {
-      const projectRoot = resolveWorktreeProjectRoot(basePath);
-      const { pruneStaleFlatPhaseBackups } = await import("../flat-phase-migration.js");
-      const pruned = pruneStaleFlatPhaseBackups(projectRoot);
-      if (pruned > 0) {
-        safetyLogWarning(
-          "bootstrap",
-          `pruned ${pruned} stale flat-phase migration backup(s) from .gsd-backups/ (retention exceeded)`,
-        );
-      }
-    } catch (err) {
-      safetyLogWarning("bootstrap", `flat-phase backup pruning: ${err instanceof Error ? err.message : String(err)}`);
-    }
-
     // Apply show_token_cost preference (#1515)
     try {
       const { loadEffectiveGSDPreferences } = await import("../preferences.js");

@@ -57,7 +57,6 @@ import { atomicWriteSync, removeProjectionFileSync } from "./atomic-write.js";
 import { logWarning, logError } from "./workflow-logger.js";
 import { dirname, join, sep } from "node:path";
 import { hasImplementationArtifacts } from "./milestone-implementation-evidence.js";
-import { isFlatPhaseMigrationInFlight } from "./flat-phase-migration.js";
 import { composeToolAffordanceReminder } from "./unit-context-composer.js";
 import {
   buildDiscussMilestonePrompt,
@@ -886,15 +885,6 @@ export const DISPATCH_RULES: DispatchRule[] = [
       // "never discussed" and re-dispatches discuss-milestone after task
       // closeout instead of continuing execution (#1317).
       const artifactBasePath = resolveArtifactBasePath(basePath, mid, session);
-      // The layout migration moves .gsd/milestones/ aside before rendering
-      // .gsd/phases/, so mid-flight the slice plans exist in neither layout.
-      // A dispatch landing in that window reads "never discussed" and re-plans a
-      // milestone that is already fully planned in the DB, discarding the plan.
-      // Startup dispatch races the migration on every run, so decline to decide
-      // while the layout is converting; the next iteration sees a settled tree.
-      // Scoped to a migration actually in flight — a settled legacy project must
-      // still reach this rule (#4671).
-      if (isFlatPhaseMigrationInFlight(artifactBasePath)) return null;
       if (hasMilestonePassedDiscuss(artifactBasePath, mid)) return null;
       // Align with the plan-v2 gate's lookup semantics: whitespace-only counts
       // as missing, and an auto worktree may fall back to GSD_PROJECT_ROOT.
