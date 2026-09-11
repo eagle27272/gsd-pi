@@ -339,10 +339,15 @@ export function createEditToolDefinition(
 				const { bom, text: content } = stripBom(rawContent);
 				const originalEnding = detectLineEnding(content);
 				const normalizedContent = normalizeToLF(content);
-				const { baseContent, newContent } = applyEditsToNormalizedContent(normalizedContent, edits, path);
+				const { baseContent, newContent, appliedRanges } = applyEditsToNormalizedContent(
+					normalizedContent,
+					edits,
+					path,
+				);
 				throwIfAborted();
 
-				const finalContent = bom + restoreLineEndings(newContent, originalEnding);
+				const finalContent =
+					bom + restoreLineEndings(content, baseContent, newContent, appliedRanges, originalEnding);
 				await ops.writeFile(absolutePath, finalContent);
 				throwIfAborted();
 
