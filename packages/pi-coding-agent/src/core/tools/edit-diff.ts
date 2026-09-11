@@ -20,8 +20,105 @@ export function normalizeToLF(text: string): string {
 	return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 }
 
-export function restoreLineEndings(text: string, ending: "\r\n" | "\n"): string {
-	return ending === "\r\n" ? text.replace(/\n/g, "\r\n") : text;
+/**
+ * The terminator of every line in `content`, in order, as it appears on disk.
+ * One entry per newline in `normalizeToLF(content)`, so the two line up by index.
+ */
+function collectLineTerminators(content: string): string[] {
+	const terminators: string[] = [];
+	for (let i = 0; i < content.length; i++) {
+		if (content[i] === "\r") {
+			const crlf = content[i + 1] === "\n";
+			terminators.push(crlf ? "\r\n" : "\r");
+			if (crlf) i++;
+		} else if (content[i] === "\n") {
+			terminators.push("\n");
+		}
+	}
+	return terminators;
+}
+
+function countNewlines(text: string, start: number, end: number): number {
+	let count = 0;
+	for (let i = text.indexOf("\n", start); i !== -1 && i < end; i = text.indexOf("\n", i + 1)) {
+		count++;
+	}
+	return count;
+}
+
+/**
+ * Work out, for each newline of the edited content, which bytes should terminate it.
+ *
+ * Newlines outside every replaced range keep the terminator the file had on disk.
+ * Inside a replaced range the replacement's newlines inherit positionally from the
+ * ones they displaced, so rewording a line does not also rewrite its ending; only
+ * newlines with nothing to inherit from are genuinely new and fall back.
+ */
+function planLineTerminators(
+	baseContent: string,
+	appliedRanges: AppliedEditRange[],
+	originalTerminators: string[],
+	fallback: "\r\n" | "\n",
+): string[] {
+	const planned: string[] = [];
+	let baseOffset = 0;
+	let baseLine = 0;
+
+	const keepThrough = (end: number): void => {
+		const kept = countNewlines(baseContent, baseOffset, end);
+		for (let i = 0; i < kept; i++) planned.push(originalTerminators[baseLine + i] ?? fallback);
+		baseLine += kept;
+		baseOffset = end;
+	};
+
+	for (const range of appliedRanges) {
+		keepThrough(range.start);
+
+		const displaced = countNewlines(baseContent, range.start, range.end);
+		const introduced = countNewlines(range.newText, 0, range.newText.length);
+		for (let i = 0; i < introduced; i++) {
+			planned.push(i < displaced ? (originalTerminators[baseLine + i] ?? fallback) : fallback);
+		}
+		baseLine += displaced;
+		baseOffset = range.end;
+	}
+
+	keepThrough(baseContent.length);
+	return planned;
+}
+
+/**
+ * Re-expand the LF-normalized edit result onto the file's real line terminators.
+ *
+ * Replaces the blanket `\n` -> `\r\n` sweep that a single detected ending implies:
+ * that sweep rewrites every line of a mixed-ending file while the diff, computed in
+ * LF space, only ever shows the edited region. Restoring per line keeps unmatched
+ * bytes unmatched, so what lands on disk is what the diff promised.
+ */
+export function restoreLineEndings(
+	originalContent: string,
+	baseContent: string,
+	newContent: string,
+	appliedRanges: AppliedEditRange[],
+	fallback: "\r\n" | "\n",
+): string {
+	const terminators = planLineTerminators(
+		baseContent,
+		appliedRanges,
+		collectLineTerminators(originalContent),
+		fallback,
+	);
+
+	const parts: string[] = [];
+	let cursor = 0;
+	for (let i = 0; ; i++) {
+		const newline = newContent.indexOf("\n", cursor);
+		if (newline === -1) break;
+		parts.push(newContent.slice(cursor, newline), terminators[i] ?? fallback);
+		cursor = newline + 1;
+	}
+	parts.push(newContent.slice(cursor));
+	return parts.join("");
 }
 
 /**
@@ -82,9 +179,18 @@ interface MatchedEdit {
 	newText: string;
 }
 
+/** A single replacement, as a half-open range of `baseContent` and the text put in its place. */
+export interface AppliedEditRange {
+	start: number;
+	end: number;
+	newText: string;
+}
+
 export interface AppliedEditsResult {
 	baseContent: string;
 	newContent: string;
+	/** The replaced regions, ascending and non-overlapping. Everything outside them is untouched. */
+	appliedRanges: AppliedEditRange[];
 }
 
 /**
@@ -256,7 +362,13 @@ export function applyEditsToNormalizedContent(
 		throw getNoChangeError(path, normalizedEdits.length);
 	}
 
-	return { baseContent, newContent };
+	const appliedRanges = matchedEdits.map((edit) => ({
+		start: edit.matchIndex,
+		end: edit.matchIndex + edit.matchLength,
+		newText: edit.newText,
+	}));
+
+	return { baseContent, newContent, appliedRanges };
 }
 
 /** Generate a standard unified patch. */
