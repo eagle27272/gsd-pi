@@ -24,6 +24,12 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { gsdAsync, stripAnsi, type SpawnSyncResult, type TmpProject } from "../e2e/_shared/index.ts";
+import {
+  canonicalPhaseDirName,
+  LAYOUT_SEGMENTS,
+  milestoneIdToPhaseNum,
+  slicePlanFileName,
+} from "../../src/resources/extensions/gsd/layout-policy.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -339,16 +345,22 @@ function seedMilestone(project: TmpProject, slices: FixtureSlice[], testScript: 
     project.writeFile(task.testFile, task.testSource);
   }
 
-  // GSD milestone structure (mirrors the layout the fake-LLM headless tests seed).
-  const milestoneDir = join(".gsd", "milestones", "M001");
+  // GSD flat-phase structure (mirrors the layout the fake-LLM headless tests
+  // seed). The pre-flat-phase milestones/<MID>/ shape is rejected by the
+  // legacy-layout guard, so names come from the layout policy itself.
+  const milestoneId = "M001";
+  const title = "Answer Fixture";
+  const phaseNum = milestoneIdToPhaseNum(milestoneId);
+  const phasePrefix = String(phaseNum).padStart(2, "0");
+  const phaseDir = join(".gsd", LAYOUT_SEGMENTS.level1, canonicalPhaseDirName(milestoneId, title));
   project.writeFile(
-    join(milestoneDir, "M001-CONTEXT.md"),
-    ["# M001: Answer Fixture", "", "## Purpose", "Live end-to-end smoke of the auto-orchestration loop.", ""].join("\n"),
+    join(phaseDir, `${phasePrefix}-CONTEXT.md`),
+    [`# ${milestoneId}: ${title}`, "", "## Purpose", "Live end-to-end smoke of the auto-orchestration loop.", ""].join("\n"),
   );
   project.writeFile(
-    join(milestoneDir, "M001-ROADMAP.md"),
+    join(phaseDir, `${phasePrefix}-ROADMAP.md`),
     [
-      "# M001: Answer Fixture",
+      `# ${milestoneId}: ${title}`,
       "",
       "## Slices",
       "",
@@ -360,7 +372,7 @@ function seedMilestone(project: TmpProject, slices: FixtureSlice[], testScript: 
     ].join("\n"),
   );
   for (const slice of slices) {
-    project.writeFile(join(milestoneDir, "slices", slice.id, `${slice.id}-PLAN.md`), planMarkdown(slice));
+    project.writeFile(join(phaseDir, slicePlanFileName(phaseNum, slice.id, "PLAN")), planMarkdown(slice));
   }
 
   // Commit the fixture so seeding starts from a clean tree.

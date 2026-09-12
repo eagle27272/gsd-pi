@@ -271,6 +271,7 @@ import type { ErrorContext } from "./auto/types.js";
 import { runAutoLoopWithUok } from "./uok/kernel.js";
 import { resolveUokFlags } from "./uok/flags.js";
 import { validateDirectory } from "./validate-directory.js";
+import { assertNoLegacyLayout } from "./legacy-layout-guard.js";
 import { createAutoOrchestrator } from "./auto/orchestrator.js";
 import type { AutoAdvanceResult, AutoOrchestrationModule } from "./auto/contracts.js";
 import {
@@ -2627,6 +2628,12 @@ export async function startAuto(
     ctx.ui.notify(dirCheck.reason!, "error");
     return;
   }
+
+  // Refuse a pre-flat-phase layout before any branching, so both the
+  // fresh-start and the resume path are covered. The matching call in
+  // auto-start.ts covers the bootstrap-only path; this one is what protects
+  // resume, which returns long before bootstrapAutoSession is reached.
+  assertNoLegacyLayout(base);
 
   const unmergedStartMessage = await getUnmergedMilestoneBlockMessageForBase(base, "auto");
   if (unmergedStartMessage) {

@@ -128,20 +128,34 @@ function scaffoldProject(runDir) {
 	return dir;
 }
 
-// Mirrors tests/e2e/headless-auto-pause-blocked.e2e.test.ts writeRecoveredMilestone.
-function writeRecoveredMilestone(dir) {
-	const milestoneDir = join(dir, ".gsd", "milestones", "M001");
-	const sliceDir = join(milestoneDir, "slices", "S01");
-	mkdirSync(join(sliceDir, "tasks"), { recursive: true });
+// Mirrors tests/e2e/headless-auto-pause-blocked.e2e.test.ts writeRecoveredMilestone:
+// both seed the flat-phase layout the resolvers read. The pre-flat-phase
+// milestones/<MID>/ shape is rejected outright by the legacy-layout guard, and
+// nothing converts it any more. Naming comes from the layout policy itself so
+// the fixture cannot drift from the resolvers.
+//
+// Flat-phase has no slices/<SID>/tasks/ dir, so there is no per-task plan
+// artifact to write: artifact-verification only demands one when a tasks/ dir
+// exists outside `.gsd/phases`.
+async function writeRecoveredMilestone(dir) {
+	const { canonicalPhaseDirName, LAYOUT_SEGMENTS, milestoneIdToPhaseNum, slicePlanFileName } = await import(
+		pathToFileURL(join(REPO_ROOT, "dist", "resources", "extensions", "gsd", "layout-policy.js")).href
+	);
+	const milestoneId = "M001";
+	const title = "Acceptance Bed Fixture";
+	const phaseNum = milestoneIdToPhaseNum(milestoneId);
+	const phasePrefix = String(phaseNum).padStart(2, "0");
+	const phaseDir = join(dir, ".gsd", LAYOUT_SEGMENTS.level1, canonicalPhaseDirName(milestoneId, title));
+	mkdirSync(phaseDir, { recursive: true });
 
 	writeFileSync(
-		join(milestoneDir, "M001-CONTEXT.md"),
-		["# M001: Acceptance Bed Fixture", "", "## Purpose", "Prove auto mode can finish a tiny planned milestone.", ""].join("\n"),
+		join(phaseDir, `${phasePrefix}-CONTEXT.md`),
+		[`# ${milestoneId}: ${title}`, "", "## Purpose", "Prove auto mode can finish a tiny planned milestone.", ""].join("\n"),
 	);
 	writeFileSync(
-		join(milestoneDir, "M001-ROADMAP.md"),
+		join(phaseDir, `${phasePrefix}-ROADMAP.md`),
 		[
-			"# M001: Acceptance Bed Fixture",
+			`# ${milestoneId}: ${title}`,
 			"",
 			"## Slices",
 			"",
@@ -151,7 +165,7 @@ function writeRecoveredMilestone(dir) {
 		].join("\n"),
 	);
 	writeFileSync(
-		join(sliceDir, "S01-PLAN.md"),
+		join(phaseDir, slicePlanFileName(phaseNum, "S01", "PLAN")),
 		[
 			"# S01: Update answer",
 			"",
@@ -179,44 +193,6 @@ function writeRecoveredMilestone(dir) {
 			"## Verification",
 			"",
 			"- Verify: `node --test test/answer.test.js` exits 0.",
-			"",
-		].join("\n"),
-	);
-	// Recovery artifact verification requires a per-task plan artifact when the
-	// tasks/ dir exists (artifact-verification.ts: "task artifact missing").
-	writeFileSync(
-		join(sliceDir, "tasks", "T01-PLAN.md"),
-		[
-			"---",
-			"estimated_steps: 1",
-			"estimated_files: 1",
-			"---",
-			"",
-			"# T01: Update answer implementation",
-			"",
-			"**Slice:** S01 — Update answer",
-			"**Milestone:** M001",
-			"",
-			"## Description",
-			"",
-			"Change `src/answer.js` so `answer()` returns `ready`, then run the verification command.",
-			"",
-			"## Steps",
-			"",
-			"1. Edit `src/answer.js` so the exported function returns \"ready\".",
-			"2. Run `node --test test/answer.test.js` and confirm it exits 0.",
-			"",
-			"## Must-Haves",
-			"",
-			"- [ ] `answer()` returns \"ready\".",
-			"",
-			"## Verification",
-			"",
-			"- Verify: `node --test test/answer.test.js` exits 0.",
-			"",
-			"## Expected Output",
-			"",
-			"- `src/answer.js` — returns \"ready\".",
 			"",
 		].join("\n"),
 	);
@@ -470,12 +446,12 @@ async function main() {
 	const runDir = nextRunDir();
 	console.error(`[bed] run dir: ${runDir}`);
 	const projectDir = scaffoldProject(runDir);
-	writeRecoveredMilestone(projectDir);
+	await writeRecoveredMilestone(projectDir);
 
 	// tasks: 0 is the real import result, not an oversight. parseProjectionPlan
 	// drops a checkbox task whose id is repeated by a `### T01: ...` detail
 	// heading (the heading branch sees a known id and clears the pending
-	// entry), and this fixture's T01-PLAN.md has both. The bed's transcript
+	// entry), and this fixture's slice PLAN has both. The bed's transcript
 	// still dispatches and completes T01 through the real engine regardless.
 	const seedCounts = seedDatabaseFromMarkdown(projectDir, { milestones: 1, slices: 1, tasks: 0 });
 	writeFileSync(join(runDir, "db-seed-counts.json"), JSON.stringify(seedCounts, null, 2) + "\n");

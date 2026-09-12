@@ -15,8 +15,33 @@ import {
 	parseJsonEvents,
 	writeTranscript,
 } from "./_shared/index.ts";
+import {
+	canonicalPhaseDirName,
+	LAYOUT_SEGMENTS,
+	milestoneIdToPhaseNum,
+	slicePlanFileName,
+} from "../../src/resources/extensions/gsd/layout-policy.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+// Fixtures write the flat-phase layout the resolvers actually read. The
+// pre-flat-phase `milestones/<MID>/` shape is rejected outright by the
+// legacy-layout guard, and nothing converts it any more.
+const MILESTONE_ID = "M001";
+const PHASE_NUM = milestoneIdToPhaseNum(MILESTONE_ID);
+const RECOVERED_TITLE = "Provider Pause Fixture";
+const CONFLICT_TITLE = "Merge Conflict Fixture";
+const RECOVERED_PHASE_DIR = canonicalPhaseDirName(MILESTONE_ID, RECOVERED_TITLE);
+const CONFLICT_PHASE_DIR = canonicalPhaseDirName(MILESTONE_ID, CONFLICT_TITLE);
+
+/** Flat-phase milestone-level file name, e.g. "01-ROADMAP.md". */
+function phaseFileName(suffix: string): string {
+	return `${String(PHASE_NUM).padStart(2, "0")}-${suffix}.md`;
+}
+
+function phaseDirPath(dir: string, phaseDirName: string): string {
+	return join(dir, ".gsd", LAYOUT_SEGMENTS.level1, phaseDirName);
+}
 
 function binaryAvailable(): { ok: boolean; reason?: string } {
 	const bin = process.env.GSD_SMOKE_BINARY;
@@ -110,22 +135,22 @@ function seedDatabaseFromMarkdown(dir: string, minimum: SeedHierarchyCounts): Se
 function commitRecoveredMilestone(dir: string): void {
 	// Track projections so pass-0 reconciliation resolves them (#1364) and
 	// flakes on neither roadmap-missing nor the provider error.
+	const relPhaseDir = `.gsd/${LAYOUT_SEGMENTS.level1}/${RECOVERED_PHASE_DIR}`;
 	commitPaths(dir, [
-		".gsd/milestones/M001/M001-CONTEXT.md",
-		".gsd/milestones/M001/M001-ROADMAP.md",
-		".gsd/milestones/M001/slices/S01/S01-PLAN.md",
+		`${relPhaseDir}/${phaseFileName("CONTEXT")}`,
+		`${relPhaseDir}/${phaseFileName("ROADMAP")}`,
+		`${relPhaseDir}/${slicePlanFileName(PHASE_NUM, "S01", "PLAN")}`,
 	], "test: seed recovered milestone projections");
 }
 
 function writeRecoveredMilestone(dir: string): void {
-	const milestoneDir = join(dir, ".gsd", "milestones", "M001");
-	const sliceDir = join(milestoneDir, "slices", "S01");
-	mkdirSync(join(sliceDir, "tasks"), { recursive: true });
+	const phaseDir = phaseDirPath(dir, RECOVERED_PHASE_DIR);
+	mkdirSync(phaseDir, { recursive: true });
 
 	writeFileSync(
-		join(milestoneDir, "M001-CONTEXT.md"),
+		join(phaseDir, phaseFileName("CONTEXT")),
 		[
-			"# M001: Provider Pause Fixture",
+			`# ${MILESTONE_ID}: ${RECOVERED_TITLE}`,
 			"",
 			"## Purpose",
 			"Exercise headless auto-mode pause handling.",
@@ -133,9 +158,9 @@ function writeRecoveredMilestone(dir: string): void {
 		].join("\n"),
 	);
 	writeFileSync(
-		join(milestoneDir, "M001-ROADMAP.md"),
+		join(phaseDir, phaseFileName("ROADMAP")),
 		[
-			"# M001: Provider Pause Fixture",
+			`# ${MILESTONE_ID}: ${RECOVERED_TITLE}`,
 			"",
 			"## Slices",
 			"",
@@ -145,7 +170,7 @@ function writeRecoveredMilestone(dir: string): void {
 		].join("\n"),
 	);
 	writeFileSync(
-		join(sliceDir, "S01-PLAN.md"),
+		join(phaseDir, slicePlanFileName(PHASE_NUM, "S01", "PLAN")),
 		[
 			"# S01: Update answer",
 			"",
@@ -171,13 +196,13 @@ function writeRecoveredMilestone(dir: string): void {
 }
 
 function writeCompletedConflictMilestone(dir: string): void {
-	const milestoneDir = join(dir, ".gsd", "milestones", "M001");
-	mkdirSync(milestoneDir, { recursive: true });
+	const phaseDir = phaseDirPath(dir, CONFLICT_PHASE_DIR);
+	mkdirSync(phaseDir, { recursive: true });
 	writeFileSync(join(dir, ".gsd", "PREFERENCES.md"), "## Git\n- isolation: worktree\n");
 	writeFileSync(
-		join(milestoneDir, "M001-ROADMAP.md"),
+		join(phaseDir, phaseFileName("ROADMAP")),
 		[
-			"# M001: Merge Conflict Fixture",
+			`# ${MILESTONE_ID}: ${CONFLICT_TITLE}`,
 			"",
 			"## Slices",
 			"",
@@ -187,10 +212,10 @@ function writeCompletedConflictMilestone(dir: string): void {
 		].join("\n"),
 	);
 	writeFileSync(
-		join(milestoneDir, "M001-VALIDATION.md"),
+		join(phaseDir, phaseFileName("VALIDATION")),
 		"---\nverdict: pass\nremediation_round: 0\n---\n\n# Validation\nPassed.\n",
 	);
-	writeFileSync(join(milestoneDir, "M001-SUMMARY.md"), "# M001 Summary\n\nDone.\n");
+	writeFileSync(join(phaseDir, phaseFileName("SUMMARY")), `# ${MILESTONE_ID} Summary\n\nDone.\n`);
 }
 
 /**
@@ -299,7 +324,7 @@ describe("headless auto pause e2e (fake LLM)", () => {
 		// answers 429, and the run pauses before any task would be read.
 		seedDatabaseFromMarkdown(project.dir, { milestones: 1, slices: 1, tasks: 0 });
 		assert.ok(
-			existsSync(join(project.dir, ".gsd", "milestones", "M001", "M001-ROADMAP.md")),
+			existsSync(join(phaseDirPath(project.dir, RECOVERED_PHASE_DIR), phaseFileName("ROADMAP"))),
 			"seeded ROADMAP must stay on disk so auto pass-0 cannot emit roadmap-missing",
 		);
 

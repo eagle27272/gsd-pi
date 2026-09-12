@@ -31,6 +31,13 @@ import {
 import { join, resolve } from "path";
 import { tmpdir } from "os";
 
+import {
+  canonicalPhaseDirName,
+  LAYOUT_SEGMENTS,
+  milestoneIdToPhaseNum,
+  slicePlanFileName,
+} from "../../src/resources/extensions/gsd/layout-policy.ts";
+
 // ─── Config ───────────────────────────────────────────────────────────────
 
 // GSD_SMOKE_BINARY may name either a filesystem path to a JS entrypoint
@@ -215,6 +222,31 @@ function buildMinimalPlan(
   return lines.join("\n");
 }
 
+// Fixtures below seed the flat-phase layout, the only on-disk shape GSD still
+// reads. The pre-flat-phase milestones/<MID>/ tree is refused by the
+// legacy-layout guard, so names come from the layout policy rather than being
+// spelled out by hand.
+const FIXTURE_MILESTONE_ID = "M001";
+const FIXTURE_MILESTONE_TITLE = "Test Milestone";
+const FIXTURE_PHASE_NUM = milestoneIdToPhaseNum(FIXTURE_MILESTONE_ID);
+
+function fixturePhaseDir(dir: string): string {
+  return join(
+    dir,
+    ".gsd",
+    LAYOUT_SEGMENTS.level1,
+    canonicalPhaseDirName(FIXTURE_MILESTONE_ID, FIXTURE_MILESTONE_TITLE),
+  );
+}
+
+function fixturePhaseFile(suffix: string): string {
+  return `${String(FIXTURE_PHASE_NUM).padStart(2, "0")}-${suffix}.md`;
+}
+
+function fixturePlanFile(sliceId: string): string {
+  return slicePlanFileName(FIXTURE_PHASE_NUM, sliceId, "PLAN");
+}
+
 // ─── Test: headless query returns valid JSON ──────────────────────────────
 
 run("headless query returns valid JSON on initialized project", () => {
@@ -290,11 +322,11 @@ const MARKDOWN_ONLY_FIXTURES: Array<{
     name: "planning",
     claim: "a roadmap with one open slice",
     seed: (dir) => {
-      const mDir = join(dir, ".gsd", "milestones", "M001");
-      mkdirSync(join(mDir, "slices", "S01"), { recursive: true });
-      writeFileSync(join(mDir, "M001-CONTEXT.md"), "# M001\n\nContext.");
+      const pDir = fixturePhaseDir(dir);
+      mkdirSync(pDir, { recursive: true });
+      writeFileSync(join(pDir, fixturePhaseFile("CONTEXT")), "# M001\n\nContext.");
       writeFileSync(
-        join(mDir, "M001-ROADMAP.md"),
+        join(pDir, fixturePhaseFile("ROADMAP")),
         buildMinimalRoadmap([{ id: "S01", title: "First Slice", done: false }]),
       );
     },
@@ -303,16 +335,15 @@ const MARKDOWN_ONLY_FIXTURES: Array<{
     name: "summarizing",
     claim: "a plan whose every task is checked",
     seed: (dir) => {
-      const mDir = join(dir, ".gsd", "milestones", "M001");
-      const sDir = join(mDir, "slices", "S01");
-      mkdirSync(sDir, { recursive: true });
-      writeFileSync(join(mDir, "M001-CONTEXT.md"), "# M001\n\nContext.");
+      const pDir = fixturePhaseDir(dir);
+      mkdirSync(pDir, { recursive: true });
+      writeFileSync(join(pDir, fixturePhaseFile("CONTEXT")), "# M001\n\nContext.");
       writeFileSync(
-        join(mDir, "M001-ROADMAP.md"),
+        join(pDir, fixturePhaseFile("ROADMAP")),
         buildMinimalRoadmap([{ id: "S01", title: "First Slice", done: false }]),
       );
       writeFileSync(
-        join(sDir, "S01-PLAN.md"),
+        join(pDir, fixturePlanFile("S01")),
         buildMinimalPlan([{ id: "T01", title: "Task One", done: true }]),
       );
     },
@@ -321,13 +352,13 @@ const MARKDOWN_ONLY_FIXTURES: Array<{
     name: "complete",
     claim: "a checked roadmap plus a milestone summary",
     seed: (dir) => {
-      const mDir = join(dir, ".gsd", "milestones", "M001");
-      mkdirSync(mDir, { recursive: true });
+      const pDir = fixturePhaseDir(dir);
+      mkdirSync(pDir, { recursive: true });
       writeFileSync(
-        join(mDir, "M001-ROADMAP.md"),
+        join(pDir, fixturePhaseFile("ROADMAP")),
         buildMinimalRoadmap([{ id: "S01", title: "Done", done: true }]),
       );
-      writeFileSync(join(mDir, "M001-SUMMARY.md"), "# M001 Summary\n\nComplete.");
+      writeFileSync(join(pDir, fixturePhaseFile("SUMMARY")), "# M001 Summary\n\nComplete.");
     },
   },
 ];
@@ -541,15 +572,15 @@ run("version skew is detected and named in stderr", () => {
 // real project directory, not the contents of the dashboard.
 function seedProjectWithMilestone(name: string): string {
   const dir = createTempProject(name);
-  const mDir = join(dir, ".gsd", "milestones", "M001");
-  mkdirSync(join(mDir, "slices", "S01"), { recursive: true });
-  writeFileSync(join(mDir, "M001-CONTEXT.md"), "# M001\n\nContext.");
+  const pDir = fixturePhaseDir(dir);
+  mkdirSync(pDir, { recursive: true });
+  writeFileSync(join(pDir, fixturePhaseFile("CONTEXT")), "# M001\n\nContext.");
   writeFileSync(
-    join(mDir, "M001-ROADMAP.md"),
+    join(pDir, fixturePhaseFile("ROADMAP")),
     buildMinimalRoadmap([{ id: "S01", title: "First Slice", done: false }]),
   );
   writeFileSync(
-    join(mDir, "slices", "S01", "S01-PLAN.md"),
+    join(pDir, fixturePlanFile("S01")),
     buildMinimalPlan([{ id: "T01", title: "Task One", done: false }]),
   );
   return dir;

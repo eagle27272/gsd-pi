@@ -24,6 +24,7 @@ import {
   type PausedSessionMetadata,
 } from "../interrupted-session.ts";
 import { normalizeRealPath } from "../paths.ts";
+import { canonicalPhaseDirName, LAYOUT_SEGMENTS, milestoneIdToPhaseNum } from "../layout-policy.ts";
 
 function makeTmpBase(): string {
   const base = join(tmpdir(), `gsd-auto-interrupted-${randomUUID()}`);
@@ -190,9 +191,17 @@ test("direct /gsd auto never restores a paused milestone superseded by the activ
 
   const pausedMilestoneId = "M016-5b17xo";
   const activeMilestoneId = "M018-6b0xxe";
-  const milestoneDir = join(base, ".gsd", "milestones", pausedMilestoneId);
-  mkdirSync(milestoneDir, { recursive: true });
-  writeFileSync(join(milestoneDir, `${pausedMilestoneId}-CONTEXT.md`), "# Paused milestone\n");
+  // Flat-phase layout: startAuto refuses a pre-flat-phase milestones/<MID>/
+  // tree outright, so this fixture must seed what the resolvers read.
+  const phaseDir = join(
+    base,
+    ".gsd",
+    LAYOUT_SEGMENTS.level1,
+    canonicalPhaseDirName(pausedMilestoneId, "Paused milestone"),
+  );
+  mkdirSync(phaseDir, { recursive: true });
+  const phasePrefix = String(milestoneIdToPhaseNum(pausedMilestoneId)).padStart(2, "0");
+  writeFileSync(join(phaseDir, `${phasePrefix}-CONTEXT.md`), "# Paused milestone\n");
   openFixtureDb(base);
   insertMilestone({ id: pausedMilestoneId, title: "Paused milestone", status: "active" });
   writePausedSession(base, pausedMilestoneId);
