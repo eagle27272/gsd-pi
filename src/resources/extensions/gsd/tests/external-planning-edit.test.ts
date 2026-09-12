@@ -57,7 +57,7 @@ test("detect reports inactive modeled planning without activating compatibility"
   assert.equal(drift[0]?.passthrough, false);
   const blocker = await externalPlanningEditHandler.blocker?.(drift[0]!, ctx(base));
   assert.match(blocker ?? "", /database is authoritative/i);
-  assert.match(blocker ?? "", /Preview\/Application/);
+  assert.match(blocker ?? "", /cannot import `\.planning\/` into the DB/);
 
   // Marker must NOT have been written by detect().
   const { readCompatMarker } = await import("../compat/compat-marker.ts");
@@ -184,7 +184,7 @@ test("reconcileBeforeDispatch dryRun=true does not write compat marker (planning
     invalidateStateCache: () => {},
     deriveState: async () => stubState as unknown as import("../types.ts").GSDState,
   });
-  assert.match(result.blockers.join("\n"), /Preview\/Application/);
+  assert.match(result.blockers.join("\n"), /cannot import `\.planning\/` into the DB/);
   assert.equal(result.repaired.length, 0);
 
   // Marker must be identical to before: no planning activation, no SHA seeding.

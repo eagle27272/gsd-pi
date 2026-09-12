@@ -88,7 +88,7 @@ export async function observeExternalPlanningEdits(
     quarantineInvalid: !dryRun,
   });
   if (!marker.planning?.active) {
-    // An inactive but recognizable legacy tree requires an explicit migration.
+    // An inactive but recognizable legacy tree is observed, never adopted.
     // Detect only modeled files here: passthrough baselines are refreshed only
     // after compatibility is active, so first contact remains fully read-only.
     const planningDir = join(basePath, ".planning");
@@ -127,7 +127,7 @@ function externalPlanningEditBlocker(record: ExternalPlanningEditDrift): string 
     `External modeled edit detected in \`.planning/${record.projectionPath}\`.`,
     "The database is authoritative, so GSD paused before transforming or importing this projection.",
     "Recommended: run `/gsd rebuild markdown` to restore database-backed projections.",
-    "If `.planning` should become the source, use `/gsd migrate` to review and confirm its explicit Preview/Application.",
+    "If this edit should replace database state, re-apply it through the owning `/gsd` command — runtime cannot import `.planning/` into the DB.",
   ].join(" ");
 }
 

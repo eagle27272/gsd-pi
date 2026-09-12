@@ -209,8 +209,8 @@ describe('derive-state-db', async () => {
         'runtime degrade: blocker explains unavailable DB',
       );
       assert.ok(
-        state.nextAction.includes('/gsd migrate'),
-        'runtime degrade: next action points to explicit migration',
+        state.nextAction.includes('/gsd doctor'),
+        'runtime degrade: next action points at database diagnosis, not markdown adoption',
       );
     } finally {
       cleanup(base);

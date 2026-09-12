@@ -171,7 +171,6 @@ export function showHelp(ctx: ExtensionCommandContext, args = ""): void {
     "  /gsd db restore-backup List or restore a verified pre-migration database backup (destructive)",
     "  /gsd task settle  Settle an orphaned running task Attempt (dry-run first)  <M001/S01/T01> --reason \"...\" [--apply] [--reconcile-lifecycle]",
     "  /gsd worktree       Manage worktrees from the TUI  [list|merge|clean|remove]",
-    "  /gsd migrate        Migrate .planning/ (v1) to DB-backed .gsd/ with backup + audit",
     "  /gsd inspect        Show SQLite DB diagnostics (schema, row counts, recent entries)",
     "  /gsd update         Update GSD to the latest version via npm  [--models refreshes the model catalog]",
     "  /gsd upgrade        Alias for /gsd update",
