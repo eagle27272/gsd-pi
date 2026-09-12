@@ -76,6 +76,12 @@ const VERDICT_RE = /verdict:\s*[\w-]+/i;
  *
  * Only overwrites when the source has a verdict — never clobbers a worktree
  * ASSESSMENT with a verdictless project-root copy.
+ *
+ * Scope is every phase dir, not just the caller's `milestoneId`, because this
+ * repairs exactly what `syncFlatPhaseArtifacts` above just declined to
+ * overwrite — and that merge copies the whole `phases/` tree. A milestone-
+ * scoped force-overwrite would leave a stale verdict behind in any other phase
+ * dir the merge had touched.
  */
 function forceOverwriteVerdictArtifacts(prGsd: string, wtGsd: string): void {
   const prPhases = join(prGsd, "phases");
