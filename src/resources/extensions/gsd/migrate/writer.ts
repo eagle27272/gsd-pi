@@ -1,4 +1,12 @@
 // GSD Directory Writer — Format Functions & Directory Orchestrator
+//
+// NOT PRODUCTION CODE — DO NOT DELETE AS DEAD. No production path reaches this
+// module since /gsd migrate was removed; every importer is a test. The
+// load-bearing one is tests/migrate-safety-audit.test.ts, the only coverage of
+// the native engine's fault-injection seams that live code — atomic-write.ts,
+// managed-projection-history.ts, db/engine.ts, database-maintenance-fence.ts,
+// projection-cleanup.ts — depends on. Deleting this deletes that coverage.
+
 // Format functions: pure string-returning functions that serialize GSD types into the exact markdown
 // format that gsd-pi's parsers expect (parseRoadmap, parsePlan, parseSummary, parseRequirementCounts).
 // writeGSDDirectory: orchestrator that writes a complete .gsd directory tree from a GSDProject.
