@@ -1293,6 +1293,7 @@ export function hasGsdBootstrapArtifacts(
   return (
     existsFn(gsdPath) &&
     (existsFn(join(gsdPath, "PREFERENCES.md")) ||
+      existsFn(join(gsdPath, "preferences.md")) ||
       existsFn(join(gsdPath, LAYOUT_SEGMENTS.level1)))
   );
 }

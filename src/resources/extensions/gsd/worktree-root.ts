@@ -212,6 +212,7 @@ function resolveNearestBootstrappedGsdRoot(path: string): string | null {
 function hasGsdBootstrapArtifacts(gsdPath: string): boolean {
   return existsSync(gsdPath) &&
     (existsSync(join(gsdPath, "PREFERENCES.md")) ||
+      existsSync(join(gsdPath, "preferences.md")) ||
       existsSync(join(gsdPath, LAYOUT_SEGMENTS.level1)));
 }
 
