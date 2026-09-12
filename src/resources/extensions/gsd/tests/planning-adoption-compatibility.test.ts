@@ -41,6 +41,7 @@ import { reconcileWorktreeDbBeforeManualMerge } from "../worktree-command.ts";
 import { worktreePath } from "../worktree-manager.ts";
 import { createWorkspace } from "../workspace.ts";
 import { renderRoadmapProjection } from "../workflow-projections.ts";
+import { resolveMilestoneFile } from "../paths.ts";
 
 const tempDirs = new Set<string>();
 
@@ -575,7 +576,9 @@ test("legacy roadmap renderer excludes cancelled slices and tasks", (t) => {
   updateTaskStatus("M001", "S01", "T01", "skipped");
 
   renderRoadmapProjection(base, "M001");
-  const roadmap = readFileSync(join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), "utf8");
+  const roadmapPath = resolveMilestoneFile(base, "M001", "ROADMAP");
+  assert.ok(roadmapPath, "expected the flat-phase ROADMAP projection to be resolvable");
+  const roadmap = readFileSync(roadmapPath, "utf8");
   assert.doesNotMatch(roadmap, /S02|Cancelled slice/);
 });
 
