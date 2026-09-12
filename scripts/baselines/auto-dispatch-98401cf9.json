@@ -1,37 +1,37 @@
 {
   "schema": "auto-dispatch-baseline/v1",
-  "gitSha": "73e20e70",
+  "gitSha": "98401cf9",
   "iterations": 20,
   "fixture": "synthetic",
   "totals": {
-    "deriveStateCalls": 44,
+    "deriveStateCalls": 21,
     "deriveStateTotalMs": 0,
     "ttsrChecks": 0,
     "ttsrTotalMs": 0,
     "ttsrPeakBuffer": 0,
-    "parseRoadmapCalls": 2,
+    "parseRoadmapCalls": 1,
     "parseRoadmapTotalMs": 0,
-    "parsePlanCalls": 2,
+    "parsePlanCalls": 0,
     "parsePlanTotalMs": 0,
     "dispatches": 0,
     "renders": 0,
-    "gitInvocations": 21,
-    "dbDeriveCount": 44
+    "gitInvocations": 0,
+    "dbDeriveCount": 21
   },
   "perDispatch": {
-    "deriveStateCalls": 2.2,
+    "deriveStateCalls": 1.05,
     "deriveStateTotalMs": 0,
     "ttsrChecks": 0,
     "ttsrTotalMs": 0,
     "ttsrPeakBuffer": 0,
-    "parseRoadmapCalls": 0.1,
+    "parseRoadmapCalls": 0.05,
     "parseRoadmapTotalMs": 0,
-    "parsePlanCalls": 0.1,
+    "parsePlanCalls": 0,
     "parsePlanTotalMs": 0,
     "dispatches": 0,
     "renders": 0,
-    "gitInvocations": 1.05,
-    "dbDeriveCount": 2.2
+    "gitInvocations": 0,
+    "dbDeriveCount": 1.05
   },
   "stageErrors": {}
 }
