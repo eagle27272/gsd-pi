@@ -35,7 +35,6 @@ import type { MilestoneRow, ArtifactRow } from "./db-milestone-artifact-rows.js"
 import type { SliceRow, TaskRow } from "./db-task-slice-rows.js";
 import type { GateRow } from "./types.js";
 import {
-  resolveDir,
   resolveFile,
   resolveSliceFile,
   resolveSlicePath,
@@ -53,7 +52,7 @@ import { saveFile, clearParseCache, registerCacheClearCallback } from "./files.j
 import { parseProjectionRoadmap } from "./schemas/parsers.js";
 import { stripIdPrefix } from "./strip-id-prefix.js";
 import { invalidateStateCache } from "./state.js";
-import { clearPathCache, milestonesDir, legacyMilestonesDir, isLegacyMilestonesLayout, resolveMilestonePath, relSliceFile, canonicalPhaseDirName } from "./paths.js";
+import { clearPathCache, milestonesDir, resolveMilestonePath, relSliceFile, canonicalPhaseDirName } from "./paths.js";
 import { readCompatMarker, writeCompatMarker, computeProjectionSha, deriveCompatProjectionKey } from "./compat/compat-marker.js";
 import type { RiskLevel } from "./types.js";
 import {
@@ -362,14 +361,6 @@ function renderDefinitionOfDone(milestone: MilestoneRow): string[] {
  */
 function stripDemoPrefix(demo: string | null | undefined): string {
   return (demo ?? "").replace(/^\s*(?:>\s*)?After this:\s*/i, "").trim();
-}
-
-function isMilestoneFlatPhaseLayout(basePath: string, milestoneId: string): boolean {
-  const existing = resolveMilestonePath(basePath, milestoneId);
-  const legacyBase = legacyMilestonesDir(basePath);
-  return existing
-    ? !(existing.startsWith(legacyBase + "/") || existing.startsWith(legacyBase + "\\"))
-    : !isLegacyMilestonesLayout(basePath);
 }
 
 /**
@@ -762,21 +753,12 @@ export async function renderTaskPlanFromDb(
       mkdirSync(tasksDir, { recursive: true });
       absPath = join(tasksDir, buildTaskFileName(taskId, "PLAN"));
     } else {
-      const existing = resolveMilestonePath(basePath, milestoneId);
-      const legacyBase = legacyMilestonesDir(basePath);
-      const isLegacyLayout = existing
-        ? existing.startsWith(legacyBase + "/") || existing.startsWith(legacyBase + "\\")
-        : isLegacyMilestonesLayout(basePath);
-      const phaseDir = existing ?? join(
-        isLegacyLayout ? legacyBase : milestonesDir(basePath),
-        isLegacyLayout ? milestoneId : canonicalPhaseDirName(milestoneId, getMilestone(milestoneId)?.title),
+      const phaseDir = resolveMilestonePath(basePath, milestoneId) ?? join(
+        milestonesDir(basePath),
+        canonicalPhaseDirName(milestoneId, getMilestone(milestoneId)?.title),
       );
       mkdirSync(phaseDir, { recursive: true });
-      const tasksDir = isLegacyLayout
-        ? join(phaseDir, "slices", sliceId, "tasks")
-        : phaseDir;
-      mkdirSync(tasksDir, { recursive: true });
-      absPath = join(tasksDir, buildTaskFileName(taskId, "PLAN"));
+      absPath = join(phaseDir, buildTaskFileName(taskId, "PLAN"));
     }
   }
   const artifactPath = toArtifactPath(absPath, basePath);
@@ -1331,27 +1313,6 @@ interface ProjectionRenderIntent {
   reason: string;
 }
 
-function planRenderIntentDrift(
-  basePath: string,
-  milestoneId: string,
-  slice: SliceRow,
-  tasks: TaskRow[],
-): StaleEntry | null {
-  const planPath = resolveSliceFile(basePath, milestoneId, slice.id, "PLAN");
-  if (!planPath || !existsSync(planPath)) return null;
-  const intent = renderSlicePlanMarkdown(
-    slice,
-    tasks,
-    getGateResults(milestoneId, slice.id, "slice"),
-  );
-  const actual = readFileSync(planPath, "utf-8");
-  if (stripProjectionStamp(actual) === stripProjectionStamp(intent)) return null;
-  return {
-    path: planPath,
-    reason: `plan for ${milestoneId}/${slice.id} differs from DB render intent (content drift in plan)`,
-  };
-}
-
 function projectionRenderIntents(basePath: string): ProjectionRenderIntent[] {
   const intents = new Map<string, ProjectionRenderIntent>();
   const record = (path: string, content: string, reason: string): void => {
@@ -1485,13 +1446,10 @@ export function detectProjectionDrift(basePath: string): StaleEntry[] {
 
 export function detectStaleRenders(basePath: string): StaleEntry[] {
   // TODO(flat-phase): stale-render detection is temporarily fully disabled.
-  // The isLegacyMilestonesLayout gate is unreliable: git-service.ts creates
-  // milestones/<mid>/ directories for integration-branch metadata even in
-  // flat-phase projects, making the gate fire true and then producing false
-  // stale-render drift in the second reconcile cycle → ReconciliationFailedError
-  // → auto-mode blocked (exit 10) for multi-slice/remediation e2e scenarios.
-  // Re-enable after path construction is unified and the metadata dir is
-  // decoupled from the layout-detection signal.
+  // It produced false stale-render drift in the second reconcile cycle →
+  // ReconciliationFailedError → auto-mode blocked (exit 10) for
+  // multi-slice/remediation e2e scenarios. Re-enable after path construction
+  // is unified.
   return [];
 }
 
@@ -1505,7 +1463,6 @@ function detectStaleRendersImpl(basePath: string): StaleEntry[] {
 
   for (const milestone of milestones) {
     const slices = getMilestoneSlices(milestone.id);
-    const isFlatPhase = isMilestoneFlatPhaseLayout(basePath, milestone.id);
 
     // ── Check roadmap checkbox state ──────────────────────────────────
     // TODO(flat-phase): roadmap checkbox parsing may not match flat-phase
@@ -1541,46 +1498,12 @@ function detectStaleRendersImpl(basePath: string): StaleEntry[] {
 
     // ── Check plan checkbox state and summaries for each slice ────────
     for (const slice of slices) {
-      const tasks = getActivePlanTasks(milestone.id, slice.id);
-
-      if (!isFlatPhase) {
-        // Check plan content against the DB render intent (T008): the
-        // projection file is never parsed — staleness is judged
-        // DB-vs-render-intent via a stamp-insensitive byte comparison.
-        if (tasks.length > 0) {
-          try {
-            const entry = planRenderIntentDrift(basePath, milestone.id, slice, tasks);
-            if (entry) stale.push(entry);
-          } catch (e) {
-            logWarning("renderer", `plan render-intent check failed: ${(e as Error).message}`);
-          }
-        }
-      }
-
-      // Check missing task summary files (legacy layout only — flat-phase keeps
-      // task state in plan <tasks> blocks and does not project Txx-SUMMARY.md)
-      if (!isFlatPhase) {
-        for (const task of tasks) {
-          if (isClosedStatus(task.status) && task.full_summary_md) {
-            const slicePath = resolveSlicePath(basePath, milestone.id, slice.id);
-            if (slicePath) {
-              const fileName = buildTaskFileName(task.id, "SUMMARY");
-              const summaryAbsPath = join(slicePath, fileName);
-
-              if (!existsSync(summaryAbsPath)) {
-                stale.push({
-                  path: summaryAbsPath,
-                  reason: `${task.id} is complete with summary in DB but SUMMARY.md missing on disk`,
-                });
-              }
-            }
-          }
-        }
-      }
+      // Flat-phase keeps task state in plan <tasks> blocks: plan render-intent
+      // drift and Txx-SUMMARY.md presence are not projected, so neither is
+      // checked here.
 
       // Check missing slice summary/UAT files. Use the same target helper as
-      // renderSliceSummary so detection and repair agree on flat-phase vs legacy
-      // output locations.
+      // renderSliceSummary so detection and repair agree on output locations.
       const sliceRow = getSlice(milestone.id, slice.id);
       if (sliceRow && sliceRow.status === "complete") {
         if (sliceRow.full_summary_md) {
@@ -1651,44 +1574,24 @@ export interface AssessmentData {
   createdAt?: string;
 }
 
-function existingLegacySliceAssessmentPath(
-  basePath: string,
-  milestoneId: string,
-  sliceId: string,
-): string | null {
-  if (!isLegacyMilestonesLayout(basePath)) return null;
-  const legacyBase = legacyMilestonesDir(basePath);
-  const milestoneDirName = resolveDir(legacyBase, milestoneId);
-  if (!milestoneDirName) return null;
-  const slicesDir = join(legacyBase, milestoneDirName, "slices");
-  const sliceDirName = resolveDir(slicesDir, sliceId);
-  if (!sliceDirName) return null;
-  return join(slicesDir, sliceDirName, `${sliceId}-ASSESSMENT.md`);
-}
-
 export function resolveAssessmentProjectionPath(
   basePath: string,
   milestoneId: string,
   sliceId: string,
 ): string {
-  return existingLegacySliceAssessmentPath(basePath, milestoneId, sliceId)
-    ?? targetSliceFile(
-      basePath,
-      milestoneId,
-      sliceId,
-      "ASSESSMENT",
-      getMilestone(milestoneId)?.title,
-    );
+  return targetSliceFile(
+    basePath,
+    milestoneId,
+    sliceId,
+    "ASSESSMENT",
+    getMilestone(milestoneId)?.title,
+  );
 }
 
 export function resolveRoadmapAssessmentProjectionPath(
   basePath: string,
   milestoneId: string,
 ): string {
-  const legacyDir = join(legacyMilestonesDir(basePath), milestoneId);
-  if (existsSync(legacyDir)) {
-    return join(legacyDir, `${milestoneId}-ROADMAP-ASSESSMENT.md`);
-  }
   return targetMilestoneFile(
     basePath,
     milestoneId,

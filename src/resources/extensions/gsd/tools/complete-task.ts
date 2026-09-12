@@ -37,14 +37,11 @@ import {
 import { closeTaskQualityGates } from "../quality-gate-closure.js";
 import {
   buildFlatTaskFileName,
-  buildTaskFileName,
   gsdProjectionRoot,
   clearPathCache,
-  legacyMilestonesDir,
   relMilestoneFile,
   resolveMilestoneFile,
   resolveMilestonePath,
-  resolveSlicePath,
   targetMilestoneFile,
 } from "../paths.js";
 import { resolveCanonicalMilestoneRoot } from "../worktree-manager.js";
@@ -100,22 +97,7 @@ function taskSummaryPath(
   sliceId: string,
   taskId: string,
 ): string {
-  // Layout-aware: avoid creating a milestones/ directory for flat-phase projects.
-  // When that directory is created as a side effect, milestonesDir() detects it as
-  // a legacy layout and breaks all subsequent path resolution for the session.
-  const slicePath = resolveSlicePath(basePath, milestoneId, sliceId);
   const phaseDir = resolveMilestonePath(basePath, milestoneId);
-  const legacyBase = legacyMilestonesDir(basePath);
-  const isLegacy = phaseDir
-    ? phaseDir.startsWith(legacyBase + "/") || phaseDir.startsWith(legacyBase + "\\")
-    : false;
-  if (isLegacy && phaseDir) {
-    // Legacy layout: the slice has its own slices/SID/ subdir → tasks/ subdir.
-    const legacySlicePath = slicePath && slicePath !== phaseDir
-      ? slicePath
-      : join(phaseDir, "slices", sliceId);
-    return join(legacySlicePath, "tasks", buildTaskFileName(taskId, "SUMMARY"));
-  }
   if (phaseDir) {
     // Flat-phase: task summaries go in the phase dir (no tasks/ subdir)
     return join(phaseDir, buildFlatTaskFileName(sliceId, taskId, "SUMMARY"));

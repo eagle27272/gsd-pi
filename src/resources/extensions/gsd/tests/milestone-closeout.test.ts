@@ -181,13 +181,13 @@ test("isMilestoneCloseoutSettled requires DB closed and summary artifact", async
   insertMilestone({ id: "M001", title: "Done", status: "complete" });
   insertSlice({ id: "S01", milestoneId: "M001", title: "Done Slice", status: "complete" });
   insertAssessment({
-    path: "milestones/M001/M001-VALIDATION.md",
+    path: "phases/01-m001/01-VALIDATION.md",
     milestoneId: "M001",
     status: "pass",
     scope: "milestone-validation",
     fullContent: "verdict: pass",
   });
-  const milestoneDir = join(base, ".gsd", "milestones", "M001");
+  const milestoneDir = join(base, ".gsd", "phases", "01-m001");
   mkdirSync(milestoneDir, { recursive: true });
   writeFileSync(join(milestoneDir, "M001-SUMMARY.md"), "# Milestone Summary\n");
 
@@ -203,7 +203,7 @@ test("isMilestoneCloseoutSettled accepts summary artifacts in a live milestone w
   insertMilestone({ id: "M001", title: "Done", status: "complete" });
   insertSlice({ id: "S01", milestoneId: "M001", title: "Done Slice", status: "complete" });
   insertAssessment({
-    path: "milestones/M001/M001-VALIDATION.md",
+    path: "phases/01-m001/01-VALIDATION.md",
     milestoneId: "M001",
     status: "pass",
     scope: "milestone-validation",
@@ -211,7 +211,7 @@ test("isMilestoneCloseoutSettled accepts summary artifacts in a live milestone w
   });
 
   const worktreeRoot = join(base, ".gsd", "worktrees", "M001");
-  const milestoneDir = join(worktreeRoot, ".gsd", "milestones", "M001");
+  const milestoneDir = join(worktreeRoot, ".gsd", "phases", "01-m001");
   mkdirSync(milestoneDir, { recursive: true });
   writeFileSync(join(worktreeRoot, ".git"), `gitdir: ${join(base, ".git", "worktrees", "M001")}\n`);
   writeFileSync(join(milestoneDir, "M001-SUMMARY.md"), "# Milestone Summary\n");
@@ -279,7 +279,7 @@ test("isCompletedMilestoneTerminal accepts validation-pass with all slices close
   insertMilestone({ id: "M008", title: "Active", status: "active" });
   insertSlice({ id: "S01", milestoneId: "M008", title: "Slice", status: "complete" });
   insertAssessment({
-    path: "milestones/M008/M008-VALIDATION.md",
+    path: "phases/08-m008/08-VALIDATION.md",
     milestoneId: "M008",
     status: "pass",
     scope: "milestone-validation",
@@ -292,7 +292,7 @@ test("isCompletedMilestoneTerminal accepts validation-pass with all slices close
 test("evaluateCompleteMilestoneDispatch repairs missing SUMMARY when DB is closed", async () => {
   const base = mkdtempSync(join(tmpdir(), "gsd-dispatch-repair-summary-"));
   tmpDirs.push(base);
-  const m008Dir = join(base, ".gsd", "milestones", "M008");
+  const m008Dir = join(base, ".gsd", "phases", "08-m008");
   mkdirSync(m008Dir, { recursive: true });
   // A content-bearing legacy milestone dir requires at least one non-META file
   // (dirIsContentBearingLegacyMilestone) so the layout sniffer treats it as a
@@ -302,7 +302,7 @@ test("evaluateCompleteMilestoneDispatch repairs missing SUMMARY when DB is close
   insertMilestone({ id: "M008", title: "Live Text Search", status: "complete" });
   insertSlice({ id: "S01", milestoneId: "M008", title: "Slice", status: "complete" });
   insertAssessment({
-    path: "milestones/M008/M008-VALIDATION.md",
+    path: "phases/08-m008/08-VALIDATION.md",
     milestoneId: "M008",
     status: "pass",
     scope: "milestone-validation",
@@ -314,7 +314,7 @@ test("evaluateCompleteMilestoneDispatch repairs missing SUMMARY when DB is close
   );
   assert.equal(action?.action, "skip");
   assert.ok(
-    existsSync(join(base, ".gsd", "milestones", "M008", "M008-SUMMARY.md")),
+    existsSync(join(base, ".gsd", "phases", "08-m008", "08-SUMMARY.md")),
     "repair should write the missing milestone SUMMARY projection",
   );
 });
@@ -461,7 +461,7 @@ test("adopted SUMMARY compensation cannot outlive a reopen after a newer complet
 test("repairMissingMilestoneSummaryProjection is idempotent when SUMMARY exists", async () => {
   const base = mkdtempSync(join(tmpdir(), "gsd-repair-summary-idempotent-"));
   tmpDirs.push(base);
-  const milestoneDir = join(base, ".gsd", "milestones", "M001");
+  const milestoneDir = join(base, ".gsd", "phases", "01-m001");
   mkdirSync(milestoneDir, { recursive: true });
   openDatabase(join(base, ".gsd", "gsd.db"));
   insertMilestone({ id: "M001", title: "Done", status: "complete" });

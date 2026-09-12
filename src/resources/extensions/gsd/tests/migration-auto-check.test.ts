@@ -22,6 +22,7 @@ import {
 } from "../migration-auto-check.ts";
 import { writeGSDDirectory } from "../migrate/writer.ts";
 import type { GSDProject } from "../migrate/types.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 const _require = createRequire(import.meta.url);
 
@@ -304,33 +305,6 @@ test("migration auto-check detects identity drift even when counts match", async
   }
 });
 
-test("migration auto-check canonicalizes a legacy descriptor milestone dir (no false drift)", async () => {
-  const base = makeBase();
-  try {
-    await writeGSDDirectory(projectFixture(), base); // creates .gsd/milestones/M001
-    // Rename the dir to a legacy descriptor form while the DB id stays "M001".
-    // scanMarkdownHierarchy must canonicalize "M001-old" → "M001" so the
-    // identity sets line up with scanDbHierarchy (which uses milestone.id).
-    const milestonesRoot = join(base, ".gsd", "milestones");
-    renameSync(join(milestonesRoot, "M001"), join(milestonesRoot, "M001-old"));
-
-    assert.equal(await ensureDbOpen(base), true);
-    insertMilestone({ id: "M001", title: "Legacy Milestone", status: "active" });
-    insertSlice({ id: "S01", milestoneId: "M001", title: "Legacy Slice", status: "pending", risk: "medium", depends: [], demo: "Legacy slice demo", sequence: 1 });
-    insertTask({ id: "T01", sliceId: "S01", milestoneId: "M001", title: "Legacy Task", status: "pending" });
-
-    const result = await checkMarkdownHierarchyAgainstDb(base);
-    // Must be in-sync: the raw dir name "M001-old" would otherwise mismatch the
-    // DB id "M001" and be flagged as false drift.
-    assert.equal(result.action, "none");
-    assert.equal(result.reason, "in-sync");
-    assert.deepEqual(result.markdown, { milestones: 1, slices: 1, tasks: 1 });
-    assert.deepEqual(result.beforeDb, { milestones: 1, slices: 1, tasks: 1 });
-  } finally {
-    cleanup(base);
-  }
-});
-
 test("migration auto-check recognizes suffixed flat-phase projection directories", async () => {
   const base = makeBase();
   try {
@@ -437,7 +411,7 @@ test("migration auto-check refreshes a stale open DB handle before comparing", a
 });
 
 function writeScratchMilestoneDir(base: string, milestoneId: string, file?: string): void {
-  const dir = join(base, ".gsd", "milestones", milestoneId);
+  const dir = join(base, ".gsd", "phases", canonicalPhaseDirName(milestoneId));
   mkdirSync(dir, { recursive: true });
   if (file) writeFileSync(join(dir, file), `# ${milestoneId} discussion context\n`);
 }
@@ -455,8 +429,8 @@ test("migration auto-check ignores discussion-scratch milestone dirs (CONTEXT on
     // DB row is only inserted at discussion handoff, so these are expected to
     // be DB-less — not drift, and recover must not be recommended (it would
     // import them as ghost active milestones).
-    writeScratchMilestoneDir(base, "M002", "M002-CONTEXT.md");
-    writeScratchMilestoneDir(base, "M003", "M003-CONTEXT-DRAFT.md");
+    writeScratchMilestoneDir(base, "M002", "01-CONTEXT.md");
+    writeScratchMilestoneDir(base, "M003", "01-CONTEXT-DRAFT.md");
     writeScratchMilestoneDir(base, "M004"); // empty dir
 
     const result = await checkMarkdownHierarchyAgainstDb(base);
@@ -473,7 +447,7 @@ test("migration auto-check stays quiet mid-first-discussion (scratch dir over em
   try {
     await writeGSDDirectory({ projectContent: "# P\n", decisionsContent: "", requirements: [], milestones: [] }, base);
     assert.equal(await ensureDbOpen(base), true);
-    writeScratchMilestoneDir(base, "M001", "M001-CONTEXT.md");
+    writeScratchMilestoneDir(base, "M001", "01-CONTEXT.md");
 
     const result = await checkMarkdownHierarchyAgainstDb(base);
     assert.equal(result.action, "none");
@@ -488,7 +462,7 @@ test("migration auto-check still reports real drift with scratch dirs excluded f
   try {
     await writeGSDDirectory(projectFixture(), base); // markdown: M001 / S01 / T01, DB empty
     assert.equal(await ensureDbOpen(base), true);
-    writeScratchMilestoneDir(base, "M002", "M002-CONTEXT.md");
+    writeScratchMilestoneDir(base, "M002", "01-CONTEXT.md");
 
     const result = await checkMarkdownHierarchyAgainstDb(base);
     assert.equal(result.action, "recovery-required");
@@ -539,12 +513,11 @@ test("migration auto-check excludes sketch slice stub tasks from the markdown sc
 - [ ] **T01: Real Task**
   Real work.
 `;
-    const milestoneDir = join(base, ".gsd", "milestones", "M001");
-    mkdirSync(join(milestoneDir, "slices", "S01"), { recursive: true });
-    mkdirSync(join(milestoneDir, "slices", "S02"), { recursive: true });
-    writeFileSync(join(milestoneDir, "M001-ROADMAP.md"), roadmap);
-    writeFileSync(join(milestoneDir, "slices", "S01", "S01-PLAN.md"), sketchPlan);
-    writeFileSync(join(milestoneDir, "slices", "S02", "S02-PLAN.md"), realPlan);
+    const milestoneDir = join(base, ".gsd", "phases", "01-m001");
+    mkdirSync(milestoneDir, { recursive: true });
+    writeFileSync(join(milestoneDir, "01-ROADMAP.md"), roadmap);
+    writeFileSync(join(milestoneDir, "01-01-PLAN.md"), sketchPlan);
+    writeFileSync(join(milestoneDir, "01-02-PLAN.md"), realPlan);
 
     // Both slices count, but only the refined slice contributes a task; the
     // sketch stub task is excluded, matching migrateHierarchyToDb.
@@ -562,7 +535,7 @@ test("migration auto-check still compares a roadmapless milestone that HAS a DB 
     // Post-handoff queued milestone: CONTEXT-only dir WITH a DB row. It must
     // stay in the comparison (both sides have it → in-sync).
     insertMilestone({ id: "M001", title: "M001", status: "queued" });
-    writeScratchMilestoneDir(base, "M001", "M001-CONTEXT.md");
+    writeScratchMilestoneDir(base, "M001", "01-CONTEXT.md");
 
     const result = await checkMarkdownHierarchyAgainstDb(base);
     assert.equal(result.action, "none");
@@ -585,7 +558,7 @@ test("migration auto-check aligns a roadmapless milestone dir to its suffixed DB
     // roadmapless subset, so the discussion-phase exclusion sees the DB row and
     // does not decrement the milestone count into false drift.
     insertMilestone({ id: "M001-re4q3k", title: "Suffixed milestone", status: "queued" });
-    writeScratchMilestoneDir(base, "M001", "M001-CONTEXT.md");
+    writeScratchMilestoneDir(base, "M001", "01-CONTEXT.md");
 
     const result = await checkMarkdownHierarchyAgainstDb(base);
     assert.equal(result.action, "none");

@@ -32,7 +32,7 @@ import {
 
 function createFixtureBase(): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-guided-state-"));
-  mkdirSync(join(base, ".gsd", "milestones"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases"), { recursive: true });
   return base;
 }
 
@@ -59,8 +59,8 @@ describe("guided-flow STATE.md rebuild (#3475)", () => {
     insertMilestone({ id: "M010", title: "Real Active", status: "active" });
     insertSlice({ id: "S03", milestoneId: "M010", title: "Slice Three", status: "active", risk: "low", depends: [] });
     insertTask({ id: "T05", sliceId: "S03", milestoneId: "M010", title: "Task Five", status: "pending" });
-    writeFile(base, "milestones/M010/M010-CONTEXT.md", "# M010: Real Active\n\nReal work here.");
-    writeFile(base, "milestones/M010/M010-ROADMAP.md", "# M010\n\n## Slices\n\n- [ ] **S03: Slice Three**");
+    writeFile(base, "phases/10-m010/10-CONTEXT.md", "# M010: Real Active\n\nReal work here.");
+    writeFile(base, "phases/10-m010/10-ROADMAP.md", "# M010\n\n## Slices\n\n- [ ] **S03: Slice Three**");
 
     // Write a STALE STATE.md pointing to wrong milestone
     writeFile(base, "STATE.md", [
@@ -97,8 +97,8 @@ describe("guided-flow STATE.md rebuild (#3475)", () => {
 
     insertMilestone({ id: "M070", title: "Current Work", status: "active" });
     insertSlice({ id: "S01", milestoneId: "M070", title: "First Slice", status: "active", risk: "low", depends: [] });
-    writeFile(base, "milestones/M070/M070-CONTEXT.md", "# M070: Current Work");
-    writeFile(base, "milestones/M070/M070-ROADMAP.md", "# M070\n\n## Slices\n\n- [ ] **S01: First Slice**");
+    writeFile(base, "phases/70-m070/70-CONTEXT.md", "# M070: Current Work");
+    writeFile(base, "phases/70-m070/70-ROADMAP.md", "# M070\n\n## Slices\n\n- [ ] **S01: First Slice**");
 
     invalidateStateCache();
     const state = await deriveState(base);
@@ -112,7 +112,7 @@ describe("guided-flow STATE.md rebuild (#3475)", () => {
     base = createFixtureBase();
     openDatabase(":memory:");
 
-    writeFile(base, "milestones/M001/M001-CONTEXT.md", "# M001: Planned\n");
+    writeFile(base, "phases/01-m001/01-CONTEXT.md", "# M001: Planned\n");
     writeFile(base, "STATE.md", "# GSD State\n\n**Active Milestone:** M001: Planned\n");
     writeFile(base, "state-manifest.json", JSON.stringify({
       version: 1,
@@ -153,7 +153,7 @@ describe("guided-flow STATE.md rebuild (#3475)", () => {
     db.exec("DROP TABLE milestones");
     db.exec("CREATE TABLE milestones (id TEXT PRIMARY KEY)");
 
-    writeFile(base, "milestones/M001/M001-CONTEXT.md", "# M001: Planned\n");
+    writeFile(base, "phases/01-m001/01-CONTEXT.md", "# M001: Planned\n");
     writeFile(base, "STATE.md", "# GSD State\n\n**Active Milestone:** M001: Planned\n");
 
     const notifications: Array<{ message: string; level: string }> = [];
@@ -186,7 +186,7 @@ describe("guided-flow STATE.md rebuild (#3475)", () => {
     db.exec("DROP TABLE milestones");
     db.exec("CREATE TABLE milestones (id TEXT PRIMARY KEY)");
 
-    writeFile(base, "milestones/M001/M001-CONTEXT.md", "# M001: Planned\n");
+    writeFile(base, "phases/01-m001/01-CONTEXT.md", "# M001: Planned\n");
     writeFile(base, "STATE.md", "# GSD State\n\n**Active Milestone:** M001: Planned\n");
 
     const notifications: Array<{ message: string; level: string }> = [];

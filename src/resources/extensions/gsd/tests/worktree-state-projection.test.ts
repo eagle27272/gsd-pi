@@ -64,7 +64,7 @@ test("projectRootToWorktree forwards root PROJECT.md into isolated worktrees", (
   const { dir, cleanup } = makeProjectRoot();
   try {
     const worktree = join(dir, ".gsd", "worktrees", "M001");
-    mkdirSync(join(dir, ".gsd", "milestones", "M001"), { recursive: true });
+    mkdirSync(join(dir, ".gsd", "phases", "01-m001"), { recursive: true });
     mkdirSync(join(worktree, ".gsd"), { recursive: true });
 
     const projectContent = [
@@ -77,7 +77,7 @@ test("projectRootToWorktree forwards root PROJECT.md into isolated worktrees", (
     ].join("\n");
     writeFileSync(join(dir, ".gsd", "PROJECT.md"), projectContent);
     writeFileSync(join(dir, ".gsd", "REQUIREMENTS.md"), "# Requirements\n");
-    writeFileSync(join(dir, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), "# M001\n");
+    writeFileSync(join(dir, ".gsd", "phases", "01-m001", "01-ROADMAP.md"), "# M001\n");
 
     const workspace = createWorkspace(worktree);
     const scope = scopeMilestone(workspace, "M001");
@@ -89,7 +89,7 @@ test("projectRootToWorktree forwards root PROJECT.md into isolated worktrees", (
     assert.ok(existsSync(projectedProject), "PROJECT.md is available to worktree-bound units");
     assert.equal(readFileSync(projectedProject, "utf-8"), projectContent);
     assert.ok(
-      existsSync(join(worktree, ".gsd", "milestones", "M001", "M001-ROADMAP.md")),
+      existsSync(join(worktree, ".gsd", "phases", "01-m001", "01-ROADMAP.md")),
       "milestone artifacts still project into the worktree",
     );
   } finally {
@@ -146,18 +146,15 @@ test("projectRootToWorktree projects prior-milestone slice/task SUMMARY.md, not 
     mkdirSync(join(worktree, ".gsd"), { recursive: true });
 
     // Current milestone (M002) — what the worktree is working on.
-    mkdirSync(join(dir, ".gsd", "milestones", "M002"), { recursive: true });
-    writeFileSync(join(dir, ".gsd", "milestones", "M002", "M002-ROADMAP.md"), "# M002\n");
+    mkdirSync(join(dir, ".gsd", "phases", "02-m002"), { recursive: true });
+    writeFileSync(join(dir, ".gsd", "phases", "02-m002", "02-ROADMAP.md"), "# M002\n");
 
     // Prior, completed milestone (M001) with nested slice + task summaries.
-    const m001TaskDir = join(dir, ".gsd", "milestones", "M001", "slices", "S01", "tasks");
-    mkdirSync(m001TaskDir, { recursive: true });
-    writeFileSync(join(dir, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), "# M001\n");
-    writeFileSync(
-      join(dir, ".gsd", "milestones", "M001", "slices", "S01", "S01-SUMMARY.md"),
-      "# S01 Summary\n",
-    );
-    writeFileSync(join(m001TaskDir, "T01-SUMMARY.md"), "# T01 Summary\n");
+    const m001PhaseDir = join(dir, ".gsd", "phases", "01-m001");
+    mkdirSync(m001PhaseDir, { recursive: true });
+    writeFileSync(join(m001PhaseDir, "01-ROADMAP.md"), "# M001\n");
+    writeFileSync(join(m001PhaseDir, "01-01-SUMMARY.md"), "# S01 Summary\n");
+    writeFileSync(join(m001PhaseDir, "S01-T01-SUMMARY.md"), "# T01 Summary\n");
 
     const workspace = createWorkspace(worktree);
     const scope = scopeMilestone(workspace, "M002");
@@ -165,11 +162,11 @@ test("projectRootToWorktree projects prior-milestone slice/task SUMMARY.md, not 
 
     const wtGsd = join(worktree, ".gsd");
     assert.ok(
-      existsSync(join(wtGsd, "milestones", "M001", "slices", "S01", "S01-SUMMARY.md")),
+      existsSync(join(wtGsd, "phases", "01-m001", "01-01-SUMMARY.md")),
       "prior-milestone slice SUMMARY.md is projected into the worktree",
     );
     assert.ok(
-      existsSync(join(wtGsd, "milestones", "M001", "slices", "S01", "tasks", "T01-SUMMARY.md")),
+      existsSync(join(wtGsd, "phases", "01-m001", "S01-T01-SUMMARY.md")),
       "prior-milestone task SUMMARY.md is projected into the worktree",
     );
   } finally {

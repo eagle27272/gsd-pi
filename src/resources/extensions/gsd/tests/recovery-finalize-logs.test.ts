@@ -39,7 +39,7 @@ function git(cwd: string, args: string[]): void {
 
 test("refreshRecoveryDbForArtifact logs a recovery warning when the detached GitHub finalize throws (auto-recovery.ts:232)", async () => {
   const base = mkdtempSync(join(tmpdir(), "gsd-recovery-finalize-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
   try {
     // Real git repo with an implementation change on a milestone branch so
     // hasImplementationArtifacts(base, "M001") returns "present" — required for
@@ -68,7 +68,7 @@ test("refreshRecoveryDbForArtifact logs a recovery warning when the detached Git
       verificationResult: "passed",
     });
     insertAssessment({
-      path: ".gsd/milestones/M001/M001-VALIDATION.md",
+      path: ".gsd/phases/01-m001/01-VALIDATION.md",
       milestoneId: "M001",
       status: "pass",
       scope: "milestone-validation",

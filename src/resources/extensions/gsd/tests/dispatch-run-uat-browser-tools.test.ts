@@ -70,7 +70,7 @@ function seedSliceRows(): void {
 }
 
 function scaffoldRunUatProject(basePath: string): void {
-  const milestoneDir = join(basePath, ".gsd", "milestones", "M001");
+  const milestoneDir = join(basePath, ".gsd", "phases", "01-m001");
   const sliceDir = join(milestoneDir, "slices", "S01");
   mkdirSync(sliceDir, { recursive: true });
 

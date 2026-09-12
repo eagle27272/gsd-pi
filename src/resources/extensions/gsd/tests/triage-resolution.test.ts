@@ -11,6 +11,7 @@ import { appendCapture, markCaptureResolved, markCaptureExecuted, loadAllCapture
 // Import only the functions that don't depend on @gsd/pi-coding-agent
 // (triage-ui.ts imports next-action-ui.ts which imports the unavailable package)
 import { executeInject, executeReplan, detectFileOverlap, loadDeferredCaptures, loadReplanCaptures, buildQuickTaskPrompt, executeTriageResolutions, ensureDeferMilestoneDir } from "../triage-resolution.ts";
+import { canonicalPhaseDirName, milestoneIdToPhaseNum, slicePlanFileName } from "../layout-policy.ts";
 
 function makeTempDir(prefix: string): string {
   const dir = join(
@@ -22,9 +23,9 @@ function makeTempDir(prefix: string): string {
 }
 
 function setupPlanFile(tmp: string, mid: string, sid: string, content: string): string {
-  const planDir = join(tmp, ".gsd", "milestones", mid, "slices", sid);
+  const planDir = join(tmp, ".gsd", "phases", canonicalPhaseDirName(mid));
   mkdirSync(planDir, { recursive: true });
-  const planPath = join(planDir, `${sid}-PLAN.md`);
+  const planPath = join(planDir, slicePlanFileName(milestoneIdToPhaseNum(mid), sid, "PLAN"));
   writeFileSync(planPath, content, "utf-8");
   return planPath;
 }
@@ -118,7 +119,7 @@ test("resolution: executeReplan writes REPLAN-TRIGGER.md", () => {
     assert.strictEqual(result, true);
 
     const triggerPath = join(
-      tmp, ".gsd", "milestones", "M001", "slices", "S01", "S01-REPLAN-TRIGGER.md",
+      tmp, ".gsd", "phases", "01-m001", "01-01-REPLAN-TRIGGER.md",
     );
     assert.ok(existsSync(triggerPath), "trigger file should exist");
 
@@ -355,7 +356,7 @@ test("resolution: executeTriageResolutions executes inject captures", () => {
     assert.strictEqual(result.quickTasks.length, 0);
 
     // Verify tasks were added to plan
-    const planPath = join(tmp, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md");
+    const planPath = join(tmp, ".gsd", "phases", "01-m001", "01-01-PLAN.md");
     const planContent = readFileSync(planPath, "utf-8");
     assert.ok(planContent.includes("**T04:"), "should have T04");
     assert.ok(planContent.includes("**T05:"), "should have T05");
@@ -384,7 +385,7 @@ test("resolution: executeTriageResolutions executes replan captures", () => {
 
     // Verify trigger file was written
     const triggerPath = join(
-      tmp, ".gsd", "milestones", "M001", "slices", "S01", "S01-REPLAN-TRIGGER.md",
+      tmp, ".gsd", "phases", "01-m001", "01-01-REPLAN-TRIGGER.md",
     );
     assert.ok(existsSync(triggerPath), "replan trigger should exist");
 
@@ -477,7 +478,7 @@ test("resolution: executeTriageResolutions returns empty result when no actionab
 test("resolution: ensureDeferMilestoneDir creates milestone directory with CONTEXT-DRAFT.md", () => {
   const tmp = makeTempDir("res-defer-create");
   try {
-    mkdirSync(join(tmp, ".gsd", "milestones"), { recursive: true });
+    mkdirSync(join(tmp, ".gsd", "phases"), { recursive: true });
 
     const captures = [
       { id: "CAP-aaa111", text: "add performance monitoring", timestamp: "2026-03-15T20:00:00Z", status: "resolved" as const, classification: "defer" as const },
@@ -487,10 +488,10 @@ test("resolution: ensureDeferMilestoneDir creates milestone directory with CONTE
     const created = ensureDeferMilestoneDir(tmp, "M005", captures);
     assert.strictEqual(created, true, "should return true");
 
-    const msDir = join(tmp, ".gsd", "milestones", "M005");
+    const msDir = join(tmp, ".gsd", "phases", "05-m005");
     assert.ok(existsSync(msDir), "milestone directory should exist");
 
-    const draftPath = join(msDir, "M005-CONTEXT-DRAFT.md");
+    const draftPath = join(msDir, "05-CONTEXT-DRAFT.md");
     assert.ok(existsSync(draftPath), "CONTEXT-DRAFT.md should exist");
 
     const content = readFileSync(draftPath, "utf-8");
@@ -506,7 +507,7 @@ test("resolution: ensureDeferMilestoneDir creates milestone directory with CONTE
 test("resolution: ensureDeferMilestoneDir returns true without overwriting existing directory", () => {
   const tmp = makeTempDir("res-defer-exists");
   try {
-    const msDir = join(tmp, ".gsd", "milestones", "M003");
+    const msDir = join(tmp, ".gsd", "phases", "03-m003");
     mkdirSync(msDir, { recursive: true });
     writeFileSync(join(msDir, "M003-CONTEXT.md"), "# M003: Existing\n", "utf-8");
 
@@ -522,7 +523,7 @@ test("resolution: ensureDeferMilestoneDir returns true without overwriting exist
 test("resolution: ensureDeferMilestoneDir rejects invalid milestone IDs", () => {
   const tmp = makeTempDir("res-defer-invalid");
   try {
-    mkdirSync(join(tmp, ".gsd", "milestones"), { recursive: true });
+    mkdirSync(join(tmp, ".gsd", "phases"), { recursive: true });
     assert.strictEqual(ensureDeferMilestoneDir(tmp, "S03", []), false, "should reject slice IDs");
     assert.strictEqual(ensureDeferMilestoneDir(tmp, "not-a-milestone", []), false, "should reject arbitrary strings");
     assert.strictEqual(ensureDeferMilestoneDir(tmp, "", []), false, "should reject empty string");
@@ -534,18 +535,18 @@ test("resolution: ensureDeferMilestoneDir rejects invalid milestone IDs", () => 
 test("resolution: ensureDeferMilestoneDir handles unique milestone IDs (M005-abc123)", () => {
   const tmp = makeTempDir("res-defer-unique");
   try {
-    mkdirSync(join(tmp, ".gsd", "milestones"), { recursive: true });
+    mkdirSync(join(tmp, ".gsd", "phases"), { recursive: true });
 
     const created = ensureDeferMilestoneDir(tmp, "M005-abc123", [
       { id: "CAP-ccc333", text: "future work", timestamp: "2026-03-15T20:00:00Z", status: "resolved" as const, classification: "defer" as const },
     ]);
     assert.strictEqual(created, true);
 
-    const msDir = join(tmp, ".gsd", "milestones", "M005-abc123");
+    const msDir = join(tmp, ".gsd", "phases", canonicalPhaseDirName("M005-abc123"));
     assert.ok(existsSync(msDir), "milestone directory should exist");
     assert.ok(
-      existsSync(join(msDir, "M005-abc123-CONTEXT-DRAFT.md")),
-      "CONTEXT-DRAFT.md should use full milestone ID",
+      existsSync(join(msDir, "05-CONTEXT-DRAFT.md")),
+      "CONTEXT-DRAFT.md uses the flat-phase name",
     );
   } finally {
     rmSync(tmp, { recursive: true, force: true });
@@ -557,7 +558,7 @@ test("resolution: ensureDeferMilestoneDir handles unique milestone IDs (M005-abc
 test("resolution: executeTriageResolutions creates milestone dir for deferred captures", () => {
   const tmp = makeTempDir("res-exec-defer");
   try {
-    mkdirSync(join(tmp, ".gsd", "milestones"), { recursive: true });
+    mkdirSync(join(tmp, ".gsd", "phases"), { recursive: true });
 
     const id1 = appendCapture(tmp, "add caching layer");
     const id2 = appendCapture(tmp, "optimize queries");
@@ -568,11 +569,11 @@ test("resolution: executeTriageResolutions creates milestone dir for deferred ca
 
     assert.strictEqual(result.deferredMilestones, 1, "should create 1 milestone");
     assert.ok(
-      existsSync(join(tmp, ".gsd", "milestones", "M005")),
+      existsSync(join(tmp, ".gsd", "phases", "05-m005")),
       "M005 directory should exist",
     );
     assert.ok(
-      existsSync(join(tmp, ".gsd", "milestones", "M005", "M005-CONTEXT-DRAFT.md")),
+      existsSync(join(tmp, ".gsd", "phases", "05-m005", "05-CONTEXT-DRAFT.md")),
       "CONTEXT-DRAFT.md should exist",
     );
 
@@ -582,7 +583,7 @@ test("resolution: executeTriageResolutions creates milestone dir for deferred ca
     assert.strictEqual(all[1].executed, true, "second defer should be marked executed");
 
     // Verify the draft content includes both captures
-    const draft = readFileSync(join(tmp, ".gsd", "milestones", "M005", "M005-CONTEXT-DRAFT.md"), "utf-8");
+    const draft = readFileSync(join(tmp, ".gsd", "phases", "05-m005", "05-CONTEXT-DRAFT.md"), "utf-8");
     assert.ok(draft.includes("add caching layer"), "should include first capture text");
     assert.ok(draft.includes("optimize queries"), "should include second capture text");
   } finally {
@@ -594,7 +595,7 @@ test("resolution: executeTriageResolutions skips defer when milestone already ex
   const tmp = makeTempDir("res-exec-defer-exists");
   try {
     // Pre-create M005
-    const msDir = join(tmp, ".gsd", "milestones", "M005");
+    const msDir = join(tmp, ".gsd", "phases", "05-m005");
     mkdirSync(msDir, { recursive: true });
     writeFileSync(join(msDir, "M005-CONTEXT.md"), "# M005: Already Planned\n", "utf-8");
 

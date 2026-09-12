@@ -49,12 +49,9 @@ import {
   resolveSliceFile,
   resolveSlicePath,
   resolveMilestonePath,
-  resolveDir,
   resolveTasksDir,
   resolveTaskFile,
   milestonesDir,
-  legacyMilestonesDir,
-  isLegacyMilestonesLayout,
   buildTaskFileName,
   canonicalPhaseDirName,
 } from "./paths.js";
@@ -3233,40 +3230,10 @@ export function ensurePreconditions(
         return;
       }
     }
-    // Layout-aware: if the legacy milestones/ dir exists, place the new milestone dir
-    // there (preserves the existing project layout). Otherwise use flat-phase phases/.
-    const legacyBase = legacyMilestonesDir(base);
-    const isLegacyLayout = isLegacyMilestonesLayout(base);
-    const targetBase = isLegacyLayout ? legacyBase : milestonesDir(base);
-    // Flat-phase: look up the milestone title to build the canonical NN-slug dir name
+    // Look up the milestone title to build the canonical NN-slug dir name
     // (e.g. "01-foundation") that resolveMilestonePath will later find by prefix.
-    // Legacy layout keeps the raw milestone id (e.g. "M001").
-    const dirName = isLegacyLayout
-      ? mid
-      : canonicalPhaseDirName(mid, getMilestone(mid)?.title);
-    const newDir = join(targetBase, dirName);
-    // Legacy projects use a slices/ subdir; flat-phase uses top-level plan files (no slices/).
-    mkdirSync(isLegacyLayout ? join(newDir, "slices") : newDir, { recursive: true });
-  }
-
-  if (sid !== undefined) {
-    const isLegacyLayout = isLegacyMilestonesLayout(base);
-    // Flat-phase: tasks are checkboxes in NN-MM-PLAN.md — no slices/ subdir needed.
-    if (!isLegacyLayout) return;
-
-    const mDirResolved = resolveMilestonePath(base, mid);
-    if (mDirResolved) {
-      const slicesDir = join(mDirResolved, "slices");
-      const sDir = resolveDir(slicesDir, sid);
-      if (!sDir) {
-        mkdirSync(join(slicesDir, sid, "tasks"), { recursive: true });
-      }
-      const resolvedSliceDir = resolveDir(slicesDir, sid) ?? sid;
-      const tasksDir = join(slicesDir, resolvedSliceDir, "tasks");
-      if (!existsSync(tasksDir)) {
-        mkdirSync(tasksDir, { recursive: true });
-      }
-    }
+    const newDir = join(milestonesDir(base), canonicalPhaseDirName(mid, getMilestone(mid)?.title));
+    mkdirSync(newDir, { recursive: true });
   }
 }
 

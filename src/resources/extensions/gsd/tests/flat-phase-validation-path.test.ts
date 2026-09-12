@@ -51,30 +51,6 @@ test("flat-phase: relMilestoneFile fallback uses the milestone title when no dir
   assert.equal(rel, ".gsd/phases/01-milestone/01-ROADMAP.md");
 });
 
-test("legacy layout: relMilestoneFile fallback stays in milestones when the target dir is missing", (t) => {
-  const basePath = mkdtempSync(join(tmpdir(), "legacy-missing-dir-"));
-  t.after(() => rmSync(basePath, { recursive: true, force: true }));
-  const existingLegacyDir = join(basePath, ".gsd", "milestones", "M002");
-  mkdirSync(existingLegacyDir, { recursive: true });
-  writeFileSync(join(existingLegacyDir, "M002-ROADMAP.md"), "# existing legacy roadmap\n");
-
-  const rel = relMilestoneFile(basePath, "M001", "ROADMAP", "Milestone");
-
-  assert.equal(rel, ".gsd/milestones/M001/M001-ROADMAP.md");
-});
-
-test("legacy layout: relSliceFile fallback uses slices directory when target milestone is missing", (t) => {
-  const basePath = mkdtempSync(join(tmpdir(), "legacy-missing-slice-"));
-  t.after(() => rmSync(basePath, { recursive: true, force: true }));
-  const existingLegacyDir = join(basePath, ".gsd", "milestones", "M002");
-  mkdirSync(existingLegacyDir, { recursive: true });
-  writeFileSync(join(existingLegacyDir, "M002-ROADMAP.md"), "# existing legacy roadmap\n");
-
-  const rel = relSliceFile(basePath, "M001", "S01", "PLAN", "Milestone");
-
-  assert.equal(rel, ".gsd/milestones/M001/slices/S01/S01-PLAN.md");
-});
-
 test("flat-phase: targetMilestoneFile ignores legacy-named compatibility files when writing", (t) => {
   const basePath = mkdtempSync(join(tmpdir(), "flat-phase-legacy-named-file-"));
   t.after(() => rmSync(basePath, { recursive: true, force: true }));
@@ -124,7 +100,7 @@ test("flat-phase: the legacy hardcoded path does NOT resolve (regression for #87
 
   // This is the path that auto-verification.ts:264-270 used to construct.
   // It must NOT exist on a flat-phase project — that's the whole bug.
-  const legacyHardcoded = join(basePath, ".gsd", "milestones", "M001", "M001-VALIDATION.md");
+  const legacyHardcoded = join(basePath, ".gsd", "phases", "01-m001", "01-VALIDATION.md");
   assert.equal(
     existsSync(legacyHardcoded),
     false,

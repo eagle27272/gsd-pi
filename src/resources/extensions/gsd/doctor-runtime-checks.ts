@@ -4,7 +4,7 @@ import { basename, dirname, join } from "node:path";
 import type { DoctorIssue, DoctorIssueCode } from "./doctor-types.js";
 import { removeLockDirectory } from "./session-lock.js";
 import { cleanNumberedGsdVariants } from "./repo-identity.js";
-import { milestonesDir, gsdRoot, resolveGsdRootFile, milestoneDirExists } from "./paths.js";
+import { milestonesDir, gsdRoot, relMilestonePath, resolveGsdRootFile, resolveMilestonePath, milestoneDirExists } from "./paths.js";
 import { deriveState, isGhostMilestone, isReusableGhostMilestone } from "./state.js";
 import { saveFile } from "./files.js";
 import { nativeIsRepo, nativeForEachRef, nativeUpdateRef } from "./native-git-bridge.js";
@@ -789,15 +789,14 @@ export async function checkRuntimeHealth(
           scope: "milestone",
           unitId: mid,
           message: `Orphan milestone directory: ${mid} — directory exists on disk with no DB row, no worktree, and no content files. This stub skews milestone ID generation and should be removed.`,
-          file: `.gsd/milestones/${mid}`,
+          file: relMilestonePath(basePath, mid),
           fixable: true,
         });
 
         if (shouldFix("orphan_milestone_dir")) {
           try {
-            const orphanPath = hasDbFile
-              ? join(milestonesDir(basePath), mid)
-              : join(root, "milestones", mid);
+            const orphanPath = resolveMilestonePath(basePath, mid);
+            if (!orphanPath) throw new Error(`orphan milestone dir for ${mid} is no longer on disk`);
             if (hasDbFile) removeProjectionTreeSync(orphanPath);
             else removeLegacyProjectionTreeSync(basePath, orphanPath);
             fixesApplied.push(`removed orphan milestone directory: ${mid}`);

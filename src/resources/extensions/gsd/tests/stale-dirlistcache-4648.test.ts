@@ -13,31 +13,32 @@ import { resolveMilestoneFile, clearPathCache } from "../paths.ts";
 
 function mkBase(): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-4648-"));
-  const mDir = join(base, ".gsd", "milestones", "M001");
+  const mDir = join(base, ".gsd", "phases", "01-m001");
   mkdirSync(mDir, { recursive: true });
-  // Seed one content file so the dir is recognised as a content-bearing legacy
-  // milestone by dirIsContentBearingLegacyMilestone. The stale-cache tests then
-  // verify that a SECOND file written to the same dir is NOT detected until the
-  // path cache is cleared (the original behaviour under test is preserved).
-  writeFileSync(join(mDir, "M001-RESEARCH.md"), "# M001 research\n");
+  // Seed one content file so the phase dir exists before the cache is warmed.
+  // The stale-cache tests then verify that a SECOND file written to the same
+  // dir is NOT detected until the path cache is cleared.
+  writeFileSync(join(mDir, "01-RESEARCH.md"), "# M001 research\n");
   return base;
 }
 
 describe("#4648 stale dirListCache", () => {
-  test("resolveMilestoneFile returns stale null until clearPathCache runs", () => {
+  test("resolveMilestoneFile sees a freshly written flat-phase artifact without a cache clear", () => {
+    // The flat-phase name (NN-SUFFIX.md) is probed with a direct stat, so it is
+    // not hidden by the warmed directory-listing cache that #4648 was about.
     const base = mkBase();
     try {
       clearPathCache();
       assert.equal(resolveMilestoneFile(base, "M001", "CONTEXT"), null);
 
       writeFileSync(
-        join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md"),
+        join(base, ".gsd", "phases", "01-m001", "01-CONTEXT.md"),
         "# M001 Context\n",
       );
 
-      assert.equal(resolveMilestoneFile(base, "M001", "CONTEXT"), null);
+      assert.match(resolveMilestoneFile(base, "M001", "CONTEXT") ?? "", /01-CONTEXT\.md$/);
       clearPathCache();
-      assert.match(resolveMilestoneFile(base, "M001", "CONTEXT") ?? "", /M001-CONTEXT\.md$/);
+      assert.match(resolveMilestoneFile(base, "M001", "CONTEXT") ?? "", /01-CONTEXT\.md$/);
     } finally {
       clearPathCache();
       rmSync(base, { recursive: true, force: true });
@@ -53,7 +54,7 @@ describe("#4648 stale dirListCache", () => {
       assert.equal(resolveMilestoneFile(base, "M001", "CONTEXT"), null);
 
       writeFileSync(
-        join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md"),
+        join(base, ".gsd", "phases", "01-m001", "01-CONTEXT.md"),
         "# M001 Context\n",
       );
 
@@ -61,7 +62,7 @@ describe("#4648 stale dirListCache", () => {
         ui: { notify: () => {} },
       } as any);
 
-      assert.match(resolveMilestoneFile(base, "M001", "CONTEXT") ?? "", /M001-CONTEXT\.md$/);
+      assert.match(resolveMilestoneFile(base, "M001", "CONTEXT") ?? "", /01-CONTEXT\.md$/);
     } finally {
       process.chdir(previousCwd);
       clearPathCache();

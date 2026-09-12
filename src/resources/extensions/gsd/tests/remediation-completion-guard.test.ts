@@ -23,12 +23,12 @@ test("completing-milestone dispatch rule exists", () => {
 
 test("completing-milestone blocks when VALIDATION verdict is needs-remediation (#2675)", async () => {
   const base = mkdtempSync(join(tmpdir(), "gsd-remediation-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
 
   try {
     // Write a VALIDATION file with needs-remediation verdict
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "M001-VALIDATION.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-VALIDATION.md"),
       [
         "---",
         "verdict: needs-remediation",
@@ -68,11 +68,11 @@ test("completing-milestone blocks when VALIDATION verdict is needs-remediation (
 
 test("completing-milestone blocks when VALIDATION verdict is needs-attention (#5747)", async () => {
   const base = mkdtempSync(join(tmpdir(), "gsd-attention-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
 
   try {
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "M001-VALIDATION.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-VALIDATION.md"),
       [
         "---",
         "verdict: needs-attention",
@@ -112,11 +112,11 @@ test("completing-milestone blocks when VALIDATION verdict is needs-attention (#5
 
 test("completing-milestone blocks when VALIDATION verdict is fail (#5920)", async () => {
   const base = mkdtempSync(join(tmpdir(), "gsd-fail-verdict-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
 
   try {
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "M001-VALIDATION.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-VALIDATION.md"),
       [
         "---",
         "verdict: fail",
@@ -155,12 +155,12 @@ test("completing-milestone blocks when VALIDATION verdict is fail (#5920)", asyn
 
 test("completing-milestone proceeds normally when VALIDATION verdict is pass (#2675 guard)", async () => {
   const base = mkdtempSync(join(tmpdir(), "gsd-remediation-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
 
   try {
     // Write a VALIDATION file with pass verdict
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "M001-VALIDATION.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-VALIDATION.md"),
       [
         "---",
         "verdict: pass",

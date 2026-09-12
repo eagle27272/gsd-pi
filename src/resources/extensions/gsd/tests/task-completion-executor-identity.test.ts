@@ -387,7 +387,7 @@ test("Pi canonical reopen calls replay without re-running projection cleanup", a
     reason: "new verification found a regression",
   };
   const first = await canonical.execute("reopen-call-42", params, undefined, undefined, { cwd: basePath });
-  const summaryPath = join(basePath, ".gsd", "phases", "01-test", "01-01-T01-SUMMARY.md");
+  const summaryPath = join(basePath, ".gsd", "phases", "01-test", "S01-T01-SUMMARY.md");
   writeFileSync(summaryPath, "# Newer summary\n");
   const replay = await canonical.execute("reopen-call-42", params, undefined, undefined, { cwd: basePath });
 

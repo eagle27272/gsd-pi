@@ -14,6 +14,7 @@ import { detectArtifactDbDrift } from "../state-reconciliation/drift/artifact-db
 import { claimTaskAttempt, settleTaskAttempt } from "../task-execution-domain-operation.js";
 import type { GSDState } from "../types.js";
 import { writeUnitRuntimeRecord } from "../unit-runtime.js";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 test("timeout recovery finalizes only a canonically succeeded Task Attempt", async (t) => {
   const basePath = mkdtempSync(join(tmpdir(), "gsd-timeout-task-authority-"));
@@ -21,9 +22,9 @@ test("timeout recovery finalizes only a canonically succeeded Task Attempt", asy
     closeDatabase();
     rmSync(basePath, { recursive: true, force: true });
   });
-  mkdirSync(join(basePath, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+  mkdirSync(join(basePath, ".gsd", "phases", canonicalPhaseDirName("M001", "Milestone"), "tasks"), { recursive: true });
   writeFileSync(
-    join(basePath, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md"),
+    join(basePath, ".gsd", "phases", canonicalPhaseDirName("M001", "Milestone"), "01-01-PLAN.md"),
     "# S01\n\n## Tasks\n\n- [ ] **T01: Task** `est:10m`\n",
   );
   writeFileSync(join(basePath, ".gsd", "STATE.md"), "## Next Action\nExecute T01 for S01: Task\n");
@@ -110,10 +111,10 @@ test("exhausted task timeout recovery writes diagnostics outside the SUMMARY pro
     closeDatabase();
     rmSync(basePath, { recursive: true, force: true });
   });
-  const tasksDir = join(basePath, ".gsd", "milestones", "M001", "slices", "S01", "tasks");
-  mkdirSync(tasksDir, { recursive: true });
+  const phaseDir = join(basePath, ".gsd", "phases", canonicalPhaseDirName("M001", "Milestone"));
+  mkdirSync(phaseDir, { recursive: true });
   writeFileSync(
-    join(basePath, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md"),
+    join(basePath, ".gsd", "phases", canonicalPhaseDirName("M001", "Milestone"), "01-01-PLAN.md"),
     "# S01\n\n## Tasks\n\n- [ ] **T01: Task** `est:10m`\n",
   );
   writeFileSync(join(basePath, ".gsd", "STATE.md"), "## Next Action\nExecute T01 for S01: Task\n");
@@ -140,8 +141,8 @@ test("exhausted task timeout recovery writes diagnostics outside the SUMMARY pro
     },
   );
 
-  const summaryPath = join(tasksDir, "T01-SUMMARY.md");
-  const blockerPath = join(tasksDir, "T01-RECOVERY-BLOCKER.md");
+  const summaryPath = join(phaseDir, "S01-T01-SUMMARY.md");
+  const blockerPath = join(phaseDir, "S01-T01-RECOVERY-BLOCKER.md");
   assert.equal(result, "recovered");
   assert.equal(getTask("M001", "S01", "T01")?.status, "pending");
   assert.equal(existsSync(summaryPath), false, "terminal recovery must not create a completion projection");

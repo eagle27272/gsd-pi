@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 
 import { detectRogueFileWrites } from "../auto-post-unit.ts";
 import { openDatabase, closeDatabase, isDbAvailable, insertMilestone, insertSlice, insertTask, updateSliceStatus, upsertMilestonePlanning } from "../gsd-db.ts";
+import { canonicalPhaseDirName, milestoneIdToPhaseNum, slicePlanFileName } from "../layout-policy.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -23,9 +24,9 @@ function createTmpBase(): string {
  * Create a minimal .gsd/ directory structure with a task summary file.
  */
 function createTaskSummaryOnDisk(basePath: string, mid: string, sid: string, tid: string): string {
-  const tasksDir = join(basePath, ".gsd", "milestones", mid, "slices", sid, "tasks");
-  mkdirSync(tasksDir, { recursive: true });
-  const summaryFile = join(tasksDir, `${tid}-SUMMARY.md`);
+  const phaseDir = join(basePath, ".gsd", "phases", canonicalPhaseDirName(mid));
+  mkdirSync(phaseDir, { recursive: true });
+  const summaryFile = join(phaseDir, `${sid}-${tid}-SUMMARY.md`);
   writeFileSync(summaryFile, `---\nid: ${tid}\nparent: ${sid}\nmilestone: ${mid}\n---\n# ${tid}: Test\n`, "utf-8");
   return summaryFile;
 }
@@ -34,25 +35,25 @@ function createTaskSummaryOnDisk(basePath: string, mid: string, sid: string, tid
  * Create a minimal .gsd/ directory structure with a slice summary file.
  */
 function createSliceSummaryOnDisk(basePath: string, mid: string, sid: string): string {
-  const sliceDir = join(basePath, ".gsd", "milestones", mid, "slices", sid);
+  const sliceDir = join(basePath, ".gsd", "phases", canonicalPhaseDirName(mid));
   mkdirSync(sliceDir, { recursive: true });
-  const summaryFile = join(sliceDir, `${sid}-SUMMARY.md`);
+  const summaryFile = join(sliceDir, slicePlanFileName(milestoneIdToPhaseNum(mid), sid, "SUMMARY"));
   writeFileSync(summaryFile, `---\nid: ${sid}\nmilestone: ${mid}\n---\n# ${sid}: Test Slice\n`, "utf-8");
   return summaryFile;
 }
 
 function createRoadmapOnDisk(basePath: string, mid: string): string {
-  const milestoneDir = join(basePath, ".gsd", "milestones", mid);
+  const milestoneDir = join(basePath, ".gsd", "phases", canonicalPhaseDirName(mid));
   mkdirSync(milestoneDir, { recursive: true });
-  const roadmapFile = join(milestoneDir, `${mid}-ROADMAP.md`);
+  const roadmapFile = join(milestoneDir, `${String(milestoneIdToPhaseNum(mid)).padStart(2, "0")}-ROADMAP.md`);
   writeFileSync(roadmapFile, `# ${mid}: Test Roadmap\n`, "utf-8");
   return roadmapFile;
 }
 
 function createSlicePlanOnDisk(basePath: string, mid: string, sid: string): string {
-  const sliceDir = join(basePath, ".gsd", "milestones", mid, "slices", sid);
+  const sliceDir = join(basePath, ".gsd", "phases", canonicalPhaseDirName(mid));
   mkdirSync(sliceDir, { recursive: true });
-  const planFile = join(sliceDir, `${sid}-PLAN.md`);
+  const planFile = join(sliceDir, slicePlanFileName(milestoneIdToPhaseNum(mid), sid, "PLAN"));
   writeFileSync(planFile, `# ${sid}: Test Plan\n`, "utf-8");
   return planFile;
 }

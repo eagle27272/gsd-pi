@@ -3412,8 +3412,8 @@ test("projection mutation gate flags .gsd-headed template literal paths", () => 
 test("milestone projection mutations honor the publication claim", () => {
   const base = makeBase("gsd-migrate-milestone-actions-fence-");
   try {
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
-    write(join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), "# Milestone\n");
+    mkdirSync(join(base, ".gsd", "phases", "01-milestone"), { recursive: true });
+    write(join(base, ".gsd", "phases", "01-milestone", "01-ROADMAP.md"), "# Milestone\n");
     const databasePath = join(base, ".gsd", "gsd.db");
     assert.equal(openDatabase(databasePath), true);
     insertMilestone({ id: "M001", title: "Milestone", status: "pending" });
@@ -3423,7 +3423,7 @@ test("milestone projection mutations honor the publication claim", () => {
     } finally {
       release();
     }
-    assert.equal(existsSync(join(base, ".gsd", "milestones", "M001", "M001-PARKED.md")), false);
+    assert.equal(existsSync(join(base, ".gsd", "phases", "01-milestone", "01-PARKED.md")), false);
   } finally {
     cleanup(base);
   }
@@ -3448,10 +3448,10 @@ test("migration backup rejects a symlinked destination root", () => {
 test("guided queue projection rewrites honor the publication claim", () => {
   const base = makeBase("gsd-migrate-guided-queue-fence-");
   try {
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
     const databasePath = join(base, ".gsd", "gsd.db");
     assert.equal(openDatabase(databasePath), true);
-    const contextPath = join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md");
+    const contextPath = join(base, ".gsd", "phases", "01-m001", "01-CONTEXT.md");
     const original = "---\ndepends_on: [M002]\n---\n# Context\n";
     write(contextPath, original);
     const release = claimProjectionMaintenance(databasePath);
@@ -3472,10 +3472,10 @@ test("guided queue projection rewrites honor the publication claim", () => {
 test("workflow tool projection removals honor the publication claim", () => {
   const base = makeBase("gsd-migrate-workflow-tool-fence-");
   try {
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
     const databasePath = join(base, ".gsd", "gsd.db");
     assert.equal(openDatabase(databasePath), true);
-    const draftPath = join(base, ".gsd", "milestones", "M001", "M001-CONTEXT-DRAFT.md");
+    const draftPath = join(base, ".gsd", "phases", "01-m001", "01-CONTEXT-DRAFT.md");
     write(draftPath, "draft\n");
     const release = claimProjectionMaintenance(databasePath);
     try {
@@ -3553,7 +3553,7 @@ test("direct renderer removals honor the maintenance publication fence", async (
     mkdirSync(join(base, ".gsd"), { recursive: true });
     assert.equal(openDatabase(join(base, ".gsd", "gsd.db")), true);
     insertMilestone({ id: "M001", title: "", status: "pending" });
-    const roadmap = join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md");
+    const roadmap = join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md");
     write(roadmap, "stale\n");
     let runOutside!: () => void;
     const start = new Promise<void>((resolve) => { runOutside = resolve; });

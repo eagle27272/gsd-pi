@@ -14,12 +14,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createWorkspace, scopeMilestone } from "../workspace.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function makeProjectDir(): string {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "gsd-ws-test-")));
-  mkdirSync(join(dir, ".gsd", "milestones"), { recursive: true });
+  mkdirSync(join(dir, ".gsd", "phases"), { recursive: true });
   return dir;
 }
 
@@ -146,18 +147,6 @@ describe("scopeMilestone path methods", () => {
     assert.equal(scope1.metaJson(), scope2.metaJson());
   });
 
-  test("uses legacy milestone paths when legacy content exists", () => {
-    const legacyDir = join(projectDir, ".gsd", "milestones", MID);
-    mkdirSync(legacyDir, { recursive: true });
-    writeFileSync(join(legacyDir, `${MID}-CONTEXT.md`), "# Legacy context\n");
-
-    const ws = createWorkspace(projectDir);
-    const scope = scopeMilestone(ws, MID);
-
-    assert.equal(scope.contextFile(), join(legacyDir, `${MID}-CONTEXT.md`));
-    assert.equal(scope.roadmapFile(), join(legacyDir, `${MID}-ROADMAP.md`));
-    assert.equal(scope.milestoneDir(), legacyDir);
-  });
 });
 
 describe("createWorkspace: contract.projectGsd is realpath-canonicalized when basePath is a symlink", () => {

@@ -16,7 +16,7 @@ import {
   _isSamePath as isSamePath,
   _shouldReconcileWorktreeDb,
 } from "./auto-worktree-cleanup.js";
-import { dirIsContentBearingLegacyMilestone, resolveGsdPathContract } from "./paths.js";
+import { resolveGsdPathContract } from "./paths.js";
 import type { MilestoneScope } from "./workspace.js";
 import { WorktreeStateProjection } from "./worktree-state-projection.js";
 import { logWarning } from "./workflow-logger.js";
@@ -195,29 +195,14 @@ function syncMilestoneLayouts(
   wtGsd: string,
   synced: string[],
 ): void {
-  for (const layoutSegment of ["phases", "milestones"] as const) {
-    syncMilestoneLayout(mainGsd, wtGsd, layoutSegment, synced);
-  }
-}
-
-function syncMilestoneLayout(
-  mainGsd: string,
-  wtGsd: string,
-  layoutSegment: "phases" | "milestones",
-  synced: string[],
-): void {
-  const mainMilestonesDir = join(mainGsd, layoutSegment);
-  const wtMilestonesDir = join(wtGsd, layoutSegment);
+  const mainMilestonesDir = join(mainGsd, "phases");
+  const wtMilestonesDir = join(wtGsd, "phases");
   if (!existsSync(mainMilestonesDir)) return;
 
   try {
     const mainMilestones = readdirSync(mainMilestonesDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name)
-      .filter((name) =>
-        layoutSegment !== "milestones" ||
-        dirIsContentBearingLegacyMilestone(join(mainMilestonesDir, name)),
-      );
+      .map((entry) => entry.name);
 
     if (mainMilestones.length === 0) return;
 

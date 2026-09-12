@@ -52,20 +52,20 @@ test("guided milestone prompt renders compact interview and context guidance", a
 test("guided milestone prompt builder preloads milestone planning context", async () => {
   const base = mkdtempSync(join(tmpdir(), "gsd-guided-milestone-context-"));
   try {
-    const milestonesRoot = join(base, ".gsd", "milestones");
-    const priorDir = join(milestonesRoot, "M001");
-    const currentDir = join(milestonesRoot, "M002");
-    const futureDir = join(milestonesRoot, "M003");
+    const milestonesRoot = join(base, ".gsd", "phases");
+    const priorDir = join(milestonesRoot, "01-m001");
+    const currentDir = join(milestonesRoot, "02-m002");
+    const futureDir = join(milestonesRoot, "03-m003");
     mkdirSync(priorDir, { recursive: true });
     mkdirSync(currentDir, { recursive: true });
     mkdirSync(futureDir, { recursive: true });
 
     writeFileSync(join(base, ".gsd", "DECISIONS.md"), "# Decisions\n\nDECISION-SIGNAL", "utf-8");
-    writeFileSync(join(priorDir, "M001-SUMMARY.md"), "# M001 Summary\n\nPRIOR-SUMMARY-SIGNAL", "utf-8");
-    writeFileSync(join(currentDir, "M002-ROADMAP.md"), "# M002 Roadmap\n\nROADMAP-SIGNAL", "utf-8");
-    writeFileSync(join(currentDir, "M002-CONTEXT.md"), "# M002 Context\n\nCONTEXT-SIGNAL", "utf-8");
-    writeFileSync(join(currentDir, "M002-RESEARCH.md"), "# M002 Research\n\nRESEARCH-SIGNAL", "utf-8");
-    writeFileSync(join(futureDir, "M003-SUMMARY.md"), "# M003 Summary\n\nFUTURE-SUMMARY-SIGNAL", "utf-8");
+    writeFileSync(join(priorDir, "01-SUMMARY.md"), "# M001 Summary\n\nPRIOR-SUMMARY-SIGNAL", "utf-8");
+    writeFileSync(join(currentDir, "02-ROADMAP.md"), "# M002 Roadmap\n\nROADMAP-SIGNAL", "utf-8");
+    writeFileSync(join(currentDir, "02-CONTEXT.md"), "# M002 Context\n\nCONTEXT-SIGNAL", "utf-8");
+    writeFileSync(join(currentDir, "02-RESEARCH.md"), "# M002 Research\n\nRESEARCH-SIGNAL", "utf-8");
+    writeFileSync(join(futureDir, "03-SUMMARY.md"), "# M003 Summary\n\nFUTURE-SUMMARY-SIGNAL", "utf-8");
 
     const prompt = await buildDiscussMilestonePrompt("M002", "Checkout Polish", base, "true");
 
@@ -115,10 +115,10 @@ test("guided milestone prompt builder caps prior draft seed before interpolation
   process.env.GSD_HOME = join(base, ".gsd-home");
 
   try {
-    const currentDir = join(base, ".gsd", "milestones", "M001");
+    const currentDir = join(base, ".gsd", "phases", "01-m001");
     mkdirSync(currentDir, { recursive: true });
 
-    const draftPath = join(currentDir, "M001-CONTEXT-DRAFT.md");
+    const draftPath = join(currentDir, "01-CONTEXT-DRAFT.md");
     writeFileSync(draftPath, "# Draft\n\nSMALL-DRAFT-SIGNAL", "utf-8");
     const smallPrompt = await buildDiscussMilestonePrompt("M001", "Draft Resume", base, "true", {
       includeContextMode: false,
@@ -141,7 +141,7 @@ test("guided milestone prompt builder caps prior draft seed before interpolation
     assert.doesNotMatch(largePrompt, /OVERSIZED-DRAFT-TAIL-SIGNAL/);
     assert.match(
       largePrompt,
-      /Draft seed truncated; read the full draft at `\.gsd\/milestones\/M001\/M001-CONTEXT-DRAFT\.md` if needed\./,
+      /Draft seed truncated; read the full draft at `\.gsd\/phases\/01-m001\/01-CONTEXT-DRAFT\.md` if needed\./,
     );
     assert.ok(addedChars < 25_000, `large draft should add bounded seed chars, added ${addedChars}`);
   } finally {

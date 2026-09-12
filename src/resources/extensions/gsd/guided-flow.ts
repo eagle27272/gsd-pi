@@ -41,7 +41,7 @@ import { listUnitRuntimeRecords, clearUnitRuntimeRecord, isInFlightRuntimePhase 
 import { resolveExpectedArtifactPath } from "./auto.js";
 import { gsdHome } from "./gsd-home.js";
 import {
-  gsdRoot, milestonesDir, legacyMilestonesDir, resolveMilestoneFile,
+  gsdRoot, milestonesDir, resolveMilestoneFile,
   resolveSliceFile, resolveSlicePath, resolveGsdRootFile, relGsdRootFile,
   relMilestoneFile, relSliceFile, relSlicePath, clearPathCache,
 } from "./paths.js";
@@ -418,10 +418,7 @@ function hasNestedFileOrSymlink(dir: string): boolean {
 }
 
 function clearEmptyLegacyDeepSetupPseudoMilestones(basePath: string, entries: string[], dir?: string): string[] {
-  // These are LEGACY pseudo-milestone dirs — prefer legacyMilestonesDir (milestones/)
-  // when it exists; caller may also supply the dir directly.
-  const legacyDir = legacyMilestonesDir(basePath);
-  const mDir = dir ?? (existsSync(legacyDir) ? legacyDir : milestonesDir(basePath));
+  const mDir = dir ?? milestonesDir(basePath);
   const remaining: string[] = [];
   for (const entry of entries) {
     if (!LEGACY_DEEP_SETUP_PSEUDO_MILESTONE_DIRS.has(entry)) {
@@ -2202,9 +2199,7 @@ export async function showSmartEntry(
     // cwd, etc). Warn instead of silently starting a new-project flow.
     if (milestoneIds.length === 0) {
       const mDir = milestonesDir(basePath);
-      const legDir = legacyMilestonesDir(basePath);
-      // Check flat-phase dir first; fall back to legacy milestones/ dir
-      const checkDir = existsSync(mDir) ? mDir : existsSync(legDir) ? legDir : null;
+      const checkDir = existsSync(mDir) ? mDir : null;
       if (checkDir) {
         try {
           const entries = clearEmptyLegacyDeepSetupPseudoMilestones(basePath, readdirSync(checkDir), checkDir);

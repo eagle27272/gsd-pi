@@ -46,7 +46,7 @@ function buildState(phase: Phase): GSDState {
 
 function makeBasePath(prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), `gsd-4671-${prefix}-`));
-  mkdirSync(join(dir, ".gsd", "milestones", "M001", "slices", "S01"), { recursive: true });
+  mkdirSync(join(dir, ".gsd", "phases", "01-m001"), { recursive: true });
   return dir;
 }
 
@@ -90,7 +90,7 @@ describe("#4671 execution-entry phase missing-context recovery", () => {
     const basePath = makeBasePath("has-context");
     try {
       writeFileSync(
-        join(basePath, ".gsd", "milestones", "M001", "M001-CONTEXT.md"),
+        join(basePath, ".gsd", "phases", "01-m001", "01-CONTEXT.md"),
         "# M001 Context\n\nSome real context.\n",
       );
       const action = await findRule().match(buildCtx(basePath, buildState("executing")));
@@ -107,7 +107,7 @@ describe("#4671 execution-entry phase missing-context recovery", () => {
       insertMilestone({ id: "M001", title: "Test milestone", status: "active" });
       insertSlice({ id: "S01", milestoneId: "M001", title: "Planned slice", status: "active" });
       writeFileSync(
-        join(basePath, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md"),
+        join(basePath, ".gsd", "phases", "01-m001", "01-01-PLAN.md"),
         "# S01 Plan\n\n- [ ] **T01**: work\n",
       );
       const action = await findRule().match(buildCtx(basePath, buildState("executing")));
@@ -124,7 +124,7 @@ describe("#4671 execution-entry phase missing-context recovery", () => {
     const prevProjectRoot = process.env.GSD_PROJECT_ROOT;
     try {
       writeFileSync(
-        join(projectRoot, ".gsd", "milestones", "M001", "M001-CONTEXT.md"),
+        join(projectRoot, ".gsd", "phases", "01-m001", "01-CONTEXT.md"),
         "# M001 Context\n\nFinalized context at project root.\n",
       );
       process.env.GSD_PROJECT_ROOT = projectRoot;
@@ -164,7 +164,7 @@ describe("#4671 execution-entry phase missing-context recovery", () => {
     const basePath = makeBasePath("empty-context");
     try {
       writeFileSync(
-        join(basePath, ".gsd", "milestones", "M001", "M001-CONTEXT.md"),
+        join(basePath, ".gsd", "phases", "01-m001", "01-CONTEXT.md"),
         "   \n\t\n",
       );
       const action = await findRule().match(buildCtx(basePath, buildState("summarizing")));

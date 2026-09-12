@@ -32,12 +32,13 @@ import {
   escalationArtifactPath,
 } from "../escalation.ts";
 import type { EscalationOption } from "../types.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 // ─── Fixture helpers ──────────────────────────────────────────────────────
 
 function makeBase(): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-adr011-p2-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test"), "tasks"), { recursive: true });
   return base;
 }
 
@@ -431,7 +432,7 @@ test("ADR-011 P3: escalation write + detect latency — 20 tasks, one escalation
     insertTask({ id: tid, sliceId: "S01", milestoneId: "M001", title: `Task ${i}`, status: "complete" });
   }
   // Escalation on T15 only.
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test"), "tasks"), { recursive: true });
   writeEscalationArtifact(base, buildEscalationArtifact({
     taskId: "T15", sliceId: "S01", milestoneId: "M001",
     question: "Q", options: sampleOptions, recommendation: "A", recommendationRationale: "r",
@@ -638,7 +639,7 @@ test("ADR-011 P3 #23: concurrent escalations across parallel slices — only the
   insertMilestone({ id: "M001", title: "Test", status: "active" });
   insertSlice({ id: "S01", milestoneId: "M001", title: "Slice A" });
   insertSlice({ id: "S02", milestoneId: "M001", title: "Slice B" });
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S02", "tasks"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test"), "tasks"), { recursive: true });
   insertTask({ id: "T60", sliceId: "S01", milestoneId: "M001", title: "Task A", status: "complete" });
   insertTask({ id: "T70", sliceId: "S02", milestoneId: "M001", title: "Task B", status: "complete" });
   insertTask({ id: "T71", sliceId: "S02", milestoneId: "M001", title: "Task B2", status: "complete" });
@@ -749,6 +750,9 @@ test("ADR-011 P3 #25: artifact write failure surfaces, leaves DB flags clean, an
   //      recovery, not replay).
   const base = makeBase();
   t.after(() => cleanup(base));
+  // Flat-phase has no per-slice directories: the unresolvable state is a
+  // missing phase dir, so drop the one makeBase seeded.
+  rmSync(join(base, ".gsd", "phases"), { recursive: true, force: true });
   openDatabase(join(base, ".gsd", "gsd.db"));
   insertMilestone({ id: "M001", title: "Test", status: "active" });
   insertSlice({ id: "S09", milestoneId: "M001", title: "Unseeded slice" });
@@ -782,10 +786,10 @@ test("ADR-011 P3 #25: artifact write failure surfaces, leaves DB flags clean, an
   const preCount = preLines.filter((l) => l.includes("escalation-manual-attention-created")).length;
   assert.equal(preCount, 0, "failed write must not emit an audit envelope");
 
-  // Phase 2 — caller recovers (creates the slice dir), retries.
+  // Phase 2 — caller recovers (creates the phase dir), retries.
   // clearPathCache() because resolveSlicePath caches directory reads and
   // the first failed attempt populated a miss for S09.
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S09", "tasks"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test")), { recursive: true });
   const { clearPathCache } = await import("../paths.ts");
   clearPathCache();
   const path = writeEscalationArtifact(base, artifact);

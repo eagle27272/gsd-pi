@@ -6,7 +6,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 
 import { getArtifact, getMilestone, getMilestoneSlices, getSliceRunUatAssessment } from "./gsd-db.js";
 import { loadFile } from "./files.js";
-import { resolveGsdPathContract, resolveSliceFile } from "./paths.js";
+import { relSliceFile, resolveGsdPathContract, resolveSliceFile } from "./paths.js";
 import {
   browserTimelineHasNavigateAndAssert,
   compactTextParts,
@@ -133,7 +133,9 @@ export async function browserEvidenceGateRequiresAttention(
     const chunks: string[] = [];
     const runUatAssessment = getSliceRunUatAssessment(params.milestoneId, slice.id);
     if (runUatAssessment?.fullContent) chunks.push(runUatAssessment.fullContent);
-    const artifactPath = `milestones/${params.milestoneId}/slices/${slice.id}/${slice.id}-ASSESSMENT.md`;
+    // Artifact rows are keyed by the projection path without the `.gsd/` prefix.
+    const artifactPath = relSliceFile(basePath, params.milestoneId, slice.id, "ASSESSMENT")
+      .replace(/^\.gsd\//, "");
     const artifact = getArtifact(artifactPath);
     if (artifact?.full_content) chunks.push(artifact.full_content);
     const assessmentPath = resolveSliceFile(basePath, params.milestoneId, slice.id, "ASSESSMENT");

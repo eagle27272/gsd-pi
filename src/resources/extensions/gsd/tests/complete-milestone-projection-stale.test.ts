@@ -115,7 +115,7 @@ function executeAtFence(
 }
 
 async function seedAdoptedMilestone(basePath: string): Promise<void> {
-  const milestoneDir = join(basePath, ".gsd", "milestones", "M001");
+  const milestoneDir = join(basePath, ".gsd", "phases", "01-m001");
   mkdirSync(join(milestoneDir, "slices", "S01", "tasks"), { recursive: true });
   writeFileSync(join(milestoneDir, "M001-CONTEXT.md"), "# M001\n");
   writeFileSync(join(basePath, "source.ts"), "export const source = 'projection delivery';\n");
@@ -363,7 +363,7 @@ test("superseded completion preserves a byte-identical summary owned by a newer 
 
   let newerSummary = "";
   _setProjectionFlushAfterRenderForTest(() => {
-    const summaryPath = join(basePath, ".gsd", "milestones", "M001", "M001-SUMMARY.md");
+    const summaryPath = join(basePath, ".gsd", "phases", "01-m001", "01-SUMMARY.md");
     newerSummary = readFileSync(summaryPath, "utf8");
     reopenMilestone({
       milestoneId: "M001",

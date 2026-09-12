@@ -63,9 +63,9 @@ function mkBase(): string {
   // realpathSync to normalize the macOS /var → /private/var symlink so the
   // basePath we pass matches what the workspace projectRoot resolves to.
   const base = realpathSync(mkdtempSync(join(tmpdir(), "gsd-ready-guard-")));
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md"),
+    join(base, ".gsd", "phases", "01-m001", "01-CONTEXT.md"),
     "# M001: Ready Guard Test\n\nContext.\n",
   );
   writeFileSync(
@@ -214,7 +214,7 @@ describe("checkAutoStartAfterDiscuss ready-notify DB guard (R3b)", () => {
     assert.equal(contextRows.length, 1, "out-of-band CONTEXT.md must be registered as a DB artifact");
     assert.equal(
       contextRows[0]!.path,
-      "milestones/M001/M001-CONTEXT.md",
+      "phases/01-m001/01-CONTEXT.md",
       "registered path must match the canonical gsd_summary_save layout",
     );
     assert.equal(

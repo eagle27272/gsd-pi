@@ -25,9 +25,9 @@ function git(dir: string, args: string[]): string {
 }
 
 function writeRecoveredRoadmap(dir: string): string {
-  const milestoneDir = join(dir, ".gsd", "milestones", "M001");
+  const milestoneDir = join(dir, ".gsd", "phases", "01-m001");
   mkdirSync(milestoneDir, { recursive: true });
-  const roadmapPath = join(milestoneDir, "M001-ROADMAP.md");
+  const roadmapPath = join(milestoneDir, "01-ROADMAP.md");
   writeFileSync(
     roadmapPath,
     [
@@ -76,7 +76,7 @@ test("#1774: tracked recovered ROADMAP stays resolvable at the in-project path",
   const dir = makeRepo(".gsd/worktrees/\n");
   created.push(dir);
   const roadmapPath = writeRecoveredRoadmap(dir);
-  git(dir, ["add", ".gsd/milestones/M001/M001-ROADMAP.md"]);
+  git(dir, ["add", ".gsd/phases/01-m001/01-ROADMAP.md"]);
   git(dir, ["commit", "-m", "test: seed recovered milestone projections"]);
 
   assert.equal(hasGitTrackedGsdFiles(dir), true, "committed ROADMAP must count as tracked .gsd state");

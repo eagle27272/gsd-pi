@@ -11,7 +11,7 @@ import { resolveMilestoneFile } from "../paths.js";
 import { closeDatabase, insertMilestone, openDatabase } from "../gsd-db.js";
 
 function writeDraftOnlyMilestone(base: string): void {
-  const milestoneDir = join(base, ".gsd", "milestones", "M001");
+  const milestoneDir = join(base, ".gsd", "phases", "01-m001");
   mkdirSync(milestoneDir, { recursive: true });
   writeFileSync(
     join(milestoneDir, "M001-CONTEXT-DRAFT.md"),

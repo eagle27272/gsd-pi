@@ -25,7 +25,7 @@ import assert from 'node:assert/strict';
 
 function createFixtureBase(): string {
   const base = mkdtempSync(join(tmpdir(), 'gsd-migrate-hier-'));
-  mkdirSync(join(base, '.gsd', 'milestones'), { recursive: true });
+  mkdirSync(join(base, '.gsd', 'phases'), { recursive: true });
   return base;
 }
 
@@ -102,9 +102,9 @@ const PLAN_S02_1_TASK = `# S02: Second Slice
 test('migrate-hier: single milestone with 2 slices, 3 tasks', () => {
     const base = createFixtureBase();
     try {
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_2_SLICES);
-      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', PLAN_S01_3_TASKS);
-      writeFile(base, 'milestones/M001/slices/S02/S02-PLAN.md', PLAN_S02_1_TASK);
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_2_SLICES);
+      writeFile(base, 'phases/01-m001/01-01-PLAN.md', PLAN_S01_3_TASKS);
+      writeFile(base, 'phases/01-m001/01-02-PLAN.md', PLAN_S02_1_TASK);
 
       openDatabase(':memory:');
       const counts = migrateHierarchyToDb(base);
@@ -163,8 +163,8 @@ test('migrate-hier: multi-milestone with deps', () => {
 - [x] **S01: Done Slice** \`risk:low\` \`depends:[]\`
   > After this: Done.
 `;
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', m001Roadmap);
-      writeFile(base, 'milestones/M001/M001-SUMMARY.md', '# M001 Summary\n\nComplete.');
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', m001Roadmap);
+      writeFile(base, 'phases/01-m001/01-SUMMARY.md', '# M001 Summary\n\nComplete.');
 
       // M002: active with depends_on M001
       const m002Context = `---
@@ -188,8 +188,8 @@ Depends on M001 completion.
 - [ ] **S02: Blocked Slice** \`risk:low\` \`depends:[S01]\`
   > After this: Second done.
 `;
-      writeFile(base, 'milestones/M002/M002-CONTEXT.md', m002Context);
-      writeFile(base, 'milestones/M002/M002-ROADMAP.md', m002Roadmap);
+      writeFile(base, 'phases/02-m002/02-CONTEXT.md', m002Context);
+      writeFile(base, 'phases/02-m002/02-ROADMAP.md', m002Roadmap);
 
       openDatabase(':memory:');
       const counts = migrateHierarchyToDb(base);
@@ -250,8 +250,8 @@ test('migrate-hier: partially-completed slice', () => {
 - [ ] **T03: Not Done** \`est:10m\`
   Still pending.
 `;
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', roadmap);
-      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', plan);
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', roadmap);
+      writeFile(base, 'phases/01-m001/01-01-PLAN.md', plan);
 
       openDatabase(':memory:');
       migrateHierarchyToDb(base);
@@ -279,9 +279,9 @@ test('migrate-hier: ghost milestone skipped', () => {
     const base = createFixtureBase();
     try {
       // M001: real milestone
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_2_SLICES);
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_2_SLICES);
       // M002: ghost — just an empty dir (no CONTEXT, ROADMAP, or SUMMARY)
-      mkdirSync(join(base, '.gsd', 'milestones', 'M002'), { recursive: true });
+      mkdirSync(join(base, '.gsd', 'phases', '02-m002'), { recursive: true });
 
       openDatabase(':memory:');
       const counts = migrateHierarchyToDb(base);
@@ -303,8 +303,8 @@ test('migrate-hier: ghost milestone skipped', () => {
 test('migrate-hier: idempotent re-run', () => {
     const base = createFixtureBase();
     try {
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_2_SLICES);
-      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', PLAN_S01_3_TASKS);
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_2_SLICES);
+      writeFile(base, 'phases/01-m001/01-01-PLAN.md', PLAN_S01_3_TASKS);
 
       openDatabase(':memory:');
 
@@ -345,7 +345,7 @@ test('migrate-hier: empty roadmap, no slices', () => {
 
 (No slices defined yet)
 `;
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', emptyRoadmap);
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', emptyRoadmap);
 
       openDatabase(':memory:');
       const counts = migrateHierarchyToDb(base);
@@ -388,7 +388,7 @@ test('migrate-hier: slice depends parsed', () => {
 - [ ] **S03: Multi-Dep** \`risk:high\` \`depends:[S01,S02]\`
   > After this: All done.
 `;
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', roadmap);
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', roadmap);
 
       openDatabase(':memory:');
       migrateHierarchyToDb(base);
@@ -411,7 +411,7 @@ test('migrate-hier: slice depends parsed', () => {
 test('migrate-hier: demo text extracted', () => {
     const base = createFixtureBase();
     try {
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_2_SLICES);
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_2_SLICES);
 
       openDatabase(':memory:');
       migrateHierarchyToDb(base);
@@ -455,9 +455,9 @@ test('migrate-hier: sketch slice stub PLAN tasks are not imported', () => {
 - [ ] **T01: Plan 01**
   Stub placeholder task.
 `;
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', roadmap);
-      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', sketchPlan);
-      writeFile(base, 'milestones/M001/slices/S02/S02-PLAN.md', PLAN_S02_1_TASK);
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', roadmap);
+      writeFile(base, 'phases/01-m001/01-01-PLAN.md', sketchPlan);
+      writeFile(base, 'phases/01-m001/01-02-PLAN.md', PLAN_S02_1_TASK);
 
       openDatabase(':memory:');
       const counts = migrateHierarchyToDb(base);

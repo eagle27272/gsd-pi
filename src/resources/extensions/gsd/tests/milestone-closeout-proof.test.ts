@@ -21,7 +21,7 @@ const tmpDirs: string[] = [];
 function makeBase(): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-closeout-proof-"));
   tmpDirs.push(base);
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
   try { closeDatabase(); } catch { /* noop */ }
   openDatabase(join(base, ".gsd", "gsd.db"));
   return base;
@@ -29,7 +29,7 @@ function makeBase(): string {
 
 function insertValidationPass(): void {
   insertAssessment({
-    path: "milestones/M001/M001-VALIDATION.md",
+    path: "phases/01-m001/01-VALIDATION.md",
     milestoneId: "M001",
     status: "pass",
     scope: "milestone-validation",
@@ -39,7 +39,7 @@ function insertValidationPass(): void {
 
 function writeSummary(base: string, status = "complete"): void {
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "M001-SUMMARY.md"),
+    join(base, ".gsd", "phases", "01-m001", "01-SUMMARY.md"),
     `---\nstatus: ${status}\n---\n\n# Summary\n`,
     "utf-8",
   );

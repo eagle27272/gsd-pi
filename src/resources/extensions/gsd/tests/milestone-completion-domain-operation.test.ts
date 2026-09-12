@@ -172,8 +172,8 @@ function lifecycleId(itemKind: "slice" | "task", sliceId: string, taskId?: strin
 function makeBase(): string {
   const basePath = mkdtempSync(join(tmpdir(), "gsd-milestone-completion-domain-"));
   tempDirs.add(basePath);
-  mkdirSync(join(basePath, ".gsd", "milestones", "M001"), { recursive: true });
-  writeFileSync(join(basePath, ".gsd", "milestones", "M001", "M001-CONTEXT.md"), "# M001\n");
+  mkdirSync(join(basePath, ".gsd", "phases", "01-m001"), { recursive: true });
+  writeFileSync(join(basePath, ".gsd", "phases", "01-m001", "01-CONTEXT.md"), "# M001\n");
   writeFileSync(join(basePath, "source.ts"), "export const source = 'milestone completion';\n");
   execFileSync("git", ["init"], { cwd: basePath, stdio: "ignore" });
   execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: basePath });
@@ -510,7 +510,7 @@ afterEach(cleanupFixtures);
 test("adopted closeout proof inspects quality gates without mutating them", async () => {
   const basePath = await prepareFixture();
   writeFileSync(
-    join(basePath, ".gsd", "milestones", "M001", "M001-SUMMARY.md"),
+    join(basePath, ".gsd", "phases", "01-m001", "01-SUMMARY.md"),
     "# Milestone Summary\n",
   );
   const before = qualityGateSnapshot();

@@ -39,7 +39,7 @@ import {
   resolveSliceFile,
   resolveSlicePath,
   resolveTasksDir,
-  legacyMilestonesDir,
+  gsdProjectionRoot,
   gsdRoot,
   resolveTaskFiles,
   resolveTaskFile,
@@ -348,7 +348,7 @@ function importHierarchyArtifacts(gsdDir: string): number {
 
   // Walk phases (flat-phase layout: phases/NN-slug/, legacy: milestones/M001/)
   const milestoneIds = findMilestoneIds(gsdDir);
-  const legacyDir = legacyMilestonesDir(gsdDir);
+  const legacyDir = join(gsdProjectionRoot(gsdDir), "milestones");
 
   for (const milestoneId of milestoneIds) {
     // Use resolveMilestonePath so canonical-name / newest-dir selection matches

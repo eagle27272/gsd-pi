@@ -324,7 +324,7 @@ test("runAutoLoopWithUok treats kernel-enter audit failures as telemetry-only", 
     );
     assert.equal(filtered.eligible.length, 1);
 
-    mkdirSync(join(basePath, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), {
+    mkdirSync(join(basePath, ".gsd", "phases", "01-m001", "tasks"), {
       recursive: true,
     });
     writeEscalationArtifact(basePath, {

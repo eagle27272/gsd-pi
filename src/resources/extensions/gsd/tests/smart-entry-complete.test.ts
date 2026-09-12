@@ -9,12 +9,13 @@ import { tmpdir } from "node:os";
 import { deriveState } from "../state.js";
 import { showSmartEntry } from "../guided-flow.js";
 import { closeDatabase, insertMilestone, insertSlice, openDatabase } from "../gsd-db.js";
+import { canonicalPhaseDirName } from "../layout-policy.js";
 
 function writeCompleteMilestone(base: string): void {
-  const milestoneDir = join(base, ".gsd", "milestones", "M001");
+  const milestoneDir = join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Complete Milestone"));
   mkdirSync(milestoneDir, { recursive: true });
   writeFileSync(
-    join(milestoneDir, "M001-ROADMAP.md"),
+    join(milestoneDir, "01-ROADMAP.md"),
     [
       "# M001: Complete Milestone",
       "",
@@ -23,7 +24,7 @@ function writeCompleteMilestone(base: string): void {
       "  > Done.",
     ].join("\n"),
   );
-  writeFileSync(join(milestoneDir, "M001-SUMMARY.md"), "# M001 Summary\n\nComplete.");
+  writeFileSync(join(milestoneDir, "01-SUMMARY.md"), "# M001 Summary\n\nComplete.");
 }
 
 test("deriveState reports the last completed milestone when all milestone slices are done", async () => {

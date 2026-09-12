@@ -34,17 +34,18 @@ import {
 import type { GSDPreferences } from "../preferences.ts";
 import type { GSDState } from "../types.ts";
 import { linkExternalGsdState } from "./test-utils.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 function makeBase(): string {
   const base = join(tmpdir(), `gsd-deep-project-loop-${randomUUID()}`);
-  mkdirSync(join(base, ".gsd", "milestones"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases"), { recursive: true });
   writeFileSync(join(base, ".gsd", "PREFERENCES.md"), "---\nplanning_depth: deep\n---\n");
   return base;
 }
 
 function makeCommandBase(): string {
   const base = join(tmpdir(), `gsd-deep-project-command-${randomUUID()}`);
-  mkdirSync(join(base, ".gsd", "milestones"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases"), { recursive: true });
   writeFileSync(join(base, "package.json"), '{"name":"gsd-command-test"}\n');
   return base;
 }
@@ -141,7 +142,7 @@ function makeRepo(): string {
   // Mirror the production external-state layout, and keep the fixture's writes
   // out of the operator's real ~/.gsd. Must precede any project files.
   linkExternalGsdState(base);
-  mkdirSync(join(base, ".gsd", "milestones"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases"), { recursive: true });
   writeFileSync(join(base, ".gsd", "PREFERENCES.md"), "---\nplanning_depth: deep\n---\n");
   writeFileSync(join(base, ".gitignore"), ".gsd\n");
   writeFileSync(join(base, "README.md"), "# test\n");
@@ -1322,16 +1323,16 @@ test("deep project setup: empty legacy pseudo-milestone dirs do not block first 
     writeFileSync(join(base, ".gsd", "runtime", "research-decision.json"), '{"decision":"skip"}\n');
 
     for (const legacy of ["PROJECT", "RESEARCH-PROJECT", "WORKFLOW-PREFS"]) {
-      mkdirSync(join(base, ".gsd", "milestones", legacy), { recursive: true });
+      mkdirSync(join(base, ".gsd", "phases", legacy), { recursive: true });
     }
 
     const messages: unknown[] = [];
     await showSmartEntry(makeCtx(`legacy-${randomUUID()}`) as any, makePi(messages) as any, base);
 
     assert.equal(messages.length, 1, "first real milestone discussion should dispatch");
-    assert.equal(existsSync(join(base, ".gsd", "milestones", "PROJECT")), false);
-    assert.equal(existsSync(join(base, ".gsd", "milestones", "RESEARCH-PROJECT")), false);
-    assert.equal(existsSync(join(base, ".gsd", "milestones", "WORKFLOW-PREFS")), false);
+    assert.equal(existsSync(join(base, ".gsd", "phases", "PROJECT")), false);
+    assert.equal(existsSync(join(base, ".gsd", "phases", "RESEARCH-PROJECT")), false);
+    assert.equal(existsSync(join(base, ".gsd", "phases", "WORKFLOW-PREFS")), false);
   } finally {
     if (previousWorkflowPath === undefined) delete process.env.GSD_WORKFLOW_PATH;
     else process.env.GSD_WORKFLOW_PATH = previousWorkflowPath;
@@ -1746,7 +1747,7 @@ test("verified task git closeout partial multi-repo commit pauses instead of red
     execFileSync("git", ["commit", "-m", "init"], { cwd: dir, stdio: "ignore" });
   };
   try {
-    mkdirSync(join(root, ".gsd", "milestones"), { recursive: true });
+    mkdirSync(join(root, ".gsd", "phases"), { recursive: true });
     writeFileSync(
       join(root, ".gsd", "PREFERENCES.md"),
       [

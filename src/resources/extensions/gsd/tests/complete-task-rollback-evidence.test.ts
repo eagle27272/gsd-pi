@@ -20,7 +20,7 @@ import { _setManagedMutationBoundaryForTest } from "../atomic-write.js";
 function makeTmpBase(): string {
   const base = join(tmpdir(), `gsd-ct-rollback-${randomUUID()}`);
   // Create the full tasks directory so the success path works
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001", "tasks"), { recursive: true });
   return base;
 }
 
@@ -62,7 +62,7 @@ describe("complete-task projection failures preserve committed DB completion", (
 
     // Write a minimal slice plan so renderPlanCheckboxes doesn't error
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-01-PLAN.md"),
       "# S01 Plan\n\n## Tasks\n\n- [ ] **T01: Test task**\n",
     );
 
@@ -82,7 +82,7 @@ describe("complete-task projection failures preserve committed DB completion", (
     insertMilestone({ id: "M001" });
     insertSlice({ id: "S01", milestoneId: "M001" });
 
-    const planPath = join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md");
+    const planPath = join(base, ".gsd", "phases", "01-m001", "01-01-PLAN.md");
     writeFileSync(
       planPath,
       "# S01 Plan\n\n## Tasks\n\n- [ ] **T01: Test task**\n",
@@ -118,10 +118,11 @@ describe("complete-task projection failures preserve committed DB completion", (
     insertMilestone({ id: "M001" });
     insertSlice({ id: "S01", milestoneId: "M001" });
 
-    // Replace the tasks directory with a file so disk write fails (cross-platform)
-    const tasksDir = join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks");
-    rmSync(tasksDir, { recursive: true, force: true });
-    writeFileSync(tasksDir, "not-a-directory");
+    // Replace the phase directory with a file so the disk write fails
+    // (cross-platform): flat-phase task summaries land at the phase root.
+    const phaseDir = join(base, ".gsd", "phases", "01-m001");
+    rmSync(phaseDir, { recursive: true, force: true });
+    writeFileSync(phaseDir, "not-a-directory");
 
     const result = await handleCompleteTask(VALID_PARAMS, base);
     assert.ok("error" in result, "expected stale projection error when projection write fails");

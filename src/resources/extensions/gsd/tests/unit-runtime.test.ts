@@ -17,11 +17,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 const base = mkdtempSync(join(tmpdir(), "gsd-unit-runtime-test-"));
-const tasksDir = join(base, ".gsd", "milestones", "M100", "slices", "S02", "tasks");
-mkdirSync(tasksDir, { recursive: true });
+const phaseDir = join(base, ".gsd", "phases", "100-m100");
+mkdirSync(phaseDir, { recursive: true });
 writeFileSync(join(base, ".gsd", "STATE.md"), "## Next Action\nExecute T09 for S02: do the thing\n", "utf-8");
 writeFileSync(
-  join(base, ".gsd", "milestones", "M100", "slices", "S02", "S02-PLAN.md"),
+  join(base, ".gsd", "phases", "100-m100", "100-02-PLAN.md"),
   "# S02: Test Slice\n\n## Tasks\n\n- [ ] **T09: Do the thing** `est:10m`\n  Description.\n",
   "utf-8",
 );
@@ -80,9 +80,9 @@ console.log("\n=== execute-task durability inspection ===");
   assert.deepStrictEqual(status!.nextActionAdvanced, false, "next action initially stale");
   assert.ok(/summary missing/i.test(formatExecuteTaskRecoveryStatus(status!)), "diagnostic mentions summary");
 
-  writeFileSync(join(tasksDir, "T09-SUMMARY.md"), "# done\n", "utf-8");
+  writeFileSync(join(phaseDir, "S02-T09-SUMMARY.md"), "# done\n", "utf-8");
   writeFileSync(
-    join(base, ".gsd", "milestones", "M100", "slices", "S02", "S02-PLAN.md"),
+    join(base, ".gsd", "phases", "100-m100", "100-02-PLAN.md"),
     "# S02: Test Slice\n\n## Tasks\n\n- [x] **T09: Do the thing** `est:10m`\n  Description.\n",
     "utf-8",
   );
@@ -106,14 +106,14 @@ console.log("\n=== runtime record cleanup ===");
 console.log("\n=== execute-task durability trusts closed DB task status ===");
 {
   const dbBase = mkdtempSync(join(tmpdir(), "gsd-unit-runtime-db-test-"));
-  mkdirSync(join(dbBase, ".gsd", "milestones", "M300", "slices", "S01", "tasks"), { recursive: true });
+  mkdirSync(join(dbBase, ".gsd", "phases", "300-m300", "tasks"), { recursive: true });
   try {
     openDatabase(join(dbBase, ".gsd", "gsd.db"));
     insertMilestone({ id: "M300", title: "DB Milestone", status: "active" });
     insertSlice({ id: "S01", milestoneId: "M300", title: "DB Slice", status: "in_progress" });
     insertTask({ id: "T01", milestoneId: "M300", sliceId: "S01", title: "DB Task", status: "complete" });
     writeFileSync(
-      join(dbBase, ".gsd", "milestones", "M300", "slices", "S01", "S01-PLAN.md"),
+      join(dbBase, ".gsd", "phases", "300-m300", "300-01-PLAN.md"),
       "# S01\n\n## Tasks\n\n- [ ] **T01: DB Task** `est:10m`\n",
       "utf-8",
     );
@@ -163,12 +163,13 @@ const mhBase = mkdtempSync(join(tmpdir(), "gsd-unit-runtime-mh-test-"));
 
 console.log("\n=== must-haves: all mentioned in summary ===");
 {
-  const tasksDir2 = join(mhBase, ".gsd", "milestones", "M200", "slices", "S01", "tasks");
+  const phaseDir2 = join(mhBase, ".gsd", "phases", "200-m200");
+  const tasksDir2 = join(phaseDir2, "tasks");
   mkdirSync(tasksDir2, { recursive: true });
 
   // Slice plan with T01 checked
   writeFileSync(
-    join(mhBase, ".gsd", "milestones", "M200", "slices", "S01", "S01-PLAN.md"),
+    join(mhBase, ".gsd", "phases", "200-m200", "200-01-PLAN.md"),
     "# S01: Test\n\n## Tasks\n\n- [x] **T01: Build parser** `est:10m`\n  Build the parser.\n",
     "utf-8",
   );
@@ -180,7 +181,7 @@ console.log("\n=== must-haves: all mentioned in summary ===");
   );
   // Summary that mentions all must-haves
   writeFileSync(
-    join(tasksDir2, "T01-SUMMARY.md"),
+    join(phaseDir2, "S01-T01-SUMMARY.md"),
     "# T01: Build parser\n\nAdded parseWidget function and formatWidget with edge case handling. All existing tests pass without regression.\n",
     "utf-8",
   );
@@ -199,11 +200,12 @@ console.log("\n=== must-haves: all mentioned in summary ===");
 
 console.log("\n=== must-haves: partially mentioned in summary ===");
 {
-  const tasksDir3 = join(mhBase, ".gsd", "milestones", "M200", "slices", "S02", "tasks");
+  const phaseDir3 = join(mhBase, ".gsd", "phases", "200-m200");
+  const tasksDir3 = join(phaseDir3, "tasks");
   mkdirSync(tasksDir3, { recursive: true });
 
   writeFileSync(
-    join(mhBase, ".gsd", "milestones", "M200", "slices", "S02", "S02-PLAN.md"),
+    join(mhBase, ".gsd", "phases", "200-m200", "200-02-PLAN.md"),
     "# S02: Test\n\n## Tasks\n\n- [x] **T01: Build thing** `est:10m`\n  Build.\n",
     "utf-8",
   );
@@ -215,7 +217,7 @@ console.log("\n=== must-haves: partially mentioned in summary ===");
   );
   // Summary only mentions computeScore
   writeFileSync(
-    join(tasksDir3, "T01-SUMMARY.md"),
+    join(phaseDir3, "S02-T01-SUMMARY.md"),
     "# T01: Build thing\n\nAdded computeScore function with full test coverage.\n",
     "utf-8",
   );
@@ -233,17 +235,20 @@ console.log("\n=== must-haves: partially mentioned in summary ===");
 
 console.log("\n=== must-haves: no task plan file ===");
 {
-  const tasksDir4 = join(mhBase, ".gsd", "milestones", "M200", "slices", "S03", "tasks");
+  // Own base: the flat-phase tasks/ dir is shared across a phase's slices, so a
+  // sibling block's T01-PLAN.md would otherwise leak into this "no plan" case.
+  const mhBase = mkdtempSync(join(tmpdir(), "gsd-unit-runtime-mh-noplan-"));
+  const tasksDir4 = join(mhBase, ".gsd", "phases", "200-m200", "tasks");
   mkdirSync(tasksDir4, { recursive: true });
 
   writeFileSync(
-    join(mhBase, ".gsd", "milestones", "M200", "slices", "S03", "S03-PLAN.md"),
+    join(mhBase, ".gsd", "phases", "200-m200", "200-03-PLAN.md"),
     "# S03: Test\n\n## Tasks\n\n- [x] **T01: Quick fix** `est:5m`\n  Fix.\n",
     "utf-8",
   );
   // No T01-PLAN.md — only summary
   writeFileSync(
-    join(tasksDir4, "T01-SUMMARY.md"),
+    join(mhBase, ".gsd", "phases", "200-m200", "S03-T01-SUMMARY.md"),
     "# T01: Quick fix\n\nFixed the thing.\n",
     "utf-8",
   );
@@ -258,11 +263,12 @@ console.log("\n=== must-haves: no task plan file ===");
 
 console.log("\n=== must-haves: present but no summary file ===");
 {
-  const tasksDir5 = join(mhBase, ".gsd", "milestones", "M200", "slices", "S04", "tasks");
+  const mhBase = mkdtempSync(join(tmpdir(), "gsd-unit-runtime-mh-nosummary-"));
+  const tasksDir5 = join(mhBase, ".gsd", "phases", "200-m200", "tasks");
   mkdirSync(tasksDir5, { recursive: true });
 
   writeFileSync(
-    join(mhBase, ".gsd", "milestones", "M200", "slices", "S04", "S04-PLAN.md"),
+    join(mhBase, ".gsd", "phases", "200-m200", "200-04-PLAN.md"),
     "# S04: Test\n\n## Tasks\n\n- [ ] **T01: Build parser** `est:10m`\n  Build.\n",
     "utf-8",
   );
@@ -284,11 +290,12 @@ console.log("\n=== must-haves: present but no summary file ===");
 
 console.log("\n=== must-haves: substring matching (no backtick tokens) ===");
 {
-  const tasksDir6 = join(mhBase, ".gsd", "milestones", "M200", "slices", "S05", "tasks");
+  const mhBase = mkdtempSync(join(tmpdir(), "gsd-unit-runtime-mh-substr-"));
+  const tasksDir6 = join(mhBase, ".gsd", "phases", "200-m200", "tasks");
   mkdirSync(tasksDir6, { recursive: true });
 
   writeFileSync(
-    join(mhBase, ".gsd", "milestones", "M200", "slices", "S05", "S05-PLAN.md"),
+    join(mhBase, ".gsd", "phases", "200-m200", "200-05-PLAN.md"),
     "# S05: Test\n\n## Tasks\n\n- [x] **T01: Add diagnostics** `est:10m`\n  Add.\n",
     "utf-8",
   );
@@ -300,7 +307,7 @@ console.log("\n=== must-haves: substring matching (no backtick tokens) ===");
   );
   // Summary mentions "heuristic" and "diagnostic" but not "assertions"
   writeFileSync(
-    join(tasksDir6, "T01-SUMMARY.md"),
+    join(mhBase, ".gsd", "phases", "200-m200", "S05-T01-SUMMARY.md"),
     "# T01: Add diagnostics\n\nImplemented heuristic matching for must-have items. Recovery diagnostic string now includes gap counts.\n",
     "utf-8",
   );

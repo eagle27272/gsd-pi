@@ -13,6 +13,7 @@ import { homedir } from "node:os";
 import { gsdRoot } from "./paths.js";
 import { gsdHome } from "./gsd-home.js";
 import { detectPackageManager, buildScriptCommand } from "./package-manager.js";
+import { LAYOUT_SEGMENTS } from "./layout-policy.js";
 
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
@@ -1292,8 +1293,7 @@ export function hasGsdBootstrapArtifacts(
   return (
     existsFn(gsdPath) &&
     (existsFn(join(gsdPath, "PREFERENCES.md")) ||
-      existsFn(join(gsdPath, "preferences.md")) ||
-      existsFn(join(gsdPath, "milestones")))
+      existsFn(join(gsdPath, LAYOUT_SEGMENTS.level1)))
   );
 }
 

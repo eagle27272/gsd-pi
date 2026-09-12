@@ -36,7 +36,7 @@ describe("DB-authoritative slice rogue detection", () => {
     insertMilestone({ id: "M001", title: "Milestone", status: "active" });
     insertSlice({ milestoneId: "M001", id: "S01", title: "Slice", status: "pending", sequence: 1 });
 
-    const summaryPath = join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-SUMMARY.md");
+    const summaryPath = join(base, ".gsd", "phases", "01-m001", "01-01-SUMMARY.md");
     mkdirSync(dirname(summaryPath), { recursive: true });
     writeFileSync(summaryPath, "# Summary\n", "utf-8");
 

@@ -34,7 +34,7 @@ function stubState(): GSDState {
 
 test("#442: detectArtifactDbDrift is memoized per DriftContext", (t) => {
   const base = mkdtempSync(join(tmpdir(), "gsd-artifact-memo-"));
-  const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+  const sliceDir = join(base, ".gsd", "phases", "01-m001");
   mkdirSync(sliceDir, { recursive: true });
   t.after(() => {
     try { closeDatabase(); } catch { /* noop */ }
@@ -45,7 +45,7 @@ test("#442: detectArtifactDbDrift is memoized per DriftContext", (t) => {
   insertMilestone({ id: "M001", title: "M", status: "active" });
   insertSlice({ id: "S01", milestoneId: "M001", title: "Slice", status: "pending", risk: "low", depends: [], sequence: 1 });
   // A SUMMARY on disk while the slice is still pending = artifact/DB divergence.
-  writeFileSync(join(sliceDir, "S01-SUMMARY.md"), "# S01 Summary\n");
+  writeFileSync(join(sliceDir, "01-01-SUMMARY.md"), "# S01 Summary\n");
 
   const state = stubState();
 

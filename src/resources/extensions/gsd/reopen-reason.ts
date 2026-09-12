@@ -14,7 +14,7 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { legacyMilestonesDir, resolveSlicePath, resolveTasksDir } from "./paths.js";
+import { resolveSlicePath, resolveTasksDir } from "./paths.js";
 import { atomicWriteSync, removeProjectionFileSync } from "./atomic-write.js";
 import { logWarning } from "./workflow-logger.js";
 
@@ -30,16 +30,14 @@ interface ReopenReasonArtifact {
 /**
  * Canonical reopen-reason artifact path, parallel to T##-SUMMARY.md and
  * T##-ESCALATION.json:
- *   .gsd/milestones/{M}/slices/{S}/tasks/{T}-REOPEN.json
- * Flat-phase: the artifact sits directly in the phase dir. Legacy layouts
- * without a tasks/ subdir return null (caller degrades gracefully).
+ *   .gsd/phases/{NN-slug}/{T}-REOPEN.json
+ * The artifact sits directly in the phase dir unless a tasks/ subdir exists.
  */
 export function reopenReasonArtifactPath(
   basePath: string, milestoneId: string, sliceId: string, taskId: string,
 ): string | null {
   const tDir = resolveTasksDir(basePath, milestoneId, sliceId);
   if (tDir) return join(tDir, `${taskId}-REOPEN.json`);
-  if (existsSync(legacyMilestonesDir(basePath))) return null;
   const phaseDir = resolveSlicePath(basePath, milestoneId, sliceId);
   if (!phaseDir) return null;
   return join(phaseDir, `${taskId}-REOPEN.json`);

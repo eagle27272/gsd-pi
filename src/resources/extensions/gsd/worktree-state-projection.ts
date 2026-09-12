@@ -7,13 +7,13 @@
  *   - The direction-and-rules of state file flow (project-root authoritative
  *     for some classes, worktree authoritative for others)
  *   - The bug-hardened invariants encoded in `syncProjectRootToWorktree` /
- *     `syncStateToProjectRoot` (additive milestone copy #1886, ASSESSMENT
- *     verdict overwrite #2821, completed-units forward-sync, WAL/SHM
- *     cleanup #2478, .gsd symlink edge case #2184)
+ *     `syncStateToProjectRoot` (additive phase copy #1886, verdict artifact
+ *     force-overwrite #2821, completed-units forward-sync, WAL/SHM cleanup
+ *     #2478, .gsd symlink edge case #2184)
  *
  * Slice 7 (#5591): the bodies of the three projection verbs and their
- * private helpers (`isSamePath`, `forceOverwriteAssessmentsWithVerdict`,
- * `ROOT_DIAGNOSTIC_FILES`) live here. The legacy `syncProjectRootToWorktree`,
+ * private helpers (`isSamePath`, `ROOT_DIAGNOSTIC_FILES`) live here. The
+ * legacy `syncProjectRootToWorktree`,
  * `syncStateToProjectRoot`, `syncWorktreeStateBack` exports in
  * `auto-worktree.ts` are thin wrappers around the `_*Impl` exports below
  * until the legacy-helper cleanup step retires them.
@@ -23,8 +23,8 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
-  readdirSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   statSync,
   unlinkSync,
@@ -32,7 +32,7 @@ import {
 import { join } from "node:path";
 
 import { reconcileWorktreeDb } from "./gsd-db.js";
-import { dirIsContentBearingLegacyMilestone, resolveGsdPathContract } from "./paths.js";
+import { resolveGsdPathContract } from "./paths.js";
 import { copyProjectionFileSync, mergeProjectionTreeSync } from "./atomic-write.js";
 import type { MilestoneScope } from "./workspace.js";
 import { logError, logWarning } from "./workflow-logger.js";
@@ -57,129 +57,63 @@ function isSamePath(a: string, b: string): boolean {
   }
 }
 
+function syncFlatPhaseArtifacts(prGsd: string, wtGsd: string): void {
+  mergeProjectionTreeSync(join(prGsd, "phases"), join(wtGsd, "phases"), false);
+}
+
 /** Regex matching YAML frontmatter `verdict:` field. */
 const VERDICT_RE = /verdict:\s*[\w-]+/i;
 
 /**
- * Walk a milestone directory and force-overwrite ASSESSMENT files in the
- * destination when the source copy contains a `verdict:` field.
+ * Force-overwrite ASSESSMENT/VALIDATION files in the worktree when the project
+ * root copy carries a `verdict:`.
  *
- * Targeted fix for the UAT stuck-loop (#2821): the main `safeCopyRecursive`
- * uses `force:false` to protect worktree-local projection files (#1886),
- * but ASSESSMENT files written by run-uat must be forward-synced when the
- * project root has a verdict. Without this, the worktree retains a stale
- * FAIL or missing ASSESSMENT and `checkNeedsRunUat` re-dispatches run-uat
- * indefinitely.
+ * Targeted fix for the UAT stuck-loop (#2821): the phase-tree merge above uses
+ * force:false to protect worktree-local projection files (#1886), but verdict
+ * artifacts written by run-uat must be forward-synced. Without this, the
+ * worktree retains a stale FAIL or missing ASSESSMENT and `checkNeedsRunUat`
+ * re-dispatches run-uat indefinitely.
  *
- * Only overwrites when the source has a verdict — never clobbers a
- * worktree ASSESSMENT with a verdictless project-root copy.
+ * Only overwrites when the source has a verdict — never clobbers a worktree
+ * ASSESSMENT with a verdictless project-root copy.
  */
-function forceOverwriteValidationWithVerdict(
-  srcMilestoneDir: string,
-  dstMilestoneDir: string,
-  milestoneId: string,
-): void {
-  if (!existsSync(srcMilestoneDir) || !milestoneId) return;
-
-  const srcFile = join(srcMilestoneDir, `${milestoneId}-VALIDATION.md`);
-  if (!existsSync(srcFile)) return;
+function forceOverwriteVerdictArtifacts(prGsd: string, wtGsd: string): void {
+  const prPhases = join(prGsd, "phases");
+  if (!existsSync(prPhases)) return;
 
   try {
-    const srcContent = readFileSync(srcFile, "utf-8");
-    if (!VERDICT_RE.test(srcContent)) return;
-
-    copyProjectionFileSync(srcFile, join(dstMilestoneDir, `${milestoneId}-VALIDATION.md`), true);
-  } catch (err) {
-    logWarning(
-      "worktree",
-      `validation force-copy failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-}
-
-function forceOverwriteAssessmentsWithVerdict(
-  srcMilestoneDir: string,
-  dstMilestoneDir: string,
-): void {
-  if (!existsSync(srcMilestoneDir)) return;
-
-  const slicesDir = join(srcMilestoneDir, "slices");
-  if (!existsSync(slicesDir)) return;
-
-  try {
-    for (const sliceEntry of readdirSync(slicesDir, { withFileTypes: true })) {
-      if (!sliceEntry.isDirectory()) continue;
-      const srcSliceDir = join(slicesDir, sliceEntry.name);
-      const dstSliceDir = join(dstMilestoneDir, "slices", sliceEntry.name);
-
+    for (const phase of readdirSync(prPhases, { withFileTypes: true })) {
+      if (!phase.isDirectory()) continue;
+      const srcDir = join(prPhases, phase.name);
+      const dstDir = join(wtGsd, "phases", phase.name);
       try {
-        for (const fileEntry of readdirSync(srcSliceDir, { withFileTypes: true })) {
-          if (!fileEntry.isFile()) continue;
-          if (!fileEntry.name.endsWith("-ASSESSMENT.md")) continue;
-
-          const srcFile = join(srcSliceDir, fileEntry.name);
+        for (const entry of readdirSync(srcDir, { withFileTypes: true })) {
+          if (!entry.isFile()) continue;
+          if (!/-(ASSESSMENT|VALIDATION)\.md$/.test(entry.name)) continue;
+          const srcFile = join(srcDir, entry.name);
           try {
-            const srcContent = readFileSync(srcFile, "utf-8");
-            if (!VERDICT_RE.test(srcContent)) continue;
-
-            copyProjectionFileSync(srcFile, join(dstSliceDir, fileEntry.name), true);
+            if (!VERDICT_RE.test(readFileSync(srcFile, "utf-8"))) continue;
+            copyProjectionFileSync(srcFile, join(dstDir, entry.name), true);
           } catch (err) {
             logWarning(
               "worktree",
-              `assessment force-copy failed: ${err instanceof Error ? err.message : String(err)}`,
+              `verdict artifact force-copy failed: ${err instanceof Error ? err.message : String(err)}`,
             );
           }
         }
       } catch (err) {
         logWarning(
           "worktree",
-          `assessment slice scan failed: ${err instanceof Error ? err.message : String(err)}`,
+          `verdict artifact scan failed: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     }
   } catch (err) {
     logWarning(
       "worktree",
-      `assessment sync failed: ${err instanceof Error ? err.message : String(err)}`,
+      `verdict artifact sync failed: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
-}
-
-function syncOtherMilestoneArtifacts(
-  srcMilestonesDir: string,
-  dstMilestonesDir: string,
-  currentMilestoneId: string,
-): void {
-  if (!existsSync(srcMilestonesDir)) return;
-
-  try {
-    for (const milestoneEntry of readdirSync(srcMilestonesDir, { withFileTypes: true })) {
-      if (!milestoneEntry.isDirectory()) continue;
-      // The current milestone is already fully projected by the caller's
-      // additive safeCopyRecursive; skip it here to avoid redundant work.
-      if (milestoneEntry.name === currentMilestoneId) continue;
-      const srcMilestoneDir = join(srcMilestonesDir, milestoneEntry.name);
-      if (!dirIsContentBearingLegacyMilestone(srcMilestoneDir)) continue;
-      const dstMilestoneDir = join(dstMilestonesDir, milestoneEntry.name);
-
-      // Additively project the entire milestone subtree (force:false), not just
-      // top-level files. Prior completed milestones keep their per-slice and
-      // per-task SUMMARY.md / UAT.md on disk so the worktree's stale-render
-      // detector doesn't flag them as missing (DB has summary, disk doesn't).
-      // force:false preserves any worktree-local files (#1886 invariant) and
-      // only fills in files absent from the worktree projection.
-      mergeProjectionTreeSync(srcMilestoneDir, dstMilestoneDir, false);
-    }
-  } catch (err) {
-    logWarning(
-      "worktree",
-      `milestone artifact scan failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-}
-
-function syncFlatPhaseArtifacts(prGsd: string, wtGsd: string): void {
-  mergeProjectionTreeSync(join(prGsd, "phases"), join(wtGsd, "phases"), false);
 }
 
 /**
@@ -232,9 +166,9 @@ function syncRootProjectionFilesToWorktree(prGsd: string, wtGsd: string): void {
  * Project state from project root onto the auto-worktree (raw-path body).
  *
  * Owns the rules: identity-key safety check (#2184 .gsd symlink), additive
- * milestone copy preserving worktree-local files (#1886), ASSESSMENT
- * verdict force-overwrite (#2821), forward-sync of `completed-units.json`,
- * WAL/SHM cleanup on legacy worktree-local DB (#2478).
+ * phase copy preserving worktree-local files (#1886), verdict artifact
+ * force-overwrite (#2821), forward-sync of `completed-units.json`, WAL/SHM
+ * cleanup on a stale worktree-local DB (#2478).
  */
 export function _projectRootToWorktreeImpl(
   projectRoot: string,
@@ -260,37 +194,7 @@ export function _projectRootToWorktreeImpl(
   // Flat-phase artifacts (phases/NN-slug/NN-CONTEXT.md, NN-DISCUSSION.md,
   // ROADMAP, etc.) must be available before the first worktree dispatch.
   syncFlatPhaseArtifacts(prGsd, wtGsd);
-
-  // Copy milestone directory from project root to worktree — additive only.
-  // force:false prevents cpSync from overwriting existing worktree files.
-  // Without this, worktree-local files (e.g. VALIDATION.md written
-  // by validate-milestone) get clobbered by stale project root copies,
-  // causing an infinite re-validation loop (#1886).
-  const prMilestoneDir = join(prGsd, "milestones", milestoneId);
-  const wtMilestoneDir = join(wtGsd, "milestones", milestoneId);
-  if (dirIsContentBearingLegacyMilestone(prMilestoneDir)) {
-    mergeProjectionTreeSync(prMilestoneDir, wtMilestoneDir, false);
-
-    // Force-sync ASSESSMENT files that have a verdict from project root (#2821).
-    // The additive-only copy above preserves worktree-local files, but
-    // ASSESSMENT files are special: after run-uat writes a verdict and post-unit
-    // syncs it to the project root, the worktree may retain a stale copy (e.g.
-    // verdict:fail while the project root has verdict:pass from a retry). On
-    // session resume the DB is rebuilt from disk, and if the stale ASSESSMENT
-    // persists, checkNeedsRunUat finds no passing verdict → re-dispatches
-    // run-uat indefinitely (stuck-loop ×9).
-    forceOverwriteValidationWithVerdict(prMilestoneDir, wtMilestoneDir, milestoneId);
-    forceOverwriteAssessmentsWithVerdict(prMilestoneDir, wtMilestoneDir);
-  }
-
-  // Additively project the full subtree of every OTHER content-bearing legacy
-  // milestone so worktree-bound units can read prior-milestone context artifacts
-  // without recreating empty/meta-only milestones/ scaffolds in flat-phase projects.
-  syncOtherMilestoneArtifacts(
-    join(prGsd, "milestones"),
-    join(wtGsd, "milestones"),
-    milestoneId,
-  );
+  forceOverwriteVerdictArtifacts(prGsd, wtGsd);
 
   // Forward-sync completed-units.json from project root to worktree.
   // Project root is authoritative for completion state after crash recovery;

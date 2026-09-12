@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { gsdHome } from "./gsd-home.js";
+import { LAYOUT_SEGMENTS } from "./layout-policy.js";
 
 export interface WorktreeSegment {
   gsdIdx: number;
@@ -211,8 +212,7 @@ function resolveNearestBootstrappedGsdRoot(path: string): string | null {
 function hasGsdBootstrapArtifacts(gsdPath: string): boolean {
   return existsSync(gsdPath) &&
     (existsSync(join(gsdPath, "PREFERENCES.md")) ||
-      existsSync(join(gsdPath, "preferences.md")) ||
-      existsSync(join(gsdPath, "milestones")));
+      existsSync(join(gsdPath, LAYOUT_SEGMENTS.level1)));
 }
 
 function resolveGitWorkingTreeRoot(path: string): string | null {

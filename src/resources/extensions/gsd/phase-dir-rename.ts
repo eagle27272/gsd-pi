@@ -8,15 +8,14 @@ import { LAYOUT_SEGMENTS } from "./layout-policy.js";
 import {
   canonicalPhaseDirName,
   clearPathCache,
-  isLegacyMilestonesLayoutIn,
   milestonesDirIn,
   resolvePhaseDirIn,
 } from "./paths.js";
 
 /**
  * Move `phases/NN-old-slug` → `phases/NN-canonical` after a title change.
- * No-op when the old dir is missing, the new dir already exists, names match,
- * or the project is still on the legacy milestones/ layout. (#1526)
+ * No-op when the old dir is missing, the new dir already exists, or the names
+ * match. (#1526)
  *
  * `projectionRoot` is the real `.gsd` directory — not the project root. It must
  * not be reconstructed from the project path, because `.gsd` is a symlink into
@@ -29,7 +28,6 @@ export function renamePhaseDirOnTitleChange(
   nextTitle: string,
 ): boolean {
   if (!nextTitle.trim()) return false;
-  if (isLegacyMilestonesLayoutIn(projectionRoot)) return false;
 
   const nextName = canonicalPhaseDirName(milestoneId, nextTitle);
   const phasesDir = milestonesDirIn(projectionRoot);

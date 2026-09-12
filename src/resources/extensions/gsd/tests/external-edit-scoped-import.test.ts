@@ -24,6 +24,7 @@ import {
 } from "../compat/compat-marker.ts";
 import type { DriftContext } from "../state-reconciliation/types.ts";
 import type { GSDState } from "../types.ts";
+import { canonicalPhaseDirName, milestoneIdToPhaseNum, slicePlanFileName } from "../layout-policy.ts";
 
 const stubState = { phase: "idle" } as unknown as GSDState;
 
@@ -42,7 +43,7 @@ function cleanup(base: string): void {
   rmSync(base, { recursive: true, force: true });
 }
 
-const roadmapRel = (mid: string): string => join("milestones", mid, `${mid}-ROADMAP.md`);
+const roadmapRel = (mid: string): string => join("phases",canonicalPhaseDirName(mid),`${String(milestoneIdToPhaseNum(mid)).padStart(2, "0")}-ROADMAP.md`);
 
 /** Render a single-slice roadmap whose one slice is checked (`done`). */
 function roadmapContent(mid: string, sliceTitle: string, done: boolean): string {
@@ -58,10 +59,10 @@ function roadmapContent(mid: string, sliceTitle: string, done: boolean): string 
 }
 
 function writeRoadmap(base: string, mid: string, sliceTitle: string, done: boolean): string {
-  const dir = join(base, ".gsd", "milestones", mid);
+  const dir = join(base, ".gsd", "phases", canonicalPhaseDirName(mid));
   mkdirSync(dir, { recursive: true });
   const content = roadmapContent(mid, sliceTitle, done);
-  writeFileSync(join(dir, `${mid}-ROADMAP.md`), content, "utf-8");
+  writeFileSync(join(dir, `${String(milestoneIdToPhaseNum(mid)).padStart(2, "0")}-ROADMAP.md`), content, "utf-8");
   return content;
 }
 
@@ -80,9 +81,9 @@ function planContent(taskDone: boolean): string {
 }
 
 function writePlan(base: string, mid: string, taskDone: boolean): void {
-  const dir = join(base, ".gsd", "milestones", mid, "slices", "S01");
+  const dir = join(base, ".gsd", "phases", canonicalPhaseDirName(mid));
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "S01-PLAN.md"), planContent(taskDone), "utf-8");
+  writeFileSync(join(dir, slicePlanFileName(milestoneIdToPhaseNum(mid), "S01", "PLAN")), planContent(taskDone), "utf-8");
 }
 
 function taskStatus(mid: string): string | undefined {
@@ -90,7 +91,7 @@ function taskStatus(mid: string): string | undefined {
 }
 
 /**
- * Build two legacy-layout milestones (M001, M002) each with one checked slice,
+ * Build two flat-phase milestones (M001, M002) each with one checked slice,
  * import them so both slices land `complete`, then reopen M002/S01 to `pending`
  * while leaving M002's roadmap checkbox checked (a stale projection).
  */
