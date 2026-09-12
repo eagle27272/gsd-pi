@@ -15,6 +15,7 @@ import {
   type HealthWidgetData,
 } from "../health-widget-core.ts";
 import { HEALTH_WIDGET_ACTIVE_HINTS, getCachedProjectState, initHealthWidget } from "../health-widget.ts";
+import { canonicalPhaseDirName, LAYOUT_SEGMENTS } from "../layout-policy.ts";
 import { registerHooks } from "../bootstrap/register-hooks.ts";
 import { GIT_NO_PROMPT_ENV } from "../git-constants.ts";
 
@@ -121,7 +122,7 @@ test("detectHealthWidgetProjectState: milestone without metrics returns active",
   const dir = makeTempDir("active");
   t.after(() => { cleanup(dir); });
 
-  mkdirSync(join(dir, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(dir, ".gsd", LAYOUT_SEGMENTS.level1, canonicalPhaseDirName("M001")), { recursive: true });
   assert.equal(detectHealthWidgetProjectState(dir), "active");
 });
 
@@ -136,7 +137,7 @@ test("getCachedProjectState: reuses project state until the refresh TTL expires"
   mkdirSync(join(dir, ".gsd"), { recursive: true });
   assert.equal(getCachedProjectState(dir), "initialized");
 
-  mkdirSync(join(dir, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(dir, ".gsd", LAYOUT_SEGMENTS.level1, canonicalPhaseDirName("M001")), { recursive: true });
   assert.equal(getCachedProjectState(dir), "initialized");
 
   now += 60_000;
@@ -159,7 +160,7 @@ test("getCachedProjectState: force=true bypasses TTL and returns fresh state wit
   assert.equal(getCachedProjectState(dir), "initialized");
 
   // Disk changes within the TTL window.
-  mkdirSync(join(dir, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(dir, ".gsd", LAYOUT_SEGMENTS.level1, canonicalPhaseDirName("M001")), { recursive: true });
   now += 1_000; // well within 60s TTL
 
   // Normal call still returns stale cached value.
@@ -198,7 +199,7 @@ test("initHealthWidget: re-init paints fresh project state within cache TTL", (t
   initHealthWidget(ctx);
   assert.equal(initialLineSets.at(-1)?.[0], "  GSD  Project Initialized");
 
-  mkdirSync(join(dir, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(dir, ".gsd", LAYOUT_SEGMENTS.level1, canonicalPhaseDirName("M001")), { recursive: true });
   now += 1_000;
 
   initHealthWidget(ctx);
@@ -239,7 +240,7 @@ test("health widget active hints include visualization and notifications", () =>
 test("health widget async refresh does not block timers while git log is slow", async (t) => {
   const dir = makeTempRepo("slow-git-log");
   const binDir = makeTempDir("slow-git-log-bin");
-  mkdirSync(join(dir, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(dir, ".gsd", LAYOUT_SEGMENTS.level1, canonicalPhaseDirName("M001")), { recursive: true });
   installSlowGitLogShim(binDir);
 
   const originalCwd = process.cwd();
@@ -325,7 +326,7 @@ test("initHealthWidget: synchronous first-paint render never contains last-commi
   // string-array setWidget call never contains "Last commit:" even on a real
   // git repo where native git queries would succeed.
   const dir = makeTempRepo("sync-last-commit-regression");
-  mkdirSync(join(dir, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(dir, ".gsd", LAYOUT_SEGMENTS.level1, canonicalPhaseDirName("M001")), { recursive: true });
 
   const originalCwd = process.cwd();
   process.chdir(dir);

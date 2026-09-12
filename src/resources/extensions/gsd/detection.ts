@@ -392,11 +392,12 @@ function detectV2Gsd(basePath: string): V2Detection | null {
 
   const hasContext = existsSync(join(gsdPath, "CONTEXT.md"));
 
+  // A milestone is one flat-phase directory under .gsd/phases/.
   let milestoneCount = 0;
-  const milestonesPath = join(gsdPath, "milestones");
-  if (existsSync(milestonesPath)) {
+  const phasesPath = join(gsdPath, LAYOUT_SEGMENTS.level1);
+  if (existsSync(phasesPath)) {
     try {
-      const entries = readdirSync(milestonesPath, { withFileTypes: true });
+      const entries = readdirSync(phasesPath, { withFileTypes: true });
       milestoneCount = entries.filter(e => e.isDirectory()).length;
     } catch {
       // unreadable — report 0
