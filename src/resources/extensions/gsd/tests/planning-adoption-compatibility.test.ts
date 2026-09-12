@@ -7,7 +7,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test, type TestContext } from "node:test";
 
-import { computeProjectionSha, readCompatMarker, writeCompatMarker } from "../compat/compat-marker.ts";
 import { teardownAutoWorktree } from "../auto-worktree-teardown.ts";
 import {
   getActiveWorkspace,
@@ -41,10 +40,7 @@ import type { StateManifest } from "../workflow-manifest.ts";
 import { reconcileWorktreeDbBeforeManualMerge } from "../worktree-command.ts";
 import { worktreePath } from "../worktree-manager.ts";
 import { createWorkspace } from "../workspace.ts";
-import {
-  renderPlanProjection,
-  renderRoadmapProjection,
-} from "../workflow-projections.ts";
+import { renderRoadmapProjection } from "../workflow-projections.ts";
 
 const tempDirs = new Set<string>();
 
@@ -566,7 +562,7 @@ test("legacy-only restore, recover clear, and bulk import retain their existing 
   assert.equal(getSliceTasks("M002", "S02")[0]?.title, "Legacy task");
 });
 
-test("legacy projection renderers exclude cancelled slices and tasks", (t) => {
+test("legacy roadmap renderer excludes cancelled slices and tasks", (t) => {
   const database = openFixture(t);
   const base = tempDir("gsd-active-projection-filter-");
   mkdirSync(join(base, ".gsd"), { recursive: true });
@@ -581,19 +577,6 @@ test("legacy projection renderers exclude cancelled slices and tasks", (t) => {
   renderRoadmapProjection(base, "M001");
   const roadmap = readFileSync(join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), "utf8");
   assert.doesNotMatch(roadmap, /S02|Cancelled slice/);
-
-  const planPath = join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md");
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01"), { recursive: true });
-  const planContent = "# stale cancelled task projection\n";
-  writeFileSync(planPath, planContent, "utf8");
-  const marker = readCompatMarker(base);
-  marker.projections["milestones/M001/slices/S01/S01-PLAN.md"] = {
-    sha: computeProjectionSha(planContent),
-    entities: ["M001/S01"],
-  };
-  writeCompatMarker(base, marker);
-  renderPlanProjection(base, "M001", "S01");
-  assert.equal(existsSync(planPath), false);
 });
 
 test("discard milestone fails before deleting projections when canonical lifecycle history exists", () => {

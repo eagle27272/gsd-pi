@@ -27,7 +27,6 @@ import type { GSDState } from "./types.js";
 import { renderPlanFromDb, renderRoadmapFromDb, writeTaskSummaryProjection } from "./markdown-renderer.js";
 import { readManifest } from "./workflow-manifest.js";
 import { gsdRoot, resolveMilestoneFile, resolveSliceFile, resolveTaskFile } from "./paths.js";
-import { removeOwnedPlanProjection } from "./projection-cleanup.js";
 import { stripIdPrefix } from "./strip-id-prefix.js";
 export { stripIdPrefix };
 
@@ -82,24 +81,6 @@ export function renderPlanContent(sliceRow: SliceRow, taskRows: TaskRow[]): stri
 
   lines.push("");
   return lines.join("\n");
-}
-
-/**
- * Render PLAN.md projection to disk for a specific slice.
- * Queries DB via helper functions and persists through the canonical projection writer.
- */
-export function renderPlanProjection(basePath: string, milestoneId: string, sliceId: string): void {
-  const sliceRows = getMilestoneSlices(milestoneId);
-  const sliceRow = sliceRows.find(s => s.id === sliceId);
-  const planPath = join(basePath, ".gsd", "milestones", milestoneId, "slices", sliceId, `${sliceId}-PLAN.md`);
-  const taskRows = getSliceTasks(milestoneId, sliceId).filter((task) => task.status !== "skipped");
-  if (!sliceRow || sliceRow.status === "skipped" || taskRows.length === 0) {
-    removeOwnedPlanProjection(basePath, planPath);
-    return;
-  }
-
-  const content = renderPlanContent(sliceRow, taskRows);
-  atomicWriteSync(planPath, content);
 }
 
 // ─── ROADMAP.md Projection ───────────────────────────────────────────────
