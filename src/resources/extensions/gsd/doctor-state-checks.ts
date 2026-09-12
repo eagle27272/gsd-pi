@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { loadFile, parseSummary, saveFile, parseTaskPlanMustHaves, countMustHavesMentionedInSummary } from "./files.js";
 import { getMilestone, getMilestoneSlices, getSliceTasks } from "./gsd-db.js";
-import { resolveMilestoneFile, resolveMilestonePath, resolveSliceFile, resolveSlicePath, resolveTaskFile, resolveTasksDir, legacyMilestonesDir, relMilestoneFile, relSliceFile, relTaskFile, relSlicePath, relGsdRootFile, resolveGsdRootFile, relMilestonePath } from "./paths.js";
+import { resolveMilestoneFile, resolveMilestonePath, resolveSliceFile, resolveSlicePath, resolveTaskFile, resolveTasksDir, relMilestoneFile, relSliceFile, relTaskFile, relSlicePath, relGsdRootFile, resolveGsdRootFile, relMilestonePath } from "./paths.js";
 import { findMilestoneIds } from "./milestone-ids.js";
 import { deriveState } from "./state.js";
 import { isClosedStatus } from "./status-guards.js";
@@ -338,28 +338,6 @@ export async function checkGsdStateHealth(
       // slices/<SID>/ subdir), which makes tasksDir a single directory shared by
       // every slice in the milestone rather than this slice's own.
       const tasksDirIsShared = !!slicePath && !!milestonePath && slicePath === milestonePath;
-      if (!tasksDir) {
-        // Pending slices haven't been planned yet — tasks/ is created on demand.
-        // Skipped slices may legitimately never create tasks/.
-        if (slice.pending || slice.skipped) continue;
-        // Flat-phase: tasks are embedded in plan files; no tasks/ subdir expected.
-        if (!existsSync(legacyMilestonesDir(basePath))) continue;
-        issues.push({
-          severity: slice.done ? "warning" : "error",
-          code: "missing_tasks_dir",
-          scope: "slice",
-          unitId,
-          message: slice.done
-            ? `Missing tasks directory for ${unitId} (slice is complete \u2014 cosmetic only)`
-            : `Missing tasks directory for ${unitId}`,
-          file: relSlicePath(basePath, milestoneId, slice.id),
-          fixable: true,
-        });
-        if (fix) {
-          mkdirSync(join(slicePath, "tasks"), { recursive: true });
-          fixesApplied.push(`created ${join(slicePath, "tasks")}`);
-        }
-      }
 
       // Plan tasks come from the DB (ADR-017): the PLAN projection is display only.
       let plan: { tasks: Array<{ id: string; done: boolean; title: string; estimate?: string }> } | null = null;

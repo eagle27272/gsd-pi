@@ -123,8 +123,8 @@ function dbProjectionMatches(
 /**
  * Detect sha drift between the marker baseline and current file contents.
  *
- * - Missing marker → no records (the broader /gsd recover flow handles a
- *   cold-start; this handler only fires when we have a baseline to compare).
+ * - Missing marker → no records (this handler only fires when we have a
+ *   baseline to compare; a cold start has nothing to compare against).
  * - Missing file on disk → no record (other handlers cover missing artifacts).
  * - Sha match → no record (gsd-pi's own write or no change).
  * - Sha mismatch → one record per drifted file, scoped to its recorded entities.
@@ -191,7 +191,7 @@ function externalMarkdownEditBlocker(record: ExternalMarkdownEditDrift): string 
     `External modeled edit detected in \`.gsd/${record.projectionPath}\`.`,
     "The database is authoritative, so GSD paused before importing or overwriting this projection.",
     "Recommended: run `/gsd rebuild markdown` to restore the database projection.",
-    "If this edit should replace database state, review it first, then run `/gsd recover` and approve its exact hash through the explicit Preview/Application flow.",
+    "If this edit should replace database state, re-apply it through the owning `/gsd` command — runtime cannot import the edited markdown into the DB.",
   ].join(" ");
 }
 

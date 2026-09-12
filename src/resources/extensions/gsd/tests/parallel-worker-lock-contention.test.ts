@@ -165,9 +165,9 @@ describe("parallel-worker-lock-contention (#2184)", () => {
     mkdirSync(worktreePath, { recursive: true });
 
     // Create the external state directory with a milestone
-    mkdirSync(join(externalGsd, "milestones", "M001"), { recursive: true });
+    mkdirSync(join(externalGsd, "phases", "01-m001"), { recursive: true });
     writeFileSync(
-      join(externalGsd, "milestones", "M001", "M001-ROADMAP.md"),
+      join(externalGsd, "phases", "01-m001", "01-ROADMAP.md"),
       "# Roadmap",
     );
 
@@ -204,11 +204,11 @@ describe("parallel-worker-lock-contention (#2184)", () => {
     const projectRoot = join(base, "project");
     const worktreePath = join(base, "worktree");
 
-    mkdirSync(join(projectRoot, ".gsd", "milestones", "M001"), { recursive: true });
-    mkdirSync(join(worktreePath, ".gsd", "milestones"), { recursive: true });
+    mkdirSync(join(projectRoot, ".gsd", "phases", "01-m001"), { recursive: true });
+    mkdirSync(join(worktreePath, ".gsd", "phases"), { recursive: true });
 
     writeFileSync(
-      join(projectRoot, ".gsd", "milestones", "M001", "M001-ROADMAP.md"),
+      join(projectRoot, ".gsd", "phases", "01-m001", "01-ROADMAP.md"),
       "# Roadmap content",
     );
 
@@ -216,7 +216,7 @@ describe("parallel-worker-lock-contention (#2184)", () => {
       syncProjectRootToWorktree(projectRoot, worktreePath, "M001");
 
       // The roadmap should have been copied
-      const copied = join(worktreePath, ".gsd", "milestones", "M001", "M001-ROADMAP.md");
+      const copied = join(worktreePath, ".gsd", "phases", "01-m001", "01-ROADMAP.md");
       assert.ok(existsSync(copied), "milestone roadmap copied to worktree");
       assert.equal(readFileSync(copied, "utf-8"), "# Roadmap content");
     } finally {

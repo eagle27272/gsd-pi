@@ -146,9 +146,9 @@ test("executeBacktrack writes trigger and regression markers", () => {
   // Create target milestone directory with a content file so it is recognised as
   // a content-bearing legacy milestone by dirIsContentBearingLegacyMilestone
   // (a metadata-only dir would be ignored by resolveMilestonePath).
-  const m003Dir = join(tmp, ".gsd", "milestones", "M003");
+  const m003Dir = join(tmp, ".gsd", "phases", "03-m003");
   mkdirSync(m003Dir, { recursive: true });
-  writeFileSync(join(m003Dir, "M003-CONTEXT.md"), "# M003\n");
+  writeFileSync(join(m003Dir, "03-CONTEXT.md"), "# M003\n");
 
   const targetMid = executeBacktrack(tmp, "M005", {
     id: "CAP-test123",
@@ -170,7 +170,7 @@ test("executeBacktrack writes trigger and regression markers", () => {
   assert.ok(triggerContent.includes("M003"));
 
   // Check regression marker exists on target milestone
-  const regressionPath = join(tmp, ".gsd", "milestones", "M003", "M003-REGRESSION.md");
+  const regressionPath = join(tmp, ".gsd", "phases", "03-m003", "03-REGRESSION.md");
   assert.ok(existsSync(regressionPath));
   const regressionContent = readFileSync(regressionPath, "utf-8");
   assert.ok(regressionContent.includes("M005"));
@@ -182,7 +182,7 @@ test("executeBacktrack writes trigger and regression markers", () => {
 test("readBacktrackTrigger parses trigger file", () => {
   const tmp = makeTempDir("read-bt");
   setupGsdDir(tmp);
-  mkdirSync(join(tmp, ".gsd", "milestones", "M003"), { recursive: true });
+  mkdirSync(join(tmp, ".gsd", "phases", "03-m003"), { recursive: true });
 
   executeBacktrack(tmp, "M005", {
     id: "CAP-abc",

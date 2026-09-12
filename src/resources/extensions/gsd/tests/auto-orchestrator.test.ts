@@ -119,7 +119,7 @@ function makeFixture(opts: FixtureOptions = {}): Fixture {
   const base = mkdtempSync(join(tmpdir(), "gsd-orchestrator-"));
   gitInit(base);
 
-  const milestoneDir = join(base, ".gsd", "milestones", "M001");
+  const milestoneDir = join(base, ".gsd", "phases", "01-m001");
   const sliceDir = join(milestoneDir, "slices", "S01");
   mkdirSync(join(sliceDir, "tasks"), { recursive: true });
 
@@ -406,12 +406,9 @@ test("#1677: advance() blocks an unproven open-task SUMMARY instead of filtering
   const summaryPath = join(
     f.base,
     ".gsd",
-    "milestones",
-    "M001",
-    "slices",
-    "S01",
-    "tasks",
-    "T01-SUMMARY.md",
+    "phases",
+    "01-m001",
+    "S01-T01-SUMMARY.md",
   );
   const summary = "# T01 Summary\n\nUnproven failure-path output.\n";
   writeFileSync(summaryPath, summary);
@@ -636,7 +633,7 @@ test("advance() merges a completed milestone worktree before all-complete stop",
   t.after(() => f.cleanup());
 
   insertAssessment({
-    path: "milestones/M001/M001-VALIDATION.md",
+    path: "phases/01-m001/01-VALIDATION.md",
     milestoneId: "M001",
     status: "pass",
     scope: "milestone-validation",
@@ -653,8 +650,8 @@ test("advance() merges a completed milestone worktree before all-complete stop",
   const worktreePath = join(f.base, ".gsd", "worktrees", "M001");
   mkdirSync(join(f.base, ".gsd", "worktrees"), { recursive: true });
   execFileSync("git", ["worktree", "add", "-b", "milestone/M001", worktreePath], { cwd: f.base, stdio: "ignore" });
-  mkdirSync(join(worktreePath, ".gsd", "milestones", "M001"), { recursive: true });
-  writeFileSync(join(worktreePath, ".gsd", "milestones", "M001", "M001-SUMMARY.md"), "# Milestone Summary\n");
+  mkdirSync(join(worktreePath, ".gsd", "phases", "01-m001"), { recursive: true });
+  writeFileSync(join(worktreePath, ".gsd", "phases", "01-m001", "01-SUMMARY.md"), "# Milestone Summary\n");
   f.session.basePath = worktreePath;
   f.session.originalBasePath = f.base;
   f.session.currentMilestoneId = "M001";

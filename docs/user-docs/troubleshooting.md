@@ -204,17 +204,16 @@ Stop the process through its terminal or service manager when possible. Use `kil
 - Close apps that might hold file locks (editors, shells in old worktree paths, antivirus/indexers).
 - Retry the command after a short delay.
 
-### Startup fails during flat-phase migration
+### Startup refuses a pre-flat-phase `milestones/` layout
 
-**Symptoms:** GSD exits during startup with a message like `flat-phase migration failed` or `flat-phase migration required but the workflow database could not be opened`.
+**Symptoms:** GSD exits during startup with `This project uses the pre-flat-phase milestones/<MID>/ layout.`, the offending directory, and a note that support for migrating it was removed.
 
-**Cause:** The project still has the legacy nested `.gsd/milestones/` layout. On startup, GSD must migrate it to the flat `.gsd/phases/` layout before path resolvers and state checks run. Markdown for milestone, slice, and task identities already known to the database is archived in the migration backup and re-rendered from database authority; it is not imported during startup. An unknown or ambiguous identity, a database hierarchy gap, an unavailable database, a backup/rename/delete failure, or an unverifiable flat-phase render stops startup before GSD can continue against mixed or invented state.
+**Cause:** The project still keeps content under the legacy nested `.gsd/milestones/<MID>/` layout. Every path resolver and state check assumes the flat `.gsd/phases/<NN-slug>/` layout, so GSD fails closed rather than run against a layout it cannot resolve. Nothing converts the layout any more — the conversion was removed along with the rest of the migration machinery.
 
 **Fix:**
-- Make sure you are starting GSD from the project root and that `.gsd/gsd.db*`, `.gsd/`, and `.gsd-backups/` are readable and writable on local disk.
-- Close editors, shells, sync tools, antivirus/indexers, or other processes that may be locking `.gsd/milestones/`, `.gsd/milestones.migrating/`, `.gsd/phases/`, or `.gsd-backups/`.
-- If the database is damaged or missing and rendered markdown is the state you intentionally want to import, use `/gsd recover` after database access is restored, then approve its exact Preview hash. It preserves existing rows absent from markdown and retains a verified pre-import backup; see [Migration from v1](./migration.md#post-migration) for the recovery contract.
-- Start GSD again after fixing the underlying issue. The migration retries on the next startup and can resume an interrupted run from `.gsd/milestones.migrating/`; keep `.gsd-backups/migrate-*` snapshots until the project starts successfully and `/gsd doctor` passes.
+- Open the project once with GSD `v1.18.0`, the last release that can convert `.gsd/milestones/` to `.gsd/phases/`, then upgrade again.
+- If the milestone directories are leftovers rather than live state, move them out of `.gsd/` (keep a copy) and restart. The guard only fires on a milestone directory holding files other than `<MID>-META.json`, or a non-empty subdirectory other than `anchors/`.
+- Run `/gsd doctor` after a successful start to confirm the database and its projections agree.
 
 ### `command not found: gsd` after install
 
@@ -404,7 +403,7 @@ In these states GSD does not auto-stash and does not auto-fix; it stops so you c
 
 **What it means:** The canonical database has an `artifacts` row for that path, but the rendered markdown file is missing from disk. In worktree mode, doctor checks both the active worktree-local `.gsd/` projection root and the project `.gsd/` root before reporting the issue, so the error usually means the artifact was deleted, skipped during a failed write, or left dangling by an interrupted migration/rebuild.
 
-**Fix:** If the database is still the source of truth, run `/gsd rebuild markdown` to re-render missing artifact projections from the DB, then rerun `/gsd doctor`. If the file represented work that should still exist but rebuild cannot recreate it, restore the file from git/backups or rerun the GSD workflow that generates that artifact. Use `/gsd recover` and its exact Preview-hash approval only when the database is lost or corrupt and the markdown on disk is the source you intentionally want to import; it is not the normal fix for a dangling artifact reference. See [Migration from v1](./migration.md#post-migration) for the recovery contract.
+**Fix:** If the database is still the source of truth, run `/gsd rebuild markdown` to re-render missing artifact projections from the DB, then rerun `/gsd doctor`. If the file represented work that should still exist but rebuild cannot recreate it, restore the file from git/backups or rerun the GSD workflow that generates that artifact. There is no markdown import path: GSD never repopulates the database from the markdown on disk. If the database itself is lost or corrupt, restore it with `/gsd db restore-backup`.
 
 ### `/gsd doctor` reports `artifact_path_escapes_projection_root`
 
@@ -420,7 +419,7 @@ In these states GSD does not auto-stash and does not auto-fix; it stops so you c
 
 **What it means:** Runtime will not silently trust an open-task SUMMARY as task completion. After `gsd_task_complete` stages a result, an `in_progress` task's SUMMARY is considered a current staged projection only when its milestone, slice, and task identity and canonical path match; its disk and artifact content are byte-identical; its stamp-stripped content matches the task's database summary; and the latest Attempt is settled and successful at `verify`, or at `route` after a current non-passing host verdict. A mismatched, disk-only, missing-task, missing-Attempt, or failed-executor SUMMARY remains fail-closed and produces this diagnostic.
 
-**Fix:** Review the divergent SUMMARY, then run `/gsd rebuild markdown` to quarantine stale projections and re-render from the authoritative database. Use `/gsd recover` with its exact Preview approval only when markdown should repopulate a lost or corrupt database. Otherwise, repair or rerun the task and rerun `/gsd doctor`.
+**Fix:** Review the divergent SUMMARY, then run `/gsd rebuild markdown` to quarantine stale projections and re-render from the authoritative database. Markdown never repopulates the database, so if the database is the damaged side, restore it with `/gsd db restore-backup`. Otherwise, repair or rerun the task and rerun `/gsd doctor`.
 
 ### `/gsd doctor` reports `artifact_user_content_missing`
 
@@ -621,18 +620,18 @@ rm .gsd/routing-history.json
 
 Doctor checks the authoritative database, refreshes `STATE.md` from derived database state, and fixes detected projection or runtime-file inconsistencies.
 
-### Recover database hierarchy from markdown
+### Recover a missing or damaged database
 
-Use this only when the database is missing, damaged, or known to be stale but the rendered milestone, slice, and task markdown on disk is the best available source:
+The database is the sole authority. There is no markdown import path: GSD never rebuilds database hierarchy from the rendered milestone, slice, and task markdown on disk, at startup or on demand, and worktree markdown is never synced back as authoritative state.
+
+When the database is missing or damaged:
 
 ```
-/gsd recover
-# Then re-run with the exact --preview=<sha256> printed by the command.
+/gsd doctor
+/gsd db restore-backup --list
 ```
 
-`/gsd recover` prints a sealed legacy Preview; its `--preview=<sha256>` follow-up applies that unchanged preview through a verified, backed-up Import Application and preserves database rows absent from markdown. It then assesses whether the retained backup may still be restored or whether later canonical work requires Forward Repair. Follow the exact evidence-bound action printed by the command; see [Migration from v1](./migration.md#post-migration) for the authoritative recovery contract. Normal runtime does not silently import markdown projections, and worktree markdown is not synced back as authoritative state.
-
-For non-TTY environments (CI, cron, scripted automation), `gsd headless recover` has the same semantics without an interactive prompt. See the [commands reference](./commands.md#gsd-headless-recover) for evidence-bound restore and Forward Repair flags.
+`/gsd doctor` diagnoses what is wrong first. `/gsd db restore-backup` lists the verified `gsd.db.backup-v*` snapshots taken before schema upgrades and restores one against an explicit `--consent` token; the restore is destructive, so read its preview before approving. If no backup applies, recover the database file from your own backups or replay the work through the ordinary planning commands.
 
 ## Getting Help
 
@@ -677,7 +676,7 @@ For non-TTY environments (CI, cron, scripted automation), `gsd headless recover`
 
 **Cause:** The SQLite database was not initialized or could not be opened. Runtime state derivation will not silently fall back to markdown projections.
 
-**Fix:** Upgrade to the latest version, then run a GSD command from the project root to initialize or open the database. Use `/gsd inspect` for database diagnostics. If the database was lost or corrupted and markdown artifacts are the state you intentionally want to import, run `/gsd recover` after GSD has opened the database and approve its exact Preview hash. Follow its verified backup assessment and exact evidence-bound recovery action; see [Migration from v1](./migration.md#post-migration).
+**Fix:** Upgrade to the latest version, then run a GSD command from the project root to initialize or open the database. Use `/gsd inspect` for database diagnostics. Markdown artifacts are never imported back into the database, so if it was lost or corrupted, diagnose with `/gsd doctor` and restore a verified snapshot with `/gsd db restore-backup`.
 
 ## Verification Issues
 

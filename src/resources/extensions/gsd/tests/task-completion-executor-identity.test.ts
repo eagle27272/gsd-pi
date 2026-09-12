@@ -187,18 +187,6 @@ function registeredTools(): RegisteredTool[] {
   return tools;
 }
 
-function registeredCompletionTools(): RegisteredTool[] {
-  return registeredTools().filter(
-    (tool) => tool.name === "gsd_task_complete" || tool.name === "gsd_complete_task",
-  );
-}
-
-function registeredReopenTools(): RegisteredTool[] {
-  return registeredTools().filter(
-    (tool) => tool.name === "gsd_task_reopen" || tool.name === "gsd_reopen_task",
-  );
-}
-
 function registeredTaskRecoveryResumeTool(): RegisteredTool {
   const tool = registeredTools().find((candidate) => candidate.name === "gsd_task_recovery_resume");
   assert.ok(tool);
@@ -256,7 +244,6 @@ function writeEscalationPreference(basePath: string, enabled: boolean): void {
 afterEach(() => {
   closeDatabase();
   clearGSDPreferencesCache();
-  delete process.env.GSD_ADVERTISE_TOOL_ALIASES;
   for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
   tempDirs.clear();
 });
@@ -373,20 +360,16 @@ test("private completion identity cannot fall back when the canonical lifecycle 
   assert.equal(row("SELECT COUNT(*) AS count FROM workflow_attempt_results").count, 0);
 });
 
-test("Pi canonical and alias completion calls converge on one private staged Result", async () => {
-  process.env.GSD_ADVERTISE_TOOL_ALIASES = "1";
+test("Pi canonical completion calls replay onto one private staged Result", async () => {
   const basePath = createBase();
   const attemptId = claimCanonicalAttempt(basePath);
-  const tools = registeredCompletionTools();
+  const tools = registeredTools();
   const canonical = tools.find((tool) => tool.name === "gsd_task_complete");
-  const alias = tools.find((tool) => tool.name === "gsd_complete_task");
   assert.ok(canonical);
-  assert.ok(alias);
   assert.equal(canonical.parameters.properties?.["idempotencyKey"], undefined);
-  assert.equal(alias.parameters.properties?.["idempotencyKey"], undefined);
 
   const first = await canonical.execute("completion-call-42", completionParams(), undefined, undefined, { cwd: basePath });
-  const replay = await alias.execute("completion-call-42", completionParams(), undefined, undefined, { cwd: basePath });
+  const replay = await canonical.execute("completion-call-42", completionParams(), undefined, undefined, { cwd: basePath });
 
   assert.deepEqual(replay, first);
   assert.equal(first.isError, undefined);
@@ -408,15 +391,12 @@ test("Pi canonical and alias completion calls converge on one private staged Res
   assert.equal(row("SELECT status FROM tasks WHERE id = 'T01'").status, "in_progress");
 });
 
-test("Pi canonical and alias reopen calls converge without replaying projection cleanup", async () => {
-  process.env.GSD_ADVERTISE_TOOL_ALIASES = "1";
+test("Pi canonical reopen calls replay without re-running projection cleanup", async () => {
   const basePath = createBase();
   completeCanonicalFixture();
-  const tools = registeredReopenTools();
+  const tools = registeredTools();
   const canonical = tools.find((tool) => tool.name === "gsd_task_reopen");
-  const alias = tools.find((tool) => tool.name === "gsd_reopen_task");
   assert.ok(canonical);
-  assert.ok(alias);
 
   const params = {
     milestoneId: "M001",
@@ -425,9 +405,9 @@ test("Pi canonical and alias reopen calls converge without replaying projection 
     reason: "new verification found a regression",
   };
   const first = await canonical.execute("reopen-call-42", params, undefined, undefined, { cwd: basePath });
-  const summaryPath = join(basePath, ".gsd", "phases", "01-test", "01-01-T01-SUMMARY.md");
+  const summaryPath = join(basePath, ".gsd", "phases", "01-test", "S01-T01-SUMMARY.md");
   writeFileSync(summaryPath, "# Newer summary\n");
-  const replay = await alias.execute("reopen-call-42", params, undefined, undefined, { cwd: basePath });
+  const replay = await canonical.execute("reopen-call-42", params, undefined, undefined, { cwd: basePath });
 
   assert.deepEqual(replay, first);
   assert.ok(existsSync(summaryPath), "replay must not delete a projection created after the original reopen");

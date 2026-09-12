@@ -58,7 +58,7 @@ function mkPi(cap: MockCapture, opts: { sendThrows?: boolean } = {}): any {
 
 function mkBase(): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-4573-"));
-  const mDir = join(base, ".gsd", "milestones", "M001");
+  const mDir = join(base, ".gsd", "phases", "01-m001");
   mkdirSync(mDir, { recursive: true });
   // Seed one content file so the dir is recognised as a content-bearing legacy
   // milestone by dirIsContentBearingLegacyMilestone. Tests that check for
@@ -168,7 +168,7 @@ describe("#4573 maybeHandleReadyPhraseWithoutFiles", () => {
   test("files present → no nudge (happy path already fired)", () => {
     const base = mkBase();
     try {
-      writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md"), "# ctx");
+      writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-CONTEXT.md"), "# ctx");
       const cap = mkCapture();
       setPendingAutoStart(base, {
         basePath: base,
@@ -204,7 +204,7 @@ describe("#4573 maybeHandleReadyPhraseWithoutFiles", () => {
     // step (a), so resolveFile cannot see the newly written CONTEXT/ROADMAP.
     const base = mkBase();
     try {
-      const mDir = join(base, ".gsd", "milestones", "M001");
+      const mDir = join(base, ".gsd", "phases", "01-m001");
 
       // (a) Prime the dirListCache for M001/ with only M001-RESEARCH.md.
       //     mkBase() already created M001-RESEARCH.md; this first resolver
@@ -264,8 +264,8 @@ describe("#4573 maybeHandleReadyPhraseWithoutFiles", () => {
   test("legacy unprefixed files present → no nudge", () => {
     const base = mkBase();
     try {
-      writeFileSync(join(base, ".gsd", "milestones", "M001", "CONTEXT.md"), "# ctx");
-      writeFileSync(join(base, ".gsd", "milestones", "M001", "ROADMAP.md"), "# roadmap");
+      writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-CONTEXT.md"), "# ctx");
+      writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md"), "# roadmap");
       const cap = mkCapture();
       setPendingAutoStart(base, {
         basePath: base,

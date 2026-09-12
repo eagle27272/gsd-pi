@@ -394,7 +394,7 @@ const runtimeFilesCleanedUpRepos = new Set<string>();
 /**
  * Path to the milestone integration-branch metadata file.
  * Format: .gsd/<MID>-META.json  (deliberately OUTSIDE milestones/<MID>/ so it
- * cannot poison isLegacyMilestonesLayout — see ADR-045).
+ * never creates a pre-flat-phase milestones/ tree — see ADR-045).
  */
 export function milestoneMetaPath(basePath: string, milestoneId: string): string {
   return join(gsdRoot(basePath), `${milestoneId}-META.json`);

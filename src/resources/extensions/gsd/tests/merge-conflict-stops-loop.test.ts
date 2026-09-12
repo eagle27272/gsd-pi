@@ -146,12 +146,12 @@ describe("WorktreeResolver.mergeAndExit re-throws MergeConflictError (#2330)", (
   beforeEach(() => {
     baseDir = mkdtempSync(join(tmpdir(), "merge-conflict-stops-loop-"));
     // Fake out a milestone directory so mergeAndExit reaches mergeMilestoneToMain.
-    mkdirSync(join(baseDir, ".gsd", "milestones", "M001"), { recursive: true });
+    mkdirSync(join(baseDir, ".gsd", "phases", "01-m001"), { recursive: true });
     // ADR-016 phase 2 / C1 (#5624): worktree-lifecycle.ts now calls
     // node:fs.readFileSync directly (the dep was retired), so the roadmap
     // file must exist on disk for the test to reach mergeMilestoneToMain.
     writeFileSync(
-      join(baseDir, ".gsd", "milestones", "M001", "M001-ROADMAP.md"),
+      join(baseDir, ".gsd", "phases", "01-m001", "01-ROADMAP.md"),
       "# M001\n",
     );
     // ADR-016 phase 2 / C3 (#5626): `getIsolationMode` is also inlined.
@@ -180,7 +180,7 @@ describe("WorktreeResolver.mergeAndExit re-throws MergeConflictError (#2330)", (
 
   test("propagates MergeConflictError with conflicted file list", () => {
     const conflicted = ["src/feature.ts", "README.md"];
-    const roadmapPath = join(baseDir, ".gsd", "milestones", "M001", "M001-ROADMAP.md");
+    const roadmapPath = join(baseDir, ".gsd", "phases", "01-m001", "01-ROADMAP.md");
     const deps = makeDeps({
       resolveMilestoneFile: (_base: string, _mid: string, type: string) =>
         type === "ROADMAP" ? roadmapPath : null,
@@ -210,7 +210,7 @@ describe("WorktreeResolver.mergeAndExit re-throws MergeConflictError (#2330)", (
   });
 
   test("propagates non-conflict errors too (#4380 — never swallow silently)", () => {
-    const roadmapPath = join(baseDir, ".gsd", "milestones", "M001", "M001-ROADMAP.md");
+    const roadmapPath = join(baseDir, ".gsd", "phases", "01-m001", "01-ROADMAP.md");
     class FakePermError extends Error {}
     const deps = makeDeps({
       resolveMilestoneFile: (_base: string, _mid: string, type: string) =>
@@ -237,7 +237,7 @@ describe("WorktreeResolver.mergeAndExit re-throws MergeConflictError (#2330)", (
   });
 
   test("successful merge does not throw", () => {
-    const roadmapPath = join(baseDir, ".gsd", "milestones", "M001", "M001-ROADMAP.md");
+    const roadmapPath = join(baseDir, ".gsd", "phases", "01-m001", "01-ROADMAP.md");
     const deps = makeDeps({
       resolveMilestoneFile: (_base: string, _mid: string, type: string) =>
         type === "ROADMAP" ? roadmapPath : null,

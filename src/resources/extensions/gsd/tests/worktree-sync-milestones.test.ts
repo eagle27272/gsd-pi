@@ -23,7 +23,7 @@
  *   - syncWorktreeStateBack skips non-standard milestone projection dir names
  */
 
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -32,13 +32,13 @@ import {
   syncProjectRootToWorktree,
   syncWorktreeStateBack,
 } from '../auto-worktree-sync.ts';
-import { describe, test } from 'node:test';
+import { after, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 
 function createBase(name: string): string {
   const base = mkdtempSync(join(tmpdir(), `gsd-wt-sync-${name}-`));
-  mkdirSync(join(base, '.gsd', 'milestones'), { recursive: true });
+  mkdirSync(join(base, '.gsd', 'phases'), { recursive: true });
   return base;
 }
 
@@ -55,19 +55,19 @@ describe('worktree-sync-milestones', async () => {
     const wtBase = createBase('wt');
 
     try {
-      const m001Dir = join(mainBase, '.gsd', 'milestones', 'M001');
+      const m001Dir = join(mainBase, '.gsd', 'phases', '01-m001');
       mkdirSync(m001Dir, { recursive: true });
-      writeFileSync(join(m001Dir, 'M001-CONTEXT.md'), '# M001\nContext.');
-      writeFileSync(join(m001Dir, 'M001-ROADMAP.md'), '# Roadmap');
+      writeFileSync(join(m001Dir, '01-CONTEXT.md'), '# M001\nContext.');
+      writeFileSync(join(m001Dir, '01-ROADMAP.md'), '# Roadmap');
 
       // Worktree has no M001
-      assert.ok(!existsSync(join(wtBase, '.gsd', 'milestones', 'M001')), 'M001 missing before sync');
+      assert.ok(!existsSync(join(wtBase, '.gsd', 'phases', '01-m001')), 'M001 missing before sync');
 
       syncProjectRootToWorktree(mainBase, wtBase, 'M001');
 
-      assert.ok(existsSync(join(wtBase, '.gsd', 'milestones', 'M001')), '#1311: M001 synced to worktree');
-      assert.ok(existsSync(join(wtBase, '.gsd', 'milestones', 'M001', 'M001-CONTEXT.md')), 'M001 CONTEXT synced');
-      assert.ok(existsSync(join(wtBase, '.gsd', 'milestones', 'M001', 'M001-ROADMAP.md')), 'M001 ROADMAP synced');
+      assert.ok(existsSync(join(wtBase, '.gsd', 'phases', '01-m001')), '#1311: M001 synced to worktree');
+      assert.ok(existsSync(join(wtBase, '.gsd', 'phases', '01-m001', '01-CONTEXT.md')), 'M001 CONTEXT synced');
+      assert.ok(existsSync(join(wtBase, '.gsd', 'phases', '01-m001', '01-ROADMAP.md')), 'M001 ROADMAP synced');
     } finally {
       cleanup(mainBase);
       cleanup(wtBase);
@@ -81,22 +81,21 @@ describe('worktree-sync-milestones', async () => {
     const wtBase = createBase('wt');
 
     try {
-      const m001Dir = join(mainBase, '.gsd', 'milestones', 'M001');
-      mkdirSync(join(m001Dir, 'slices', 'S01'), { recursive: true });
-      mkdirSync(join(m001Dir, 'slices', 'S02'), { recursive: true });
-      writeFileSync(join(m001Dir, 'M001-ROADMAP.md'), '# Roadmap');
-      writeFileSync(join(m001Dir, 'slices', 'S01', 'S01-PLAN.md'), '# S01 Plan');
-      writeFileSync(join(m001Dir, 'slices', 'S02', 'S02-PLAN.md'), '# S02 Plan');
+      const m001Dir = join(mainBase, '.gsd', 'phases', '01-m001');
+      mkdirSync(m001Dir, { recursive: true });
+      writeFileSync(join(m001Dir, '01-ROADMAP.md'), '# Roadmap');
+      writeFileSync(join(m001Dir, '01-01-PLAN.md'), '# S01 Plan');
+      writeFileSync(join(m001Dir, '01-02-PLAN.md'), '# S02 Plan');
 
       // Worktree only has S01
-      const wtM001Dir = join(wtBase, '.gsd', 'milestones', 'M001');
-      mkdirSync(join(wtM001Dir, 'slices', 'S01'), { recursive: true });
-      writeFileSync(join(wtM001Dir, 'slices', 'S01', 'S01-PLAN.md'), '# S01 Plan');
+      const wtM001Dir = join(wtBase, '.gsd', 'phases', '01-m001');
+      mkdirSync(wtM001Dir, { recursive: true });
+      writeFileSync(join(wtM001Dir, '01-01-PLAN.md'), '# S01 Plan');
 
       syncProjectRootToWorktree(mainBase, wtBase, 'M001');
 
-      assert.ok(existsSync(join(wtBase, '.gsd', 'milestones', 'M001', 'slices', 'S02')), '#1311: S02 synced');
-      assert.ok(existsSync(join(wtBase, '.gsd', 'milestones', 'M001', 'slices', 'S02', 'S02-PLAN.md')), 'S02 PLAN synced');
+      assert.ok(existsSync(join(wtBase, '.gsd', 'phases', '01-m001')), '#1311: S02 synced');
+      assert.ok(existsSync(join(wtBase, '.gsd', 'phases', '01-m001', '01-02-PLAN.md')), 'S02 PLAN synced');
     } finally {
       cleanup(mainBase);
       cleanup(wtBase);
@@ -110,9 +109,9 @@ describe('worktree-sync-milestones', async () => {
     const wtBase = createBase('wt');
 
     try {
-      const m001Dir = join(mainBase, '.gsd', 'milestones', 'M001');
+      const m001Dir = join(mainBase, '.gsd', 'phases', '01-m001');
       mkdirSync(m001Dir, { recursive: true });
-      writeFileSync(join(m001Dir, 'M001-ROADMAP.md'), '# Roadmap');
+      writeFileSync(join(m001Dir, '01-ROADMAP.md'), '# Roadmap');
 
       // Worktree has an empty (0-byte) gsd.db — stale/corrupt
       writeFileSync(join(wtBase, '.gsd', 'gsd.db'), '');
@@ -134,9 +133,9 @@ describe('worktree-sync-milestones', async () => {
     const wtBase = createBase('wt');
 
     try {
-      const m001Dir = join(mainBase, '.gsd', 'milestones', 'M001');
+      const m001Dir = join(mainBase, '.gsd', 'phases', '01-m001');
       mkdirSync(m001Dir, { recursive: true });
-      writeFileSync(join(m001Dir, 'M001-ROADMAP.md'), '# Roadmap');
+      writeFileSync(join(m001Dir, '01-ROADMAP.md'), '# Roadmap');
 
       // Worktree has a populated gsd.db (e.g. from gsd-migrate on respawn)
       writeFileSync(join(wtBase, '.gsd', 'gsd.db'), 'migrated-db-content');
@@ -158,19 +157,19 @@ describe('worktree-sync-milestones', async () => {
     const wtBase = createBase('wt');
 
     try {
-      const mainSliceDir = join(mainBase, '.gsd', 'milestones', 'M001', 'slices', 'S01');
-      mkdirSync(join(mainSliceDir, 'S01-SUMMARY.md'), { recursive: true });
-      mkdirSync(join(mainSliceDir, 'S01-ASSESSMENT.md'), { recursive: true });
+      const mainSliceDir = join(mainBase, '.gsd', 'phases', '01-m001');
+      mkdirSync(join(mainSliceDir, '01-01-SUMMARY.md'), { recursive: true });
+      mkdirSync(join(mainSliceDir, '01-01-ASSESSMENT.md'), { recursive: true });
 
-      const wtSliceDir = join(wtBase, '.gsd', 'milestones', 'M001', 'slices', 'S01');
+      const wtSliceDir = join(wtBase, '.gsd', 'phases', '01-m001');
       mkdirSync(wtSliceDir, { recursive: true });
-      writeFileSync(join(wtSliceDir, 'S01-SUMMARY.md'), '# Valid summary\n');
-      writeFileSync(join(wtSliceDir, 'S01-ASSESSMENT.md'), '---\nverdict: pass\n---\n# Valid assessment\n');
+      writeFileSync(join(wtSliceDir, '01-01-SUMMARY.md'), '# Valid summary\n');
+      writeFileSync(join(wtSliceDir, '01-01-ASSESSMENT.md'), '---\nverdict: pass\n---\n# Valid assessment\n');
 
       syncProjectRootToWorktree(mainBase, wtBase, 'M001');
 
-      const summaryPath = join(wtSliceDir, 'S01-SUMMARY.md');
-      const assessmentPath = join(wtSliceDir, 'S01-ASSESSMENT.md');
+      const summaryPath = join(wtSliceDir, '01-01-SUMMARY.md');
+      const assessmentPath = join(wtSliceDir, '01-01-ASSESSMENT.md');
       assert.ok(statSync(summaryPath).isFile(), 'existing SUMMARY.md stays a file');
       assert.ok(statSync(assessmentPath).isFile(), 'existing ASSESSMENT.md stays a file');
       assert.equal(readFileSync(summaryPath, 'utf-8'), '# Valid summary\n');
@@ -226,19 +225,19 @@ describe('worktree-sync-milestones', async () => {
       mkdirSync(join(wtBase, '.gsd'), { recursive: true });
 
       // Main repo has M001
-      const m001Dir = join(mainBase, '.gsd', 'milestones', 'M001');
+      const m001Dir = join(mainBase, '.gsd', 'phases', '01-m001');
       mkdirSync(m001Dir, { recursive: true });
-      writeFileSync(join(m001Dir, 'M001-CONTEXT.md'), '# M001 Context');
-      writeFileSync(join(m001Dir, 'M001-ROADMAP.md'), '# M001 Roadmap');
+      writeFileSync(join(m001Dir, '01-CONTEXT.md'), '# M001 Context');
+      writeFileSync(join(m001Dir, '01-ROADMAP.md'), '# M001 Roadmap');
 
-      assert.ok(!existsSync(join(wtBase, '.gsd', 'milestones')), 'milestones/ missing before sync');
+      assert.ok(!existsSync(join(wtBase, '.gsd', 'phases')), 'milestones/ missing before sync');
 
       const result = syncGsdStateToWorktree(mainBase, wtBase);
 
-      assert.ok(existsSync(join(wtBase, '.gsd', 'milestones')), 'milestones/ created in worktree');
-      assert.ok(existsSync(join(wtBase, '.gsd', 'milestones', 'M001')), 'M001 synced to worktree');
-      assert.ok(existsSync(join(wtBase, '.gsd', 'milestones', 'M001', 'M001-CONTEXT.md')), 'M001 CONTEXT synced');
-      assert.ok(existsSync(join(wtBase, '.gsd', 'milestones', 'M001', 'M001-ROADMAP.md')), 'M001 ROADMAP synced');
+      assert.ok(existsSync(join(wtBase, '.gsd', 'phases')), 'milestones/ created in worktree');
+      assert.ok(existsSync(join(wtBase, '.gsd', 'phases', '01-m001')), 'M001 synced to worktree');
+      assert.ok(existsSync(join(wtBase, '.gsd', 'phases', '01-m001', '01-CONTEXT.md')), 'M001 CONTEXT synced');
+      assert.ok(existsSync(join(wtBase, '.gsd', 'phases', '01-m001', '01-ROADMAP.md')), 'M001 ROADMAP synced');
       assert.ok(result.synced.length > 0, 'sync reported files');
     } finally {
       cleanup(mainBase);
@@ -315,23 +314,23 @@ describe('worktree-sync-milestones', async () => {
     try {
       // Build worktree milestone structure with slice-level and task-level files
       // Use M002 as the milestone to sync, M001 as the "current" being merged (skipped)
-      const wtSliceDir = join(wtBase, '.gsd', 'milestones', 'M002', 'slices', 'S01');
+      const wtSliceDir = join(wtBase, '.gsd', 'phases', '02-m002');
       const wtTasksDir = join(wtSliceDir, 'tasks');
       mkdirSync(wtTasksDir, { recursive: true });
-      writeFileSync(join(wtSliceDir, 'S01-SUMMARY.md'), '# S01 Summary');
+      writeFileSync(join(wtSliceDir, '01-01-SUMMARY.md'), '# S01 Summary');
       writeFileSync(join(wtTasksDir, 'T01-SUMMARY.md'), '# T01 Summary');
       writeFileSync(join(wtTasksDir, 'T02-SUMMARY.md'), '# T02 Summary');
 
       // Main project root starts with only the milestone directory (no slices yet)
-      mkdirSync(join(mainBase, '.gsd', 'milestones', 'M002'), { recursive: true });
+      mkdirSync(join(mainBase, '.gsd', 'phases', '02-m002'), { recursive: true });
 
       const { synced } = syncWorktreeStateBack(mainBase, wtBase, 'M001');
 
-      const mainSliceDir = join(mainBase, '.gsd', 'milestones', 'M002', 'slices', 'S01');
+      const mainSliceDir = join(mainBase, '.gsd', 'phases', '02-m002');
       const mainTasksDir = join(mainSliceDir, 'tasks');
 
       assert.ok(
-        !existsSync(join(mainSliceDir, 'S01-SUMMARY.md')),
+        !existsSync(join(mainSliceDir, '01-01-SUMMARY.md')),
         'slice SUMMARY projection is not copied to project root',
       );
       assert.ok(
@@ -359,8 +358,8 @@ describe('worktree-sync-milestones', async () => {
     const wtBase = mkdtempSync(join(tmpdir(), 'gsd-wt-back-root-wt-'));
 
     try {
-      mkdirSync(join(mainBase, '.gsd', 'milestones', 'M001'), { recursive: true });
-      mkdirSync(join(wtBase, '.gsd', 'milestones', 'M001'), { recursive: true });
+      mkdirSync(join(mainBase, '.gsd', 'phases', '01-m001'), { recursive: true });
+      mkdirSync(join(wtBase, '.gsd', 'phases', '01-m001'), { recursive: true });
 
       // Main has original REQUIREMENTS and PROJECT
       writeFileSync(join(mainBase, '.gsd', 'REQUIREMENTS.md'), '# Requirements\n## R001');
@@ -406,63 +405,93 @@ describe('worktree-sync-milestones', async () => {
   }
 
   // ─── 10. syncWorktreeStateBack does not copy milestone directories ─────
-  console.log('\n=== 10. syncWorktreeStateBack does not copy milestone dirs ===');
-  {
+  //
+  // Each assertion below is its own case so a regression reports every
+  // invariant it breaks rather than stopping at the first. The worktree
+  // fixture uses canonical flat-phase filenames on purpose: when the fixture
+  // names and the asserted names diverge, `!existsSync(...)` holds whether or
+  // not the phases copy-back runs, and the case defends nothing.
+  describe('10. syncWorktreeStateBack does not copy phase dirs back to the project root', () => {
     const mainBase = mkdtempSync(join(tmpdir(), 'gsd-wt-back-all-main-'));
     const wtBase = mkdtempSync(join(tmpdir(), 'gsd-wt-back-all-wt-'));
-
-    try {
-      mkdirSync(join(mainBase, '.gsd', 'milestones'), { recursive: true });
-      mkdirSync(join(wtBase, '.gsd', 'milestones'), { recursive: true });
-
-      // Worktree has M001 (current) AND M002 (next, created by complete-milestone)
-      const wtM001Dir = join(wtBase, '.gsd', 'milestones', 'M001');
-      mkdirSync(wtM001Dir, { recursive: true });
-      writeFileSync(join(wtM001Dir, 'M001-SUMMARY.md'), '# M001 Summary');
-
-      const wtM002Dir = join(wtBase, '.gsd', 'milestones', 'M002-abc123');
-      mkdirSync(wtM002Dir, { recursive: true });
-      writeFileSync(join(wtM002Dir, 'M002-abc123-CONTEXT.md'), '# M002 Context');
-      writeFileSync(join(wtM002Dir, 'M002-abc123-ROADMAP.md'), '# M002 Roadmap');
-
-      // Main has neither
-      assert.ok(
-        !existsSync(join(mainBase, '.gsd', 'milestones', 'M001')),
-        'M001 missing in main before sync',
-      );
-      assert.ok(
-        !existsSync(join(mainBase, '.gsd', 'milestones', 'M002-abc123')),
-        'M002 missing in main before sync',
-      );
-
-      // Sync with milestoneId = M001 (the current milestone being merged — skipped)
-      const { synced } = syncWorktreeStateBack(mainBase, wtBase, 'M001');
-
-      // M001 should be SKIPPED (current milestone being merged — #3641)
-      assert.ok(
-        !existsSync(join(mainBase, '.gsd', 'milestones', 'M001', 'M001-SUMMARY.md')),
-        'M001 SUMMARY NOT synced (current milestone skipped to prevent merge conflicts)',
-      );
-
-      // M002 should not be synced either; worktree projections are not authoritative.
-      assert.ok(
-        !existsSync(join(mainBase, '.gsd', 'milestones', 'M002-abc123', 'M002-abc123-CONTEXT.md')),
-        'M002 CONTEXT projection is not copied to main',
-      );
-      assert.ok(
-        !existsSync(join(mainBase, '.gsd', 'milestones', 'M002-abc123', 'M002-abc123-ROADMAP.md')),
-        'M002 ROADMAP projection is not copied to main',
-      );
-
-      assert.ok(
-        !synced.some((p) => p.includes('M002-abc123')),
-        'M002 does not appear in synced list',
-      );
-    } finally {
+    after(() => {
       rmSync(mainBase, { recursive: true, force: true });
       rmSync(wtBase, { recursive: true, force: true });
-    }
-  }
+    });
+
+    const mainPhases = join(mainBase, '.gsd', 'phases');
+    mkdirSync(mainPhases, { recursive: true });
+    mkdirSync(join(wtBase, '.gsd', 'phases'), { recursive: true });
+
+    // Worktree has M001 (current) AND M002 (next, created by complete-milestone)
+    const wtM001Dir = join(wtBase, '.gsd', 'phases', '01-m001');
+    mkdirSync(wtM001Dir, { recursive: true });
+    writeFileSync(join(wtM001Dir, '01-SUMMARY.md'), '# M001 Summary');
+
+    const wtM002Dir = join(wtBase, '.gsd', 'phases', '02-m002-abc123');
+    mkdirSync(wtM002Dir, { recursive: true });
+    writeFileSync(join(wtM002Dir, '02-CONTEXT.md'), '# M002 Context');
+    writeFileSync(join(wtM002Dir, '02-ROADMAP.md'), '# M002 Roadmap');
+
+    // Fixture precondition — main starts with an empty phases/ tree.
+    assert.deepEqual(readdirSync(mainPhases), [], 'main phases/ is empty before sync');
+
+    // Sync with milestoneId = M001 (the current milestone being merged — skipped)
+    const { synced } = syncWorktreeStateBack(mainBase, wtBase, 'M001');
+
+    test('project-root phases/ tree gains no entries at all', () => {
+      assert.deepEqual(
+        readdirSync(mainPhases).sort(),
+        [],
+        'no worktree phase dir is materialised in the project root',
+      );
+    });
+
+    test('current milestone phase dir is not created in the project root', () => {
+      assert.equal(
+        existsSync(join(mainPhases, '01-m001')),
+        false,
+        'M001 phase dir NOT created (current milestone skipped to prevent merge conflicts — #3641)',
+      );
+    });
+
+    test('M001 SUMMARY projection is not copied to the project root', () => {
+      assert.equal(
+        existsSync(join(mainPhases, '01-m001', '01-SUMMARY.md')),
+        false,
+        'M001 SUMMARY NOT synced (current milestone skipped to prevent merge conflicts)',
+      );
+    });
+
+    test('next-milestone phase dir is not created in the project root', () => {
+      assert.equal(
+        existsSync(join(mainPhases, '02-m002-abc123')),
+        false,
+        'M002 phase dir NOT created; worktree projections are not authoritative',
+      );
+    });
+
+    test('M002 CONTEXT and ROADMAP projections are not copied to the project root', () => {
+      assert.equal(
+        existsSync(join(mainPhases, '02-m002-abc123', '02-CONTEXT.md')),
+        false,
+        'M002 CONTEXT projection is not copied to main',
+      );
+      assert.equal(
+        existsSync(join(mainPhases, '02-m002-abc123', '02-ROADMAP.md')),
+        false,
+        'M002 ROADMAP projection is not copied to main',
+      );
+    });
+
+    test('no phase-tree entry is advertised in the synced list', () => {
+      assert.deepEqual(
+        synced.filter((p) => /phases|m001|m002/i.test(p)),
+        [],
+        'synced must not report any milestone/phase projection as having crossed the boundary',
+      );
+    });
+  });
 
   // ─── 11. Full M006→M007 transition scenario ───────────────────────────
   console.log('\n=== 11. complete-milestone worktree projections do not overwrite project root ===');
@@ -471,11 +500,11 @@ describe('worktree-sync-milestones', async () => {
     const wtBase = mkdtempSync(join(tmpdir(), 'gsd-wt-transition-wt-'));
 
     try {
-      mkdirSync(join(mainBase, '.gsd', 'milestones'), { recursive: true });
-      mkdirSync(join(wtBase, '.gsd', 'milestones'), { recursive: true });
+      mkdirSync(join(mainBase, '.gsd', 'phases'), { recursive: true });
+      mkdirSync(join(wtBase, '.gsd', 'phases'), { recursive: true });
 
       // Main starts with M006 context + existing REQUIREMENTS
-      const mainM006 = join(mainBase, '.gsd', 'milestones', 'M006-589wvh');
+      const mainM006 = join(mainBase, '.gsd', 'phases', '06-m006-589wvh');
       mkdirSync(mainM006, { recursive: true });
       writeFileSync(join(mainM006, 'M006-589wvh-CONTEXT.md'), '# M006 Context');
       writeFileSync(join(mainBase, '.gsd', 'REQUIREMENTS.md'), '# Requirements\n## R001 through R089');
@@ -486,17 +515,19 @@ describe('worktree-sync-milestones', async () => {
       // - M007 setup (created by complete-milestone for next milestone)
       // - Updated REQUIREMENTS with R090-R094
       // - Updated PROJECT with M007
-      const wtM006 = join(wtBase, '.gsd', 'milestones', 'M006-589wvh');
+      // Canonical flat-phase filenames, so the assertions below name files that
+      // really exist on the worktree side and fail if a copy-back reappears.
+      const wtM006 = join(wtBase, '.gsd', 'phases', '06-m006-589wvh');
       mkdirSync(join(wtM006, 'slices', 'S01'), { recursive: true });
-      writeFileSync(join(wtM006, 'M006-589wvh-CONTEXT.md'), '# M006 Context');
-      writeFileSync(join(wtM006, 'M006-589wvh-SUMMARY.md'), '# M006 Complete');
-      writeFileSync(join(wtM006, 'M006-589wvh-VALIDATION.md'), '# Validated');
-      writeFileSync(join(wtM006, 'slices', 'S01', 'S01-SUMMARY.md'), '# S01 done');
+      writeFileSync(join(wtM006, '06-CONTEXT.md'), '# M006 Context');
+      writeFileSync(join(wtM006, '06-SUMMARY.md'), '# M006 Complete');
+      writeFileSync(join(wtM006, '06-VALIDATION.md'), '# Validated');
+      writeFileSync(join(wtM006, 'slices', 'S01', '01-01-SUMMARY.md'), '# S01 done');
 
-      const wtM007 = join(wtBase, '.gsd', 'milestones', 'M007-wortc8');
+      const wtM007 = join(wtBase, '.gsd', 'phases', '07-m007-wortc8');
       mkdirSync(wtM007, { recursive: true });
-      writeFileSync(join(wtM007, 'M007-wortc8-CONTEXT.md'), '# M007 Enterprise Security');
-      writeFileSync(join(wtM007, 'M007-wortc8-ROADMAP.md'), '# M007 Roadmap\n10 phases');
+      writeFileSync(join(wtM007, '07-CONTEXT.md'), '# M007 Enterprise Security');
+      writeFileSync(join(wtM007, '07-ROADMAP.md'), '# M007 Roadmap\n10 phases');
 
       writeFileSync(join(wtBase, '.gsd', 'REQUIREMENTS.md'), '# Requirements\n## R001-R089\n## R090 — SCIM\n## R091 — WebAuthn');
       writeFileSync(join(wtBase, '.gsd', 'PROJECT.md'), '# Project\nMilestones: M001-M007');
@@ -507,17 +538,17 @@ describe('worktree-sync-milestones', async () => {
       // M006 is the current milestone being merged — it should be SKIPPED (#3641)
       // Its files are already in the milestone branch and would conflict with squash merge.
       assert.ok(
-        !existsSync(join(mainBase, '.gsd', 'milestones', 'M006-589wvh', 'M006-589wvh-SUMMARY.md')),
+        !existsSync(join(mainBase, '.gsd', 'phases', '06-m006-589wvh', '06-SUMMARY.md')),
         'M006 SUMMARY NOT synced (current milestone skipped)',
       );
 
       // Verify M007 worktree projections are not copied back.
       assert.ok(
-        !existsSync(join(mainBase, '.gsd', 'milestones', 'M007-wortc8', 'M007-wortc8-CONTEXT.md')),
+        !existsSync(join(mainBase, '.gsd', 'phases', '07-m007-wortc8', '07-CONTEXT.md')),
         'M007 CONTEXT projection is not copied to main',
       );
       assert.ok(
-        !existsSync(join(mainBase, '.gsd', 'milestones', 'M007-wortc8', 'M007-wortc8-ROADMAP.md')),
+        !existsSync(join(mainBase, '.gsd', 'phases', '07-m007-wortc8', '07-ROADMAP.md')),
         'M007 ROADMAP projection is not copied to main',
       );
 
@@ -546,8 +577,8 @@ describe('worktree-sync-milestones', async () => {
     const wtBase = mkdtempSync(join(tmpdir(), 'gsd-wt-back-noroot-wt-'));
 
     try {
-      mkdirSync(join(mainBase, '.gsd', 'milestones', 'M001'), { recursive: true });
-      mkdirSync(join(wtBase, '.gsd', 'milestones', 'M001'), { recursive: true });
+      mkdirSync(join(mainBase, '.gsd', 'phases', '01-m001'), { recursive: true });
+      mkdirSync(join(wtBase, '.gsd', 'phases', '01-m001'), { recursive: true });
 
       // Main has REQUIREMENTS, worktree does not
       writeFileSync(join(mainBase, '.gsd', 'REQUIREMENTS.md'), '# Original');
@@ -577,8 +608,8 @@ describe('worktree-sync-milestones', async () => {
     const wtBase = mkdtempSync(join(tmpdir(), 'gsd-wt-back-queue-wt-'));
 
     try {
-      mkdirSync(join(mainBase, '.gsd', 'milestones', 'M001'), { recursive: true });
-      mkdirSync(join(wtBase, '.gsd', 'milestones', 'M001'), { recursive: true });
+      mkdirSync(join(mainBase, '.gsd', 'phases', '01-m001'), { recursive: true });
+      mkdirSync(join(wtBase, '.gsd', 'phases', '01-m001'), { recursive: true });
 
       // Worktree has QUEUE.md projection and completed-units.json diagnostic.
       writeFileSync(join(wtBase, '.gsd', 'QUEUE.md'), '# Queue\n- M002 next');
@@ -629,33 +660,24 @@ describe('worktree-sync-milestones', async () => {
     }
   }
 
-  // ─── 14. syncGsdStateToWorktree syncs non-standard milestone dir names (#1547) ──
-  console.log('\n=== 14. syncGsdStateToWorktree syncs non-standard milestone dir names (#1547) ===');
+  // ─── 14. syncGsdStateToWorktree syncs suffixed phase dir names (#1547) ──
+  console.log('\n=== 14. syncGsdStateToWorktree syncs suffixed phase dir names (#1547) ===');
   {
     const mainBase = createBase('main');
     const wtBase = createBase('wt');
 
     try {
-      // Main has milestone dirs with non-standard names
-      const customDir = join(mainBase, '.gsd', 'milestones', 'sprint-alpha');
-      mkdirSync(customDir, { recursive: true });
-      writeFileSync(join(customDir, 'CONTEXT.md'), '# Sprint Alpha Context');
-
-      const suffixDir = join(mainBase, '.gsd', 'milestones', 'M001-abc123');
+      // Main has a team-suffixed phase dir name
+      const suffixDir = join(mainBase, '.gsd', 'phases', '01-m001-abc123');
       mkdirSync(suffixDir, { recursive: true });
-      writeFileSync(join(suffixDir, 'M001-abc123-CONTEXT.md'), '# M001 Context');
+      writeFileSync(join(suffixDir, '01-CONTEXT.md'), '# M001 Context');
 
-      assert.ok(!existsSync(join(wtBase, '.gsd', 'milestones', 'sprint-alpha')), 'sprint-alpha missing before sync');
-      assert.ok(!existsSync(join(wtBase, '.gsd', 'milestones', 'M001-abc123')), 'M001-abc123 missing before sync');
+      assert.ok(!existsSync(join(wtBase, '.gsd', 'phases', '01-m001-abc123')), 'M001-abc123 missing before sync');
 
       const result = syncGsdStateToWorktree(mainBase, wtBase);
 
       assert.ok(
-        existsSync(join(wtBase, '.gsd', 'milestones', 'sprint-alpha', 'CONTEXT.md')),
-        '#1547: non-standard milestone dir "sprint-alpha" synced to worktree',
-      );
-      assert.ok(
-        existsSync(join(wtBase, '.gsd', 'milestones', 'M001-abc123', 'M001-abc123-CONTEXT.md')),
+        existsSync(join(wtBase, '.gsd', 'phases', '01-m001-abc123', '01-CONTEXT.md')),
         '#1547: suffixed milestone dir "M001-abc123" synced to worktree',
       );
       assert.ok(result.synced.length > 0, 'sync reported files');
@@ -672,8 +694,8 @@ describe('worktree-sync-milestones', async () => {
     const wtBase = mkdtempSync(join(tmpdir(), 'gsd-wt-back-custom-wt-'));
 
     try {
-      mkdirSync(join(mainBase, '.gsd', 'milestones'), { recursive: true });
-      mkdirSync(join(wtBase, '.gsd', 'milestones'), { recursive: true });
+      mkdirSync(join(mainBase, '.gsd', 'phases'), { recursive: true });
+      mkdirSync(join(wtBase, '.gsd', 'phases'), { recursive: true });
 
       // Worktree has a non-standard milestone dir
       const wtCustomDir = join(wtBase, '.gsd', 'milestones', 'sprint-beta');
@@ -709,47 +731,47 @@ describe('worktree-sync-milestones', async () => {
 
     try {
       // Canonical .gsd has M003 context draft that complete-milestone needs.
-      const mainM003 = join(mainBase, '.gsd', 'milestones', 'M003');
+      const mainM003 = join(mainBase, '.gsd', 'phases', '03-m003');
       mkdirSync(mainM003, { recursive: true });
-      writeFileSync(join(mainM003, 'M003-CONTEXT-DRAFT.md'), '# M003 Context Draft');
-      writeFileSync(join(mainM003, 'M003-ROADMAP.md'), '# M003 Roadmap');
+      writeFileSync(join(mainM003, '03-CONTEXT-DRAFT.md'), '# M003 Context Draft');
+      writeFileSync(join(mainM003, '03-ROADMAP.md'), '# M003 Roadmap');
 
       // Worktree only has skeletal roadmap for M003.
-      const wtM003 = join(wtBase, '.gsd', 'milestones', 'M003');
+      const wtM003 = join(wtBase, '.gsd', 'phases', '03-m003');
       mkdirSync(wtM003, { recursive: true });
-      writeFileSync(join(wtM003, 'M003-ROADMAP.md'), '# WT Roadmap');
+      writeFileSync(join(wtM003, '03-ROADMAP.md'), '# WT Roadmap');
 
       // Worktree has current milestone file that must not be overwritten.
-      const mainM002 = join(mainBase, '.gsd', 'milestones', 'M002');
+      const mainM002 = join(mainBase, '.gsd', 'phases', '02-m002');
       mkdirSync(mainM002, { recursive: true });
-      writeFileSync(join(mainM002, 'M002-ROADMAP.md'), '# Main M002 Roadmap');
-      const wtM002 = join(wtBase, '.gsd', 'milestones', 'M002');
+      writeFileSync(join(mainM002, '02-ROADMAP.md'), '# Main M002 Roadmap');
+      const wtM002 = join(wtBase, '.gsd', 'phases', '02-m002');
       mkdirSync(wtM002, { recursive: true });
-      writeFileSync(join(wtM002, 'M002-ROADMAP.md'), '# Worktree M002 Roadmap');
+      writeFileSync(join(wtM002, '02-ROADMAP.md'), '# Worktree M002 Roadmap');
 
       // Canonical .gsd has M004 with no corresponding worktree directory at all.
-      const mainM004 = join(mainBase, '.gsd', 'milestones', 'M004');
+      const mainM004 = join(mainBase, '.gsd', 'phases', '04-m004');
       mkdirSync(mainM004, { recursive: true });
-      writeFileSync(join(mainM004, 'M004-CONTEXT-DRAFT.md'), '# M004 Context Draft');
+      writeFileSync(join(mainM004, '04-CONTEXT-DRAFT.md'), '# M004 Context Draft');
 
       syncProjectRootToWorktree(mainBase, wtBase, 'M002');
 
       assert.ok(
-        existsSync(join(wtBase, '.gsd', 'milestones', 'M003', 'M003-CONTEXT-DRAFT.md')),
+        existsSync(join(wtBase, '.gsd', 'phases', '03-m003', '03-CONTEXT-DRAFT.md')),
         '#5687: future milestone context draft projected into worktree',
       );
       assert.equal(
-        readFileSync(join(wtBase, '.gsd', 'milestones', 'M003', 'M003-ROADMAP.md'), 'utf-8'),
+        readFileSync(join(wtBase, '.gsd', 'phases', '03-m003', '03-ROADMAP.md'), 'utf-8'),
         '# WT Roadmap',
         '#5687: existing worktree-local M003 file is not overwritten',
       );
       assert.equal(
-        readFileSync(join(wtBase, '.gsd', 'milestones', 'M002', 'M002-ROADMAP.md'), 'utf-8'),
+        readFileSync(join(wtBase, '.gsd', 'phases', '02-m002', '02-ROADMAP.md'), 'utf-8'),
         '# Worktree M002 Roadmap',
         '#5687: existing worktree-local files are not overwritten',
       );
       assert.ok(
-        existsSync(join(wtBase, '.gsd', 'milestones', 'M004', 'M004-CONTEXT-DRAFT.md')),
+        existsSync(join(wtBase, '.gsd', 'phases', '04-m004', '04-CONTEXT-DRAFT.md')),
         '#5687: future milestone context draft projected into worktree when no wt dir existed',
       );
     } finally {
@@ -766,28 +788,28 @@ describe('worktree-sync-milestones', async () => {
 
     try {
       // Canonical .gsd has a future milestone M004 with a context draft.
-      const mainM004 = join(mainBase, '.gsd', 'milestones', 'M004');
+      const mainM004 = join(mainBase, '.gsd', 'phases', '04-m004');
       mkdirSync(mainM004, { recursive: true });
-      writeFileSync(join(mainM004, 'M004-CONTEXT-DRAFT.md'), '# M004 Context Draft');
+      writeFileSync(join(mainM004, '04-CONTEXT-DRAFT.md'), '# M004 Context Draft');
 
       // Active milestone M002 exists in both main and worktree.
-      const mainM002 = join(mainBase, '.gsd', 'milestones', 'M002');
+      const mainM002 = join(mainBase, '.gsd', 'phases', '02-m002');
       mkdirSync(mainM002, { recursive: true });
-      writeFileSync(join(mainM002, 'M002-ROADMAP.md'), '# Main M002 Roadmap');
-      const wtM002 = join(wtBase, '.gsd', 'milestones', 'M002');
+      writeFileSync(join(mainM002, '02-ROADMAP.md'), '# Main M002 Roadmap');
+      const wtM002 = join(wtBase, '.gsd', 'phases', '02-m002');
       mkdirSync(wtM002, { recursive: true });
-      writeFileSync(join(wtM002, 'M002-ROADMAP.md'), '# Worktree M002 Roadmap');
+      writeFileSync(join(wtM002, '02-ROADMAP.md'), '# Worktree M002 Roadmap');
 
       // M004 does NOT exist in the worktree at all before sync.
       assert.ok(
-        !existsSync(join(wtBase, '.gsd', 'milestones', 'M004')),
+        !existsSync(join(wtBase, '.gsd', 'phases', '04-m004')),
         '#5687: worktree M004 dir must not exist before sync',
       );
 
       syncProjectRootToWorktree(mainBase, wtBase, 'M002');
 
       assert.ok(
-        existsSync(join(wtBase, '.gsd', 'milestones', 'M004', 'M004-CONTEXT-DRAFT.md')),
+        existsSync(join(wtBase, '.gsd', 'phases', '04-m004', '04-CONTEXT-DRAFT.md')),
         '#5687: context draft projected into worktree even when milestone dir was absent',
       );
     } finally {

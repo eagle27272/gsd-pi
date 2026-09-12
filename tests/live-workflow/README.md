@@ -78,10 +78,11 @@ Each `test-*.ts` script:
    verification is a runnable command (`node --test ...`). The bundled tests
    *fail* until the agent does the work. A `package.json` `test` script is
    included so gsd's verification gate has a host-owned check to discover and
-   run. After seeding it runs the **two-step** `gsd headless recover`: the
-   first call prints an import preview and a `--preview=sha256:<hash>` hint
-   (exit non-zero), the second call with that hash applies it. The result is
-   committed so the pre-dispatch `git diff --check` guard sees a clean tree.
+   run. After seeding it loads that markdown into the project database with
+   md-importer's test-only `migrateFromMarkdown`, run in a child process
+   against the built `dist/`. There is no production markdown→DB import path;
+   the database is the sole authority. The result is committed so the
+   pre-dispatch `git diff --check` guard sees a clean tree.
 2. **Forwards credentials from the environment.** Any `*_API_KEY` /
    `*_OAUTH_TOKEN` in your shell is passed to the child; nothing reads or
    touches your real `~/.gsd`. The child keeps the e2e harness's isolated,

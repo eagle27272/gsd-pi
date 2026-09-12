@@ -18,7 +18,7 @@ You are running the GSD **import** workflow — ingest an external plan with con
 
 4. **Resolve.** For each conflict, propose a resolution (adopt source, keep ours, merge). In `--resolve auto`, apply the safe merges and flag the rest; in `--resolve interactive`, confirm each resolution with the user.
 
-5. **Import.** On approval, translate the source into gsd-pi artifacts: phases → milestones, requirements → CONTEXT/requirements, decisions → Decisions Register (`/gsd knowledge rule`), tasks → slice tasks. Prefer `/gsd migrate` machinery for whole `.planning/` imports.
+5. **Import.** On approval, translate the source into gsd-pi artifacts: phases → milestones, requirements → CONTEXT/requirements, decisions → Decisions Register (`/gsd knowledge rule`), tasks → slice tasks. There is no bulk markdown→database import; every artifact is written through its owning planning tool.
 
 Nothing is written until conflicts are resolved.
 
@@ -27,4 +27,4 @@ Nothing is written until conflicts are resolved.
 - Conflicts are detected and reported before any write.
 - No destructive overwrite of existing decisions without explicit resolution.
 - Phase-based source content is translated to gsd-pi's milestone/slice model.
-- Whole-`.planning/` imports route through `/gsd migrate`.
+- Whole-`.planning/` imports are written entity by entity through the planning tools; the database is never populated by adopting markdown wholesale.

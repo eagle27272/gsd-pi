@@ -5,7 +5,6 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { parseFrontmatter } from '@gsd/pi-coding-agent';
-import { incrementLegacyTelemetry } from './legacy-telemetry.js';
 import type {
 	Component,
 	ComponentApiVersion,
@@ -262,7 +261,6 @@ function loadFromLegacySkill(
 		enabled: true,
 	};
 
-	incrementLegacyTelemetry('legacy.componentFormatUsed');
 	return { component, diagnostics };
 }
 
@@ -338,7 +336,6 @@ function loadFromLegacyAgent(
 		enabled: true,
 	};
 
-	incrementLegacyTelemetry('legacy.componentFormatUsed');
 	return { component, diagnostics };
 }
 

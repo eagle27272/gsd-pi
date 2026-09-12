@@ -27,6 +27,7 @@ import {
 } from "../gsd-db.ts";
 import { invalidateStateCache } from "../state.ts";
 import { resolveMilestoneFile } from "../paths.ts";
+import { canonicalPhaseDirName, milestoneIdToPhaseNum } from "../layout-policy.ts";
 
 interface NotifyCall {
   message: string;
@@ -115,9 +116,9 @@ function writeValidation(
   round = 0,
   verificationClasses?: string,
 ): string {
-  const milestoneDir = join(base, ".gsd", "milestones", milestoneId);
+  const milestoneDir = join(base, ".gsd", "phases", canonicalPhaseDirName(milestoneId));
   mkdirSync(milestoneDir, { recursive: true });
-  const path = join(milestoneDir, `${milestoneId}-VALIDATION.md`);
+  const path = join(milestoneDir, `${String(milestoneIdToPhaseNum(milestoneId)).padStart(2, "0")}-VALIDATION.md`);
   const md = [
     "---",
     `verdict: ${verdict}`,
@@ -284,7 +285,7 @@ test("handleVerdict rejects when milestone validation is missing", async () => {
     openTestDb(base);
     seedMilestone("M001", "Test Milestone");
     seedSlice("M001", "S01", "complete");
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
 
     const { ctx, calls } = makeMockCtx();
     await handleVerdict("pass --milestone M001", ctx, base);
@@ -430,7 +431,7 @@ test("handleVerdict pass override works when validation only exists in DB", asyn
     ].join("\n");
 
     insertAssessment({
-      path: "/external/worktree/.gsd/milestones/M001/M001-VALIDATION.md",
+      path: "/external/worktree/.gsd/phases/01-m001/01-VALIDATION.md",
       milestoneId: "M001",
       status: "needs-attention",
       scope: "milestone-validation",
@@ -524,10 +525,10 @@ test("auto-dispatch needs-attention pause message references /gsd verdict", asyn
   assert.ok(rule, "completing-milestone rule should exist");
 
   const base = mkdtempSync(join(tmpdir(), "gsd-verdict-paused-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
   try {
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "M001-VALIDATION.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-VALIDATION.md"),
       "---\nverdict: needs-attention\nremediation_round: 0\n---\n\n# Validation\nNeeds work.\n",
     );
 

@@ -114,7 +114,7 @@ function setupTestEnvironment(): void {
   mkdirSync(gsdDir, { recursive: true });
   
   // Create milestones directory structure
-  const milestonesDir = join(gsdDir, "milestones", "M001", "slices", "S01", "tasks");
+  const milestonesDir = join(gsdDir, "phases", "01-m001", "tasks");
   mkdirSync(milestonesDir, { recursive: true });
   
   // Change cwd so loadEffectiveGSDPreferences finds our PREFERENCES.md
@@ -367,7 +367,7 @@ describe("Pre-execution checks → retry/pause wiring", () => {
       "failure notification should summarize truncated blocking checks",
     );
     assert.ok(
-      errorMessage.includes(join(".gsd", "milestones", "M001", "slices", "S01", "S01-PRE-EXEC-VERIFY.json")),
+      errorMessage.includes(join(".gsd", "phases", "01-m001", "S01-PRE-EXEC-VERIFY.json")),
       "failure notification should point to the relative pre-exec evidence file path",
     );
     assert.ok(
@@ -567,7 +567,7 @@ describe("Pre-execution checks → retry/pause wiring", () => {
     // Create a separate "worktree" directory with the referenced files present.
     const worktreeDir = join(tempDir, "worktree");
     mkdirSync(join(worktreeDir, "lib"), { recursive: true });
-    mkdirSync(join(worktreeDir, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+    mkdirSync(join(worktreeDir, ".gsd", "phases", "01-m001", "tasks"), { recursive: true });
     writeFileSync(join(worktreeDir, "lib", "types.ts"), "export type Habit = { id: string; name: string; };");
     writeFileSync(join(worktreeDir, "lib", "useLocalStorage.ts"), "export function useLocalStorage() {}");
 
@@ -624,7 +624,7 @@ describe("Pre-execution checks → retry/pause wiring", () => {
     });
 
     const worktreeDir = join(tempDir, "worktree-missing-src");
-    mkdirSync(join(worktreeDir, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+    mkdirSync(join(worktreeDir, ".gsd", "phases", "01-m001", "tasks"), { recursive: true });
 
     mkdirSync(join(tempDir, "src", "engine"), { recursive: true });
     writeFileSync(join(tempDir, "src", "engine", "bus.ts"), "export const bus = {};");

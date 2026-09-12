@@ -16,12 +16,12 @@ import { clearParseCache } from "../files.js";
 
 function makeTmpBase(): string {
   const base = join(tmpdir(), `gsd-val-handler-${randomUUID()}`);
-  const mDir = join(base, ".gsd", "milestones", "M001");
+  const mDir = join(base, ".gsd", "phases", "01-m001");
   mkdirSync(mDir, { recursive: true });
   // A content-bearing legacy milestone dir requires at least one non-META file
   // (dirIsContentBearingLegacyMilestone) so the layout sniffer treats it as a
   // real legacy milestone rather than a metadata-only placeholder.
-  writeFileSync(join(mDir, "M001-CONTEXT.md"), "# M001\n");
+  writeFileSync(join(mDir, "01-CONTEXT.md"), "# M001\n");
   return base;
 }
 
@@ -68,7 +68,7 @@ describe("handleValidateMilestone write ordering (#2725)", () => {
     assert.equal(row!.status, "pass");
 
     // Disk file exists
-    const filePath = join(base, ".gsd", "milestones", "M001", "M001-VALIDATION.md");
+    const filePath = join(base, ".gsd", "phases", "01-m001", "01-VALIDATION.md");
     assert.ok(existsSync(filePath), "VALIDATION.md should exist on disk");
     const validationMd = readFileSync(filePath, "utf-8");
     assert.match(validationMd, /## Verification Class Compliance/);
@@ -89,7 +89,7 @@ describe("handleValidateMilestone write ordering (#2725)", () => {
     );
     assert.ok(!("error" in result), `unexpected error: ${"error" in result ? result.error : ""}`);
 
-    const filePath = join(base, ".gsd", "milestones", "M001", "M001-VALIDATION.md");
+    const filePath = join(base, ".gsd", "phases", "01-m001", "01-VALIDATION.md");
     const validationMd = readFileSync(filePath, "utf-8");
     assert.doesNotMatch(validationMd, /## Verification Class Compliance/);
   });
@@ -104,11 +104,9 @@ describe("handleValidateMilestone write ordering (#2725)", () => {
     // Force disk write failure by replacing the milestone directory with a
     // regular file. saveFile() will fail because it cannot write inside a
     // non-directory. This works cross-platform (chmod is ignored on Windows).
-    const milestoneDir = join(base, ".gsd", "milestones", "M001");
-    rmSync(milestoneDir, { recursive: true, force: true });
-    writeFileSync(milestoneDir, "not-a-directory");
-    // Also block the flat-phase fallback path: write a regular file named
-    // "phases" so mkdir("phases/01-m001", {recursive:true}) throws ENOTDIR.
+    // Write a regular file named "phases" so mkdir("phases/01-m001",
+    // {recursive:true}) throws ENOTDIR and saveFile cannot write inside it.
+    rmSync(join(base, ".gsd", "phases"), { recursive: true, force: true });
     writeFileSync(join(base, ".gsd", "phases"), "not-a-directory");
 
     const result = await handleValidateMilestone(VALID_PARAMS, base);
@@ -303,7 +301,7 @@ describe("handleValidateMilestone write ordering (#2725)", () => {
     ).get() as { status: string } | undefined;
     assert.equal(row?.status, "needs-attention");
 
-    const filePath = join(base, ".gsd", "milestones", "M001", "M001-VALIDATION.md");
+    const filePath = join(base, ".gsd", "phases", "01-m001", "01-VALIDATION.md");
     const validationMd = readFileSync(filePath, "utf-8");
     assert.match(validationMd, /verdict: needs-attention/);
     assert.match(validationMd, /Browser evidence gate/);
@@ -365,10 +363,10 @@ describe("handleValidateMilestone write ordering (#2725)", () => {
       milestoneId: "M001",
       demo: "Open index.html, add todos, click Mark All Complete, reload the page.",
     });
-    const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+    const sliceDir = join(base, ".gsd", "phases", "01-m001");
     mkdirSync(sliceDir, { recursive: true });
     writeFileSync(
-      join(sliceDir, "S01-ASSESSMENT.md"),
+      join(sliceDir, "01-01-ASSESSMENT.md"),
       [
         "---",
         "verdict: PASS",
@@ -420,7 +418,7 @@ describe("handleValidateMilestone write ordering (#2725)", () => {
       demo: "Open index.html, add todos, click Mark All Complete, reload the page.",
     });
     insertArtifact({
-      path: "milestones/M001/slices/S01/S01-ASSESSMENT.md",
+      path: "phases/01-m001/01-01-ASSESSMENT.md",
       artifact_type: "ASSESSMENT",
       milestone_id: "M001",
       slice_id: "S01",
@@ -474,9 +472,9 @@ describe("handleValidateMilestone write ordering (#2725)", () => {
         ],
       }],
     }));
-    const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+    const sliceDir = join(base, ".gsd", "phases", "01-m001");
     mkdirSync(sliceDir, { recursive: true });
-    writeFileSync(join(sliceDir, "S01-ASSESSMENT.md"), [
+    writeFileSync(join(sliceDir, "01-01-ASSESSMENT.md"), [
       "---",
       "verdict: PASS",
       "---",
@@ -514,10 +512,10 @@ describe("handleValidateMilestone write ordering (#2725)", () => {
       // actually triggered before the runtime evidence bypasses it.
       demo: "Visit localhost:3000 to verify DOM state after clicking Mark All Complete.",
     });
-    const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+    const sliceDir = join(base, ".gsd", "phases", "01-m001");
     mkdirSync(sliceDir, { recursive: true });
     writeFileSync(
-      join(sliceDir, "S01-ASSESSMENT.md"),
+      join(sliceDir, "01-01-ASSESSMENT.md"),
       [
         "---",
         "sliceId: S01",
@@ -595,9 +593,9 @@ describe("handleValidateMilestone write ordering (#2725)", () => {
       demo: "Visit localhost:3000 to confirm persistence after reload.",
     });
     // S01 has runtime-executable evidence; S02 has none.
-    mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-ASSESSMENT.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-01-ASSESSMENT.md"),
       [
         "---",
         "sliceId: S01",

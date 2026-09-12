@@ -88,14 +88,14 @@ function makeRecordingCtx() {
 {
   console.log("\n=== validate-milestone timeout recovery accepts DB validation without Markdown ===");
   const base = mkdtempSync(join(tmpdir(), "gsd-timeout-db-validation-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
 
   try {
     openDatabase(join(base, ".gsd", "gsd.db"));
     insertMilestone({ id: "M001", title: "Milestone", status: "active" });
     insertSlice({ id: "S01", milestoneId: "M001", title: "Slice", status: "complete" });
     insertAssessment({
-      path: ".gsd/milestones/M001/M001-VALIDATION.md",
+      path: ".gsd/phases/01-m001/01-VALIDATION.md",
       milestoneId: "M001",
       status: "pass",
       scope: "milestone-validation",
@@ -128,7 +128,7 @@ function makeRecordingCtx() {
 {
   console.log("\n=== execute-task timeout recovery ignores closed Task row without Attempt proof ===");
   const base = mkdtempSync(join(tmpdir(), "gsd-timeout-db-complete-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001", "tasks"), { recursive: true });
 
   try {
     openDatabase(join(base, ".gsd", "gsd.db"));
@@ -136,7 +136,7 @@ function makeRecordingCtx() {
     insertSlice({ id: "S01", milestoneId: "M001", title: "Slice", status: "in_progress" });
     insertTask({ id: "T01", milestoneId: "M001", sliceId: "S01", title: "Task", status: "complete" });
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-01-PLAN.md"),
       "# S01\n\n## Tasks\n\n- [ ] **T01: Task** `est:10m`\n",
       "utf-8",
     );
@@ -177,7 +177,7 @@ function makeRecordingCtx() {
 {
   console.log("\n=== plan-slice timeout recovery rejects stale placeholder PLAN ===");
   const base = mkdtempSync(join(tmpdir(), "gsd-timeout-stale-plan-"));
-  const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+  const sliceDir = join(base, ".gsd", "phases", "01-m001");
   mkdirSync(sliceDir, { recursive: true });
 
   try {
@@ -185,7 +185,7 @@ function makeRecordingCtx() {
     insertMilestone({ id: "M001", title: "Milestone", status: "active" });
     insertSlice({ id: "S01", milestoneId: "M001", title: "Slice", status: "pending" });
     writeFileSync(
-      join(sliceDir, "S01-PLAN.md"),
+      join(sliceDir, "01-01-PLAN.md"),
       "# S01: Slice\n\n## Tasks\n\nPlanning was interrupted before task rows were persisted.\n",
       "utf-8",
     );
@@ -222,7 +222,7 @@ function makeRecordingCtx() {
 
 test("plan-milestone timeout recovery persists a blocker and pauses", async (t) => {
   const base = mkdtempSync(join(tmpdir(), "gsd-timeout-plan-milestone-blocked-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
   t.after(() => {
     closeDatabase();
     rmSync(base, { recursive: true, force: true });
@@ -256,7 +256,7 @@ test("plan-milestone timeout recovery persists a blocker and pauses", async (t) 
 {
   console.log("\n=== plan-slice verification accepts completed task summaries ===");
   const base = mkdtempSync(join(tmpdir(), "gsd-plan-slice-complete-summary-"));
-  const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S05");
+  const sliceDir = join(base, ".gsd", "phases", "01-m001");
   const tasksDir = join(sliceDir, "tasks");
   mkdirSync(tasksDir, { recursive: true });
 
@@ -269,7 +269,7 @@ test("plan-milestone timeout recovery persists a blocker and pauses", async (t) 
     insertTask({ id: "T03", milestoneId: "M001", sliceId: "S05", title: "Pending 1", status: "pending" });
     insertTask({ id: "T04", milestoneId: "M001", sliceId: "S05", title: "Pending 2", status: "pending" });
     writeFileSync(
-      join(sliceDir, "S05-PLAN.md"),
+      join(sliceDir, "01-05-PLAN.md"),
       [
         "# S05: Slice",
         "",
@@ -304,7 +304,7 @@ test("plan-milestone timeout recovery persists a blocker and pauses", async (t) 
 {
   console.log("\n=== #1855: recoverTimedOutUnit succeeds with valid RecoveryContext ===");
   const base = mkdtempSync(join(tmpdir(), "gsd-stalled-tool-test-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001", "tasks"), { recursive: true });
   mkdirSync(join(base, ".gsd", "runtime", "units"), { recursive: true });
 
   try {

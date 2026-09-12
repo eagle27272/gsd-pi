@@ -15,10 +15,11 @@ import {
   upsertMilestonePlanning,
   insertArtifact,
 } from "../gsd-db.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 function makeBase(): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-research-ms-composer-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Research Test")), { recursive: true });
   return base;
 }
 
@@ -56,7 +57,7 @@ test("#4782 phase 3: buildResearchMilestonePrompt emits milestone-context then r
   seed(base, "M001");
 
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md"),
+    join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Research Test"), "01-CONTEXT.md"),
     "# M001 Context\n\nA research test milestone.\n",
   );
 
@@ -85,7 +86,7 @@ test("buildResearchMilestonePrompt keeps broad project docs on-demand", async (t
   invalidateAllCaches();
 
   seed(base, "M001");
-  writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md"), "# M001 Context\n");
+  writeFileSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Research Test"), "01-CONTEXT.md"), "# M001 Context\n");
   insertArtifact({
     path: "PROJECT.md",
     artifact_type: "project",
@@ -139,7 +140,7 @@ test("ADR-029: research-milestone inlines project classification + codebase snap
   invalidateAllCaches();
 
   seed(base, "M001");
-  writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md"), "# M001 Context\n");
+  writeFileSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Research Test"), "01-CONTEXT.md"), "# M001 Context\n");
   // Give the codebase scan something real to sample.
   writeFileSync(join(base, "index.html"), "<!doctype html><html><body><h1>hi</h1></body></html>\n");
   writeFileSync(join(base, "script.js"), "const x = 1;\nasync function go() { await x; }\n");
@@ -160,7 +161,7 @@ test("ADR-029: codebase snapshot is suppressed when discuss_preparation is false
   invalidateAllCaches();
 
   seed(base, "M001");
-  writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md"), "# M001 Context\n");
+  writeFileSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Research Test"), "01-CONTEXT.md"), "# M001 Context\n");
   writeFileSync(join(base, ".gsd", "PREFERENCES.md"), "---\ndiscuss_preparation: false\n---\n");
   invalidateAllCaches();
 
@@ -177,7 +178,7 @@ test("ADR-029: prior partial RESEARCH is inlined as a resume block; absent other
   invalidateAllCaches();
 
   seed(base, "M001");
-  writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md"), "# M001 Context\n");
+  writeFileSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Research Test"), "01-CONTEXT.md"), "# M001 Context\n");
 
   // No prior research yet → no resume block. (Match the rendered block heading,
   // not the bare phrase — step 8 of the template references the phrase by name.)
@@ -186,7 +187,7 @@ test("ADR-029: prior partial RESEARCH is inlined as a resume block; absent other
 
   // A partial RESEARCH draft from a prior (interrupted) attempt.
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "M001-RESEARCH.md"),
+    join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Research Test"), "01-RESEARCH.md"),
     "# Research\n\n## Findings\n\nPartial finding: the app is a static site.\n",
   );
   invalidateAllCaches();

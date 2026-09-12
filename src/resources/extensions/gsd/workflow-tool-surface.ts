@@ -70,7 +70,3 @@ export function isWorkflowSurfaceAliasTool(toolName: string): boolean {
 export function isWorkflowToolSurfaceName(toolName: string): boolean {
   return WORKFLOW_TOOL_SURFACE_NAME_SET.has(stripMcpToolPrefix(toolName));
 }
-
-export function aliasesForWorkflowTool(canonicalName: string): readonly string[] {
-  return WORKFLOW_TOOL_CONTRACTS.find((tool) => tool.canonicalName === canonicalName)?.aliases ?? [];
-}

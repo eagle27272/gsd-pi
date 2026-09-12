@@ -25,6 +25,7 @@ import { handleCompleteMilestone } from "../tools/complete-milestone.ts";
 import { handleValidateMilestone } from "../tools/validate-milestone.ts";
 import { internalExecutionInvocation, type ExecutionInvocation } from "../execution-invocation.ts";
 import { seedSliceCompletionAuthority } from "./slice-completion-fixture.ts";
+import { canonicalPhaseDirName, milestoneIdToPhaseNum, slicePlanFileName } from "../layout-policy.ts";
 
 const MID = "M001";
 const SID = "S01";
@@ -51,8 +52,8 @@ function makeFixture(t: test.TestContext): WorktreeFixture {
   const projectRoot = realpathSync.native(mkdtempSync(join(tmpdir(), "gsd-worktree-projection-")));
   const worktreeRoot = join(projectRoot, ".gsd", "worktrees", MID);
 
-  mkdirSync(join(projectRoot, ".gsd", "milestones", MID, "slices", SID, "tasks"), { recursive: true });
-  mkdirSync(join(worktreeRoot, ".gsd", "milestones", MID, "slices", SID, "tasks"), { recursive: true });
+  mkdirSync(join(projectRoot, ".gsd", "phases", canonicalPhaseDirName(MID), "tasks"), { recursive: true });
+  mkdirSync(join(worktreeRoot, ".gsd", "phases", canonicalPhaseDirName(MID), "tasks"), { recursive: true });
   writeFileSync(join(worktreeRoot, ".git"), "gitdir: ../../../.git/worktrees/M001\n", "utf8");
 
   assert.equal(openDatabase(join(projectRoot, ".gsd", "gsd.db")), true);
@@ -146,8 +147,8 @@ test("complete-task writes SUMMARY under the active worktree projection", async 
   const result = await handleCompleteTask(completeTaskParams(), worktreeRoot);
 
   assert.ok(!("error" in result), "complete-task should succeed");
-  const expected = join(worktreeRoot, ".gsd", "milestones", MID, "slices", SID, "tasks", "T01-SUMMARY.md");
-  const projectProjection = join(projectRoot, ".gsd", "milestones", MID, "slices", SID, "tasks", "T01-SUMMARY.md");
+  const expected = join(worktreeRoot, ".gsd", "phases", canonicalPhaseDirName(MID), `${SID}-T01-SUMMARY.md`);
+  const projectProjection = join(projectRoot, ".gsd", "phases", canonicalPhaseDirName(MID), `${SID}-T01-SUMMARY.md`);
   assert.equal(result.summaryPath, expected);
   assert.equal(existsSync(expected), true);
   assert.equal(existsSync(projectProjection), false);
@@ -166,10 +167,10 @@ test("complete-slice writes SUMMARY and UAT under the active worktree projection
   const result = await handleCompleteSlice(completeSliceParams(), worktreeRoot);
 
   assert.ok(!("error" in result), "complete-slice should succeed");
-  const expectedSummary = join(worktreeRoot, ".gsd", "milestones", MID, "slices", SID, "S01-SUMMARY.md");
-  const expectedUat = join(worktreeRoot, ".gsd", "milestones", MID, "slices", SID, "S01-UAT.md");
-  const projectSummary = join(projectRoot, ".gsd", "milestones", MID, "slices", SID, "S01-SUMMARY.md");
-  const projectUat = join(projectRoot, ".gsd", "milestones", MID, "slices", SID, "S01-UAT.md");
+  const expectedSummary = join(worktreeRoot, ".gsd", "phases", canonicalPhaseDirName(MID), slicePlanFileName(milestoneIdToPhaseNum(MID), "S01", "SUMMARY"));
+  const expectedUat = join(worktreeRoot, ".gsd", "phases", canonicalPhaseDirName(MID), slicePlanFileName(milestoneIdToPhaseNum(MID), "S01", "UAT"));
+  const projectSummary = join(projectRoot, ".gsd", "phases", canonicalPhaseDirName(MID), slicePlanFileName(milestoneIdToPhaseNum(MID), "S01", "SUMMARY"));
+  const projectUat = join(projectRoot, ".gsd", "phases", canonicalPhaseDirName(MID), slicePlanFileName(milestoneIdToPhaseNum(MID), "S01", "UAT"));
   assert.equal(result.summaryPath, expectedSummary);
   assert.equal(result.uatPath, expectedUat);
   assert.equal(existsSync(expectedSummary), true);
@@ -187,8 +188,8 @@ test("validate-milestone invoked from the project root writes VALIDATION under t
   });
 
   assert.ok(!("error" in result), "validate-milestone should succeed");
-  const expected = join(worktreeRoot, ".gsd", "milestones", MID, "M001-VALIDATION.md");
-  const projectProjection = join(projectRoot, ".gsd", "milestones", MID, "M001-VALIDATION.md");
+  const expected = join(worktreeRoot, ".gsd", "phases", canonicalPhaseDirName(MID), `${String(milestoneIdToPhaseNum(MID)).padStart(2, "0")}-VALIDATION.md`);
+  const projectProjection = join(projectRoot, ".gsd", "phases", canonicalPhaseDirName(MID), `${String(milestoneIdToPhaseNum(MID)).padStart(2, "0")}-VALIDATION.md`);
   assert.equal(result.validationPath, expected);
   assert.equal(existsSync(expected), true);
   assert.equal(existsSync(projectProjection), true, "VALIDATION should mirror to project root for consistent reads");
@@ -200,7 +201,7 @@ test("complete-milestone writes SUMMARY under the active worktree projection", a
   insertTask({ id: "T01", sliceId: SID, milestoneId: MID, status: "complete", title: "Task" });
   updateSliceStatus(MID, SID, "complete", new Date().toISOString());
   insertAssessment({
-    path: join(worktreeRoot, ".gsd", "milestones", MID, "M001-VALIDATION.md"),
+    path: join(worktreeRoot, ".gsd", "phases", canonicalPhaseDirName(MID), `${String(milestoneIdToPhaseNum(MID)).padStart(2, "0")}-VALIDATION.md`),
     milestoneId: MID,
     sliceId: null,
     taskId: null,
@@ -218,8 +219,8 @@ test("complete-milestone writes SUMMARY under the active worktree projection", a
   }, worktreeRoot);
 
   assert.ok(!("error" in result), "complete-milestone should succeed");
-  const expected = join(worktreeRoot, ".gsd", "milestones", MID, "M001-SUMMARY.md");
-  const projectProjection = join(projectRoot, ".gsd", "milestones", MID, "M001-SUMMARY.md");
+  const expected = join(worktreeRoot, ".gsd", "phases", canonicalPhaseDirName(MID), `${String(milestoneIdToPhaseNum(MID)).padStart(2, "0")}-SUMMARY.md`);
+  const projectProjection = join(projectRoot, ".gsd", "phases", canonicalPhaseDirName(MID), `${String(milestoneIdToPhaseNum(MID)).padStart(2, "0")}-SUMMARY.md`);
   assert.equal(result.summaryPath, expected);
   assert.equal(existsSync(expected), true);
   assert.equal(existsSync(projectProjection), false);

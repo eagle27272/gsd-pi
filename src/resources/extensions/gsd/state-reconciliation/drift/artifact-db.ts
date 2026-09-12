@@ -748,7 +748,7 @@ export async function repairArtifactDbDrift(
       `${record.sliceId ? `/${record.sliceId}` : ""}` +
       `${record.taskId ? `/${record.taskId}` : ""}: ${record.reason}. ` +
       "Runtime will not silently import completion artifacts into DB state. " +
-      "Run `/gsd rebuild markdown` after review to quarantine stale projections and re-render from the DB; use `/gsd recover` with exact Preview approval only when markdown should repopulate a lost or corrupt DB.",
+      "Run `/gsd rebuild markdown` after review to quarantine stale projections and re-render from the DB; if the DB itself is the side that is wrong, run `/gsd doctor` — runtime cannot import these artifacts into the DB.",
   );
 }
 
@@ -775,7 +775,7 @@ export function describeArtifactDbDriftBlocker(
     `${record.sliceId ? `/${record.sliceId}` : ""}` +
     `${record.taskId ? `/${record.taskId}` : ""}: ${record.reason}. ` +
     "Runtime will not silently import completion artifacts into DB state. " +
-    "Run `/gsd rebuild markdown` after review to quarantine stale projections and re-render from the DB; use `/gsd recover` with exact Preview approval only when markdown should repopulate a lost or corrupt DB."
+    "Run `/gsd rebuild markdown` after review to quarantine stale projections and re-render from the DB; if the DB itself is the side that is wrong, run `/gsd doctor` — runtime cannot import these artifacts into the DB."
   );
 }
 

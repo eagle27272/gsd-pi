@@ -7,9 +7,8 @@
  *      self-identify (Stream 2: actor identity passthrough).
  *
  *   2. The 3 reversibility handlers (reopen-task/slice/milestone) are
- *      registered as MCP tools under their canonical names, and additionally
- *      under their alias names when GSD_ADVERTISE_TOOL_ALIASES=1 (plan 035
- *      suppresses alias schemas by default) (Stream 3: reversibility tools).
+ *      registered as MCP tools under their canonical names only
+ *      (Stream 3: reversibility tools).
  *
  *   3. The reopen tools accept the documented core params plus optional
  *      reason/actorName/triggerReason without rejecting valid payloads.
@@ -35,18 +34,6 @@ registerDbTools(pi);
 
 function getTool(name: string) {
   return pi.tools.find((t: any) => t.name === name);
-}
-
-function withEnv(name: string, value: string | undefined, fn: () => void): void {
-  const previous = process.env[name];
-  if (value === undefined) delete process.env[name];
-  else process.env[name] = value;
-  try {
-    fn();
-  } finally {
-    if (previous === undefined) delete process.env[name];
-    else process.env[name] = previous;
-  }
 }
 
 function getRequiredProps(tool: any): string[] {
@@ -109,8 +96,6 @@ for (const name of ACTOR_TOOLS) {
 }
 
 // ─── Stream 3: reopen tools registered under canonical names ────────────────
-// Plan 035 suppresses alias schemas by default; the canonical reopen tools are
-// always registered, and their aliases only when GSD_ADVERTISE_TOOL_ALIASES=1.
 
 const REOPEN_TOOLS = [
   { canonical: "gsd_task_reopen", alias: "gsd_reopen_task" },
@@ -119,24 +104,11 @@ const REOPEN_TOOLS = [
 ];
 
 for (const { canonical, alias } of REOPEN_TOOLS) {
-  test(`${canonical} — registered under its canonical name, no alias by default`, () => {
+  test(`${canonical} — registered under its canonical name, no alias`, () => {
     const canonicalTool = getTool(canonical);
     assert.ok(canonicalTool, `${canonical} must be registered`);
     assert.ok(typeof canonicalTool.execute === "function", `${canonical} must have an execute function`);
-    assert.ok(!getTool(alias), `${alias} must not be registered by default (plan 035 alias suppression)`);
-  });
-
-  test(`${canonical} — registered with alias ${alias} when GSD_ADVERTISE_TOOL_ALIASES=1`, () => {
-    withEnv("GSD_ADVERTISE_TOOL_ALIASES", "1", () => {
-      const aliasPi = makeMockPi();
-      registerDbTools(aliasPi);
-      const canonicalTool = aliasPi.tools.find((t: any) => t.name === canonical);
-      const aliasTool = aliasPi.tools.find((t: any) => t.name === alias);
-      assert.ok(canonicalTool, `${canonical} must be registered`);
-      assert.ok(aliasTool, `${alias} must be registered as alias`);
-      assert.ok(typeof canonicalTool.execute === "function", `${canonical} must have an execute function`);
-      assert.ok(typeof aliasTool.execute === "function", `${alias} must have an execute function`);
-    });
+    assert.ok(!getTool(alias), `${alias} must not be registered`);
   });
 }
 

@@ -4,7 +4,7 @@ import { basename, dirname, join } from "node:path";
 import type { DoctorIssue, DoctorIssueCode } from "./doctor-types.js";
 import { removeLockDirectory } from "./session-lock.js";
 import { cleanNumberedGsdVariants } from "./repo-identity.js";
-import { milestonesDir, gsdRoot, resolveGsdRootFile, milestoneDirExists } from "./paths.js";
+import { milestonesDir, gsdRoot, relMilestonePath, resolveGsdRootFile, resolveMilestonePath, milestoneDirExists } from "./paths.js";
 import { deriveState, isGhostMilestone, isReusableGhostMilestone } from "./state.js";
 import { saveFile } from "./files.js";
 import { nativeIsRepo, nativeForEachRef, nativeUpdateRef } from "./native-git-bridge.js";
@@ -13,7 +13,7 @@ import { getActiveAutoWorkers } from "./db/auto-workers.js";
 import { normalizeRealPath } from "./paths.js";
 import { ensureGitignore, isGsdGitignored } from "./gitignore.js";
 import { readAllSessionStatuses, isSessionStale, removeSessionStatus } from "./session-status-io.js";
-import { isCurrentGsdStateIntactForMigratingCleanup, recoverFailedMigration } from "./migrate-external.js";
+import { detectLegacyLayout } from "./legacy-layout-guard.js";
 import { splitCompletedKey } from "./forensics.js";
 import { findMilestoneIds } from "./milestone-ids.js";
 import { getAllMilestones, isDbAvailable } from "./gsd-db.js";
@@ -518,38 +518,30 @@ export async function checkRuntimeHealth(
     // Non-fatal — gitignore check failed
   }
 
+  // ── Pre-migration on-disk layout ───────────────────────────────────────
+  // Runtime no longer converts the pre-flat-phase milestones/<MID>/ layout.
+  // Doctor reports so the operator can act; the auto-start guard is the one
+  // that refuses to run.
+  {
+    const legacyLayout = detectLegacyLayout(basePath);
+    if (legacyLayout) {
+      issues.push({
+        severity: "error",
+        code: "legacy_layout",
+        scope: "project",
+        unitId: "project",
+        message: `Found the pre-flat-phase milestones/<MID>/ layout at ${legacyLayout.path}. Support for converting it was removed; GSD v1.18.0 is the last version that can.`,
+        file: ".gsd",
+        fixable: false,
+      });
+    }
+  }
+
   // ── External state symlink health ──────────────────────────────────────
   try {
     const localGsd = join(basePath, ".gsd");
     if (existsSync(localGsd)) {
       const stat = lstatSync(localGsd);
-
-      // Check for .gsd.migrating (failed migration)
-      const migratingPath = join(basePath, ".gsd.migrating");
-      if (existsSync(migratingPath)) {
-        issues.push({
-          severity: "error",
-          code: "failed_migration",
-          scope: "project",
-          unitId: "project",
-          message: "Found .gsd.migrating — a previous external state migration failed. State may be incomplete.",
-          file: ".gsd.migrating",
-          fixable: true,
-        });
-
-        if (shouldFix("failed_migration")) {
-          if (recoverFailedMigration(basePath)) {
-            fixesApplied.push("recovered failed external state migration");
-          } else if (isCurrentGsdStateIntactForMigratingCleanup(basePath)) {
-            try {
-              rmSync(migratingPath, { recursive: true, force: true });
-              fixesApplied.push("removed stale .gsd.migrating orphan after validating current .gsd state");
-            } catch (err) {
-              fixesApplied.push(`failed to remove stale .gsd.migrating orphan at ${migratingPath}: ${err instanceof Error ? err.message : String(err)}`);
-            }
-          }
-        }
-      }
 
       // Check symlink target exists
       if (stat.isSymbolicLink()) {
@@ -797,15 +789,14 @@ export async function checkRuntimeHealth(
           scope: "milestone",
           unitId: mid,
           message: `Orphan milestone directory: ${mid} — directory exists on disk with no DB row, no worktree, and no content files. This stub skews milestone ID generation and should be removed.`,
-          file: `.gsd/milestones/${mid}`,
+          file: relMilestonePath(basePath, mid),
           fixable: true,
         });
 
         if (shouldFix("orphan_milestone_dir")) {
           try {
-            const orphanPath = hasDbFile
-              ? join(milestonesDir(basePath), mid)
-              : join(root, "milestones", mid);
+            const orphanPath = resolveMilestonePath(basePath, mid);
+            if (!orphanPath) throw new Error(`orphan milestone dir for ${mid} is no longer on disk`);
             if (hasDbFile) removeProjectionTreeSync(orphanPath);
             else removeLegacyProjectionTreeSync(basePath, orphanPath);
             fixesApplied.push(`removed orphan milestone directory: ${mid}`);

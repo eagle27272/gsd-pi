@@ -1,3 +1,0 @@
----
-planning_depth: deep
----

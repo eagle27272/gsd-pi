@@ -16,7 +16,7 @@ import { _setAutoActiveForTest } from '../auto.ts';
 
 function createFixture(): string {
   const base = mkdtempSync(join(tmpdir(), 'gsd-guard-test-'));
-  const mDir = join(base, '.gsd', 'milestones', 'M001');
+  const mDir = join(base, '.gsd', 'phases', '01-m001');
   mkdirSync(mDir, { recursive: true });
   writeFileSync(join(mDir, 'M001-ROADMAP.md'), '# M001\n', 'utf-8');
   return base;

@@ -5,10 +5,12 @@ import assert from "node:assert/strict";
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
+  readlinkSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -16,6 +18,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { afterEach } from "node:test";
 
+import { hashBytes, hashValue, type Sha256 } from "../canonical-json.ts";
 import { writeCompatMarker } from "../compat/compat-marker.ts";
 import {
   _getAdapter,
@@ -26,12 +29,10 @@ import {
   isDbAvailable,
   openDatabase,
 } from "../gsd-db.ts";
-import { captureCurrentLegacyImportBaseSnapshot } from "../legacy-import-preview-base.ts";
 import { reconcileBeforeDispatch, type ReconciliationResult } from "../state-reconciliation.ts";
 import { externalMarkdownEditHandler } from "../state-reconciliation/drift/external-markdown-edit.ts";
 import { externalPlanningEditHandler } from "../state-reconciliation/drift/external-planning-edit.ts";
 import type { GSDState } from "../types.ts";
-import { fingerprintLegacyImportCorpusTree } from "./helpers/legacy-import-corpus.ts";
 
 const PLANNING_FIXTURE = join(
   import.meta.dirname,
@@ -79,9 +80,35 @@ function tableSnapshot(tables: readonly string[]): Record<string, unknown> {
   ]));
 }
 
+/**
+ * Digest over the project authority row plus every canonical table. Replaces
+ * the deleted legacy-import base snapshot: same row coverage, hashed with the
+ * shared canonical-JSON primitives so the proof carries no kernel dependency.
+ */
+function canonicalBaseDigest(): Sha256 {
+  return hashValue([
+    db().prepare("SELECT * FROM project_authority ORDER BY rowid").all(),
+    tableSnapshot(CANONICAL_TABLES),
+  ]);
+}
+
+/** Byte-exact fingerprint of a directory tree, including symlink targets. */
+function fingerprintTree(path: string, relative = ""): Sha256 {
+  const rows: unknown[] = [];
+  for (const name of readdirSync(join(path, relative)).sort()) {
+    const child = relative ? `${relative}/${name}` : name;
+    const physical = join(path, child);
+    const stat = lstatSync(physical);
+    if (stat.isDirectory()) rows.push([child, "directory", fingerprintTree(path, child)]);
+    else if (stat.isSymbolicLink()) rows.push([child, "symlink", readlinkSync(physical)]);
+    else rows.push([child, "file", hashBytes(readFileSync(physical))]);
+  }
+  return hashValue(rows);
+}
+
 function durableSnapshot(): Record<string, unknown> {
   return {
-    base: captureCurrentLegacyImportBaseSnapshot(),
+    base: canonicalBaseDigest(),
     authority: db().prepare("SELECT * FROM project_authority ORDER BY rowid").all(),
     canonical: tableSnapshot(CANONICAL_TABLES),
     lineage: tableSnapshot(LINEAGE_TABLES),
@@ -163,10 +190,16 @@ function projectionTreeSnapshot(root: string, relative = ""): string[] {
 
 function assertExplicitImportBlocker(result: ReconciliationResult): void {
   assert.ok(result.blockers.length > 0, "dispatch must block before importing a projection");
+  const blockers = result.blockers.join("\n");
   assert.match(
-    result.blockers.join("\n"),
-    /Preview\/Application|\/gsd recover/i,
-    "blocker recommends the explicit Preview/Application or recovery route",
+    blockers,
+    /database is authoritative/i,
+    "blocker states that the database, not the projection, is authoritative",
+  );
+  assert.match(
+    blockers,
+    /\/gsd rebuild markdown/,
+    "blocker routes the operator to the DB-first realignment command",
   );
 }
 
@@ -193,7 +226,7 @@ test("cold planning-only reconciliation ignores Markdown without capturing or ad
   cpSync(PLANNING_FIXTURE, join(base, ".planning"), { recursive: true });
   const databaseBefore = durableSnapshot();
   const markerBefore = markerBytes(base);
-  const planningBefore = fingerprintLegacyImportCorpusTree(join(base, ".planning"));
+  const planningBefore = fingerprintTree(join(base, ".planning"));
   const projectionBefore = projectionTreeSnapshot(join(base, ".gsd"));
 
   const result = await reconcileBeforeDispatch(base);
@@ -207,7 +240,7 @@ test("cold planning-only reconciliation ignores Markdown without capturing or ad
   assert.deepEqual(durableSnapshot(), databaseBefore, "canonical authority and lineage remain exact");
   assert.deepEqual(markerBytes(base), markerBefore, "inactive/default marker remains exact");
   assert.equal(
-    fingerprintLegacyImportCorpusTree(join(base, ".planning")),
+    fingerprintTree(join(base, ".planning")),
     planningBefore,
     "planning source bytes remain exact",
   );
@@ -312,7 +345,7 @@ test("changed modeled .planning projection blocks without transform, import, or 
   });
   const databaseBefore = durableSnapshot();
   const markerBefore = markerBytes(base);
-  const planningBefore = fingerprintLegacyImportCorpusTree(join(base, ".planning"));
+  const planningBefore = fingerprintTree(join(base, ".planning"));
   const projectionBefore = projectionTreeSnapshot(join(base, ".gsd"));
 
   const result = await reconcileBeforeDispatch(base, {
@@ -326,7 +359,7 @@ test("changed modeled .planning projection blocks without transform, import, or 
   assert.deepEqual(durableSnapshot(), databaseBefore, "canonical authority and lineage remain exact");
   assert.deepEqual(markerBytes(base), markerBefore, "planning marker baseline remains exact");
   assert.equal(
-    fingerprintLegacyImportCorpusTree(join(base, ".planning")),
+    fingerprintTree(join(base, ".planning")),
     planningBefore,
     "modeled .planning source bytes remain exact",
   );

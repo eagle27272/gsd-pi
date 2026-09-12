@@ -781,11 +781,15 @@ async function runPersistentSliceLifecycleMatrix(
 
       closeDatabase();
 
+      // The Pi in-process surface no longer registers alias tools, so its retry
+      // replays through the canonical name; the MCP surface still advertises
+      // aliases by default, so its retry exercises the alias name.
+      const retryToolName = transport === "pi" ? lifecycleCase.canonicalName : lifecycleCase.retryName;
       const retry = transport === "pi"
-        ? await runNativeDbTool(fixture.root, lifecycleCase.retryName, lifecycleCase.args)
+        ? await runNativeDbTool(fixture.root, retryToolName, lifecycleCase.args)
         : await callMcpLifecycleTool(
             fixture.root,
-            lifecycleCase.retryName,
+            retryToolName,
             lifecycleCase.args,
             lifecycleCase.stableKey,
           );
@@ -799,7 +803,7 @@ async function runPersistentSliceLifecycleMatrix(
       assert.deepEqual(
         retryContract,
         firstContract,
-        `${transport} ${lifecycleCase.retryName} retry must preserve canonical response semantics`,
+        `${transport} ${retryToolName} retry must preserve canonical response semantics`,
       );
       responses[lifecycleCase.operationType] = firstContract;
 
@@ -834,16 +838,7 @@ async function runPersistentSliceLifecycleMatrix(
 }
 
 describe("Slice lifecycle persistent retry parity", () => {
-  it("Pi and MCP preserve canonical-first complete, reopen, and cancel across fresh retry registrations", async (t) => {
-    const previousAliasSetting = process.env.GSD_ADVERTISE_TOOL_ALIASES;
-    t.after(() => {
-      if (previousAliasSetting === undefined) {
-        delete process.env.GSD_ADVERTISE_TOOL_ALIASES;
-      } else {
-        process.env.GSD_ADVERTISE_TOOL_ALIASES = previousAliasSetting;
-      }
-    });
-    process.env.GSD_ADVERTISE_TOOL_ALIASES = "1";
+  it("Pi and MCP preserve canonical-first complete, reopen, and cancel across fresh retry registrations", async () => {
     const piResponses = await runPersistentSliceLifecycleMatrix("pi");
     const mcpResponses = await runPersistentSliceLifecycleMatrix("mcp");
     assert.deepEqual(mcpResponses, piResponses, "Pi and MCP lifecycle response contracts must match");

@@ -30,7 +30,6 @@ Simplified Chinese translation: [`zh-CN/`](./zh-CN/).
 | [Subagents](./user-docs/subagents.md) | Delegate, inspect, and resume isolated child-agent runs |
 | [Working in Teams](./user-docs/working-in-teams.md) | Unique milestone IDs, `.gitignore` setup, and shared planning artifacts |
 | [Skills](./user-docs/skills.md) | Bundled skills, skill discovery, and custom skill authoring |
-| [Migration from v1](./user-docs/migration.md) | Migrating `.planning` directories from the original GSD |
 | [Troubleshooting](./user-docs/troubleshooting.md) | Common issues, `/gsd doctor` (real-time visibility), `/gsd forensics` (full debugger), and recovery procedures |
 | [Web Interface](./user-docs/web-interface.md) | Browser-based project management with `gsd --web` |
 | [VS Code Extension](../vscode-extension/README.md) | Chat participant, sidebar dashboard, and RPC integration for VS Code |

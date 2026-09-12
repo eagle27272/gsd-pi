@@ -1,7 +1,7 @@
 // Project/App: gsd-pi
 // File Purpose: Registers GSD extension runtime hooks and token-saving tool policies.
 
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -12,7 +12,7 @@ import { ALWAYS_PRESERVED_SHIM_TOOL_NAMES } from "@gsd/pi-ai";
 import type { GSDEcosystemBeforeAgentStartHandler } from "../ecosystem/gsd-extension-api.js";
 import { updateSnapshot } from "../ecosystem/gsd-extension-api.js";
 
-import { buildMilestoneFileName, canonicalPhaseDirName, clearPathCache, milestonesDir, legacyMilestonesDir, relMilestoneFile, resolveMilestonePath, resolveSliceFile, resolveSlicePath } from "../paths.js";
+import { buildMilestoneFileName, canonicalPhaseDirName, clearPathCache, milestonesDir, relMilestoneFile, resolveMilestonePath, resolveSliceFile, resolveSlicePath } from "../paths.js";
 import { applyAskUserQuestionsGateResult, clearDiscussionFlowState, currentWriteGateSnapshot, formatPendingAskUserQuestionsGateMessage, formatTimedOutAskUserQuestionsGateMessage, hostWriteGateAdapter, isApprovalGateVerifiedInSnapshot, isDepthConfirmationAnswer, isMilestoneDepthVerifiedInSnapshot, isQueuePhaseActive, resetWriteGateState, shouldBlockContextWrite, shouldBlockPlanningUnit, shouldBlockQueueExecution, shouldBlockWorktreeBash, shouldBlockWorktreeWrite, isGateQuestionId, getPendingGate, shouldBlockPendingGate, shouldBlockPendingGateBash, extractDepthVerificationMilestoneId, type WriteGateSnapshot } from "./write-gate.js";
 import { canonicalToolName } from "../engine-hook-contract.js";
 import { resolveManifest } from "../unit-context-manifest.js";
@@ -1001,21 +1001,11 @@ function formatQuestionExchange(
 }
 
 async function ensureMilestoneShell(basePath: string, milestoneId: string): Promise<string> {
-  // When no milestone dir exists yet, prefer the legacy container when it has
-  // at least one milestone subdirectory; an empty milestones/ dir (e.g. one
-  // created by an old bootstrapGsdProject) is not a real legacy layout.
-  const legacy = legacyMilestonesDir(basePath);
-  const isLegacyLayout = existsSync(legacy) && (() => {
-    try {
-      return readdirSync(legacy).some(e => statSync(join(legacy, e)).isDirectory());
-    } catch { return false; }
-  })();
-  const container = isLegacyLayout ? legacy : milestonesDir(basePath);
-  const fallbackDirName = isLegacyLayout
-    ? milestoneId
-    : canonicalPhaseDirName(milestoneId, `New milestone ${milestoneId}`);
   const milestoneDir = resolveMilestonePath(basePath, milestoneId)
-    ?? join(container, fallbackDirName);
+    ?? join(
+      milestonesDir(basePath),
+      canonicalPhaseDirName(milestoneId, `New milestone ${milestoneId}`),
+    );
   mkdirSync(milestoneDir, { recursive: true });
   clearPathCache();
 
@@ -1049,11 +1039,8 @@ async function saveDiscussionQuestionRound(
   const timestamp = new Date().toISOString();
   const exchange = formatQuestionExchange(questions, answers);
 
-  // Layout-aware filename: legacy dirs use MID-SUFFIX.md; flat-phase use NN-SUFFIX.md.
-  const legacyBase = legacyMilestonesDir(basePath);
-  const isLegacyDir = milestoneDir.startsWith(legacyBase + "/") || milestoneDir.startsWith(legacyBase + "\\");
   const milestoneFileName = (suffix: string): string =>
-    isLegacyDir ? `${milestoneId}-${suffix}.md` : buildMilestoneFileName(milestoneId, suffix);
+    buildMilestoneFileName(milestoneId, suffix);
 
   const discussionPath = join(milestoneDir, milestoneFileName("DISCUSSION"));
   const existingDiscussion = await loadFile(discussionPath) ?? `# ${milestoneId} Discussion Log\n\n`;
@@ -1180,50 +1167,6 @@ export function registerHooks(
     await applyDisabledModelProviderPolicy(ctx);
     await applyCompactionThresholdOverride(ctx);
     await prepareWorkflowMcpForHookContext(ctx, basePath);
-
-    // Migrate legacy .gsd/milestones/ to flat-phase .gsd/phases/ when detected.
-    // Fail closed on migration errors: resolvers assume flat-phase paths after
-    // startup, so continuing with nested disk state corrupts later checks.
-    try {
-      const { isInAutoWorktree } = await import("../auto-worktree.js");
-      if (!isInAutoWorktree(basePath)) {
-        const { needsFlatPhaseMigration } = await import("../flat-phase-migration.js");
-        if (needsFlatPhaseMigration(basePath)) {
-          const { ensureDbOpen } = await import("./dynamic-tools.js");
-          const opened = await ensureDbOpen(basePath);
-          if (opened) {
-            const { migrateToFlatPhase } = await import("../flat-phase-migration.js");
-            await migrateToFlatPhase(basePath);
-          } else {
-            safetyLogWarning(
-              "bootstrap",
-              "flat-phase migration required: legacy .gsd/milestones/ layout detected but the workflow database could not be opened — fix database access before starting GSD",
-            );
-            throw new Error(
-              "flat-phase migration required but the workflow database could not be opened; fix database access before starting GSD",
-            );
-          }
-        }
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      safetyLogWarning("bootstrap", `flat-phase migration failed: ${message}`);
-      throw new Error(`flat-phase migration failed: ${message}`);
-    }
-
-    try {
-      const projectRoot = resolveWorktreeProjectRoot(basePath);
-      const { pruneStaleFlatPhaseBackups } = await import("../flat-phase-migration.js");
-      const pruned = pruneStaleFlatPhaseBackups(projectRoot);
-      if (pruned > 0) {
-        safetyLogWarning(
-          "bootstrap",
-          `pruned ${pruned} stale flat-phase migration backup(s) from .gsd-backups/ (retention exceeded)`,
-        );
-      }
-    } catch (err) {
-      safetyLogWarning("bootstrap", `flat-phase backup pruning: ${err instanceof Error ? err.message : String(err)}`);
-    }
 
     // Apply show_token_cost preference (#1515)
     try {

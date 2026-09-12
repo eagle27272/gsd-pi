@@ -23,11 +23,12 @@ import {
   openDatabase,
 } from "../gsd-db.ts";
 import type { GSDState } from "../types.ts";
+import { milestoneIdToPhaseNum, slicePlanFileName } from "../layout-policy.ts";
 
 function makeTmpBase(): string {
   const base = join(tmpdir(), `gsd-test-reassess-${randomUUID()}`);
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S02", "tasks"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001", "tasks"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001", "tasks"), { recursive: true });
   return base;
 }
 
@@ -50,14 +51,14 @@ function seedSlices(s01Status: string, s02Status: string): void {
 
 function writeSummary(base: string, sid: string): void {
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "slices", sid, `${sid}-SUMMARY.md`),
+    join(base, ".gsd", "phases", "01-m001", slicePlanFileName(milestoneIdToPhaseNum("M001"), sid, "SUMMARY")),
     `---\nid: ${sid}\n---\n# ${sid} Summary\nDone.`,
   );
 }
 
 function writeAssessment(base: string, sid: string): void {
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "slices", sid, `${sid}-ASSESSMENT.md`),
+    join(base, ".gsd", "phases", "01-m001", slicePlanFileName(milestoneIdToPhaseNum("M001"), sid, "ASSESSMENT")),
     `# ${sid} Assessment\nNo changes needed.`,
   );
 }

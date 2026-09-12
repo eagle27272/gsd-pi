@@ -16,6 +16,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 // Point GSD_HOME at a throwaway directory *before* the prompt-loader
 // module is imported (via the dynamic imports below) so templates
@@ -50,7 +51,7 @@ function writeRoadmap(
   mid: string,
   slices: Array<{ id: string; title: string; done?: boolean; depends?: string[] }>,
 ): void {
-  const milestoneDir = join(base, ".gsd", "milestones", mid);
+  const milestoneDir = join(base, ".gsd", "phases", canonicalPhaseDirName(mid));
   mkdirSync(milestoneDir, { recursive: true });
   // The dispatch rule reads slices from the DB (ADR-017), not the ROADMAP
   // projection — seed both so disk-based artifact checks still resolve.
@@ -196,7 +197,7 @@ describe("parallel-research-slices dispatch rule", () => {
       { id: "S02", title: "Beta" },
     ]);
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "M001-RESEARCH.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-RESEARCH.md"),
       "# Milestone Research\n",
       "utf-8",
     );
@@ -269,9 +270,9 @@ describe("parallel-research-slices dispatch rule", () => {
       { id: "S01", title: "Alpha" },
       { id: "S02", title: "Beta" },
     ]);
-    const milestoneDir = join(base, ".gsd", "milestones", "M001");
+    const milestoneDir = join(base, ".gsd", "phases", "01-m001");
     writeFileSync(
-      join(milestoneDir, "M001-PARALLEL-BLOCKER.md"),
+      join(milestoneDir, "01-PARALLEL-BLOCKER.md"),
       "# Parallel research escalated\nPrevious dispatch failed; need per-slice fallback.\n",
       "utf-8",
     );
@@ -293,10 +294,10 @@ describe("parallel-research-slices dispatch rule", () => {
       { id: "S02", title: "Beta" },
     ]);
     // S01 already has research → only S02 remains → <2 ready → no parallel dispatch
-    const s01Dir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+    const s01Dir = join(base, ".gsd", "phases", "01-m001");
     mkdirSync(s01Dir, { recursive: true });
     writeFileSync(
-      join(s01Dir, "S01-RESEARCH.md"),
+      join(s01Dir, "01-01-RESEARCH.md"),
       "# Research\n",
       "utf-8",
     );
@@ -318,7 +319,7 @@ describe("buildParallelResearchSlicesPrompt", () => {
 
   beforeEach(() => {
     base = mkdtempSync(join(tmpdir(), "parallel-research-prompt-"));
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
   });
 
   afterEach(() => {

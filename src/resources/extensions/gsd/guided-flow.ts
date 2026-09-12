@@ -41,7 +41,7 @@ import { listUnitRuntimeRecords, clearUnitRuntimeRecord, isInFlightRuntimePhase 
 import { resolveExpectedArtifactPath } from "./auto.js";
 import { gsdHome } from "./gsd-home.js";
 import {
-  gsdRoot, milestonesDir, legacyMilestonesDir, resolveMilestoneFile,
+  gsdRoot, milestonesDir, resolveMilestoneFile,
   resolveSliceFile, resolveSlicePath, resolveGsdRootFile, relGsdRootFile,
   relMilestoneFile, relSliceFile, relSlicePath, clearPathCache,
 } from "./paths.js";
@@ -58,8 +58,9 @@ import { getAutoWorktreePath } from "./auto-worktree-path-resolution.js";
 import { resolveUokFlags } from "./uok/flags.js";
 import { ensurePlanV2Graph, isMissingFinalizedContextResult } from "./uok/plan-v2.js";
 import { detectProjectState, hasGsdBootstrapArtifacts } from "./detection.js";
+import { assertNoLegacyLayout } from "./legacy-layout-guard.js";
 import { isFutureMilestoneStatus } from "./status-guards.js";
-import { showProjectInit, offerMigration } from "./init-wizard.js";
+import { showProjectInit } from "./init-wizard.js";
 import { validateDirectory } from "./validate-directory.js";
 import { showConfirm } from "../shared/tui.js";
 import { debugLog } from "./debug-logger.js";
@@ -419,10 +420,7 @@ function hasNestedFileOrSymlink(dir: string): boolean {
 }
 
 function clearEmptyLegacyDeepSetupPseudoMilestones(basePath: string, entries: string[], dir?: string): string[] {
-  // These are LEGACY pseudo-milestone dirs — prefer legacyMilestonesDir (milestones/)
-  // when it exists; caller may also supply the dir directly.
-  const legacyDir = legacyMilestonesDir(basePath);
-  const mDir = dir ?? (existsSync(legacyDir) ? legacyDir : milestonesDir(basePath));
+  const mDir = dir ?? milestonesDir(basePath);
   const remaining: string[] = [];
   for (const entry of entries) {
     if (!LEGACY_DEEP_SETUP_PSEUDO_MILESTONE_DIRS.has(entry)) {
@@ -1952,6 +1950,18 @@ export async function showSmartEntry(
     if (!proceed) return;
   }
 
+  // ── Legacy-layout refusal — must precede externalization and detection ──
+  // Entering without `auto` reaches neither startAuto nor bootstrapAutoSession,
+  // the two other assertNoLegacyLayout call sites. hasGsdBootstrapArtifacts
+  // keys on `phases/`, so a pre-flat-phase project reports "no bootstrap" and
+  // showProjectInit below would bootstrap a second, empty .gsd alongside the
+  // legacy tree. A pi hook cannot carry this refusal: the extension runner
+  // catches every handler throw and downgrades it to an error event, so the
+  // session proceeds regardless. This command funnel can actually refuse.
+  // Refusing first also keeps ensureExternalState from relocating a layout
+  // nothing can convert.
+  assertNoLegacyLayout(basePath);
+
   // ── Externalize state before anything resolves or writes `.gsd` ──────
   // gsdRoot() below caches the resolved path, so a local `.gsd` left in place
   // here would stay local for the rest of the process.
@@ -1975,18 +1985,6 @@ export async function showSmartEntry(
 
   if (!hasBootstrapArtifacts) {
     const detection = detectProjectState(basePath);
-
-    // v1 .planning/ detected — offer migration before anything else
-    if (detection.state === "v1-planning" && detection.v1) {
-      const migrationChoice = await offerMigration(ctx, detection.v1);
-      if (migrationChoice === "cancel") return;
-      if (migrationChoice === "migrate") {
-        const { handleMigrate } = await import("./migrate/command.js");
-        await handleMigrate("", ctx, pi);
-        return;
-      }
-      // "fresh" — fall through to init wizard
-    }
 
     // No .gsd/ or zombie .gsd/ — run the project init wizard
     const result = await showProjectInit(ctx, pi, basePath, detection);
@@ -2123,7 +2121,7 @@ export async function showSmartEntry(
           clearMarkdownAutoRebuildBackoff();
           ctx.ui.notify(
             result.message ??
-              `Markdown planning artifacts do not match the authoritative DB. Run \`${result.recoveryCommand ?? "/gsd recover"}\` to preview an explicit markdown import.`,
+              `Markdown planning artifacts do not match the authoritative DB. Run \`${result.recoveryCommand ?? "/gsd doctor"}\` to diagnose the drift.`,
             "warning",
           );
         }
@@ -2234,9 +2232,7 @@ export async function showSmartEntry(
     // cwd, etc). Warn instead of silently starting a new-project flow.
     if (milestoneIds.length === 0) {
       const mDir = milestonesDir(basePath);
-      const legDir = legacyMilestonesDir(basePath);
-      // Check flat-phase dir first; fall back to legacy milestones/ dir
-      const checkDir = existsSync(mDir) ? mDir : existsSync(legDir) ? legDir : null;
+      const checkDir = existsSync(mDir) ? mDir : null;
       if (checkDir) {
         try {
           const entries = clearEmptyLegacyDeepSetupPseudoMilestones(basePath, readdirSync(checkDir), checkDir);

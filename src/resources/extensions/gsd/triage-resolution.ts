@@ -14,7 +14,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { atomicWriteSync, removeProjectionFileSync } from "./atomic-write.js";
 import { join } from "node:path";
 import { createRequire } from "node:module";
-import { gsdRoot, milestonesDir, legacyMilestonesDir, resolveMilestonePath } from "./paths.js";
+import { buildMilestoneFileName, canonicalPhaseDirName, gsdRoot, milestonesDir, resolveMilestonePath, resolveSliceFile, targetSliceFile } from "./paths.js";
 import { MILESTONE_ID_RE } from "./milestone-ids.js";
 import type { Classification, CaptureEntry } from "./captures.js";
 import {
@@ -41,8 +41,8 @@ export function executeInject(
 ): string | null {
   try {
     // Resolve the plan file path
-    const planPath = join(gsdRoot(basePath), "milestones", mid, "slices", sid, `${sid}-PLAN.md`);
-    if (!existsSync(planPath)) return null;
+    const planPath = resolveSliceFile(basePath, mid, sid, "PLAN");
+    if (!planPath || !existsSync(planPath)) return null;
 
     const content = readFileSync(planPath, "utf-8");
 
@@ -90,9 +90,7 @@ export function executeReplan(
   capture: CaptureEntry,
 ): boolean {
   try {
-    const triggerPath = join(
-      basePath, ".gsd", "milestones", mid, "slices", sid, `${sid}-REPLAN-TRIGGER.md`,
-    );
+    const triggerPath = targetSliceFile(basePath, mid, sid, "REPLAN-TRIGGER");
     const ts = new Date().toISOString();
     const content = [
       `# Replan Trigger`,
@@ -190,7 +188,7 @@ export function executeBacktrack(
         if (targetDir && existsSync(targetDir)) {
           // Write a regression marker so the state machine knows this milestone
           // needs re-discussion, not just re-execution
-          const regressionPath = join(targetDir, `${targetMilestoneId}-REGRESSION.md`);
+          const regressionPath = join(targetDir, buildMilestoneFileName(targetMilestoneId, "REGRESSION"));
           atomicWriteSync(regressionPath, [
             `# Milestone Regression`,
             ``,
@@ -335,13 +333,9 @@ export function ensureDeferMilestoneDir(
 ): boolean {
   if (!MILESTONE_ID_RE.test(targetMilestone)) return false;
 
-  // Check if the milestone dir already exists in either layout.
   const existingDir = resolveMilestonePath(basePath, targetMilestone);
   if (existingDir && existsSync(existingDir)) return true;
-  // Create new dir in the layout-appropriate location.
-  const legacyBase = legacyMilestonesDir(basePath);
-  const msBase = existsSync(legacyBase) ? legacyBase : milestonesDir(basePath);
-  const msDir = join(msBase, targetMilestone);
+  const msDir = join(milestonesDir(basePath), canonicalPhaseDirName(targetMilestone));
 
   try {
     mkdirSync(msDir, { recursive: true });
@@ -364,7 +358,7 @@ export function ensureDeferMilestoneDir(
     ].join("\n");
 
     atomicWriteSync(
-      join(msDir, `${targetMilestone}-CONTEXT-DRAFT.md`),
+      join(msDir, buildMilestoneFileName(targetMilestone, "CONTEXT-DRAFT")),
       draftContent,
       "utf-8",
     );

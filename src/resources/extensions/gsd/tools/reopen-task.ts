@@ -24,10 +24,7 @@ import type { ExecutionInvocation } from "../execution-invocation.js";
 import {
   buildFlatTaskFileName,
   buildTaskFileName,
-  legacyMilestonesDir,
   resolveMilestonePath,
-  resolveTasksDir,
-  resolveSlicePath,
   clearPathCache,
 } from "../paths.js";
 
@@ -95,22 +92,16 @@ export async function handleReopenTask(
   // ── Clean up stale filesystem artifacts (M12 fix) ────────────────────────
   // Without this, the DB-filesystem reconciler sees the SUMMARY.md and
   // auto-corrects the task back to "complete", making reopen a no-op (#3161).
-  // Legacy layout keeps the summary under a tasks/ subdir; flat-phase writes
-  // TID-SUMMARY.md directly in the phase dir. A tasks/ subdir may still exist
-  // in flat-phase for auxiliary artifacts — its mere existence must NOT redirect
-  // summary cleanup into tasks/ (#1208).
+  // Flat-phase writes TID-SUMMARY.md directly in the phase dir. A tasks/ subdir
+  // may still exist for auxiliary artifacts — its mere existence must NOT
+  // redirect summary cleanup into tasks/ (#1208).
   try {
-    const slicePath = resolveSlicePath(basePath, params.milestoneId, params.sliceId);
     const milestonePath = resolveMilestonePath(basePath, params.milestoneId);
     if (milestonePath) {
-      const legacyBase = legacyMilestonesDir(basePath);
-      const isLegacy = milestonePath.startsWith(legacyBase + "/") || milestonePath.startsWith(legacyBase + "\\");
-      const summaryPaths = isLegacy
-        ? [join(resolveTasksDir(basePath, params.milestoneId, params.sliceId) ?? slicePath ?? join(milestonePath, "slices", params.sliceId, "tasks"), buildTaskFileName(params.taskId, "SUMMARY"))]
-        : [
-          join(milestonePath, buildFlatTaskFileName(params.sliceId, params.taskId, "SUMMARY")),
-          join(milestonePath, buildTaskFileName(params.taskId, "SUMMARY")),
-        ];
+      const summaryPaths = [
+        join(milestonePath, buildFlatTaskFileName(params.sliceId, params.taskId, "SUMMARY")),
+        join(milestonePath, buildTaskFileName(params.taskId, "SUMMARY")),
+      ];
       for (const summaryPath of summaryPaths) {
         if (existsSync(summaryPath)) removeProjectionFileSync(summaryPath);
       }

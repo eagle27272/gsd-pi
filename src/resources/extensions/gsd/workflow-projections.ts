@@ -17,7 +17,7 @@ import type { MilestoneRow } from "./db-milestone-artifact-rows.js";
 import type { SliceRow, TaskRow } from "./db-task-slice-rows.js";
 import type { VerificationEvidenceRow } from "./db-verification-evidence-rows.js";
 import { atomicWriteSync } from "./atomic-write.js";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { mkdirSync, existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { logWarning } from "./workflow-logger.js";
@@ -26,8 +26,7 @@ import { deriveState } from "./state.js";
 import type { GSDState } from "./types.js";
 import { renderPlanFromDb, renderRoadmapFromDb, writeTaskSummaryProjection } from "./markdown-renderer.js";
 import { readManifest } from "./workflow-manifest.js";
-import { gsdRoot, resolveMilestoneFile, resolveSliceFile, resolveTaskFile } from "./paths.js";
-import { removeOwnedPlanProjection } from "./projection-cleanup.js";
+import { gsdRoot, resolveMilestoneFile, resolveSliceFile, resolveTaskFile, targetMilestoneFile } from "./paths.js";
 import { stripIdPrefix } from "./strip-id-prefix.js";
 export { stripIdPrefix };
 
@@ -84,24 +83,6 @@ export function renderPlanContent(sliceRow: SliceRow, taskRows: TaskRow[]): stri
   return lines.join("\n");
 }
 
-/**
- * Render PLAN.md projection to disk for a specific slice.
- * Queries DB via helper functions and persists through the canonical projection writer.
- */
-export function renderPlanProjection(basePath: string, milestoneId: string, sliceId: string): void {
-  const sliceRows = getMilestoneSlices(milestoneId);
-  const sliceRow = sliceRows.find(s => s.id === sliceId);
-  const planPath = join(basePath, ".gsd", "milestones", milestoneId, "slices", sliceId, `${sliceId}-PLAN.md`);
-  const taskRows = getSliceTasks(milestoneId, sliceId).filter((task) => task.status !== "skipped");
-  if (!sliceRow || sliceRow.status === "skipped" || taskRows.length === 0) {
-    removeOwnedPlanProjection(basePath, planPath);
-    return;
-  }
-
-  const content = renderPlanContent(sliceRow, taskRows);
-  atomicWriteSync(planPath, content);
-}
-
 // ─── ROADMAP.md Projection ───────────────────────────────────────────────
 
 /**
@@ -146,6 +127,11 @@ export function renderRoadmapContent(milestoneRow: MilestoneRow, sliceRows: Slic
 /**
  * Render ROADMAP.md projection to disk for a specific milestone.
  * Queries DB via helper functions, renders content, writes via atomicWriteSync.
+ *
+ * The write target comes from targetMilestoneFile so it lands in the flat-phase
+ * layout (`phases/NN-slug/NN-ROADMAP.md`) that resolveMilestoneFile reads. A
+ * `milestones/<MID>/` write here would be refused outright by the legacy-layout
+ * guard on the next session start.
  */
 export function renderRoadmapProjection(basePath: string, milestoneId: string): void {
   const milestoneRow = getMilestone(milestoneId);
@@ -154,8 +140,9 @@ export function renderRoadmapProjection(basePath: string, milestoneId: string): 
   const sliceRows = getMilestoneSlices(milestoneId).filter((slice) => slice.status !== "skipped");
 
   const content = renderRoadmapContent(milestoneRow, sliceRows);
-  const dir = join(basePath, ".gsd", "milestones", milestoneId);
-  atomicWriteSync(join(dir, `${milestoneId}-ROADMAP.md`), content);
+  const absPath = targetMilestoneFile(basePath, milestoneId, "ROADMAP", milestoneRow.title);
+  mkdirSync(dirname(absPath), { recursive: true });
+  atomicWriteSync(absPath, content);
 }
 
 function milestoneStatusGlyph(status: string): string {

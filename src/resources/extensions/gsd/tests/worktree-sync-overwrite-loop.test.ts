@@ -29,7 +29,7 @@ import { syncProjectRootToWorktree } from "../auto-worktree-sync.ts";
 
 function createBase(name: string): string {
   const base = mkdtempSync(join(tmpdir(), `gsd-wt-1886-${name}-`));
-  mkdirSync(join(base, ".gsd", "milestones"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases"), { recursive: true });
   return base;
 }
 
@@ -50,32 +50,32 @@ test("#1886: worktree VALIDATION.md is not overwritten by project root sync", (t
   registerBases(t, mainBase, wtBase);
 
   // Project root has an older CONTEXT but no VALIDATION
-  const prM004 = join(mainBase, ".gsd", "milestones", "M004");
+  const prM004 = join(mainBase, ".gsd", "phases", "04-m004");
   mkdirSync(prM004, { recursive: true });
-  writeFileSync(join(prM004, "M004-CONTEXT.md"), "# old context");
+  writeFileSync(join(prM004, "04-CONTEXT.md"), "# old context");
 
   // Worktree has CONTEXT + VALIDATION (written by validate-milestone)
-  const wtM004 = join(wtBase, ".gsd", "milestones", "M004");
+  const wtM004 = join(wtBase, ".gsd", "phases", "04-m004");
   mkdirSync(wtM004, { recursive: true });
-  writeFileSync(join(wtM004, "M004-CONTEXT.md"), "# worktree context");
+  writeFileSync(join(wtM004, "04-CONTEXT.md"), "# worktree context");
   writeFileSync(
-    join(wtM004, "M004-VALIDATION.md"),
+    join(wtM004, "04-VALIDATION.md"),
     "verdict: pass\nremediation_round: 1",
   );
 
   syncProjectRootToWorktree(mainBase, wtBase, "M004");
 
   assert.ok(
-    existsSync(join(wtM004, "M004-VALIDATION.md")),
+    existsSync(join(wtM004, "04-VALIDATION.md")),
     "VALIDATION.md still exists after sync",
   );
   assert.equal(
-    readFileSync(join(wtM004, "M004-VALIDATION.md"), "utf-8"),
+    readFileSync(join(wtM004, "04-VALIDATION.md"), "utf-8"),
     "verdict: pass\nremediation_round: 1",
     "VALIDATION.md content preserved",
   );
   assert.equal(
-    readFileSync(join(wtM004, "M004-CONTEXT.md"), "utf-8"),
+    readFileSync(join(wtM004, "04-CONTEXT.md"), "utf-8"),
     "# worktree context",
     "existing worktree CONTEXT.md not overwritten",
   );
@@ -86,19 +86,19 @@ test("#1886: missing worktree files are still copied from project root", (t) => 
   const wtBase = createBase("wt");
   registerBases(t, mainBase, wtBase);
 
-  const prM004 = join(mainBase, ".gsd", "milestones", "M004");
+  const prM004 = join(mainBase, ".gsd", "phases", "04-m004");
   mkdirSync(prM004, { recursive: true });
-  writeFileSync(join(prM004, "M004-CONTEXT.md"), "# from project root");
-  writeFileSync(join(prM004, "M004-ROADMAP.md"), "# roadmap");
+  writeFileSync(join(prM004, "04-CONTEXT.md"), "# from project root");
+  writeFileSync(join(prM004, "04-ROADMAP.md"), "# roadmap");
 
   syncProjectRootToWorktree(mainBase, wtBase, "M004");
 
   assert.ok(
-    existsSync(join(wtBase, ".gsd", "milestones", "M004", "M004-CONTEXT.md")),
+    existsSync(join(wtBase, ".gsd", "phases", "04-m004", "04-CONTEXT.md")),
     "missing CONTEXT.md copied from project root",
   );
   assert.ok(
-    existsSync(join(wtBase, ".gsd", "milestones", "M004", "M004-ROADMAP.md")),
+    existsSync(join(wtBase, ".gsd", "phases", "04-m004", "04-ROADMAP.md")),
     "missing ROADMAP.md copied from project root",
   );
 });
@@ -135,7 +135,7 @@ test("#1886: worktree completed-units.json untouched when project root has none"
   registerBases(t, mainBase, wtBase);
 
   // Project root milestone dir must exist for sync to run
-  const prM004 = join(mainBase, ".gsd", "milestones", "M004");
+  const prM004 = join(mainBase, ".gsd", "phases", "04-m004");
   mkdirSync(prM004, { recursive: true });
 
   writeFileSync(

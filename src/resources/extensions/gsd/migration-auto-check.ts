@@ -272,10 +272,6 @@ export function countMarkdownHierarchy(basePath: string): HierarchyCounts {
   return scanMarkdownHierarchy(basePath).counts;
 }
 
-export function countDbHierarchy(): HierarchyCounts {
-  return scanDbHierarchy().counts;
-}
-
 export async function checkMarkdownHierarchyAgainstDb(
   basePath: string,
 ): Promise<MigrationAutoCheckResult> {
@@ -310,10 +306,9 @@ export async function checkMarkdownHierarchyAgainstDb(
   // Discussion-phase scratch: a milestone dir with no ROADMAP and no DB row is
   // a pre-registration discussion artifact (CONTEXT/CONTEXT-DRAFT only — the
   // queued DB row is inserted only at discussion handoff). Treating it as
-  // drift would warn on every live discussion and recommend
-  // `/gsd recover` with exact Preview approval, an import that materializes abandoned-discussion
-  // dirs as ghost active milestones. Exclude such dirs from this comparison
-  // only; recover preflights use the raw scans and still see them.
+  // drift would raise a recovery-required warning on every live discussion,
+  // pointing operators at a database that is in fact correct. Exclude such
+  // dirs from this comparison only; callers of the raw scans still see them.
   for (const id of markdownScan.milestonesWithoutRoadmap) {
     if (dbScan.milestones.has(id)) continue;
     markdownScan.milestones.delete(id);
@@ -339,8 +334,8 @@ export async function checkMarkdownHierarchyAgainstDb(
 
   // Choose the safe repair direction by identity, not cardinality. Whenever the
   // authoritative DB holds identities markdown lacks, re-project from the DB.
-  // Reserve explicit legacy import for a lost or corrupt DB whose intended
-  // source is markdown.
+  // The reverse direction has no automated repair — markdown is never a source
+  // the runtime imports from — so it routes to diagnosis instead.
   const dbHasExtra = scanHasExtraIdentities(dbScan, markdownScan);
   const driftFingerprint = recoveryFingerprint(markdownScan, dbScan);
 
@@ -363,12 +358,12 @@ export async function checkMarkdownHierarchyAgainstDb(
         countsLine +
         "The DB holds rows the markdown lacks, so the markdown projection is stale. " +
         "Run `/gsd rebuild markdown` to re-project from the authoritative DB. " +
-        "Do NOT run `/gsd recover` here — legacy import is not a repair for stale markdown projections.",
+        "Runtime never imports markdown into the database, so the DB rows are not at risk here.",
     };
   }
 
-  // DB is empty (or markdown is strictly richer): markdown is the surviving
-  // source to import.
+  // DB is empty (or markdown is strictly richer): nothing can be repaired
+  // automatically, so report the drift and route to diagnosis.
   const reason = dbEmpty ? "db-empty" : "count-mismatch";
   return {
     action: "recovery-required",
@@ -376,10 +371,11 @@ export async function checkMarkdownHierarchyAgainstDb(
     markdown,
     beforeDb,
     afterDb: beforeDb,
-    recoveryCommand: "/gsd recover",
+    recoveryCommand: "/gsd doctor",
     recoveryFingerprint: driftFingerprint,
     message:
       countsLine +
-      "Runtime startup will not import markdown automatically; run `/gsd recover` and approve its exact Preview hash if markdown should repopulate the database.",
+      "There is no markdown-to-database import path: runtime will never repopulate the DB from these files. " +
+      "Run `/gsd doctor` to diagnose, or restore a verified backup with `/gsd db restore-backup` if the database was lost.",
   };
 }

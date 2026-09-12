@@ -24,6 +24,7 @@ import {
   type PausedSessionMetadata,
 } from "../interrupted-session.ts";
 import { normalizeRealPath } from "../paths.ts";
+import { canonicalPhaseDirName, LAYOUT_SEGMENTS, milestoneIdToPhaseNum } from "../layout-policy.ts";
 
 function makeTmpBase(): string {
   const base = join(tmpdir(), `gsd-auto-interrupted-${randomUUID()}`);
@@ -88,10 +89,10 @@ function writePausedSession(base: string, milestoneId = "M001", stepMode = false
 }
 
 function writeRoadmap(base: string, checked = false): void {
-  const milestoneDir = join(base, ".gsd", "milestones", "M001");
+  const milestoneDir = join(base, ".gsd", "phases", "01-m001");
   mkdirSync(join(milestoneDir, "slices", "S01", "tasks"), { recursive: true });
   writeFileSync(
-    join(milestoneDir, "M001-ROADMAP.md"),
+    join(milestoneDir, "01-ROADMAP.md"),
     [
       "# M001: Test Milestone",
       "",
@@ -119,16 +120,16 @@ function writeRoadmap(base: string, checked = false): void {
 }
 
 function writeCompleteArtifacts(base: string): void {
-  const milestoneDir = join(base, ".gsd", "milestones", "M001");
+  const milestoneDir = join(base, ".gsd", "phases", "01-m001");
   const sliceDir = join(milestoneDir, "slices", "S01");
   const tasksDir = join(sliceDir, "tasks");
   mkdirSync(sliceDir, { recursive: true });
   mkdirSync(tasksDir, { recursive: true });
-  writeFileSync(join(sliceDir, "S01-PLAN.md"), "# S01: Test Slice\n\n## Tasks\n- [x] **T01: Do thing** `est:10m`\n", "utf-8");
+  writeFileSync(join(sliceDir, "01-01-PLAN.md"), "# S01: Test Slice\n\n## Tasks\n- [x] **T01: Do thing** `est:10m`\n", "utf-8");
   writeFileSync(join(tasksDir, "T01-SUMMARY.md"), "# Task Summary\nDone.\n", "utf-8");
-  writeFileSync(join(sliceDir, "S01-SUMMARY.md"), "# Summary\nDone.\n", "utf-8");
-  writeFileSync(join(sliceDir, "S01-UAT.md"), "# UAT\nPassed.\n", "utf-8");
-  writeFileSync(join(milestoneDir, "M001-SUMMARY.md"), "# Milestone Summary\nDone.\n", "utf-8");
+  writeFileSync(join(sliceDir, "01-01-SUMMARY.md"), "# Summary\nDone.\n", "utf-8");
+  writeFileSync(join(sliceDir, "01-01-UAT.md"), "# UAT\nPassed.\n", "utf-8");
+  writeFileSync(join(milestoneDir, "01-SUMMARY.md"), "# Milestone Summary\nDone.\n", "utf-8");
 }
 
 test("direct /gsd auto stale complete repo yields stale classification with no recovery payload", async () => {
@@ -190,9 +191,17 @@ test("direct /gsd auto never restores a paused milestone superseded by the activ
 
   const pausedMilestoneId = "M016-5b17xo";
   const activeMilestoneId = "M018-6b0xxe";
-  const milestoneDir = join(base, ".gsd", "milestones", pausedMilestoneId);
-  mkdirSync(milestoneDir, { recursive: true });
-  writeFileSync(join(milestoneDir, `${pausedMilestoneId}-CONTEXT.md`), "# Paused milestone\n");
+  // Flat-phase layout: startAuto refuses a pre-flat-phase milestones/<MID>/
+  // tree outright, so this fixture must seed what the resolvers read.
+  const phaseDir = join(
+    base,
+    ".gsd",
+    LAYOUT_SEGMENTS.level1,
+    canonicalPhaseDirName(pausedMilestoneId, "Paused milestone"),
+  );
+  mkdirSync(phaseDir, { recursive: true });
+  const phasePrefix = String(milestoneIdToPhaseNum(pausedMilestoneId)).padStart(2, "0");
+  writeFileSync(join(phaseDir, `${phasePrefix}-CONTEXT.md`), "# Paused milestone\n");
   openFixtureDb(base);
   insertMilestone({ id: pausedMilestoneId, title: "Paused milestone", status: "active" });
   writePausedSession(base, pausedMilestoneId);
@@ -269,11 +278,11 @@ test("direct /gsd auto skips paused-session replay when recovered unit already c
   const base = makeTmpBase();
   try {
     writeRoadmap(base, false);
-    const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+    const sliceDir = join(base, ".gsd", "phases", "01-m001");
     const tasksDir = join(sliceDir, "tasks");
     mkdirSync(tasksDir, { recursive: true });
     writeFileSync(
-      join(sliceDir, "S01-PLAN.md"),
+      join(sliceDir, "01-01-PLAN.md"),
       [
         "# S01: Test Slice",
         "",

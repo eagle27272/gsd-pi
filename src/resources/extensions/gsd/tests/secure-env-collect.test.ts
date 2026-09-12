@@ -230,7 +230,7 @@ function makeManifest(entries: Array<{ key: string; status?: string; formatHint?
 
 async function writeManifestFile(dir: string, manifest: any): Promise<string> {
 	const { formatSecretsManifest } = await loadFilesExports();
-	const milestoneDir = join(dir, ".gsd", "milestones", "M001");
+	const milestoneDir = join(dir, ".gsd", "phases", "01-m001");
 	mkdirSync(milestoneDir, { recursive: true });
 	const filePath = join(milestoneDir, "M001-SECRETS.md");
 	writeFileSync(filePath, formatSecretsManifest(manifest));

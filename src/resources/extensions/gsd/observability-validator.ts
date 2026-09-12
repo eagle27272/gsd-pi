@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { loadFile } from "./files.js";
 import { resolveSliceFile, resolveTaskFile, resolveTasksDir, resolveTaskFiles } from "./paths.js";
 
@@ -432,11 +433,10 @@ export async function validateCompleteBoundary(basePath: string, milestoneId: st
   const issues: ValidationIssue[] = [];
   const tasksDir = resolveTasksDir(basePath, milestoneId, sliceId);
   const taskSummaries = tasksDir ? resolveTaskFiles(tasksDir, "SUMMARY") : [];
-  const taskSummaryPaths = taskSummaries.flatMap(file => {
-    const taskId = file.split("-")[0];
-    const taskSummary = resolveTaskFile(basePath, milestoneId, sliceId, taskId, "SUMMARY");
-    return taskSummary ? [taskSummary] : [];
-  });
+  // Validate the files actually present in the tasks dir. Re-resolving each id
+  // through resolveTaskFile would drop them: the canonical task summary lives at
+  // the phase root, and a tasks/ copy must not stand in for it (#1208).
+  const taskSummaryPaths = taskSummaries.map(file => join(tasksDir!, file));
   const taskSummaryContents = await Promise.all(taskSummaryPaths.map(loadFile));
   for (const [index, content] of taskSummaryContents.entries()) {
     const taskSummary = taskSummaryPaths[index];

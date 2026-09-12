@@ -14,7 +14,7 @@ import type { Override } from "./files.js";
 import { extractVerdict } from "./verdict-parser.js";
 import { loadPrompt, inlineTemplate } from "./prompt-loader.js";
 import {
-  resolveMilestoneFile, resolveSliceFile, resolveSlicePath,
+  resolveMilestoneFile, resolveMilestonePath, resolveSliceFile, resolveSlicePath,
   resolveTasksDir, resolveTaskFiles, resolveTaskFile,
   taskIdFromTaskFileName,
   relMilestoneFile, relSliceFile, relSlicePath, relMilestonePath,
@@ -1556,9 +1556,15 @@ function resolveTaskSummariesLocation(
 ): { dir: string; relPrefix: string } | null {
   const slicePath = resolveSlicePath(base, mid, sid);
   if (!slicePath) return null;
-  const tDir = resolveTasksDir(base, mid, sid);
   const sRel = relSlicePath(base, mid, sid);
-  if (tDir) return { dir: tDir, relPrefix: `${sRel}/tasks` };
+  // Only a real slices/<SID>/ subdir keeps its summaries under tasks/. In
+  // flat-phase the slice path IS the phase dir, where a tasks/ subdir may hold
+  // auxiliary artifacts only — resolveTaskFile writes summaries at the phase
+  // root, so reading from tasks/ there would find nothing (#1208).
+  if (slicePath !== resolveMilestonePath(base, mid)) {
+    const tDir = resolveTasksDir(base, mid, sid);
+    if (tDir) return { dir: tDir, relPrefix: `${sRel}/tasks` };
+  }
   return { dir: slicePath, relPrefix: sRel };
 }
 

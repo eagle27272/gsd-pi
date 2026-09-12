@@ -24,6 +24,7 @@ import {
 } from "../guided-flow.ts";
 import { shouldRunPlanV2Gate } from "../auto/phase-helpers.ts";
 import { resolveUokFlags } from "../uok/flags.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 const MILESTONE_ID = "M001";
 const SLICE_ID = "S01";
@@ -32,19 +33,19 @@ const tempDirs = new Set<string>();
 
 function createBasePath(): string {
   const basePath = mkdtempSync(join(tmpdir(), "gsd-uok-planv2-"));
-  mkdirSync(join(basePath, ".gsd", "milestones", MILESTONE_ID), { recursive: true });
+  mkdirSync(join(basePath, ".gsd", "phases", canonicalPhaseDirName(MILESTONE_ID)), { recursive: true });
   tempDirs.add(basePath);
   return basePath;
 }
 
 function writeMilestoneFile(basePath: string, suffix: string, content: string): void {
-  const milestoneDir = join(basePath, ".gsd", "milestones", MILESTONE_ID);
+  const milestoneDir = join(basePath, ".gsd", "phases", canonicalPhaseDirName(MILESTONE_ID));
   mkdirSync(milestoneDir, { recursive: true });
   writeFileSync(join(milestoneDir, `${MILESTONE_ID}-${suffix}.md`), `${content}\n`, "utf-8");
 }
 
 function writeSliceFile(basePath: string, suffix: string, content: string): void {
-  const sliceDir = join(basePath, ".gsd", "milestones", MILESTONE_ID, "slices", SLICE_ID);
+  const sliceDir = join(basePath, ".gsd", "phases", canonicalPhaseDirName(MILESTONE_ID));
   mkdirSync(sliceDir, { recursive: true });
   writeFileSync(join(sliceDir, `${SLICE_ID}-${suffix}.md`), `${content}\n`, "utf-8");
 }

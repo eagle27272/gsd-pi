@@ -105,16 +105,16 @@ function createFixtureTree(baseDir: string): void {
   fs.writeFileSync(path.join(gsd, 'PROJECT.md'), '# Test Project\nA test project.');
 
   // Create milestone hierarchy
-  const m001 = path.join(gsd, 'milestones', 'M001');
+  const m001 = path.join(gsd, 'phases', '01-m001');
   fs.mkdirSync(m001, { recursive: true });
-  fs.writeFileSync(path.join(m001, 'M001-ROADMAP.md'), '# M001 Roadmap\nTest roadmap content.');
-  fs.writeFileSync(path.join(m001, 'M001-CONTEXT.md'), '# M001 Context\nTest context.');
+  fs.writeFileSync(path.join(m001, '01-ROADMAP.md'), '# M001 Roadmap\nTest roadmap content.');
+  fs.writeFileSync(path.join(m001, '01-CONTEXT.md'), '# M001 Context\nTest context.');
 
   // Create slice
   const s01 = path.join(m001, 'slices', 'S01');
   fs.mkdirSync(s01, { recursive: true });
-  fs.writeFileSync(path.join(s01, 'S01-PLAN.md'), '# S01 Plan\nTest plan.');
-  fs.writeFileSync(path.join(s01, 'S01-SUMMARY.md'), '# S01 Summary\nTest summary.');
+  fs.writeFileSync(path.join(s01, '01-01-PLAN.md'), '# S01 Plan\nTest plan.');
+  fs.writeFileSync(path.join(s01, '01-01-SUMMARY.md'), '# S01 Summary\nTest summary.');
 
   // Create tasks
   const tasks = path.join(s01, 'tasks');

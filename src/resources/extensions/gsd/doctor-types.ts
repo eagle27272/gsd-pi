@@ -30,7 +30,7 @@ export type DoctorIssueCode =
   | "gitignore_missing_patterns"
   | "symlinked_gsd_unignored"
   | "unresolvable_dependency"
-  | "failed_migration"
+  | "legacy_layout"
   | "broken_symlink"
   | "numbered_gsd_variant"
   // Environment health checks (#1221)

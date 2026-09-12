@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { openDatabase, closeDatabase } from '../gsd-db.ts';
 import { handlePlanMilestone as handlePlanMilestoneWithInvocation } from '../tools/plan-milestone.ts';
 import { internalPlanningInvocation } from '../planning-invocation.ts';
+import { canonicalPhaseDirName } from '../layout-policy.ts';
 
 function handlePlanMilestone(
   params: Parameters<typeof handlePlanMilestoneWithInvocation>[0],
@@ -94,12 +95,9 @@ function planParams() {
 
 test('#4402 plan-milestone preserves ## Boundary Map after post-mutation projections', async (t) => {
   const base = mkdtempSync(join(tmpdir(), 'gsd-4402-'));
-  const mDir = join(base, '.gsd', 'milestones', 'M001');
+  const mDir = join(base, '.gsd', 'phases', canonicalPhaseDirName('M001', 'Preserve Boundary Map'));
   mkdirSync(mDir, { recursive: true });
-  // A content-bearing legacy milestone dir requires at least one non-META file
-  // (dirIsContentBearingLegacyMilestone) so the layout sniffer treats it as a
-  // real legacy milestone rather than a metadata-only placeholder.
-  writeFileSync(join(mDir, 'M001-CONTEXT.md'), '# M001\n');
+  writeFileSync(join(mDir, '01-CONTEXT.md'), '# M001\n');
   openDatabase(join(base, '.gsd', 'gsd.db'));
 
   t.after(() => {
@@ -110,7 +108,7 @@ test('#4402 plan-milestone preserves ## Boundary Map after post-mutation project
   const result = await handlePlanMilestone(planParams(), base);
   assert.ok(!('error' in result), `unexpected error: ${'error' in result ? result.error : ''}`);
 
-  const roadmapPath = join(base, '.gsd', 'milestones', 'M001', 'M001-ROADMAP.md');
+  const roadmapPath = join(mDir, '01-ROADMAP.md');
   assert.ok(existsSync(roadmapPath), 'ROADMAP.md must exist on disk');
 
   const roadmap = readFileSync(roadmapPath, 'utf-8');

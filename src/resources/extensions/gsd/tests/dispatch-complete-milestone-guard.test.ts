@@ -27,9 +27,9 @@ import {
 
 function makeBase(): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-complete-dispatch-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01"), { recursive: true });
-  writeFileSync(join(base, ".gsd", "milestones", "M001", "ROADMAP.md"), "# M001\n\n## Slices\n\n- [x] **S01**: Done\n");
-  writeFileSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "SUMMARY.md"), "# Summary\n");
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
+  writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md"), "# M001\n\n## Slices\n\n- [x] **S01**: Done\n");
+  writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-01-SUMMARY.md"), "# Summary\n");
   writeFileSync(join(base, "implementation.txt"), "done\n");
   return base;
 }
@@ -112,7 +112,7 @@ describe("completing-milestone dispatch guard (#4324)", () => {
     assert.equal(result?.unitType, "complete-milestone");
     const validation = getLatestAssessmentByScope("M001", "milestone-validation");
     assert.equal(validation?.status, "pass");
-    const validationPath = join(base, ".gsd", "milestones", "M001", "M001-VALIDATION.md");
+    const validationPath = join(base, ".gsd", "phases", "01-m001", "01-VALIDATION.md");
     assert.equal(existsSync(validationPath), true);
     assert.match(readFileSync(validationPath, "utf-8"), /skip_validation_reason: closeout-recovery/);
   });
@@ -138,7 +138,7 @@ describe("completing-milestone dispatch guard (#4324)", () => {
     base = makeBase();
     rmSync(join(base, "implementation.txt"), { force: true });
     initGitRepo(base);
-    writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-SUMMARY.md"), "# Milestone Summary\n");
+    writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-SUMMARY.md"), "# Milestone Summary\n");
     execFileSync("git", ["add", "."], { cwd: base, stdio: "ignore" });
     execFileSync("git", ["commit", "-m", "chore: planning artifacts only"], { cwd: base, stdio: "ignore" });
 
@@ -190,7 +190,7 @@ describe("completing-milestone dispatch guard (#4324)", () => {
     insertMilestone({ id: "M001", title: "Milestone One", status: "active" });
     insertSlice({ milestoneId: "M001", id: "S01", title: "Done", status: "complete" });
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-ASSESSMENT.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-01-ASSESSMENT.md"),
       "---\nverdict: fail\n---\n\nUAT failed.\n",
     );
 
@@ -208,7 +208,7 @@ describe("completing-milestone dispatch guard (#4324)", () => {
     insertMilestone({ id: "M001", title: "Milestone One", status: "active" });
     insertSlice({ milestoneId: "M001", id: "S01", title: "Done", status: "complete" });
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-ASSESSMENT.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-01-ASSESSMENT.md"),
       "# UAT\n\nNo verdict yet.\n",
     );
 
@@ -253,7 +253,7 @@ describe("complete phase dispatch guard (#5683)", () => {
     insertMilestone({ id: "M001", title: "Milestone One", status: "complete" });
     insertSlice({ milestoneId: "M001", id: "S01", title: "Done", status: "complete" });
     insertAssessment({
-      path: "milestones/M001/M001-VALIDATION.md",
+      path: "phases/01-m001/01-VALIDATION.md",
       milestoneId: "M001",
       status: "pass",
       scope: "milestone-validation",
@@ -275,7 +275,7 @@ describe("complete phase dispatch guard (#5683)", () => {
     insertMilestone({ id: "M001", title: "Milestone One", status: "complete" });
     insertSlice({ milestoneId: "M001", id: "S01", title: "Done", status: "complete" });
     insertAssessment({
-      path: "milestones/M001/M001-VALIDATION.md",
+      path: "phases/01-m001/01-VALIDATION.md",
       milestoneId: "M001",
       status: "pass",
       scope: "milestone-validation",

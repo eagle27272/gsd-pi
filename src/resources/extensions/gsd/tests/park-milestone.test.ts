@@ -20,17 +20,18 @@ import {
 } from "../gsd-db.ts";
 import { createWorktree } from "../worktree-manager.ts";
 import { _resetLogs, drainLogs, setStderrLoggingEnabled } from "../workflow-logger.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 // ─── Fixture Helpers ───────────────────────────────────────────────────────
 
 function createFixtureBase(): string {
   const base = mkdtempSync(join(tmpdir(), 'gsd-park-test-'));
-  mkdirSync(join(base, '.gsd', 'milestones'), { recursive: true });
+  mkdirSync(join(base, '.gsd', 'phases'), { recursive: true });
   return base;
 }
 
 function createMilestone(base: string, mid: string, opts?: { withRoadmap?: boolean; withSummary?: boolean; dependsOn?: string[] }): void {
-  const mDir = join(base, '.gsd', 'milestones', mid);
+  const mDir = join(base, '.gsd', 'phases', canonicalPhaseDirName(mid));
   mkdirSync(mDir, { recursive: true });
 
   if (opts?.dependsOn) {
@@ -201,7 +202,7 @@ test('discardMilestone removes directory', async () => {
       createMilestone(base, 'M001', { withRoadmap: true });
       clearCaches();
 
-      const mDir = join(base, '.gsd', 'milestones', 'M001');
+      const mDir = join(base, '.gsd', 'phases', '01-m001');
       assert.ok(existsSync(mDir), 'milestone dir exists before discard');
 
       const success = discardMilestone(base, 'M001');
@@ -284,7 +285,7 @@ test('discardMilestone removes DB rows when milestone directory is already missi
       insertSlice({ milestoneId: 'M001', id: 'S01', title: 'Only slice', status: 'pending' });
       insertTask({ milestoneId: 'M001', sliceId: 'S01', id: 'T01', title: 'Only task', status: 'pending' });
 
-      const mDir = join(base, '.gsd', 'milestones', 'M001');
+      const mDir = join(base, '.gsd', 'phases', '01-m001');
       rmSync(mDir, { recursive: true, force: true });
       assert.ok(!existsSync(mDir), 'milestone dir removed before discard');
 

@@ -418,15 +418,15 @@ test("replan recovery durably carries its evidence into restart-safe dispatch co
   assert.match(recoveryPrompt, new RegExp(String(routed.workCheckpointId)));
   assert.match(recoveryPrompt, /call `gsd_replan_task`/i);
   assert.match(recoveryPrompt, /do not call `gsd_task_complete`/i);
-  const milestoneDir = join(scope.basePath, ".gsd", "milestones", "M001");
+  const milestoneDir = join(scope.basePath, ".gsd", "phases", "01-m001");
   const sliceDir = join(milestoneDir, "slices", "S01");
   mkdirSync(sliceDir, { recursive: true });
-  writeFileSync(join(milestoneDir, "M001-CONTEXT.md"), "# Recovery context\n");
-  writeFileSync(join(milestoneDir, "M001-RESEARCH.md"), "# Recovery research\n");
-  writeFileSync(join(milestoneDir, "M001-ROADMAP.md"), "# Recovery\n\n- [ ] **S01: Recovery operation**\n");
-  writeFileSync(join(sliceDir, "S01-CONTEXT.md"), "# Slice context\n");
-  writeFileSync(join(sliceDir, "S01-RESEARCH.md"), "# Slice research\n");
-  writeFileSync(join(sliceDir, "S01-PLAN.md"), "# S01\n\n- [ ] **T01: Recover atomically**\n");
+  writeFileSync(join(milestoneDir, "01-CONTEXT.md"), "# Recovery context\n");
+  writeFileSync(join(milestoneDir, "01-RESEARCH.md"), "# Recovery research\n");
+  writeFileSync(join(milestoneDir, "01-ROADMAP.md"), "# Recovery\n\n- [ ] **S01: Recovery operation**\n");
+  writeFileSync(join(sliceDir, "01-01-CONTEXT.md"), "# Slice context\n");
+  writeFileSync(join(sliceDir, "01-01-RESEARCH.md"), "# Slice research\n");
+  writeFileSync(join(sliceDir, "01-01-PLAN.md"), "# S01\n\n- [ ] **T01: Recover atomically**\n");
   const state = {
     activeMilestone: { id: "M001", title: "Recovery" },
     activeSlice: { id: "S01", title: "Recovery operation" },
@@ -473,7 +473,7 @@ test("replan recovery durably carries its evidence into restart-safe dispatch co
   assert.match(customPreparation.prompt, /call `gsd_replan_task`/i);
   assert.doesNotMatch(customPreparation.prompt, /stale custom engine implementation step/i);
 
-  const taskDir = join(scope.basePath, ".gsd", "milestones", "M001", "slices", "S01", "tasks");
+  const taskDir = join(scope.basePath, ".gsd", "phases", "01-m001", "tasks");
   mkdirSync(taskDir, { recursive: true });
   writeFileSync(join(taskDir, "T01-PLAN.md"), "# T01: Recover atomically\n\nOld invalid plan.\n");
   const replanned = await handleReplanTask({
@@ -1357,16 +1357,16 @@ test("durable budget use survives retries and exhausts to agent abort", async ()
     },
   });
 
-  const milestoneDir = join(firstFailure.basePath, ".gsd", "milestones", "M001");
+  const milestoneDir = join(firstFailure.basePath, ".gsd", "phases", "01-m001");
   const sliceDir = join(milestoneDir, "slices", "S01");
   const taskDir = join(sliceDir, "tasks");
   mkdirSync(taskDir, { recursive: true });
-  writeFileSync(join(milestoneDir, "M001-CONTEXT.md"), "# Recovery context\n");
-  writeFileSync(join(milestoneDir, "M001-RESEARCH.md"), "# Recovery research\n");
-  writeFileSync(join(milestoneDir, "M001-ROADMAP.md"), "# Recovery\n\n- [ ] **S01: Recovery operation**\n");
-  writeFileSync(join(sliceDir, "S01-CONTEXT.md"), "# Slice context\n");
-  writeFileSync(join(sliceDir, "S01-RESEARCH.md"), "# Slice research\n");
-  writeFileSync(join(sliceDir, "S01-PLAN.md"), "# S01\n\n- [ ] **T01: Recover atomically**\n");
+  writeFileSync(join(milestoneDir, "01-CONTEXT.md"), "# Recovery context\n");
+  writeFileSync(join(milestoneDir, "01-RESEARCH.md"), "# Recovery research\n");
+  writeFileSync(join(milestoneDir, "01-ROADMAP.md"), "# Recovery\n\n- [ ] **S01: Recovery operation**\n");
+  writeFileSync(join(sliceDir, "01-01-CONTEXT.md"), "# Slice context\n");
+  writeFileSync(join(sliceDir, "01-01-RESEARCH.md"), "# Slice research\n");
+  writeFileSync(join(sliceDir, "01-01-PLAN.md"), "# S01\n\n- [ ] **T01: Recover atomically**\n");
   writeFileSync(join(taskDir, "T01-PLAN.md"), "# T01: Recover atomically\n");
   const builtInPrompt = await buildExecuteTaskPrompt(
     "M001", "S01", "Recovery operation", "T01", "Recover atomically", firstFailure.basePath,
@@ -1626,16 +1626,16 @@ test("dispatcher does not reject an abort whose resumed successor terminated", a
   );
   assert.equal(readTerminalTaskRecoveryAbort("M001", "S01", "T01"), null);
 
-  const milestoneDir = join(failed.basePath, ".gsd", "milestones", "M001");
+  const milestoneDir = join(failed.basePath, ".gsd", "phases", "01-m001");
   const sliceDir = join(milestoneDir, "slices", "S01");
   const taskDir = join(sliceDir, "tasks");
   mkdirSync(taskDir, { recursive: true });
-  writeFileSync(join(milestoneDir, "M001-CONTEXT.md"), "# Recovery context\n");
-  writeFileSync(join(milestoneDir, "M001-RESEARCH.md"), "# Recovery research\n");
-  writeFileSync(join(milestoneDir, "M001-ROADMAP.md"), "# Recovery\n\n- [ ] **S01: Recovery operation**\n");
-  writeFileSync(join(sliceDir, "S01-CONTEXT.md"), "# Slice context\n");
-  writeFileSync(join(sliceDir, "S01-RESEARCH.md"), "# Slice research\n");
-  writeFileSync(join(sliceDir, "S01-PLAN.md"), "# S01\n\n- [ ] **T01: Recover atomically**\n");
+  writeFileSync(join(milestoneDir, "01-CONTEXT.md"), "# Recovery context\n");
+  writeFileSync(join(milestoneDir, "01-RESEARCH.md"), "# Recovery research\n");
+  writeFileSync(join(milestoneDir, "01-ROADMAP.md"), "# Recovery\n\n- [ ] **S01: Recovery operation**\n");
+  writeFileSync(join(sliceDir, "01-01-CONTEXT.md"), "# Slice context\n");
+  writeFileSync(join(sliceDir, "01-01-RESEARCH.md"), "# Slice research\n");
+  writeFileSync(join(sliceDir, "01-01-PLAN.md"), "# S01\n\n- [ ] **T01: Recover atomically**\n");
   writeFileSync(join(taskDir, "T01-PLAN.md"), "# T01: Recover atomically\n");
 
   const dispatch = await resolveDispatch({

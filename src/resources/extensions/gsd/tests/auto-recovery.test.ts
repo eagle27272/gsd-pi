@@ -42,7 +42,7 @@ const tmpDirs: string[] = [];
 function makeTmpBase(): string {
   const base = join(tmpdir(), `gsd-test-${randomUUID()}`);
   // Create .gsd/milestones/M001/slices/S01/tasks/ structure
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001", "tasks"), { recursive: true });
   return base;
 }
 
@@ -147,7 +147,7 @@ function runGit(base: string, args: string[]): void {
 
 function makeCompleteMilestoneRecoveryProject(): string {
   const base = mkdtempSync(join(tmpdir(), "auto-recovery-adopted-complete-ms-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
   openDatabase(join(base, ".gsd", "gsd.db"));
   tmpDirs.push(base);
   insertMilestone({ id: "M001", title: "Milestone", status: "active" });
@@ -167,14 +167,14 @@ function makeCompleteMilestoneRecoveryProject(): string {
     status: "complete",
   });
   insertAssessment({
-    path: ".gsd/milestones/M001/M001-VALIDATION.md",
+    path: ".gsd/phases/01-m001/01-VALIDATION.md",
     milestoneId: "M001",
     status: "pass",
     scope: "milestone-validation",
     fullContent: "---\nverdict: pass\n---\n",
   });
-  writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-SUMMARY.md"), "# Complete-looking projection\n");
-  writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-VALIDATION.md"), "---\nverdict: pass\n---\n");
+  writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-SUMMARY.md"), "# Complete-looking projection\n");
+  writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-VALIDATION.md"), "---\nverdict: pass\n---\n");
   runGit(base, ["init", "-b", "main"]);
   runGit(base, ["config", "user.email", "test@example.com"]);
   runGit(base, ["config", "user.name", "Test User"]);
@@ -293,8 +293,7 @@ test("resolveExpectedArtifactPath returns correct path for execute-task", () => 
   try {
     const result = resolveExpectedArtifactPath("execute-task", "M001/S01/T01", base);
     assert.ok(result);
-    assert.ok(result!.includes("tasks"));
-    assert.ok(result!.includes("SUMMARY"));
+    assert.ok(result!.includes("S01-T01-SUMMARY.md"));
   } finally {
     cleanup(base);
   }
@@ -325,9 +324,9 @@ test("resolveExpectedArtifactPath returns correct path for plan-slice", () => {
 test("plan-slice artifact resolution handles lowercase unit IDs against uppercase paths", () => {
   const base = makeTmpBase();
   try {
-    const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+    const sliceDir = join(base, ".gsd", "phases", "01-m001");
     const tasksDir = join(sliceDir, "tasks");
-    writeFileSync(join(sliceDir, "S01-PLAN.md"), [
+    writeFileSync(join(sliceDir, "01-01-PLAN.md"), [
       "# S01: Test Slice",
       "",
       "## Tasks",
@@ -338,13 +337,13 @@ test("plan-slice artifact resolution handles lowercase unit IDs against uppercas
 
     const artifactPath = resolveExpectedArtifactPath("plan-slice", "m001/s01", base);
     assert.ok(
-      artifactPath?.endsWith(".gsd/milestones/M001/slices/S01/S01-PLAN.md"),
+      artifactPath?.endsWith(".gsd/phases/01-m001/01-01-PLAN.md"),
       "lowercase unit IDs should resolve to the existing uppercase artifact path",
     );
 
     const diagnostic = diagnoseExpectedArtifact("plan-slice", "m001/s01", base);
     assert.ok(
-      diagnostic?.includes(".gsd/milestones/M001/slices/S01/S01-PLAN.md"),
+      diagnostic?.includes(".gsd/phases/01-m001/01-01-PLAN.md"),
       "diagnostic should report the existing uppercase artifact path",
     );
     assert.ok(
@@ -365,15 +364,15 @@ test("plan-slice artifact resolution handles lowercase unit IDs against uppercas
 test("plan-slice verification accepts artifacts rendered in the live milestone worktree", () => {
   const base = makeTmpBase();
   try {
-    const rootSlicePlan = join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md");
+    const rootSlicePlan = join(base, ".gsd", "phases", "01-m001", "01-01-PLAN.md");
     rmSync(rootSlicePlan, { force: true });
 
     const worktree = join(base, ".gsd", "worktrees", "M001");
-    const worktreeSliceDir = join(worktree, ".gsd", "milestones", "M001", "slices", "S01");
+    const worktreeSliceDir = join(worktree, ".gsd", "phases", "01-m001");
     const worktreeTasksDir = join(worktreeSliceDir, "tasks");
     mkdirSync(worktreeTasksDir, { recursive: true });
     writeFileSync(join(worktree, ".git"), "gitdir: ../../../../.git/worktrees/M001\n", "utf-8");
-    writeFileSync(join(worktreeSliceDir, "S01-PLAN.md"), [
+    writeFileSync(join(worktreeSliceDir, "01-01-PLAN.md"), [
       "# S01: Test Slice",
       "",
       "## Tasks",
@@ -395,9 +394,9 @@ test("plan-slice verification accepts artifacts rendered in the live milestone w
 test("complete-slice verification accepts artifacts rendered in the project root while a live worktree exists", () => {
   const base = makeTmpBase();
   try {
-    const milestoneDir = join(base, ".gsd", "milestones", "M001");
-    const sliceDir = join(milestoneDir, "slices", "S01");
-    writeFileSync(join(milestoneDir, "M001-ROADMAP.md"), [
+    const milestoneDir = join(base, ".gsd", "phases", "01-m001");
+    const sliceDir = milestoneDir;
+    writeFileSync(join(milestoneDir, "01-ROADMAP.md"), [
       "# M001: Test",
       "",
       "## Slices",
@@ -405,12 +404,12 @@ test("complete-slice verification accepts artifacts rendered in the project root
       "- [x] **S01: Test Slice** `risk:low` `depends:[]`",
       "  > After this: done",
     ].join("\n"));
-    writeFileSync(join(sliceDir, "S01-SUMMARY.md"), "# S01 Summary\nDone.");
-    writeFileSync(join(sliceDir, "S01-UAT.md"), "# S01 UAT\nPass.");
+    writeFileSync(join(sliceDir, "01-01-SUMMARY.md"), "# S01 Summary\nDone.");
+    writeFileSync(join(sliceDir, "01-01-UAT.md"), "# S01 UAT\nPass.");
     seedMilestoneSlices(base, [{ id: "S01", status: "complete" }]);
 
     const worktree = join(base, ".gsd", "worktrees", "M001");
-    mkdirSync(join(worktree, ".gsd", "milestones", "M001", "slices", "S01"), { recursive: true });
+    mkdirSync(join(worktree, ".gsd", "phases", "01-m001"), { recursive: true });
     writeFileSync(join(worktree, ".git"), "gitdir: ../../../../.git/worktrees/M001\n", "utf-8");
 
     assert.equal(
@@ -426,11 +425,11 @@ test("complete-slice verification accepts artifacts rendered in the project root
 test("validate-milestone verification accepts project-root VALIDATION while a live worktree exists", () => {
   const base = makeTmpBase();
   try {
-    const milestoneDir = join(base, ".gsd", "milestones", "M001");
-    writeFileSync(join(milestoneDir, "M001-VALIDATION.md"), "---\nverdict: pass\n---\n# Validation\nPass.");
+    const milestoneDir = join(base, ".gsd", "phases", "01-m001");
+    writeFileSync(join(milestoneDir, "01-VALIDATION.md"), "---\nverdict: pass\n---\n# Validation\nPass.");
 
     const worktree = join(base, ".gsd", "worktrees", "M001");
-    mkdirSync(join(worktree, ".gsd", "milestones", "M001"), { recursive: true });
+    mkdirSync(join(worktree, ".gsd", "phases", "01-m001"), { recursive: true });
     writeFileSync(join(worktree, ".git"), "gitdir: ../../../../.git/worktrees/M001\n", "utf-8");
 
     assert.equal(
@@ -558,9 +557,9 @@ test("refreshRecoveryDbForArtifact rejects a Task row without an actionable Atte
     title: "Stuck Task",
     status: "pending",
   });
-  const sliceDir = join(dir, ".gsd", "milestones", "M001", "slices", "S01");
+  const sliceDir = join(dir, ".gsd", "phases", "01-m001");
   mkdirSync(sliceDir, { recursive: true });
-  writeFileSync(join(sliceDir, "S01-PLAN.md"), [
+  writeFileSync(join(sliceDir, "01-01-PLAN.md"), [
     "# S01 Plan",
     "",
     "- [ ] **T01: Implement feature** `est:1h`",
@@ -576,7 +575,7 @@ test("refreshRecoveryDbForArtifact rejects a Task row without an actionable Atte
     message: "Stuck recovery found execute-task M001/S01/T01 artifacts, but its latest canonical Task Attempt has no actionable verify or route Result.",
   });
   assert.equal(getTask("M001", "S01", "T01")?.status, "pending");
-  const planContent = readFileSync(join(sliceDir, "S01-PLAN.md"), "utf-8");
+  const planContent = readFileSync(join(sliceDir, "01-01-PLAN.md"), "utf-8");
   assert.ok(planContent.includes("[ ] **T01:"), "projection must remain non-authoritative");
   const events = readEvents(join(dir, ".gsd", "event-log.jsonl"));
   assert.equal(events.some((event) => event.cmd === "complete-task"), false);
@@ -591,11 +590,11 @@ test("refreshRecoveryDbForArtifact does not mistake an unreadable projection for
     title: "Stuck Task",
     status: "pending",
   });
-  const sliceDir = join(dir, ".gsd", "milestones", "M001", "slices", "S01");
+  const sliceDir = join(dir, ".gsd", "phases", "01-m001");
   mkdirSync(sliceDir, { recursive: true });
   // Make the expected plan path a directory so the best-effort checkbox
   // rewrite (readFileSync) throws EISDIR after the DB row is already promoted.
-  mkdirSync(join(sliceDir, "S01-PLAN.md"), { recursive: true });
+  mkdirSync(join(sliceDir, "01-01-PLAN.md"), { recursive: true });
 
   const result = refreshRecoveryDbForArtifact("execute-task", "M001/S01/T01", dir);
 
@@ -717,16 +716,16 @@ test("refreshRecoveryDbForArtifact closes complete-milestone DB row when artifac
     status: "complete",
   });
   insertAssessment({
-    path: ".gsd/milestones/M001/M001-VALIDATION.md",
+    path: ".gsd/phases/01-m001/01-VALIDATION.md",
     milestoneId: "M001",
     status: "pass",
     scope: "milestone-validation",
     fullContent: "---\nverdict: pass\n---\n",
   });
-  const milestoneDir = join(base, ".gsd", "milestones", "M001");
+  const milestoneDir = join(base, ".gsd", "phases", "01-m001");
   mkdirSync(milestoneDir, { recursive: true });
-  writeFileSync(join(milestoneDir, "M001-SUMMARY.md"), "# Milestone Summary\n");
-  writeFileSync(join(milestoneDir, "M001-VALIDATION.md"), "---\nverdict: pass\n---\n");
+  writeFileSync(join(milestoneDir, "01-SUMMARY.md"), "# Milestone Summary\n");
+  writeFileSync(join(milestoneDir, "01-VALIDATION.md"), "---\nverdict: pass\n---\n");
   runGit(base, ["init", "-b", "main"]);
   runGit(base, ["config", "user.email", "test@example.com"]);
   runGit(base, ["config", "user.name", "Test User"]);
@@ -946,16 +945,16 @@ test("refreshRecoveryDbForArtifact fails closed for complete-milestone without i
     status: "complete",
   });
   insertAssessment({
-    path: ".gsd/milestones/M001/M001-VALIDATION.md",
+    path: ".gsd/phases/01-m001/01-VALIDATION.md",
     milestoneId: "M001",
     status: "pass",
     scope: "milestone-validation",
     fullContent: "---\nverdict: pass\n---\n",
   });
-  const milestoneDir = join(base, ".gsd", "milestones", "M001");
+  const milestoneDir = join(base, ".gsd", "phases", "01-m001");
   mkdirSync(milestoneDir, { recursive: true });
-  writeFileSync(join(milestoneDir, "M001-SUMMARY.md"), "# Milestone Summary\n");
-  writeFileSync(join(milestoneDir, "M001-VALIDATION.md"), "---\nverdict: pass\n---\n");
+  writeFileSync(join(milestoneDir, "01-SUMMARY.md"), "# Milestone Summary\n");
+  writeFileSync(join(milestoneDir, "01-VALIDATION.md"), "---\nverdict: pass\n---\n");
   runGit(base, ["init", "-b", "main"]);
   runGit(base, ["config", "user.email", "test@example.com"]);
   runGit(base, ["config", "user.name", "Test User"]);
@@ -1022,7 +1021,10 @@ test("buildLoopRemediationSteps returns steps for plan-slice", () => {
     const steps = buildLoopRemediationSteps("plan-slice", "M001/S01", base);
     assert.ok(steps);
     assert.ok(steps!.includes("PLAN"));
-    assert.ok(steps!.includes("gsd recover"));
+    // Trailing backtick pins the whole argument: /gsd dispatch takes a phase and
+    // a MILESTONE id, so a slice-shaped `M001/S01` must not creep back in.
+    assert.ok(steps!.includes("gsd dispatch plan M001`"));
+    assert.ok(!steps!.includes("gsd recover"));
   } finally {
     cleanup(base);
   }
@@ -1063,17 +1065,17 @@ test("verifyExpectedArtifact accepts DB-complete slice when roadmap projection i
     });
 
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md"),
       "# M001: Test Milestone\n\n## Slices\n\n- [ ] **S01: Test Slice** `risk:low` `depends:[]`\n",
       "utf-8",
     );
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-SUMMARY.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-01-SUMMARY.md"),
       "# S01 Summary\n\nDone.\n",
       "utf-8",
     );
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-UAT.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-01-UAT.md"),
       "# S01 UAT\n\nPassed.\n",
       "utf-8",
     );
@@ -1094,9 +1096,9 @@ test("verifyExpectedArtifact accepts DB-complete slice when roadmap projection i
 test("verifyExpectedArtifact rejects plan-slice with empty scaffold", () => {
   const base = makeTmpBase();
   try {
-    const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+    const sliceDir = join(base, ".gsd", "phases", "01-m001");
     mkdirSync(sliceDir, { recursive: true });
-    writeFileSync(join(sliceDir, "S01-PLAN.md"), "# S01: Test Slice\n\n## Tasks\n\n");
+    writeFileSync(join(sliceDir, "01-01-PLAN.md"), "# S01: Test Slice\n\n## Tasks\n\n");
     assert.strictEqual(
       verifyExpectedArtifact("plan-slice", "M001/S01", base),
       false,
@@ -1110,10 +1112,10 @@ test("verifyExpectedArtifact rejects plan-slice with empty scaffold", () => {
 test("verifyExpectedArtifact accepts plan-slice with actual tasks", () => {
   const base = makeTmpBase();
   try {
-    const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+    const sliceDir = join(base, ".gsd", "phases", "01-m001");
     const tasksDir = join(sliceDir, "tasks");
     mkdirSync(tasksDir, { recursive: true });
-    writeFileSync(join(sliceDir, "S01-PLAN.md"), [
+    writeFileSync(join(sliceDir, "01-01-PLAN.md"), [
       "# S01: Test Slice",
       "",
       "## Tasks",
@@ -1136,10 +1138,10 @@ test("verifyExpectedArtifact accepts plan-slice with actual tasks", () => {
 test("verifyExpectedArtifact accepts plan-slice with completed tasks", () => {
   const base = makeTmpBase();
   try {
-    const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+    const sliceDir = join(base, ".gsd", "phases", "01-m001");
     const tasksDir = join(sliceDir, "tasks");
     mkdirSync(tasksDir, { recursive: true });
-    writeFileSync(join(sliceDir, "S01-PLAN.md"), [
+    writeFileSync(join(sliceDir, "01-01-PLAN.md"), [
       "# S01: Test Slice",
       "",
       "## Tasks",
@@ -1162,11 +1164,11 @@ test("verifyExpectedArtifact accepts plan-slice with completed tasks", () => {
 test("verifyExpectedArtifact treats complete-slice as satisfied when summary, UAT, and the DB slice row are complete", () => {
   const base = makeTmpBase();
   try {
-    const milestoneDir = join(base, ".gsd", "milestones", "M001");
-    const sliceDir = join(milestoneDir, "slices", "S01");
+    const milestoneDir = join(base, ".gsd", "phases", "01-m001");
+    const sliceDir = milestoneDir;
     mkdirSync(sliceDir, { recursive: true });
-    writeFileSync(join(sliceDir, "S01-SUMMARY.md"), "# Summary\nDone.\n");
-    writeFileSync(join(sliceDir, "S01-UAT.md"), "# UAT\nPassed.\n");
+    writeFileSync(join(sliceDir, "01-01-SUMMARY.md"), "# Summary\nDone.\n");
+    writeFileSync(join(sliceDir, "01-01-UAT.md"), "# UAT\nPassed.\n");
     seedMilestoneSlices(base, [{ id: "S01", status: "complete" }]);
 
     assert.equal(
@@ -1182,12 +1184,12 @@ test("verifyExpectedArtifact treats complete-slice as satisfied when summary, UA
 test("verifyExpectedArtifact rejects complete-slice when the DB slice row is unreadable, even with a checked roadmap", () => {
   const base = makeTmpBase();
   try {
-    const milestoneDir = join(base, ".gsd", "milestones", "M001");
-    const sliceDir = join(milestoneDir, "slices", "S01");
+    const milestoneDir = join(base, ".gsd", "phases", "01-m001");
+    const sliceDir = milestoneDir;
     mkdirSync(sliceDir, { recursive: true });
     // A checked roadmap projection must never stand in for the DB slice row:
     // slice completion is DB-authoritative (ADR-017) and fails closed.
-    writeFileSync(join(milestoneDir, "M001-ROADMAP.md"), [
+    writeFileSync(join(milestoneDir, "01-ROADMAP.md"), [
       "# M001: Test Milestone",
       "",
       "## Slices",
@@ -1200,8 +1202,8 @@ test("verifyExpectedArtifact rejects complete-slice when the DB slice row is unr
       "  - Produces: done",
       "  - Consumes: nothing",
     ].join("\n"));
-    writeFileSync(join(sliceDir, "S01-SUMMARY.md"), "# Summary\nDone.\n");
-    writeFileSync(join(sliceDir, "S01-UAT.md"), "# UAT\nPassed.\n");
+    writeFileSync(join(sliceDir, "01-01-SUMMARY.md"), "# Summary\nDone.\n");
+    writeFileSync(join(sliceDir, "01-01-UAT.md"), "# UAT\nPassed.\n");
 
     assert.equal(
       verifyExpectedArtifact("complete-slice", "M001/S01", base),
@@ -1216,8 +1218,8 @@ test("verifyExpectedArtifact rejects complete-slice when the DB slice row is unr
 test("verifyExpectedArtifact rejects run-uat when ASSESSMENT has no verdict", () => {
   const base = makeTmpBase();
   try {
-    const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
-    writeFileSync(join(sliceDir, "S01-ASSESSMENT.md"), "# Reassessment\n\nNo canonical verdict field.\n");
+    const sliceDir = join(base, ".gsd", "phases", "01-m001");
+    writeFileSync(join(sliceDir, "01-01-ASSESSMENT.md"), "# Reassessment\n\nNo canonical verdict field.\n");
 
     assert.equal(
       verifyExpectedArtifact("run-uat", "M001/S01", base),
@@ -1232,8 +1234,8 @@ test("verifyExpectedArtifact rejects run-uat when ASSESSMENT has no verdict", ()
 test("verifyExpectedArtifact accepts run-uat when ASSESSMENT has verdict", () => {
   const base = makeTmpBase();
   try {
-    const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
-    writeFileSync(join(sliceDir, "S01-ASSESSMENT.md"), [
+    const sliceDir = join(base, ".gsd", "phases", "01-m001");
+    writeFileSync(join(sliceDir, "01-01-ASSESSMENT.md"), [
       "---",
       "verdict: pass",
       "---",
@@ -1257,8 +1259,8 @@ test("verifyExpectedArtifact accepts run-uat when ASSESSMENT has verdict", () =>
 test("verifyExpectedArtifact plan-slice passes when all task plan files exist", () => {
   const base = makeTmpBase();
   try {
-    const tasksDir = join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks");
-    const planPath = join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md");
+    const tasksDir = join(base, ".gsd", "phases", "01-m001", "tasks");
+    const planPath = join(base, ".gsd", "phases", "01-m001", "01-01-PLAN.md");
     const planContent = [
       "# S01: Test Slice",
       "",
@@ -1281,8 +1283,8 @@ test("verifyExpectedArtifact plan-slice passes when all task plan files exist", 
 test("verifyExpectedArtifact plan-slice fails when a task plan file is missing (#739)", () => {
   const base = makeTmpBase();
   try {
-    const tasksDir = join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks");
-    const planPath = join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md");
+    const tasksDir = join(base, ".gsd", "phases", "01-m001", "tasks");
+    const planPath = join(base, ".gsd", "phases", "01-m001", "01-01-PLAN.md");
     const planContent = [
       "# S01: Test Slice",
       "",
@@ -1328,8 +1330,8 @@ test("verifyExpectedArtifact accepts flat-phase plan-slice with embedded tasks a
 test("verifyExpectedArtifact plan-slice still verifies per-task files for legacy ## Tasks plan with a stray empty <tasks> block", () => {
   const base = makeTmpBase();
   try {
-    const tasksDir = join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks");
-    const planPath = join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md");
+    const tasksDir = join(base, ".gsd", "phases", "01-m001", "tasks");
+    const planPath = join(base, ".gsd", "phases", "01-m001", "01-01-PLAN.md");
     // Legacy layout: real tasks live in a "## Tasks" section with separate
     // per-task PLAN files, but the plan also carries an empty <tasks></tasks>
     // block. The empty block must NOT flip the plan into flat-phase mode and
@@ -1359,7 +1361,7 @@ test("verifyExpectedArtifact plan-slice still verifies per-task files for legacy
 test("verifyExpectedArtifact plan-slice fails for plan with no tasks (#699)", () => {
   const base = makeTmpBase();
   try {
-    const planPath = join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md");
+    const planPath = join(base, ".gsd", "phases", "01-m001", "01-01-PLAN.md");
     const planContent = [
       "# S01: Test Slice",
       "",
@@ -1381,10 +1383,10 @@ test("verifyExpectedArtifact plan-slice fails for plan with no tasks (#699)", ()
 test("verifyExpectedArtifact accepts plan-slice with heading-style tasks (### T01 --)", () => {
   const base = makeTmpBase();
   try {
-    const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+    const sliceDir = join(base, ".gsd", "phases", "01-m001");
     const tasksDir = join(sliceDir, "tasks");
     mkdirSync(tasksDir, { recursive: true });
-    writeFileSync(join(sliceDir, "S01-PLAN.md"), [
+    writeFileSync(join(sliceDir, "01-01-PLAN.md"), [
       "# S01: Test Slice",
       "",
       "## Tasks",
@@ -1412,10 +1414,10 @@ test("verifyExpectedArtifact accepts plan-slice with heading-style tasks (### T0
 test("verifyExpectedArtifact accepts plan-slice with colon-style heading tasks (### T01:)", () => {
   const base = makeTmpBase();
   try {
-    const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+    const sliceDir = join(base, ".gsd", "phases", "01-m001");
     const tasksDir = join(sliceDir, "tasks");
     mkdirSync(tasksDir, { recursive: true });
-    writeFileSync(join(sliceDir, "S01-PLAN.md"), [
+    writeFileSync(join(sliceDir, "01-01-PLAN.md"), [
       "# S01: Test Slice",
       "",
       "## Tasks",
@@ -1438,10 +1440,10 @@ test("verifyExpectedArtifact accepts plan-slice with colon-style heading tasks (
 test("verifyExpectedArtifact execute-task requires checked checkbox or DB status for heading-style plan entry (#1691, #3607)", () => {
   const base = makeTmpBase();
   try {
-    const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+    const sliceDir = join(base, ".gsd", "phases", "01-m001");
     const tasksDir = join(sliceDir, "tasks");
     mkdirSync(tasksDir, { recursive: true });
-    writeFileSync(join(sliceDir, "S01-PLAN.md"), [
+    writeFileSync(join(sliceDir, "01-01-PLAN.md"), [
       "# S01: Test Slice",
       "",
       "## Tasks",
@@ -1526,9 +1528,9 @@ test("hasImplementationArtifacts returns false when only .gsd/ files committed (
   try {
     // Create a feature branch and commit only .gsd/ files
     execFileSync("git", ["checkout", "-b", "feat/test-milestone"], { cwd: base, stdio: "ignore" });
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
-    writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), "# Roadmap");
-    writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-SUMMARY.md"), "# Summary");
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
+    writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md"), "# Roadmap");
+    writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-SUMMARY.md"), "# Summary");
     execFileSync("git", ["add", "."], { cwd: base, stdio: "ignore" });
     execFileSync("git", ["commit", "-m", "chore: add plan files"], { cwd: base, stdio: "ignore" });
 
@@ -1544,8 +1546,8 @@ test("hasImplementationArtifacts returns true when implementation files committe
   try {
     // Create a feature branch with both .gsd/ and implementation files
     execFileSync("git", ["checkout", "-b", "feat/test-impl"], { cwd: base, stdio: "ignore" });
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
-    writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), "# Roadmap");
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
+    writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md"), "# Roadmap");
     mkdirSync(join(base, "src"), { recursive: true });
     writeFileSync(join(base, "src", "feature.ts"), "export function feature() {}");
     execFileSync("git", ["add", "."], { cwd: base, stdio: "ignore" });
@@ -1561,15 +1563,15 @@ test("hasImplementationArtifacts returns true when implementation files committe
 test("hasImplementationArtifacts finds milestone implementation commits after retry resumes on main (#4699)", () => {
   const base = makeGitBase();
   try {
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
-    writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), "# Roadmap");
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
+    writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md"), "# Roadmap");
     execFileSync("git", ["add", "."], { cwd: base, stdio: "ignore" });
     execFileSync("git", ["commit", "-m", "chore: auto-commit after plan-milestone\n\nGSD-Unit: M001"], { cwd: base, stdio: "ignore" });
 
     mkdirSync(join(base, "src"), { recursive: true });
-    mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001", "tasks"), { recursive: true });
     writeFileSync(join(base, "src", "feature.ts"), "export function feature() {}");
-    writeFileSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T01-SUMMARY.md"), "# Summary");
+    writeFileSync(join(base, ".gsd", "phases", "01-m001", "S01-T01-SUMMARY.md"), "# Summary");
     execFileSync("git", ["add", "."], { cwd: base, stdio: "ignore" });
     execFileSync("git", ["commit", "-m", "feat: add milestone feature\n\nGSD-Task: S01/T01"], { cwd: base, stdio: "ignore" });
 
@@ -1583,9 +1585,9 @@ test("hasImplementationArtifacts finds milestone implementation commits after re
 test("hasImplementationArtifacts rejects milestone-scoped main history with only .gsd commits (#4699)", () => {
   const base = makeGitBase();
   try {
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
-    writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), "# Roadmap");
-    writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-SUMMARY.md"), "# Summary");
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
+    writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md"), "# Roadmap");
+    writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-SUMMARY.md"), "# Summary");
     execFileSync("git", ["add", "."], { cwd: base, stdio: "ignore" });
     execFileSync("git", ["commit", "-m", "chore: auto-commit after complete-milestone\n\nGSD-Unit: M001"], { cwd: base, stdio: "ignore" });
 
@@ -1628,8 +1630,8 @@ test("hasImplementationArtifacts finds integration implementation-only commits w
     // ADR-045: writeIntegrationBranch no longer creates milestones/<MID>/ as a
     // side effect (META is now flat at .gsd/<MID>-META.json), so scaffold the
     // legacy summary dir explicitly.
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
-    writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-SUMMARY.md"), "# Milestone Summary\nDone.");
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
+    writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-SUMMARY.md"), "# Milestone Summary\nDone.");
     execFileSync("git", ["add", "."], { cwd: base, stdio: "ignore" });
     execFileSync("git", ["commit", "-m", "chore: auto-commit after complete-milestone\n\nGSD-Unit: M001"], { cwd: base, stdio: "ignore" });
 
@@ -1672,13 +1674,13 @@ test("hasImplementationArtifacts ignores corrupted milestone/* integration metad
     });
 
     execFileSync("git", ["checkout", "-b", "milestone/M001"], { cwd: base, stdio: "ignore" });
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
-    writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-SUMMARY.md"), "# Milestone Summary\nDone.");
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
+    writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-SUMMARY.md"), "# Milestone Summary\nDone.");
     execFileSync("git", ["add", "."], { cwd: base, stdio: "ignore" });
     execFileSync("git", ["commit", "-m", "chore: auto-commit after complete-milestone\n\nGSD-Unit: M001"], { cwd: base, stdio: "ignore" });
 
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "M001-META.json"),
+      join(base, ".gsd", "phases", "01-m001", "01-META.json"),
       JSON.stringify({ integrationBranch: "milestone/M001" }, null, 2) + "\n",
     );
 
@@ -1851,10 +1853,10 @@ test("hasImplementationArtifacts uses milestone path history instead of rolling 
   const base = makeGitBase();
   try {
     execFileSync("git", ["checkout", "-b", "milestone/M001"], { cwd: base, stdio: "ignore" });
-    mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001", "tasks"), { recursive: true });
     mkdirSync(join(base, "src"), { recursive: true });
     writeFileSync(join(base, "src", "feature.ts"), "export function feature() {}");
-    writeFileSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T01-SUMMARY.md"), "# Summary");
+    writeFileSync(join(base, ".gsd", "phases", "01-m001", "S01-T01-SUMMARY.md"), "# Summary");
     execFileSync("git", ["add", "."], { cwd: base, stdio: "ignore" });
     execFileSync("git", ["commit", "-m", "feat: old milestone implementation\n\nGSD-Task: S01/T01"], { cwd: base, stdio: "ignore" });
 
@@ -1878,9 +1880,9 @@ test("hasImplementationArtifacts finds implementation commits when .gsd/ is giti
     // Simulate external/untracked .gsd/ via .git/info/exclude — milestone
     // planning artifacts never enter git, but real implementation files do.
     writeFileSync(join(base, ".git", "info", "exclude"), ".gsd/\n");
-    mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001", "tasks"), { recursive: true });
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T01-SUMMARY.md"),
+      join(base, ".gsd", "phases", "01-m001", "S01-T01-SUMMARY.md"),
       "# Summary",
     );
 
@@ -1909,9 +1911,9 @@ test("hasImplementationArtifacts scans GSD-tagged history without per-commit dif
   const base = makeGitBase();
   try {
     writeFileSync(join(base, ".git", "info", "exclude"), ".gsd/\n");
-    mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001", "tasks"), { recursive: true });
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T01-SUMMARY.md"),
+      join(base, ".gsd", "phases", "01-m001", "S01-T01-SUMMARY.md"),
       "# Summary",
     );
 
@@ -2106,8 +2108,8 @@ test("verifyExpectedArtifact complete-milestone fails with only .gsd/ files (#17
   try {
     // Create feature branch with only .gsd/ files
     execFileSync("git", ["checkout", "-b", "feat/ms-only-gsd"], { cwd: base, stdio: "ignore" });
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
-    writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-SUMMARY.md"), "# Milestone Summary\nDone.");
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
+    writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-SUMMARY.md"), "# Milestone Summary\nDone.");
     execFileSync("git", ["add", "."], { cwd: base, stdio: "ignore" });
     execFileSync("git", ["commit", "-m", "chore: milestone plan files"], { cwd: base, stdio: "ignore" });
 
@@ -2123,8 +2125,8 @@ test("verifyExpectedArtifact complete-milestone passes with impl files (#1703)",
   try {
     // Create feature branch with implementation files AND milestone summary
     execFileSync("git", ["checkout", "-b", "feat/ms-with-impl"], { cwd: base, stdio: "ignore" });
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
-    writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-SUMMARY.md"), "# Milestone Summary\nDone.");
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
+    writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-SUMMARY.md"), "# Milestone Summary\nDone.");
     mkdirSync(join(base, "src"), { recursive: true });
     writeFileSync(join(base, "src", "app.ts"), "console.log('hello');");
     execFileSync("git", ["add", "."], { cwd: base, stdio: "ignore" });
@@ -2138,7 +2140,7 @@ test("verifyExpectedArtifact complete-milestone passes with impl files (#1703)",
     insertMilestone({ id: "M001", title: "Milestone One", status: "complete" });
     insertSlice({ id: "S01", milestoneId: "M001", title: "Done Slice", status: "complete" });
     insertAssessment({
-      path: "milestones/M001/M001-VALIDATION.md",
+      path: "phases/01-m001/01-VALIDATION.md",
       milestoneId: "M001",
       status: "pass",
       scope: "milestone-validation",
@@ -2155,12 +2157,12 @@ test("verifyExpectedArtifact complete-milestone passes with impl files (#1703)",
 test("verifyExpectedArtifact complete-milestone passes on main retry with milestone implementation commits (#4699)", () => {
   const base = makeGitBase();
   try {
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
-    writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-SUMMARY.md"), "# Milestone Summary\nDone.");
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
+    writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-SUMMARY.md"), "# Milestone Summary\nDone.");
     mkdirSync(join(base, "src"), { recursive: true });
-    mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001", "tasks"), { recursive: true });
     writeFileSync(join(base, "src", "app.ts"), "console.log('hello');");
-    writeFileSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T01-SUMMARY.md"), "# Summary");
+    writeFileSync(join(base, ".gsd", "phases", "01-m001", "S01-T01-SUMMARY.md"), "# Summary");
     execFileSync("git", ["add", "."], { cwd: base, stdio: "ignore" });
     execFileSync("git", ["commit", "-m", "feat: implementation already on main\n\nGSD-Task: S01/T01"], { cwd: base, stdio: "ignore" });
 
@@ -2171,7 +2173,7 @@ test("verifyExpectedArtifact complete-milestone passes on main retry with milest
     insertMilestone({ id: "M001", title: "Milestone One", status: "complete" });
     insertSlice({ id: "S01", milestoneId: "M001", title: "Done Slice", status: "complete" });
     insertAssessment({
-      path: "milestones/M001/M001-VALIDATION.md",
+      path: "phases/01-m001/01-VALIDATION.md",
       milestoneId: "M001",
       status: "pass",
       scope: "milestone-validation",
@@ -2189,8 +2191,8 @@ test("verifyExpectedArtifact complete-milestone fails when DB milestone is not c
   const base = makeGitBase();
   try {
     execFileSync("git", ["checkout", "-b", "feat/ms-db-active"], { cwd: base, stdio: "ignore" });
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
-    writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-SUMMARY.md"), "# Milestone Summary\nverification FAILED — not complete.");
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
+    writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-SUMMARY.md"), "# Milestone Summary\nverification FAILED — not complete.");
     mkdirSync(join(base, "src"), { recursive: true });
     writeFileSync(join(base, "src", "app.ts"), "console.log('hello');");
     execFileSync("git", ["add", "."], { cwd: base, stdio: "ignore" });
@@ -2210,8 +2212,8 @@ test("verifyExpectedArtifact complete-milestone passes when DB milestone is comp
   const base = makeGitBase();
   try {
     execFileSync("git", ["checkout", "-b", "feat/ms-db-complete"], { cwd: base, stdio: "ignore" });
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
-    writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-SUMMARY.md"), "# Milestone Summary\nDone.");
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
+    writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-SUMMARY.md"), "# Milestone Summary\nDone.");
     mkdirSync(join(base, "src"), { recursive: true });
     writeFileSync(join(base, "src", "app.ts"), "console.log('hello');");
     execFileSync("git", ["add", "."], { cwd: base, stdio: "ignore" });
@@ -2221,7 +2223,7 @@ test("verifyExpectedArtifact complete-milestone passes when DB milestone is comp
     insertMilestone({ id: "M001", title: "Milestone One", status: "complete" });
     insertSlice({ id: "S01", milestoneId: "M001", title: "Done Slice", status: "complete" });
     insertAssessment({
-      path: "milestones/M001/M001-VALIDATION.md",
+      path: "phases/01-m001/01-VALIDATION.md",
       milestoneId: "M001",
       status: "pass",
       scope: "milestone-validation",
@@ -2239,9 +2241,9 @@ test("verifyExpectedArtifact complete-milestone rejects success SUMMARY when DB 
   const base = makeGitBase();
   try {
     execFileSync("git", ["checkout", "-b", "feat/ms-db-lag-success"], { cwd: base, stdio: "ignore" });
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "M001-SUMMARY.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-SUMMARY.md"),
       [
         "---",
         "id: M001",
@@ -2368,7 +2370,7 @@ test("#4068: verifyExpectedArtifact parallel-research treats PARALLEL-BLOCKER as
   try {
     // Write a minimal roadmap
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md"),
       [
         "# M001: Timeout Test",
         "",
@@ -2432,12 +2434,12 @@ test("writeReactiveExecuteBlocker never derives Task completion or cancellation 
     insertTask({ id: "T02", milestoneId: "M001", sliceId: "S01", title: "Two", status: "pending" });
     insertTask({ id: "T03", milestoneId: "M001", sliceId: "S01", title: "Three", status: "complete" });
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T01-SUMMARY.md"),
+      join(base, ".gsd", "phases", "01-m001", "S01-T01-SUMMARY.md"),
       "# T01 Summary\n",
       "utf-8",
     );
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T03-SUMMARY.md"),
+      join(base, ".gsd", "phases", "01-m001", "S01-T03-SUMMARY.md"),
       "# T03 Summary\n",
       "utf-8",
     );
@@ -2477,7 +2479,7 @@ test("#1088: writeReactiveExecuteBlocker preserves deferred batch task statuses"
     insertTask({ id: "T01", milestoneId: "M001", sliceId: "S01", title: "One", status: "deferred" });
     insertTask({ id: "T02", milestoneId: "M001", sliceId: "S01", title: "Two", status: "deferred" });
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T01-SUMMARY.md"),
+      join(base, ".gsd", "phases", "01-m001", "S01-T01-SUMMARY.md"),
       "# T01 Summary\n",
       "utf-8",
     );
@@ -2685,8 +2687,8 @@ test("writeBlockerPlaceholder fails closed instead of inserting an S00-blocker s
 test("#4414: verifyExpectedArtifact parallel-research succeeds when all research-ready slices have RESEARCH", () => {
   const base = makeTmpBase();
   try {
-    mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S02", "tasks"), { recursive: true });
-    mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S03", "tasks"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001", "tasks"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001", "tasks"), { recursive: true });
     seedMilestoneSlices(base, [
       { id: "S01", status: "pending" },
       { id: "S02", status: "pending" },
@@ -2695,7 +2697,7 @@ test("#4414: verifyExpectedArtifact parallel-research succeeds when all research
 
     // Minimal roadmap with three slices
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md"),
       [
         "# M001: Regression",
         "",
@@ -2711,12 +2713,12 @@ test("#4414: verifyExpectedArtifact parallel-research succeeds when all research
 
     // Only 2 of 3 have RESEARCH — should fail verification
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-RESEARCH.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-01-RESEARCH.md"),
       "# research",
       "utf-8",
     );
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "slices", "S02", "S02-RESEARCH.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-02-RESEARCH.md"),
       "# research",
       "utf-8",
     );
@@ -2731,7 +2733,7 @@ test("#4414: verifyExpectedArtifact parallel-research succeeds when all research
 
     // All three RESEARCH present → verification passes
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "slices", "S03", "S03-RESEARCH.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-03-RESEARCH.md"),
       "# research",
       "utf-8",
     );
@@ -2752,9 +2754,8 @@ test("parallel-research verification accepts canonical project artifacts from a 
   const previousProjectRoot = process.env.GSD_PROJECT_ROOT;
   delete process.env.GSD_PROJECT_ROOT;
   try {
-    const milestoneDir = join(base, ".gsd", "milestones", "M001");
-    mkdirSync(join(milestoneDir, "slices", "S02", "tasks"), { recursive: true });
-    mkdirSync(join(milestoneDir, "slices", "S03", "tasks"), { recursive: true });
+    const milestoneDir = join(base, ".gsd", "phases", "01-m001");
+    mkdirSync(milestoneDir, { recursive: true });
     seedMilestoneSlices(base, [
       { id: "S01", status: "pending" },
       { id: "S02", status: "pending" },
@@ -2762,7 +2763,7 @@ test("parallel-research verification accepts canonical project artifacts from a 
     ]);
 
     writeFileSync(
-      join(milestoneDir, "M001-ROADMAP.md"),
+      join(milestoneDir, "01-ROADMAP.md"),
       [
         "# M001: Regression",
         "",
@@ -2775,12 +2776,12 @@ test("parallel-research verification accepts canonical project artifacts from a 
       ].join("\n"),
       "utf-8",
     );
-    writeFileSync(join(milestoneDir, "M001-RESEARCH.md"), "# milestone research\n", "utf-8");
-    writeFileSync(join(milestoneDir, "slices", "S02", "S02-RESEARCH.md"), "# research\n", "utf-8");
-    writeFileSync(join(milestoneDir, "slices", "S03", "S03-RESEARCH.md"), "# research\n", "utf-8");
+    writeFileSync(join(milestoneDir, "01-RESEARCH.md"), "# milestone research\n", "utf-8");
+    writeFileSync(join(milestoneDir, "01-02-RESEARCH.md"), "# research\n", "utf-8");
+    writeFileSync(join(milestoneDir, "01-03-RESEARCH.md"), "# research\n", "utf-8");
 
     const worktree = join(base, ".gsd", "worktrees", "M001");
-    mkdirSync(join(worktree, ".gsd", "milestones", "M001"), { recursive: true });
+    mkdirSync(join(worktree, ".gsd", "phases", "01-m001"), { recursive: true });
     writeFileSync(join(worktree, ".git"), "gitdir: ../../../../.git/worktrees/M001\n", "utf-8");
 
     clearParseCache();

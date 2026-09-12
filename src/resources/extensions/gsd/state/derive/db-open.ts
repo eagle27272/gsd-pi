@@ -79,7 +79,7 @@ export function buildDbUnavailableState(): GSDState {
     recentDecisions: [],
     blockers: ["DB unavailable — runtime markdown state derivation is disabled"],
     nextAction:
-      "Open or create the canonical GSD database before deriving workflow state. If this project only has markdown state, run /gsd migrate explicitly.",
+      "Open or create the canonical GSD database before deriving workflow state. Markdown is never adopted as authority; run /gsd doctor to diagnose a missing or damaged database.",
     registry: [],
     requirements: { active: 0, validated: 0, deferred: 0, outOfScope: 0, blocked: 0, total: 0 },
     progress: { milestones: { done: 0, total: 0 } },

@@ -72,14 +72,7 @@ function formatViolations(violations: Violation[]): string {
 const ALLOW_HARDCODED_TMP: Array<[string, string]> = [];
 
 /** Pattern 3 — rmSync without force: true */
-const ALLOW_RMSYNC_NO_FORCE: Array<[string, string]> = [
-  // legacy-import-backup.ts intentionally removes its own private staging
-  // directory with force: false so a missing/tampered staging tree fails
-  // closed (loud) rather than being silently ignored — the crash-safe backup
-  // contract. The staging tree only ever holds a copied SQLite DB snapshot,
-  // never .git or Windows read-only files, so force: false is safe here.
-  ["resources/extensions/gsd/legacy-import-backup.ts", "rmSync(path, { recursive: true, force: false })"],
-];
+const ALLOW_RMSYNC_NO_FORCE: Array<[string, string]> = [];
 
 /** Pattern 4 — shell commands with interpolated variables */
 const ALLOW_SHELL_INTERPOLATION: Array<[string, string]> = [

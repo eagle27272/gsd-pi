@@ -1,4 +1,12 @@
 // GSD Directory Writer — Format Functions & Directory Orchestrator
+//
+// NOT PRODUCTION CODE — DO NOT DELETE AS DEAD. No production path reaches this
+// module since /gsd migrate was removed; every importer is a test. The
+// load-bearing one is tests/migrate-safety-audit.test.ts, the only coverage of
+// the native engine's fault-injection seams that live code — atomic-write.ts,
+// managed-projection-history.ts, db/engine.ts, database-maintenance-fence.ts,
+// projection-cleanup.ts — depends on. Deleting this deletes that coverage.
+
 // Format functions: pure string-returning functions that serialize GSD types into the exact markdown
 // format that gsd-pi's parsers expect (parseRoadmap, parsePlan, parseSummary, parseRequirementCounts).
 // writeGSDDirectory: orchestrator that writes a complete .gsd directory tree from a GSDProject.
@@ -6,6 +14,11 @@
 import { join } from 'node:path';
 import { saveFile } from '../files.js';
 import { gsdRoot } from '../paths.js';
+import {
+  LAYOUT_SEGMENTS,
+  canonicalPhaseDirName,
+  milestoneIdToPhaseNum,
+} from '../layout-policy.js';
 
 import type {
   GSDMilestone,
@@ -431,7 +444,7 @@ export async function writeGSDDirectory(
   targetPath: string,
 ): Promise<WrittenFiles> {
   const gsdDir = gsdRoot(targetPath);
-  const milestonesBase = join(gsdDir, 'milestones');
+  const phasesBase = join(gsdDir, LAYOUT_SEGMENTS.level1);
   const paths: string[] = [];
   const artifactPaths: string[] = [];
   const counts: WrittenFiles['counts'] = {
@@ -473,16 +486,19 @@ export async function writeGSDDirectory(
 
   // Milestones
   for (const milestone of project.milestones) {
-    const mDir = join(milestonesBase, milestone.id);
+    const mDir = join(phasesBase, canonicalPhaseDirName(milestone.id, milestone.title));
+    const phaseNum = milestoneIdToPhaseNum(milestone.id);
+    const phaseFile = (suffix: string): string =>
+      join(mDir, `${String(phaseNum).padStart(2, '0')}-${suffix}.md`);
 
     // Roadmap (always written, even for empty milestones)
-    const roadmapPath = join(mDir, `${milestone.id}-ROADMAP.md`);
+    const roadmapPath = phaseFile('ROADMAP');
     await saveFile(roadmapPath, formatRoadmap(milestone));
     paths.push(roadmapPath);
     counts.roadmaps++;
 
     // Context
-    const contextPath = join(mDir, `${milestone.id}-CONTEXT.md`);
+    const contextPath = phaseFile('CONTEXT');
     await saveFile(contextPath, formatContext(milestone.id));
     paths.push(contextPath);
     artifactPaths.push(contextPath);
@@ -490,7 +506,7 @@ export async function writeGSDDirectory(
 
     // Research (skip if null)
     if (milestone.research !== null) {
-      const researchPath = join(mDir, `${milestone.id}-RESEARCH.md`);
+      const researchPath = phaseFile('RESEARCH');
       await saveFile(researchPath, milestone.research);
       paths.push(researchPath);
       artifactPaths.push(researchPath);
@@ -502,7 +518,7 @@ export async function writeGSDDirectory(
     // phase for historical milestones that predate the validation gate (#819).
     const allSlicesDone = milestone.slices.length > 0 && milestone.slices.every(s => s.done);
     if (allSlicesDone) {
-      const validationPath = join(mDir, `${milestone.id}-VALIDATION.md`);
+      const validationPath = phaseFile('VALIDATION');
       const validationContent = [
         `---`,
         `verdict: pass`,
@@ -520,7 +536,7 @@ export async function writeGSDDirectory(
       counts.other++;
 
       // Also write a milestone summary if one doesn't exist
-      const summaryPath = join(mDir, `${milestone.id}-SUMMARY.md`);
+      const summaryPath = phaseFile('SUMMARY');
       const summaryContent = [
         `---`,
         `status: done`,
@@ -538,20 +554,22 @@ export async function writeGSDDirectory(
       counts.other++;
     }
 
-    // Slices
+    // Slices keep their own subtree so per-slice task plans stay attributable;
+    // it now hangs off the flat-phase dir instead of milestones/<MID>/.
     for (const slice of milestone.slices) {
       const sDir = join(mDir, 'slices', slice.id);
       const tasksDir = join(sDir, 'tasks');
+      const sliceFile = (suffix: string): string => join(sDir, `${slice.id}-${suffix}.md`);
 
       // Slice plan
-      const planPath = join(sDir, `${slice.id}-PLAN.md`);
+      const planPath = sliceFile('PLAN');
       await saveFile(planPath, formatPlan(slice));
       paths.push(planPath);
       counts.plans++;
 
       // Slice research (skip if null)
       if (slice.research !== null) {
-        const sliceResearchPath = join(sDir, `${slice.id}-RESEARCH.md`);
+        const sliceResearchPath = sliceFile('RESEARCH');
         await saveFile(sliceResearchPath, slice.research);
         paths.push(sliceResearchPath);
         artifactPaths.push(sliceResearchPath);
@@ -562,7 +580,7 @@ export async function writeGSDDirectory(
       if (slice.summary !== null) {
         const summaryContent = formatSliceSummary(slice, milestone.id);
         if (summaryContent) {
-          const summaryPath = join(sDir, `${slice.id}-SUMMARY.md`);
+          const summaryPath = sliceFile('SUMMARY');
           await saveFile(summaryPath, summaryContent);
           paths.push(summaryPath);
           artifactPaths.push(summaryPath);

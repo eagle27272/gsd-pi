@@ -190,8 +190,8 @@ describe('derive-seam-authority', () => {
       'fail-closed: blocker explains unavailable DB',
     );
     assert.ok(
-      state.nextAction.includes('/gsd migrate'),
-      'fail-closed: next action points to explicit migration',
+      state.nextAction.includes('/gsd doctor'),
+      'fail-closed: next action points at database diagnosis, not markdown adoption',
     );
   });
 

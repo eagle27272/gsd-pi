@@ -50,6 +50,7 @@ import {
   saveReworkBrief,
 } from "../gsd-db.ts";
 import { clearGSDPreferencesCache, getProjectGSDPreferencesPath } from "../preferences.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 // ─── Pure composer tests ──────────────────────────────────────────────────
 
@@ -516,7 +517,7 @@ test("Tool Surface composer: unknown unit renders empty block", () => {
 
 function makeFixtureBase(): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-composer-pilot-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test"), "tasks"), { recursive: true });
   return base;
 }
 
@@ -558,11 +559,11 @@ function seed(base: string, mid: string): void {
 
 function writeArtifacts(base: string): void {
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"),
+    join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test"), "01-ROADMAP.md"),
     "# M001\n## Slices\n- [x] **S01: First** `risk:low` `depends:[]`\n",
   );
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-SUMMARY.md"),
+    join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test"), "01-01-SUMMARY.md"),
     "---\nid: S01\nparent: M001\n---\n# S01 Summary\n**One-liner**\n\n## What Happened\nDone.\n",
   );
 }
@@ -640,7 +641,7 @@ test("execute-task prompt resolves an inline slice task without a standalone tas
   seed(base, "M001");
   insertTask({ id: "T02", sliceId: "S01", milestoneId: "M001", title: "Inline task", status: "pending" });
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md"),
+    join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test"), "01-01-PLAN.md"),
     [
       "# S01: First",
       "",
@@ -656,7 +657,7 @@ test("execute-task prompt resolves an inline slice task without a standalone tas
 
   const prompt = await buildExecuteTaskPrompt("M001", "S01", "First", "T02", "Inline task", base);
 
-  assert.match(prompt, /Source: `\.gsd\/milestones\/M001\/slices\/S01\/S01-PLAN\.md`/);
+  assert.match(prompt, /Source: `\.gsd\/phases\/01-test\/01-01-PLAN\.md`/);
   assert.match(prompt, /\*\*T02\*\*: Inline task/);
   assert.match(prompt, /src\/inline\.ts/);
   assert.doesNotMatch(prompt, /Task plan not found at dispatch time/);
@@ -702,7 +703,7 @@ test("reactive execute-task dispatch resolves inline slice task plans", async (t
   seed(base, "M001");
   insertTask({ id: "T02", sliceId: "S01", milestoneId: "M001", title: "Inline reactive task", status: "pending" });
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md"),
+    join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test"), "01-01-PLAN.md"),
     [
       "# S01: First",
       "",
@@ -724,7 +725,7 @@ test("reactive execute-task dispatch resolves inline slice task plans", async (t
     base,
   );
 
-  assert.match(prompt, /Source: `\.gsd\/milestones\/M001\/slices\/S01\/S01-PLAN\.md`/);
+  assert.match(prompt, /Source: `\.gsd\/phases\/01-test\/01-01-PLAN\.md`/);
   assert.match(prompt, /src\/reactive-inline\.ts/);
   assert.doesNotMatch(prompt, /Task plan not found at dispatch time/);
   assert.doesNotMatch(prompt, /tasks\/T02-PLAN\.md/);
@@ -795,7 +796,7 @@ test("execute-task prompt omits on-demand slice research when the artifact is ab
   const prompt = await buildExecuteTaskPrompt("M001", "S01", "First", "T01", "Task", base);
 
   assert.doesNotMatch(prompt, /## On-demand Context/);
-  assert.doesNotMatch(prompt, /\.gsd\/milestones\/M001\/slices\/S01\/S01-RESEARCH\.md/);
+  assert.doesNotMatch(prompt, /\.gsd\/phases\/01-test\/01-01-RESEARCH\.md/);
 });
 
 test("execute-task prompt surfaces on-demand slice research when the artifact exists", async (t) => {
@@ -806,14 +807,14 @@ test("execute-task prompt surfaces on-demand slice research when the artifact ex
   seed(base, "M001");
   writeArtifacts(base);
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-RESEARCH.md"),
+    join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test"), "01-01-RESEARCH.md"),
     "# S01 Research\n",
   );
 
   const prompt = await buildExecuteTaskPrompt("M001", "S01", "First", "T01", "Task", base);
 
   assert.match(prompt, /## On-demand Context/);
-  assert.match(prompt, /\.gsd\/milestones\/M001\/slices\/S01\/S01-RESEARCH\.md/);
+  assert.match(prompt, /\.gsd\/phases\/01-test\/01-01-RESEARCH\.md/);
   assert.match(prompt, /Read it only if the inlined task plan, slice plan excerpt, and carry-forward context do not explain/);
 });
 

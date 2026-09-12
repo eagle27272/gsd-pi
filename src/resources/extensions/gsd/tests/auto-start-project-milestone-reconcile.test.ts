@@ -38,8 +38,9 @@ test("bootstrap has no PROJECT.md → canonical milestone reconciliation path", 
   // "Milestone Sequence" checkboxes into canonical DB authority. The exported
   // no-op stub `reconcileProjectMilestonesFromDisk` was deleted; this test
   // fails if anyone reintroduces a disk-reconciliation path in auto-start.ts.
-  // The behavioral proof (startup performs zero authority writes with a
-  // PROJECT.md present) lives in implicit-import-startup-authority.test.ts.
+  // The behavioral counterpart (startup performs zero authority writes with a
+  // PROJECT.md present) was retired with the legacy-import corpus fixture, so
+  // this structural guard is now the only line of defence.
   const source = readFileSync(resolve(import.meta.dirname, "..", "auto-start.ts"), "utf-8");
   assert.equal(
     source.includes("reconcileProjectMilestonesFromDisk"),

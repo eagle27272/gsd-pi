@@ -27,6 +27,7 @@ import {
   isDbAvailable,
   openDatabase,
 } from "../gsd-db.ts";
+import { canonicalPhaseDirName, milestoneIdToPhaseNum, slicePlanFileName } from "../layout-policy.ts";
 
 function makeState(overrides: Partial<GSDState> = {}): GSDState {
   return {
@@ -104,9 +105,9 @@ function scaffoldMilestoneContext(basePath: string, mid: string): void {
 }
 
 function scaffoldLegacyMilestoneContext(basePath: string, mid: string): void {
-  const dir = join(basePath, ".gsd", "milestones", mid);
+  const dir = join(basePath, ".gsd", "phases", canonicalPhaseDirName(mid));
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${mid}-CONTEXT.md`), [
+  writeFileSync(join(dir, `${String(milestoneIdToPhaseNum(mid)).padStart(2, "0")}-CONTEXT.md`), [
     `# ${mid}: Test Milestone`,
     "",
     "Context for legacy dispatch recovery tests.",
@@ -115,9 +116,9 @@ function scaffoldLegacyMilestoneContext(basePath: string, mid: string): void {
 }
 
 function scaffoldLegacySlicePlan(basePath: string, mid: string, sid: string): void {
-  const dir = join(basePath, ".gsd", "milestones", mid, "slices", sid);
+  const dir = join(basePath, ".gsd", "phases", canonicalPhaseDirName(mid));
   mkdirSync(join(dir, "tasks"), { recursive: true });
-  writeFileSync(join(dir, `${sid}-PLAN.md`), [
+  writeFileSync(join(dir, slicePlanFileName(milestoneIdToPhaseNum(mid), sid, "PLAN")), [
     `# ${sid}: Legacy Slice`,
     "",
     "## Tasks",
@@ -127,7 +128,7 @@ function scaffoldLegacySlicePlan(basePath: string, mid: string, sid: string): vo
 }
 
 function scaffoldLegacyTaskPlan(basePath: string, mid: string, sid: string, tid: string): void {
-  const dir = join(basePath, ".gsd", "milestones", mid, "slices", sid, "tasks");
+  const dir = join(basePath, ".gsd", "phases", canonicalPhaseDirName(mid), "tasks");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${tid}-PLAN.md`), [
     `# ${tid}: First Task`,

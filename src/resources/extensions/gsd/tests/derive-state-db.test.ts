@@ -30,7 +30,7 @@ import {
 
 function createFixtureBase(): string {
   const base = mkdtempSync(join(tmpdir(), 'gsd-derive-db-'));
-  mkdirSync(join(base, '.gsd', 'milestones'), { recursive: true });
+  mkdirSync(join(base, '.gsd', 'phases'), { recursive: true });
   return base;
 }
 
@@ -134,10 +134,10 @@ describe('derive-state-db', async () => {
     const base = createFixtureBase();
     try {
       // Write files to disk (for file-only path)
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', PLAN_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/tasks/.gitkeep', '');
-      writeFile(base, 'milestones/M001/slices/S01/tasks/T01-PLAN.md', '# T01 Plan');
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_CONTENT);
+      writeFile(base, 'phases/01-m001/01-01-PLAN.md', PLAN_CONTENT);
+      writeFile(base, 'phases/01-m001/tasks/.gitkeep', '');
+      writeFile(base, 'phases/01-m001/tasks/T01-PLAN.md', '# T01 Plan');
       writeFile(base, 'REQUIREMENTS.md', REQUIREMENTS_CONTENT);
 
 
@@ -155,11 +155,11 @@ describe('derive-state-db', async () => {
       insertRequirementRow('R002', 'active');
       insertRequirementRow('R003', 'validated');
 
-      insertArtifactRow('milestones/M001/M001-ROADMAP.md', ROADMAP_CONTENT, {
+      insertArtifactRow('phases/01-m001/01-ROADMAP.md', ROADMAP_CONTENT, {
         artifact_type: 'roadmap',
         milestone_id: 'M001',
       });
-      insertArtifactRow('milestones/M001/slices/S01/S01-PLAN.md', PLAN_CONTENT, {
+      insertArtifactRow('phases/01-m001/01-01-PLAN.md', PLAN_CONTENT, {
         artifact_type: 'plan',
         milestone_id: 'M001',
         slice_id: 'S01',
@@ -190,10 +190,10 @@ describe('derive-state-db', async () => {
   test('derive-state-db: DB-unavailable runtime does not derive from markdown by default', async () => {
     const base = createFixtureBase();
     try {
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', PLAN_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/tasks/.gitkeep', '');
-      writeFile(base, 'milestones/M001/slices/S01/tasks/T01-PLAN.md', '# T01 Plan');
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_CONTENT);
+      writeFile(base, 'phases/01-m001/01-01-PLAN.md', PLAN_CONTENT);
+      writeFile(base, 'phases/01-m001/tasks/.gitkeep', '');
+      writeFile(base, 'phases/01-m001/tasks/T01-PLAN.md', '# T01 Plan');
 
       // No DB open — isDbAvailable() is false
       assert.ok(!isDbAvailable(), 'fallback: DB is not available');
@@ -209,8 +209,8 @@ describe('derive-state-db', async () => {
         'runtime degrade: blocker explains unavailable DB',
       );
       assert.ok(
-        state.nextAction.includes('/gsd migrate'),
-        'runtime degrade: next action points to explicit migration',
+        state.nextAction.includes('/gsd doctor'),
+        'runtime degrade: next action points at database diagnosis, not markdown adoption',
       );
     } finally {
       cleanup(base);
@@ -221,10 +221,10 @@ describe('derive-state-db', async () => {
   test('derive-state-db: empty DB does not import markdown milestones', async () => {
     const base = createFixtureBase();
     try {
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', PLAN_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/tasks/.gitkeep', '');
-      writeFile(base, 'milestones/M001/slices/S01/tasks/T01-PLAN.md', '# T01 Plan');
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_CONTENT);
+      writeFile(base, 'phases/01-m001/01-01-PLAN.md', PLAN_CONTENT);
+      writeFile(base, 'phases/01-m001/tasks/.gitkeep', '');
+      writeFile(base, 'phases/01-m001/tasks/T01-PLAN.md', '# T01 Plan');
 
       // Open DB but insert nothing — empty DB is authoritative at runtime.
       openDatabase(':memory:');
@@ -272,10 +272,10 @@ describe('derive-state-db', async () => {
     const base = createFixtureBase();
     try {
       // Write all files to disk
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', PLAN_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/tasks/.gitkeep', '');
-      writeFile(base, 'milestones/M001/slices/S01/tasks/T01-PLAN.md', '# T01 Plan');
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_CONTENT);
+      writeFile(base, 'phases/01-m001/01-01-PLAN.md', PLAN_CONTENT);
+      writeFile(base, 'phases/01-m001/tasks/.gitkeep', '');
+      writeFile(base, 'phases/01-m001/tasks/T01-PLAN.md', '# T01 Plan');
       writeFile(base, 'REQUIREMENTS.md', REQUIREMENTS_CONTENT);
 
       // Open DB — insert milestone hierarchy + partial artifacts (#2631 fix)
@@ -284,7 +284,7 @@ describe('derive-state-db', async () => {
       insertSlice({ id: 'S01', milestoneId: 'M001', title: 'First Slice', status: 'active', risk: 'low', depends: [] });
       insertTask({ id: 'T01', sliceId: 'S01', milestoneId: 'M001', title: 'First Task', status: 'pending' });
       // Only insert the roadmap artifact — plan and requirements missing from DB
-      insertArtifactRow('milestones/M001/M001-ROADMAP.md', ROADMAP_CONTENT, {
+      insertArtifactRow('phases/01-m001/01-ROADMAP.md', ROADMAP_CONTENT, {
         artifact_type: 'roadmap',
         milestone_id: 'M001',
       });
@@ -328,11 +328,11 @@ describe('derive-state-db', async () => {
 - [ ] **T02: Missing Pending** \`est:10m\`
   Missing from DB but present in the plan.
 `;
-    writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_CONTENT);
-    writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', partialTaskPlan);
-    writeFile(base, 'milestones/M001/slices/S01/tasks/.gitkeep', '');
-    writeFile(base, 'milestones/M001/slices/S01/tasks/T01-PLAN.md', '# T01 Plan');
-    writeFile(base, 'milestones/M001/slices/S01/tasks/T02-PLAN.md', '# T02 Plan');
+    writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_CONTENT);
+    writeFile(base, 'phases/01-m001/01-01-PLAN.md', partialTaskPlan);
+    writeFile(base, 'phases/01-m001/tasks/.gitkeep', '');
+    writeFile(base, 'phases/01-m001/tasks/T01-PLAN.md', '# T01 Plan');
+    writeFile(base, 'phases/01-m001/tasks/T02-PLAN.md', '# T02 Plan');
 
     openDatabase(':memory:');
     insertMilestone({ id: 'M001', title: 'Test Milestone', status: 'active' });
@@ -358,9 +358,9 @@ describe('derive-state-db', async () => {
       cleanup(base);
     });
 
-    writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_CONTENT);
-    writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', PLAN_CONTENT);
-    writeFile(base, 'milestones/M001/slices/S01/tasks/T01-SUMMARY.md', '# T01 Summary\n\nManual disk edit.');
+    writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_CONTENT);
+    writeFile(base, 'phases/01-m001/01-01-PLAN.md', PLAN_CONTENT);
+    writeFile(base, 'phases/01-m001/S01-T01-SUMMARY.md', '# T01 Summary\n\nManual disk edit.');
 
     openDatabase(':memory:');
     insertMilestone({ id: 'M001', title: 'Test Milestone', status: 'active' });
@@ -382,7 +382,7 @@ describe('derive-state-db', async () => {
       cleanup(base);
     });
 
-    writeFile(base, 'milestones/M001/M001-ROADMAP.md', `# M001: Foundation
+    writeFile(base, 'phases/01-m001/01-ROADMAP.md', `# M001: Foundation
 
 **Vision:** Foundation.
 
@@ -391,10 +391,10 @@ describe('derive-state-db', async () => {
 - [x] **S01: Done** \`risk:low\` \`depends:[]\`
   > After this: Done.
 `);
-    writeFile(base, 'milestones/M001/M001-VALIDATION.md', '---\nverdict: pass\nremediation_round: 0\n---\n\nPassed.');
-    writeFile(base, 'milestones/M001/M001-SUMMARY.md', '# M001 Summary\n\nDone.');
-    writeFile(base, 'milestones/M002/M002-CONTEXT.md', '---\ndepends_on:\n  - M001\n---\n\n# M002: Dependent\n');
-    writeFile(base, 'milestones/M002/M002-ROADMAP.md', `# M002: Dependent
+    writeFile(base, 'phases/01-m001/01-VALIDATION.md', '---\nverdict: pass\nremediation_round: 0\n---\n\nPassed.');
+    writeFile(base, 'phases/01-m001/01-SUMMARY.md', '# M001 Summary\n\nDone.');
+    writeFile(base, 'phases/02-m002/02-CONTEXT.md', '---\ndepends_on:\n  - M001\n---\n\n# M002: Dependent\n');
+    writeFile(base, 'phases/02-m002/02-ROADMAP.md', `# M002: Dependent
 
 **Vision:** Active work.
 
@@ -403,7 +403,7 @@ describe('derive-state-db', async () => {
 - [ ] **S01: Work** \`risk:low\` \`depends:[]\`
   > After this: Done.
 `);
-    writeFile(base, 'milestones/M003/M003-CONTEXT.md', '---\ndepends_on:\n  - M002\n---\n\n# M003: Blocked\n');
+    writeFile(base, 'phases/03-m003/03-CONTEXT.md', '---\ndepends_on:\n  - M002\n---\n\n# M003: Blocked\n');
 
     openDatabase(':memory:');
 
@@ -446,12 +446,12 @@ describe('derive-state-db', async () => {
       // Create milestone dirs on disk (needed for directory scanning)
       // Also write roadmap files to disk — resolveMilestoneFile checks file existence
       // The DB only provides content, not file discovery
-      mkdirSync(join(base, '.gsd', 'milestones', 'M001'), { recursive: true });
-      mkdirSync(join(base, '.gsd', 'milestones', 'M002'), { recursive: true });
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', completedRoadmap);
-      writeFile(base, 'milestones/M001/M001-VALIDATION.md', `---\nverdict: pass\nremediation_round: 0\n---\n\n# Validation\nPassed.`);
-      writeFile(base, 'milestones/M001/M001-SUMMARY.md', summaryContent);
-      writeFile(base, 'milestones/M002/M002-ROADMAP.md', activeRoadmap);
+      mkdirSync(join(base, '.gsd', 'phases', '01-m001'), { recursive: true });
+      mkdirSync(join(base, '.gsd', 'phases', '02-m002'), { recursive: true });
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', completedRoadmap);
+      writeFile(base, 'phases/01-m001/01-VALIDATION.md', `---\nverdict: pass\nremediation_round: 0\n---\n\n# Validation\nPassed.`);
+      writeFile(base, 'phases/01-m001/01-SUMMARY.md', summaryContent);
+      writeFile(base, 'phases/02-m002/02-ROADMAP.md', activeRoadmap);
 
       // Put roadmap content in DB only
       openDatabase(':memory:');
@@ -462,15 +462,15 @@ describe('derive-state-db', async () => {
       insertMilestone({ id: 'M002', title: 'Second Milestone', status: 'active' });
       insertSlice({ id: 'S01', milestoneId: 'M001', title: 'Done', status: 'complete', risk: 'low', depends: [] });
       insertSlice({ id: 'S01', milestoneId: 'M002', title: 'In Progress', status: 'active', risk: 'low', depends: [] });
-      insertArtifactRow('milestones/M001/M001-ROADMAP.md', completedRoadmap, {
+      insertArtifactRow('phases/01-m001/01-ROADMAP.md', completedRoadmap, {
         artifact_type: 'roadmap',
         milestone_id: 'M001',
       });
-      insertArtifactRow('milestones/M001/M001-SUMMARY.md', summaryContent, {
+      insertArtifactRow('phases/01-m001/01-SUMMARY.md', summaryContent, {
         artifact_type: 'summary',
         milestone_id: 'M001',
       });
-      insertArtifactRow('milestones/M002/M002-ROADMAP.md', activeRoadmap, {
+      insertArtifactRow('phases/02-m002/02-ROADMAP.md', activeRoadmap, {
         artifact_type: 'roadmap',
         milestone_id: 'M002',
       });
@@ -497,21 +497,21 @@ describe('derive-state-db', async () => {
   test('derive-state-db: cache invalidation', async () => {
     const base = createFixtureBase();
     try {
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', PLAN_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/tasks/.gitkeep', '');
-      writeFile(base, 'milestones/M001/slices/S01/tasks/T01-PLAN.md', '# T01 Plan');
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_CONTENT);
+      writeFile(base, 'phases/01-m001/01-01-PLAN.md', PLAN_CONTENT);
+      writeFile(base, 'phases/01-m001/tasks/.gitkeep', '');
+      writeFile(base, 'phases/01-m001/tasks/T01-PLAN.md', '# T01 Plan');
 
       openDatabase(':memory:');
       // Insert milestone/slice/task rows so deriveState takes the DB path (#2631 fix)
       insertMilestone({ id: 'M001', title: 'Test Milestone', status: 'active' });
       insertSlice({ id: 'S01', milestoneId: 'M001', title: 'First Slice', status: 'active', risk: 'low', depends: [] });
       insertTask({ id: 'T01', sliceId: 'S01', milestoneId: 'M001', title: 'First Task', status: 'pending' });
-      insertArtifactRow('milestones/M001/M001-ROADMAP.md', ROADMAP_CONTENT, {
+      insertArtifactRow('phases/01-m001/01-ROADMAP.md', ROADMAP_CONTENT, {
         artifact_type: 'roadmap',
         milestone_id: 'M001',
       });
-      insertArtifactRow('milestones/M001/slices/S01/S01-PLAN.md', PLAN_CONTENT, {
+      insertArtifactRow('phases/01-m001/01-01-PLAN.md', PLAN_CONTENT, {
         artifact_type: 'plan',
         milestone_id: 'M001',
         slice_id: 'S01',
@@ -523,13 +523,13 @@ describe('derive-state-db', async () => {
 
       // Simulate task completion by updating the plan in DB
       const updatedPlan = PLAN_CONTENT.replace('- [ ] **T01:', '- [x] **T01:');
-      insertArtifactRow('milestones/M001/slices/S01/S01-PLAN.md', updatedPlan, {
+      insertArtifactRow('phases/01-m001/01-01-PLAN.md', updatedPlan, {
         artifact_type: 'plan',
         milestone_id: 'M001',
         slice_id: 'S01',
       });
       // Also update file on disk (cachedLoadFile may read from disk for some paths)
-      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', updatedPlan);
+      writeFile(base, 'phases/01-m001/01-01-PLAN.md', updatedPlan);
       // Update task status in DB so DB-path also sees completion (#2631 fix)
       updateTaskStatus('M001', 'S01', 'T01', 'complete');
 
@@ -586,7 +586,7 @@ describe('derive-state-db', async () => {
     const base = createFixtureBase();
     try {
       // Create milestone dir on disk with a CONTEXT file (not a ghost)
-      writeFile(base, 'milestones/M001/M001-CONTEXT.md', '# M001: First\n\nSome context.');
+      writeFile(base, 'phases/01-m001/01-CONTEXT.md', '# M001: First\n\nSome context.');
 
 
       // Now open DB, populate hierarchy
@@ -609,10 +609,10 @@ describe('derive-state-db', async () => {
     const base = createFixtureBase();
     try {
       // Build filesystem fixture
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', PLAN_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/tasks/.gitkeep', '');
-      writeFile(base, 'milestones/M001/slices/S01/tasks/T01-PLAN.md', '# T01 Plan');
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_CONTENT);
+      writeFile(base, 'phases/01-m001/01-01-PLAN.md', PLAN_CONTENT);
+      writeFile(base, 'phases/01-m001/tasks/.gitkeep', '');
+      writeFile(base, 'phases/01-m001/tasks/T01-PLAN.md', '# T01 Plan');
 
 
       // Build matching DB state
@@ -657,10 +657,10 @@ describe('derive-state-db', async () => {
 - [x] **T02: Done Task** \`est:10m\`
   Already done.
 `;
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', allDonePlan);
-      writeFile(base, 'milestones/M001/slices/S01/tasks/.gitkeep', '');
-      writeFile(base, 'milestones/M001/slices/S01/tasks/T01-PLAN.md', '# T01 Plan');
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_CONTENT);
+      writeFile(base, 'phases/01-m001/01-01-PLAN.md', allDonePlan);
+      writeFile(base, 'phases/01-m001/tasks/.gitkeep', '');
+      writeFile(base, 'phases/01-m001/tasks/T01-PLAN.md', '# T01 Plan');
 
 
       openDatabase(':memory:');
@@ -697,9 +697,9 @@ describe('derive-state-db', async () => {
 - [x] **S01: Done** \`risk:low\` \`depends:[]\`
   > After this: Done.
 `;
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', completedRoadmap);
-      writeFile(base, 'milestones/M001/M001-VALIDATION.md', '---\nverdict: pass\nremediation_round: 0\n---\n\n# Validation\nPassed.');
-      writeFile(base, 'milestones/M001/M001-SUMMARY.md', '# M001 Summary\n\nDone.');
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', completedRoadmap);
+      writeFile(base, 'phases/01-m001/01-VALIDATION.md', '---\nverdict: pass\nremediation_round: 0\n---\n\n# Validation\nPassed.');
+      writeFile(base, 'phases/01-m001/01-SUMMARY.md', '# M001 Summary\n\nDone.');
 
 
       openDatabase(':memory:');
@@ -737,7 +737,7 @@ describe('derive-state-db', async () => {
 - [ ] **S02: Second** \`risk:low\` \`depends:[S01]\`
   > After this: Second done.
 `;
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', blockedRoadmap);
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', blockedRoadmap);
 
 
       openDatabase(':memory:');
@@ -764,9 +764,9 @@ describe('derive-state-db', async () => {
   test('derive-state-db: parked milestone via DB', async () => {
     const base = createFixtureBase();
     try {
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_CONTENT);
-      writeFile(base, 'milestones/M001/M001-PARKED.md', 'Parked for now.');
-      writeFile(base, 'milestones/M002/M002-CONTEXT.md', '# M002: Active After Park\n\nReady.');
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_CONTENT);
+      writeFile(base, 'phases/01-m001/01-PARKED.md', 'Parked for now.');
+      writeFile(base, 'phases/02-m002/02-CONTEXT.md', '# M002: Active After Park\n\nReady.');
 
 
       openDatabase(':memory:');
@@ -799,7 +799,7 @@ describe('derive-state-db', async () => {
 - [x] **S01: Done Slice** \`risk:low\` \`depends:[]\`
   > After this: Done.
 `;
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', doneRoadmap);
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', doneRoadmap);
       // No VALIDATION file → validating-milestone phase
 
 
@@ -831,7 +831,7 @@ describe('derive-state-db', async () => {
     insertMilestone({ id: 'M001', title: 'Canonical Validation', status: 'active' });
     insertSlice({ id: 'S01', milestoneId: 'M001', title: 'Done Slice', status: 'complete', risk: 'low', depends: [] });
     insertAssessment({
-      path: 'milestones/M001/M001-VALIDATION.md',
+      path: 'phases/01-m001/01-VALIDATION.md',
       milestoneId: 'M001',
       status: 'pass',
       scope: 'milestone-validation',
@@ -887,8 +887,8 @@ describe('derive-state-db', async () => {
 - [x] **S01: Done Slice** \`risk:low\` \`depends:[]\`
   > After this: Done.
 `;
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', doneRoadmap);
-      writeFile(base, 'milestones/M001/M001-VALIDATION.md',
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', doneRoadmap);
+      writeFile(base, 'phases/01-m001/01-VALIDATION.md',
         '---\nverdict: needs-remediation\nremediation_round: 1\n---\n\n# Validation\nNeeds fixes.');
 
 
@@ -896,7 +896,7 @@ describe('derive-state-db', async () => {
       insertMilestone({ id: 'M001', title: 'Stuck Remediation', status: 'active' });
       insertSlice({ id: 'S01', milestoneId: 'M001', title: 'Done Slice', status: 'complete', risk: 'low', depends: [] });
       insertAssessment({
-        path: 'milestones/M001/M001-VALIDATION.md',
+        path: 'phases/01-m001/01-VALIDATION.md',
         milestoneId: 'M001',
         status: 'needs-remediation',
         scope: 'milestone-validation',
@@ -940,8 +940,8 @@ describe('derive-state-db', async () => {
 - [x] **S01: Done Slice** \`risk:low\` \`depends:[]\`
   > After this: Done.
 `;
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', doneRoadmap);
-      writeFile(base, 'milestones/M001/M001-VALIDATION.md',
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', doneRoadmap);
+      writeFile(base, 'phases/01-m001/01-VALIDATION.md',
         '---\nverdict: needs-attention\nremediation_round: 0\n---\n\n# Validation\nNeeds attention.');
 
 
@@ -949,7 +949,7 @@ describe('derive-state-db', async () => {
       insertMilestone({ id: 'M001', title: 'Needs Attention', status: 'active' });
       insertSlice({ id: 'S01', milestoneId: 'M001', title: 'Done Slice', status: 'complete', risk: 'low', depends: [] });
       insertAssessment({
-        path: 'milestones/M001/M001-VALIDATION.md',
+        path: 'phases/01-m001/01-VALIDATION.md',
         milestoneId: 'M001',
         status: 'needs-attention',
         scope: 'milestone-validation',
@@ -987,15 +987,15 @@ describe('derive-state-db', async () => {
 - [x] **S01: Done Slice** \`risk:low\` \`depends:[]\`
   > After this: Done.
 `;
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', doneRoadmap);
-      writeFile(base, 'milestones/M001/M001-VALIDATION.md', '---\nverdict: pass\nremediation_round: 0\n---\n\n# Validation\nPassed.');
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', doneRoadmap);
+      writeFile(base, 'phases/01-m001/01-VALIDATION.md', '---\nverdict: pass\nremediation_round: 0\n---\n\n# Validation\nPassed.');
 
 
       openDatabase(':memory:');
       insertMilestone({ id: 'M001', title: 'Complete Test', status: 'active' });
       insertSlice({ id: 'S01', milestoneId: 'M001', title: 'Done Slice', status: 'complete', risk: 'low', depends: [] });
       insertAssessment({
-        path: 'milestones/M001/M001-VALIDATION.md',
+        path: 'phases/01-m001/01-VALIDATION.md',
         milestoneId: 'M001',
         status: 'pass',
         scope: 'milestone-validation',
@@ -1018,11 +1018,11 @@ describe('derive-state-db', async () => {
   test('derive-state-db: replanning-slice via DB', async () => {
     const base = createFixtureBase();
     try {
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', PLAN_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/tasks/.gitkeep', '');
-      writeFile(base, 'milestones/M001/slices/S01/tasks/T01-PLAN.md', '# T01 Plan');
-      writeFile(base, 'milestones/M001/slices/S01/S01-REPLAN-TRIGGER.md', 'Replan triggered.');
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_CONTENT);
+      writeFile(base, 'phases/01-m001/01-01-PLAN.md', PLAN_CONTENT);
+      writeFile(base, 'phases/01-m001/tasks/.gitkeep', '');
+      writeFile(base, 'phases/01-m001/tasks/T01-PLAN.md', '# T01 Plan');
+      writeFile(base, 'phases/01-m001/01-01-REPLAN-TRIGGER.md', 'Replan triggered.');
 
 
       openDatabase(':memory:');
@@ -1060,10 +1060,10 @@ describe('derive-state-db', async () => {
   test('derive-state-db: performance assertion', async () => {
     const base = createFixtureBase();
     try {
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', PLAN_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/tasks/.gitkeep', '');
-      writeFile(base, 'milestones/M001/slices/S01/tasks/T01-PLAN.md', '# T01 Plan');
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_CONTENT);
+      writeFile(base, 'phases/01-m001/01-01-PLAN.md', PLAN_CONTENT);
+      writeFile(base, 'phases/01-m001/tasks/.gitkeep', '');
+      writeFile(base, 'phases/01-m001/tasks/T01-PLAN.md', '# T01 Plan');
 
       openDatabase(':memory:');
       insertMilestone({ id: 'M001', title: 'Test Milestone', status: 'active' });
@@ -1117,12 +1117,12 @@ describe('derive-state-db', async () => {
 - [ ] **S01: Active** \`risk:low\` \`depends:[]\`
   > After this: Done.
 `;
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', m1Roadmap);
-      writeFile(base, 'milestones/M001/M001-VALIDATION.md', '---\nverdict: pass\nremediation_round: 0\n---\n\nPassed.');
-      writeFile(base, 'milestones/M001/M001-SUMMARY.md', '# M001 Summary\n\nDone.');
-      writeFile(base, 'milestones/M002/M002-ROADMAP.md', m2Roadmap);
-      writeFile(base, 'milestones/M002/M002-CONTEXT.md', '---\ndepends_on:\n  - M001\n---\n\n# M002: Second\n\nDepends on M001.');
-      writeFile(base, 'milestones/M003/M003-CONTEXT.md', '---\ndepends_on:\n  - M002\n---\n\n# M003: Third\n\nDepends on M002.');
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', m1Roadmap);
+      writeFile(base, 'phases/01-m001/01-VALIDATION.md', '---\nverdict: pass\nremediation_round: 0\n---\n\nPassed.');
+      writeFile(base, 'phases/01-m001/01-SUMMARY.md', '# M001 Summary\n\nDone.');
+      writeFile(base, 'phases/02-m002/02-ROADMAP.md', m2Roadmap);
+      writeFile(base, 'phases/02-m002/02-CONTEXT.md', '---\ndepends_on:\n  - M001\n---\n\n# M002: Second\n\nDepends on M001.');
+      writeFile(base, 'phases/03-m003/03-CONTEXT.md', '---\ndepends_on:\n  - M002\n---\n\n# M003: Third\n\nDepends on M002.');
 
 
       openDatabase(':memory:');
@@ -1156,10 +1156,10 @@ describe('derive-state-db', async () => {
   test('derive-state-db: K002 status handling', async () => {
     const base = createFixtureBase();
     try {
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', PLAN_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/tasks/.gitkeep', '');
-      writeFile(base, 'milestones/M001/slices/S01/tasks/T01-PLAN.md', '# T01 Plan');
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_CONTENT);
+      writeFile(base, 'phases/01-m001/01-01-PLAN.md', PLAN_CONTENT);
+      writeFile(base, 'phases/01-m001/tasks/.gitkeep', '');
+      writeFile(base, 'phases/01-m001/tasks/T01-PLAN.md', '# T01 Plan');
 
       openDatabase(':memory:');
       insertMilestone({ id: 'M001', title: 'Test Milestone', status: 'active' });
@@ -1187,10 +1187,10 @@ describe('derive-state-db', async () => {
   test('derive-state-db: dual-path wiring', async () => {
     const base = createFixtureBase();
     try {
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', PLAN_CONTENT);
-      writeFile(base, 'milestones/M001/slices/S01/tasks/.gitkeep', '');
-      writeFile(base, 'milestones/M001/slices/S01/tasks/T01-PLAN.md', '# T01 Plan');
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_CONTENT);
+      writeFile(base, 'phases/01-m001/01-01-PLAN.md', PLAN_CONTENT);
+      writeFile(base, 'phases/01-m001/tasks/.gitkeep', '');
+      writeFile(base, 'phases/01-m001/tasks/T01-PLAN.md', '# T01 Plan');
 
       openDatabase(':memory:');
       insertMilestone({ id: 'M001', title: 'Test Milestone', status: 'active' });
@@ -1220,10 +1220,10 @@ describe('derive-state-db', async () => {
     const base = createFixtureBase();
     try {
       // Ghost: milestone dir exists with only META.json, no context/roadmap/summary
-      mkdirSync(join(base, '.gsd', 'milestones', 'M001'), { recursive: true });
-      writeFileSync(join(base, '.gsd', 'milestones', 'M001', 'META.json'), '{}');
+      mkdirSync(join(base, '.gsd', 'phases', '01-m001'), { recursive: true });
+      writeFileSync(join(base, '.gsd', 'phases', '01-m001', 'M001-META.json'), '{}');
       // Real milestone
-      writeFile(base, 'milestones/M002/M002-CONTEXT.md', '# M002: Real\n\nReal milestone.');
+      writeFile(base, 'phases/02-m002/02-CONTEXT.md', '# M002: Real\n\nReal milestone.');
 
 
       openDatabase(':memory:');
@@ -1249,7 +1249,7 @@ describe('derive-state-db', async () => {
   test('derive-state-db: needs-discussion via DB status', async () => {
     const base = createFixtureBase();
     try {
-      writeFile(base, 'milestones/M001/M001-CONTEXT-DRAFT.md', '# M001: Draft\n\nDraft content.');
+      writeFile(base, 'phases/01-m001/01-CONTEXT-DRAFT.md', '# M001: Draft\n\nDraft content.');
 
 
       openDatabase(':memory:');
@@ -1313,8 +1313,8 @@ describe('derive-state-db', async () => {
     const base = createFixtureBase();
     try {
       // M001 is complete and exists in DB. M002 is disk-only — no DB row.
-      writeFile(base, 'milestones/M001/M001-SUMMARY.md', '# M001 Summary\n\nDone.');
-      writeFile(base, 'milestones/M002/M002-CONTEXT.md', '# M002: Queued\n\nQueued milestone.');
+      writeFile(base, 'phases/01-m001/01-SUMMARY.md', '# M001 Summary\n\nDone.');
+      writeFile(base, 'phases/02-m002/02-CONTEXT.md', '# M002: Queued\n\nQueued milestone.');
 
       openDatabase(':memory:');
       // Only insert M001 — simulates the state after migration guard ran then /gsd queue added M002
@@ -1368,12 +1368,12 @@ describe('derive-state-db', async () => {
     const base = createFixtureBase();
     try {
       // M001: complete milestone with summary
-      writeFile(base, 'milestones/M001/M001-SUMMARY.md', '# M001 Summary\n\nDone.');
+      writeFile(base, 'phases/01-m001/01-SUMMARY.md', '# M001 Summary\n\nDone.');
 
       // M002: queued milestone — directory + slices dir exists, but no content files.
       // This is what happens when ensureMilestoneDbRow creates M002 but the DB row
       // is lost during worktree teardown.
-      mkdirSync(join(base, '.gsd', 'milestones', 'M002', 'slices'), { recursive: true });
+      mkdirSync(join(base, '.gsd', 'phases', '02-m002'), { recursive: true });
 
       // A worktree exists for M002, proving it's a legitimate milestone
       mkdirSync(join(base, '.gsd', 'worktrees', 'M002'), { recursive: true });
@@ -1407,17 +1407,17 @@ describe('derive-state-db', async () => {
     const base = createFixtureBase();
     try {
       // M001: complete milestone with summary
-      writeFile(base, 'milestones/M001/M001-SUMMARY.md', '# M001 Summary\n\nDone.');
+      writeFile(base, 'phases/01-m001/01-SUMMARY.md', '# M001 Summary\n\nDone.');
 
       // M002: queued milestone — directory exists with CONTEXT file and DB row
-      mkdirSync(join(base, '.gsd', 'milestones', 'M002', 'slices'), { recursive: true });
-      writeFile(base, 'milestones/M002/M002-CONTEXT.md', '# M002 Context\n\nPlanned milestone.');
+      mkdirSync(join(base, '.gsd', 'phases', '02-m002'), { recursive: true });
+      writeFile(base, 'phases/02-m002/02-CONTEXT.md', '# M002 Context\n\nPlanned milestone.');
 
       // DB has both M001 complete and M002 queued
       openDatabase(':memory:');
       insertMilestone({ id: 'M001', title: 'First', status: 'complete' });
       insertMilestone({ id: 'M002', title: 'Second', status: 'queued' });
-      insertArtifactRow('milestones/M002/M002-CONTEXT.md', '# M002 Context\n\nPlanned milestone.', {
+      insertArtifactRow('phases/02-m002/02-CONTEXT.md', '# M002 Context\n\nPlanned milestone.', {
         artifact_type: 'CONTEXT',
         milestone_id: 'M002',
       });

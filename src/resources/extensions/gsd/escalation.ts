@@ -11,7 +11,6 @@ import { join } from "node:path";
 
 import type { EscalationArtifact, EscalationOption } from "./types.js";
 import {
-  legacyMilestonesDir,
   resolveMilestonePath,
   resolveSlicePath,
   resolveTasksDir,
@@ -45,14 +44,13 @@ export function escalationArtifactPath(
   const milestoneDir = resolveMilestonePath(basePath, milestoneId);
   const sliceDir = resolveSlicePath(basePath, milestoneId, sliceId);
   if (!milestoneDir || !sliceDir) return null;
-  // The first Task artifact in a legacy slice may arrive before tasks/ exists.
-  // The atomic writer creates the directory after the path has been committed.
+  // The first Task artifact in a slices/<SID>/ slice may arrive before tasks/
+  // exists. The atomic writer creates the directory after the path has been
+  // committed.
   if (sliceDir !== milestoneDir) {
     return join(sliceDir, "tasks", `${taskId}-ESCALATION.json`);
   }
   // Flat-phase: tasks live in plan files; escalation artifacts sit in the phase dir.
-  // Legacy without tasks/: return null so writeEscalationArtifact throws (run doctor).
-  if (existsSync(legacyMilestonesDir(basePath))) return null;
   return join(sliceDir, `${taskId}-ESCALATION.json`);
 }
 

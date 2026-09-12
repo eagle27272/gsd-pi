@@ -812,7 +812,7 @@ test("checkEngineHealth repair prunes stale phases task rows against tasks/<T>-<
   t.after(() => rmSync(base, { recursive: true, force: true }));
 
   const gsdDir = join(base, ".gsd");
-  const stalePath = "phases/01-m001/01-01-T01-SUMMARY.md";
+  const stalePath = "phases/01-m001/S01-T01-SUMMARY.md";
   // Canonical legacy task layout has no per-task subdirectory: the SUMMARY lives
   // at tasks/<T>-<TYPE>.md, not tasks/<T>/<T>-<TYPE>.md. If the expected-path
   // builder adds an extra tasks/<T>/ segment, task-scoped stale rows never match

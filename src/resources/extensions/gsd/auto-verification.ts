@@ -15,7 +15,7 @@
 
 import type { ExtensionContext, ExtensionAPI } from "@gsd/pi-coding-agent";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { gsdProjectionRoot, legacyMilestonesDir, resolveMilestonePath, resolveSliceFile, resolveSlicePath } from "./paths.js";
+import { gsdProjectionRoot, resolveMilestonePath, resolveSliceFile } from "./paths.js";
 import { resolveMilestoneValidationVerdict } from "./milestone-validation-verdict.js";
 import { isMilestoneLifecycleAdopted } from "./db/milestone-closeout-readiness.js";
 import { hasPendingMilestoneSubjectiveUat } from "./milestone-subjective-uat-domain-operation.js";
@@ -128,16 +128,7 @@ function resolveVerificationEvidenceLocation(
 ): VerificationEvidenceLocation | null {
   const mDir = resolveMilestonePath(basePath, milestoneId);
   if (!mDir) return null;
-
-  const legacyBase = legacyMilestonesDir(basePath);
-  const isLegacy = mDir.startsWith(legacyBase + "/") || mDir.startsWith(legacyBase + "\\");
-  if (!isLegacy) {
-    return { dir: mDir, fileSliceId: sliceId };
-  }
-
-  const sDir = resolveSlicePath(basePath, milestoneId, sliceId);
-  if (!sDir) return null;
-  return { dir: join(sDir, "tasks") };
+  return { dir: mDir, fileSliceId: sliceId };
 }
 
 function getCurrentUnitCostStats(unitId: string): { unitCostUsd: number; rollingAvgUsd: number } {

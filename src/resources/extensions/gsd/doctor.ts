@@ -8,7 +8,7 @@ import {
   resolveWorkflowDatabaseLocation,
 } from "./db-workspace.js";
 import { hasRequiredSchemaFeature } from "./db-required-schema.js";
-import { resolveMilestoneFile, milestonesDir, legacyMilestonesDir, resolveGsdRootFile } from "./paths.js";
+import { resolveMilestoneFile, milestonesDir, resolveGsdRootFile } from "./paths.js";
 import { deriveState } from "./state.js";
 import { invalidateAllCaches } from "./cache.js";
 import { loadEffectiveGSDPreferences, type GSDPreferences } from "./preferences.js";
@@ -181,8 +181,7 @@ export async function selectDoctorScope(basePath: string, requestedScope?: strin
   }
 
   const milestonesPath = milestonesDir(basePath);
-  const legacyMilestonesPath = legacyMilestonesDir(basePath);
-  if (!existsSync(milestonesPath) && !existsSync(legacyMilestonesPath)) return undefined;
+  if (!existsSync(milestonesPath)) return undefined;
 
   for (const milestone of state.registry) {
     const roadmapPath = resolveMilestoneFile(basePath, milestone.id, "ROADMAP");
@@ -284,8 +283,7 @@ export async function runGSDDoctor(basePath: string, options?: { fix?: boolean; 
   });
 
   const milestonesPath = milestonesDir(basePath);
-  const legacyMilestonesPath2 = legacyMilestonesDir(basePath);
-  if (!existsSync(milestonesPath) && !existsSync(legacyMilestonesPath2)) {
+  if (!existsSync(milestonesPath)) {
     const report: DoctorReport = { ok: issues.every(i => i.severity !== "error"), basePath, issues, fixesApplied, timing: { git: gitMs, runtime: runtimeMs, environment: envMs, gsdState: 0 } };
     await appendDoctorHistory(basePath, report);
     return report;

@@ -24,6 +24,7 @@ import {
 import { parseRoadmapSlices } from '../roadmap-slices.ts';
 import { parseProjectionPlan as parsePlan } from '../schemas/parsers.ts';
 import { createTestContext } from './test-helpers.ts';
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 const { assertEq, assertTrue, report } = createTestContext();
 
@@ -31,15 +32,15 @@ const { assertEq, assertTrue, report } = createTestContext();
 
 function createFixtureBase(): string {
   const base = mkdtempSync(join(tmpdir(), 'gsd-planning-crossval-'));
-  mkdirSync(join(base, '.gsd', 'milestones'), { recursive: true });
+  mkdirSync(join(base, '.gsd', 'phases'), { recursive: true });
   return base;
 }
 
 /** Scaffold the minimal directory structure the renderers need on disk. */
 function scaffoldDirs(base: string, milestoneId: string, sliceIds: string[]): void {
-  mkdirSync(join(base, '.gsd', 'milestones', milestoneId), { recursive: true });
+  mkdirSync(join(base, '.gsd', 'phases', canonicalPhaseDirName(milestoneId)), { recursive: true });
   for (const sid of sliceIds) {
-    mkdirSync(join(base, '.gsd', 'milestones', milestoneId, 'slices', sid, 'tasks'), { recursive: true });
+    mkdirSync(join(base, '.gsd', 'phases', canonicalPhaseDirName(milestoneId), 'tasks'), { recursive: true });
   }
 }
 
@@ -317,18 +318,18 @@ console.log('\n=== planning-crossval Test 4: ROADMAP worktree projection path ==
   const worktreeBase = join(base, '.gsd', 'worktrees', 'M001');
   const worktreeGsd = join(worktreeBase, '.gsd');
   // Both base and worktree use the legacy milestones/ layout (no phases/ dir).
-  const projectRoadmapPath = join(base, '.gsd', 'milestones', 'M001', 'M001-ROADMAP.md');
-  const worktreeRoadmapPath = join(worktreeGsd, 'milestones', 'M001', 'M001-ROADMAP.md');
+  const projectRoadmapPath = join(base, '.gsd', 'phases', '01-m001', '01-ROADMAP.md');
+  const worktreeRoadmapPath = join(worktreeGsd, 'phases', '01-m001', '01-ROADMAP.md');
   const dbPath = join(base, '.gsd', 'gsd.db');
 
   openDatabase(dbPath);
   try {
     scaffoldDirs(base, 'M001', []);
-    mkdirSync(join(worktreeGsd, 'milestones', 'M001'), { recursive: true });
+    mkdirSync(join(worktreeGsd, 'phases', '01-m001'), { recursive: true });
     // Add a content file so the worktree M001 dir passes dirIsContentBearingLegacyMilestone.
     // Without this, an empty dir is treated as a metadata-only dir (post-#852 guard) and
     // resolveMilestonePath returns null, causing the renderer to write to a flat-phase path.
-    writeFileSync(join(worktreeGsd, 'milestones', 'M001', 'M001-CONTEXT.md'), '# M001\n');
+    writeFileSync(join(worktreeGsd, 'phases', '01-m001', '01-CONTEXT.md'), '# M001\n');
     writeFileSync(projectRoadmapPath, '# stale project roadmap\n');
 
     insertMilestone({
@@ -371,14 +372,14 @@ console.log('\n=== planning-crossval Test 5: ROADMAP existing projection file pa
   const worktreeBase = join(base, '.gsd', 'worktrees', 'M001');
   const worktreeGsd = join(worktreeBase, '.gsd');
   // Legacy milestones/ layout: roadmap filename is M001-ROADMAP.md (not NN-ROADMAP.md).
-  const worktreeRoadmapPath = join(worktreeGsd, 'milestones', 'M001', 'M001-ROADMAP.md');
+  const worktreeRoadmapPath = join(worktreeGsd, 'phases', '01-m001', '01-ROADMAP.md');
   const dbPath = join(base, '.gsd', 'gsd.db');
   const originalCwd = process.cwd();
 
   openDatabase(dbPath);
   try {
     process.chdir(base);
-    mkdirSync(join(worktreeGsd, 'milestones', 'M001'), { recursive: true });
+    mkdirSync(join(worktreeGsd, 'phases', '01-m001'), { recursive: true });
     writeFileSync(worktreeRoadmapPath, '# stale worktree roadmap\n');
 
     insertMilestone({
@@ -404,49 +405,6 @@ console.log('\n=== planning-crossval Test 5: ROADMAP existing projection file pa
 // ═══════════════════════════════════════════════════════════════════════════
 // Test 6: ROADMAP renderer resolves descriptor-named projection milestone dirs
 // ═══════════════════════════════════════════════════════════════════════════
-
-console.log('\n=== planning-crossval Test 6: ROADMAP descriptor projection dir ===');
-{
-  const base = createFixtureBase();
-  const worktreeBase = join(base, '.gsd', 'worktrees', 'M001');
-  const worktreeGsd = join(worktreeBase, '.gsd');
-  const descriptorMilestoneDir = join(worktreeGsd, 'milestones', 'M001-DESCRIPTOR');
-  // Legacy milestones/ layout: roadmap filename is M001-ROADMAP.md (not NN-ROADMAP.md).
-  const descriptorRoadmapPath = join(descriptorMilestoneDir, 'M001-ROADMAP.md');
-  const bareMilestoneDir = join(worktreeGsd, 'milestones', 'M001');
-  const dbPath = join(base, '.gsd', 'gsd.db');
-
-  openDatabase(dbPath);
-  try {
-    mkdirSync(descriptorMilestoneDir, { recursive: true });
-    writeFileSync(descriptorRoadmapPath, '# stale descriptor roadmap\n');
-
-    insertMilestone({
-      id: 'M001',
-      title: 'Descriptor Projection',
-      status: 'active',
-      planning: { vision: 'Render into the descriptor-named milestone dir.' },
-    });
-
-    const rendered = await renderRoadmapFromDb(worktreeBase, 'M001');
-    // Milestone has a non-empty vision — skipped variant is unreachable here.
-    if ('skipped' in rendered) throw new Error('unexpected: milestone has non-empty vision');
-
-    assertEq(rendered.roadmapPath, descriptorRoadmapPath, 'T6: roadmap path uses descriptor milestone dir');
-    assertTrue(existsSync(descriptorRoadmapPath), 'T6: descriptor roadmap exists');
-    assertEq(existsSync(bareMilestoneDir), false, 'T6: bare duplicate milestone dir is not created');
-  } finally {
-    closeDatabase();
-    cleanup(base);
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Test 7: Renderer strips bracket-wrapped depends from corrupt DB rows (#566)
-// ═══════════════════════════════════════════════════════════════════════════
-// Simulates a DB that was corrupted before the insertSlice validation guard
-// was added (issue #566). The renderer must recover "[S01]" → "S01" rather
-// than silently dropping the dependency and rendering depends:[].
 
 console.log('\n=== planning-crossval Test 7: renderer recovers bracket-wrapped depends (#566) ===');
 {
