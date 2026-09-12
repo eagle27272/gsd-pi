@@ -272,10 +272,6 @@ export function countMarkdownHierarchy(basePath: string): HierarchyCounts {
   return scanMarkdownHierarchy(basePath).counts;
 }
 
-export function countDbHierarchy(): HierarchyCounts {
-  return scanDbHierarchy().counts;
-}
-
 export async function checkMarkdownHierarchyAgainstDb(
   basePath: string,
 ): Promise<MigrationAutoCheckResult> {

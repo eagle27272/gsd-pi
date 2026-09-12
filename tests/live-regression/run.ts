@@ -389,10 +389,13 @@ for (const fixture of MARKDOWN_ONLY_FIXTURES) {
           `markdown-only fixture must not produce an active milestone, got: ${activeId}`,
         );
 
-        const milestones = json.milestones;
+        // `headless query` emits { state, next, cost } — the milestone rows
+        // live on state.registry, so assert against that and not a top-level
+        // `milestones` key the payload has never carried.
+        const registry = json.state?.registry;
         assert(
-          milestones === undefined || (Array.isArray(milestones) && milestones.length === 0),
-          `markdown-only fixture must not produce canonical milestone rows, got: ${JSON.stringify(milestones)}`,
+          Array.isArray(registry) && registry.length === 0,
+          `markdown-only fixture must not produce canonical milestone rows, got: ${JSON.stringify(registry)}`,
         );
       } finally {
         rmSync(dir, { recursive: true, force: true });

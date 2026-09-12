@@ -36,7 +36,7 @@ test("canonicalJson throws on an object cycle", () => {
   const cyclic: Record<string, unknown> = {};
   cyclic["self"] = cyclic;
   assert.throws(() => canonicalJson(cyclic), {
-    message: "legacy import identity requires acyclic strict JSON",
+    message: "canonical JSON requires acyclic strict JSON",
   });
 });
 
@@ -44,7 +44,7 @@ test("canonicalJson throws on an array cycle", () => {
   const cyclic: unknown[] = [];
   cyclic.push(cyclic);
   assert.throws(() => canonicalJson(cyclic), {
-    message: "legacy import identity requires acyclic strict JSON",
+    message: "canonical JSON requires acyclic strict JSON",
   });
 });
 
@@ -56,7 +56,7 @@ test("canonicalJson escapes control characters and passes through unicode", () =
 test("canonicalJson rejects non-finite numbers", () => {
   for (const value of [NaN, Infinity, -Infinity]) {
     assert.throws(() => canonicalJson(value), {
-      message: "legacy import identity requires strict JSON with finite numbers",
+      message: "canonical JSON requires strict JSON with finite numbers",
     });
   }
 });
@@ -65,7 +65,7 @@ test("canonicalJson rejects sparse arrays", () => {
   const sparse = [1, 2, 3];
   delete sparse[1];
   assert.throws(() => canonicalJson(sparse), {
-    message: "legacy import identity requires dense JSON arrays without extra keys",
+    message: "canonical JSON requires dense JSON arrays without extra keys",
   });
 });
 
@@ -73,13 +73,13 @@ test("canonicalJson rejects symbol keys on objects", () => {
   const withSymbol: Record<string | symbol, unknown> = {};
   withSymbol[Symbol("x")] = 1;
   assert.throws(() => canonicalJson(withSymbol), {
-    message: "legacy import identity requires strict JSON without symbol keys",
+    message: "canonical JSON requires strict JSON without symbol keys",
   });
 });
 
 test("canonicalJson rejects non-plain prototypes", () => {
   assert.throws(() => canonicalJson(new Date()), {
-    message: "legacy import identity requires plain JSON objects",
+    message: "canonical JSON requires plain JSON objects",
   });
 });
 
@@ -91,7 +91,7 @@ test("canonicalJson accepts null-prototype objects", () => {
 
 test("canonicalJson rejects non-object, non-array values", () => {
   assert.throws(() => canonicalJson(undefined), {
-    message: "legacy import identity requires strict JSON values",
+    message: "canonical JSON requires strict JSON values",
   });
 });
 

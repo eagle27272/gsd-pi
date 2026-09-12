@@ -316,7 +316,7 @@ function snapshotDomainOperationRequest(request: object): {
 } {
   if (Object.hasOwn(request, "advanceAuthorityEpoch")) {
     throw new Error(
-      "advanceAuthorityEpoch is not accepted; use the typed authority cutover operation",
+      "advanceAuthorityEpoch is not accepted; Authority Epoch advancement is retired",
     );
   }
   return {
@@ -373,10 +373,7 @@ function validateRequestScalars(request: DomainOperationRequestIdentity): void {
   }
 }
 
-function requestHash(
-  request: DomainOperationRequest,
-  advanceAuthorityEpoch = false,
-): string {
+function requestHash(request: DomainOperationRequest): string {
   const canonical = canonicalDomainJson({
     operationType: request.operationType,
     expectedRevision: request.expectedRevision,
@@ -387,19 +384,12 @@ function requestHash(
     traceId: request.traceId ?? null,
     turnId: request.turnId ?? null,
     payload: request.payload,
-    // Retain the explicit legacy false member so existing ordinary operations
-    // keep their exact replay hash after the public epoch switch is removed.
-    advanceAuthorityEpoch,
+    // Load-bearing: every request_hash already persisted in
+    // workflow_operations was computed with this member present and false.
+    // Dropping it would silently break replay identity for existing rows.
+    advanceAuthorityEpoch: false,
   });
   return `sha256:${createHash("sha256").update(canonical).digest("hex")}`;
-}
-
-/**
- * Recompute the hash an executor durably stored in workflow_operations
- * .request_hash.
- */
-function storedRequestHash(request: DomainOperationRequest): string {
-  return requestHash(request);
 }
 
 function validateMutation(mutation: DomainOperationMutation): string[] {
@@ -514,7 +504,7 @@ export function assertDomainOperationReceiptComponents(
     && operation.resulting_revision === receipt.resultingRevision
     && operation.resulting_authority_epoch === receipt.resultingAuthorityEpoch
     && operation.request_hash === receipt.requestHash
-    && operationMatchesRequest(operation, request, storedRequestHash(request));
+    && operationMatchesRequest(operation, request, requestHash(request));
   const events = db.prepare(`
     SELECT event_id, event_index, project_revision, authority_epoch, event_type,
            entity_type, entity_id, caused_by_event_id, payload_json

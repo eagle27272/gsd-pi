@@ -28,7 +28,7 @@ import {
   prepareMigrationTarget,
   resolveMigrationPaths,
 } from "../migrate/safety.ts";
-import { formatPlan, formatRoadmap, writeGSDDirectory, type MigrationPreview } from "../migrate/writer.ts";
+import { writeGSDDirectory, type MigrationPreview } from "../migrate/writer.ts";
 import {
   _setManagedMutationBoundaryForTest,
   _setProjectionCopyBoundaryForTest,
@@ -56,16 +56,15 @@ import {
   previewUnboundProjectionEvidenceResolution,
   resolveUnboundProjectionEvidence,
 } from "../managed-projection-history.ts";
-import { renderAllFromDb, renderMilestoneArtifactsFromDb, renderRoadmapFromDb } from "../markdown-renderer.ts";
+import { renderRoadmapFromDb } from "../markdown-renderer.ts";
 import { gsdRoot } from "../paths.ts";
-import { _getAdapter, closeDatabase, getArtifact, getMilestone, getSliceTasks, insertArtifact, insertMilestone, openDatabase } from "../gsd-db.ts";
-import { _setDomainOperationFaultForTest, executeDomainOperation } from "../db/domain-operation.ts";
+import { _getAdapter, closeDatabase, insertMilestone, openDatabase } from "../gsd-db.ts";
+import { executeDomainOperation } from "../db/domain-operation.ts";
 import type { GSDProject } from "../migrate/types.ts";
 import {
   _setProjectionMutationBoundaryForTest,
   _setMigrationPublicationPlatformForTest,
   _setMigrationDirectorySyncForTest,
-  findPendingMigrationPublication,
   findMigrationPublication,
   migrationPublicationRequestHash,
   writeMigrationProjectionFile,
@@ -1610,7 +1609,7 @@ test("tree retirement leaves no child-level deletion claim", () => {
   }
 });
 
-test("retired projection evidence stays outside managed milestone scans", () => {
+test("retiring a projection tree records a delete tombstone in the recovery-evidence ledger", () => {
   const base = makeBase("gsd-migrate-tree-retirement-managed-set-");
   try {
     const path = "milestones/M001/.gsd-projection-remove-00000000-0000-0000-0000-000000000001";

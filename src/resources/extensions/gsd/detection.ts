@@ -1276,7 +1276,8 @@ export function hasProjectFileInAncestor(
 
 /**
  * Check whether a project's `.gsd/` directory contains the bootstrap artifacts
- * (`PREFERENCES.md` or `milestones/`) that indicate a completed init run.
+ * (`PREFERENCES.md` or the flat-phase `phases/` root) that indicate a
+ * completed init run.
  *
  * A zombie `.gsd/` state — symlink exists but neither artifact is present —
  * must be treated as "needs init wizard". The previous guard checked only

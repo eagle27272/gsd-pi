@@ -410,15 +410,6 @@ function removeProjectionTreeWithoutDatabaseSync(directoryPath: string): void {
   }
 }
 
-export function copyProjectionTreeSync(
-  sourcePath: string,
-  directoryPath: string,
-  include: (sourcePath: string) => boolean = () => true,
-): void {
-  if (existsSync(directoryPath)) removeProjectionTreeSync(directoryPath);
-  transferProjectionTreeSync(sourcePath, directoryPath, true, include);
-}
-
 export function mergeProjectionTreeSync(
   sourcePath: string,
   directoryPath: string,

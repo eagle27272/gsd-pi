@@ -1219,9 +1219,11 @@ export async function bootstrapAutoSession(
     // Ensure symlink exists (handles fresh projects)
     ensureGsdSymlink(base);
 
-    // The first acquisition above serialized bootstrap against the pre-symlink
-    // path. Now that .gsd points at external state, hand ownership to that
-    // physical target before any later process can observe or contend on it.
+    // The first acquisition above serialized bootstrap against the path as it
+    // stood before ensureGsdSymlink ran. Re-acquire against whatever `.gsd`
+    // now resolves to — an external-state symlink target, or a real in-repo
+    // directory for a git-tracked project — before any later process can
+    // observe or contend on it.
     const externalStateLockResult = acquireSessionLock(base);
     if (!externalStateLockResult.acquired) {
       ctx.ui.notify(externalStateLockResult.reason, "error");

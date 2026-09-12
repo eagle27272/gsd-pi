@@ -23,19 +23,19 @@ function canonicalJsonValue(value: unknown, ancestors: Set<object>): string {
   }
   if (typeof value === "number") {
     if (!Number.isFinite(value)) {
-      throw new Error("legacy import identity requires strict JSON with finite numbers");
+      throw new Error("canonical JSON requires strict JSON with finite numbers");
     }
     return JSON.stringify(value);
   }
   if (Array.isArray(value)) {
-    if (ancestors.has(value)) throw new Error("legacy import identity requires acyclic strict JSON");
+    if (ancestors.has(value)) throw new Error("canonical JSON requires acyclic strict JSON");
     const keys = Object.keys(value);
     if (
       keys.length !== value.length
       || keys.some((key, index) => key !== String(index))
       || Object.getOwnPropertySymbols(value).length > 0
     ) {
-      throw new Error("legacy import identity requires dense JSON arrays without extra keys");
+      throw new Error("canonical JSON requires dense JSON arrays without extra keys");
     }
     ancestors.add(value);
     try {
@@ -45,16 +45,16 @@ function canonicalJsonValue(value: unknown, ancestors: Set<object>): string {
     }
   }
   if (typeof value !== "object") {
-    throw new Error("legacy import identity requires strict JSON values");
+    throw new Error("canonical JSON requires strict JSON values");
   }
   const prototype = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) {
-    throw new Error("legacy import identity requires plain JSON objects");
+    throw new Error("canonical JSON requires plain JSON objects");
   }
   if (Object.getOwnPropertySymbols(value).length > 0) {
-    throw new Error("legacy import identity requires strict JSON without symbol keys");
+    throw new Error("canonical JSON requires strict JSON without symbol keys");
   }
-  if (ancestors.has(value)) throw new Error("legacy import identity requires acyclic strict JSON");
+  if (ancestors.has(value)) throw new Error("canonical JSON requires acyclic strict JSON");
   ancestors.add(value);
   try {
     return `{${Object.entries(value)
