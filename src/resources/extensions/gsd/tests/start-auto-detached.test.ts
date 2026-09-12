@@ -113,16 +113,27 @@ test("auto bootstrap validates blocked directories before touching .gsd layout s
   const staleCrashClearIdx = bootstrapBody.indexOf("clearLock(base);");
   const lockIdx = bootstrapBody.indexOf("acquireSessionLock(base)");
   const bootstrapLayoutGuardIdx = bootstrapBody.indexOf("assertNoLegacyLayout(base)");
+  // Migration runs through the shared external-state helper.
+  const bootstrapMigrationIdx = bootstrapBody.indexOf("ensureExternalState(base)");
 
   assert.ok(bootstrapIdx > -1, "bootstrapAutoSession should exist");
   assert.ok(bootstrapValidationIdx > -1, "bootstrapAutoSession should validate the base directory");
   assert.ok(lockIdx > -1, "bootstrapAutoSession should acquire a session lock for safe projects");
   assert.ok(bootstrapLayoutGuardIdx > -1, "bootstrapAutoSession should reject pre-migration on-disk layouts");
+  assert.ok(bootstrapMigrationIdx > -1, "bootstrapAutoSession should still migrate safe projects");
   assert.ok(staleCrashReadIdx > -1, "bootstrapAutoSession should probe stale crash lock state before lock acquisition");
   assert.ok(staleCrashClearIdx > -1, "bootstrapAutoSession should clear stale crash lock state when detected");
   assert.ok(
     bootstrapValidationIdx < lockIdx && bootstrapValidationIdx < bootstrapLayoutGuardIdx,
     "fresh bootstrap must reject blocked directories before locking or inspecting .gsd layout state",
+  );
+  assert.ok(
+    bootstrapValidationIdx < bootstrapMigrationIdx,
+    "fresh bootstrap must reject blocked directories before externalizing state",
+  );
+  assert.ok(
+    bootstrapLayoutGuardIdx < bootstrapMigrationIdx,
+    "the legacy-layout refusal must precede externalization so no unconvertible layout is relocated",
   );
   assert.ok(
     staleCrashReadIdx < lockIdx && staleCrashClearIdx < lockIdx,

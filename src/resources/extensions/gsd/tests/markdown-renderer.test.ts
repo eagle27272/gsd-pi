@@ -1831,6 +1831,106 @@ test('── markdown-renderer: renderRoadmapFromDb renders milestone with visio
   }
 });
 
+test('── markdown-renderer: roadmap renders the persisted Horizontal Checklist between Slices and Boundary Map ──', async () => {
+  const tmpDir = makeTmpDir();
+  const dbPath = path.join(tmpDir, '.gsd', 'gsd.db');
+  openDatabase(dbPath);
+  clearAllCaches();
+
+  try {
+    insertMilestone({ id: 'M018', title: 'Checklisted', status: 'active' });
+    insertSlice({ id: 'S01', milestoneId: 'M018', title: 'First slice', status: 'pending' });
+    scaffoldDirs(tmpDir, 'M018', ['S01']);
+
+    const { upsertMilestonePlanning } = await import('../gsd-db.ts');
+    upsertMilestonePlanning('M018', {
+      title: 'Checklisted',
+      status: 'active',
+      depends_on: [],
+      vision: 'A milestone with cross-cutting concerns',
+      horizontalChecklist: [
+        { item: 'Auth boundary documented — what is protected vs public', checked: true },
+        { item: 'Graceful shutdown / cleanup on termination verified', checked: false },
+        // The planner copied the template line verbatim, marker and all.
+        { item: '- [x] Revenue / billing path impact assessed (or N/A)', checked: true },
+        // Unsubstituted tokens must be dropped — the roadmap validator rejects
+        // any section that still contains them.
+        { item: '{{crossCuttingConcern}}', checked: false },
+        { item: '   ', checked: true },
+      ],
+      boundaryMapMarkdown: '### S01 → S02\n\nProduces:\n- a stable contract',
+    });
+
+    const result = await renderRoadmapFromDb(tmpDir, 'M018');
+    assert.ok('content' in result, 'planned milestone renders');
+    const { content } = result;
+
+    assert.ok(content.includes('## Horizontal Checklist'), 'checklist section is rendered');
+    assert.ok(
+      content.includes('- [x] Auth boundary documented — what is protected vs public'),
+      'considered concerns render as checked',
+    );
+    assert.ok(
+      content.includes('- [ ] Graceful shutdown / cleanup on termination verified'),
+      'open concerns render as unchecked',
+    );
+    assert.ok(
+      content.includes('- [x] Revenue / billing path impact assessed (or N/A)'),
+      'a template-copied checkbox marker is stripped rather than doubled',
+    );
+    assert.ok(!content.includes('{{'), 'unsubstituted template tokens are dropped');
+    assert.ok(!/^- \[[ x]\]\s*$/m.test(content), 'blank checklist items are dropped');
+
+    const checklistIndex = content.indexOf('## Horizontal Checklist');
+    assert.ok(
+      content.indexOf('## Slices') < checklistIndex
+        && checklistIndex < content.indexOf('## Boundary Map'),
+      'checklist sits between Slices and Boundary Map, as templates/roadmap.md defines',
+    );
+
+    // The section is a projection of DB rows, so it must survive a re-read.
+    const stored = getMilestone('M018');
+    assert.deepEqual(
+      stored?.horizontal_checklist.map((entry) => entry.item),
+      [
+        'Auth boundary documented — what is protected vs public',
+        'Graceful shutdown / cleanup on termination verified',
+        '- [x] Revenue / billing path impact assessed (or N/A)',
+        '{{crossCuttingConcern}}',
+        '   ',
+      ],
+      'the checklist round-trips through the milestones table verbatim',
+    );
+  } finally {
+    closeDatabase();
+    cleanupDir(tmpDir);
+  }
+});
+
+test('── markdown-renderer: roadmap omits the Horizontal Checklist section when nothing was checked ──', async () => {
+  const tmpDir = makeTmpDir();
+  const dbPath = path.join(tmpDir, '.gsd', 'gsd.db');
+  openDatabase(dbPath);
+  clearAllCaches();
+
+  try {
+    insertMilestone({ id: 'M019', title: 'Trivial', status: 'active' });
+    insertSlice({ id: 'S01', milestoneId: 'M019', title: 'Only slice', status: 'pending' });
+    scaffoldDirs(tmpDir, 'M019', ['S01']);
+
+    const result = await renderRoadmapFromDb(tmpDir, 'M019');
+
+    assert.ok('content' in result, 'planned milestone renders');
+    assert.ok(
+      !result.content.includes('Horizontal Checklist'),
+      'trivial milestones keep the frozen byte format — no empty checklist section',
+    );
+  } finally {
+    closeDatabase();
+    cleanupDir(tmpDir);
+  }
+});
+
 test('── markdown-renderer: roadmap projects every persisted planning field (#1) ──', async () => {
   const tmpDir = makeTmpDir();
   const dbPath = path.join(tmpDir, '.gsd', 'gsd.db');
@@ -1853,6 +1953,7 @@ test('── markdown-renderer: roadmap projects every persisted planning field 
         verificationUat: 'reviewer reads ROADMAP.md',
         definitionOfDone: ['Every planning field appears in the projection'],
         requirementCoverage: '- Covers: R001\n- Leaves for later: R002',
+        horizontalChecklist: [{ item: 'Auth boundary documented', checked: true }],
         boundaryMapMarkdown: '### S01 → S02\n\nProduces:\n- the rendered roadmap',
       },
     });
@@ -1874,6 +1975,7 @@ test('── markdown-renderer: roadmap projects every persisted planning field 
         '## Milestone Definition of Done',
         '## Requirement Coverage',
         '## Slices',
+        '## Horizontal Checklist',
         '## Boundary Map',
       ],
       'roadmap sections match the bundled template order',
@@ -1891,6 +1993,7 @@ test('── markdown-renderer: roadmap projects every persisted planning field 
     assert.match(content, /^- UAT \/ human verification: reviewer reads ROADMAP\.md$/m, 'uat class');
     assert.match(content, /^- Every planning field appears in the projection$/m, 'definition of done bullet');
     assert.match(content, /^- Covers: R001$/m, 'requirement coverage body');
+    assert.match(content, /^- \[x\] Auth boundary documented$/m, 'horizontal checklist bullet');
     assert.ok(!/[ \t]$/m.test(content), 'roadmap content has no trailing whitespace');
 
     // The added sections must not disturb slice/boundary parsing.
@@ -1968,6 +2071,106 @@ test('── markdown-renderer: roadmap demo line does not double the "After thi
 
     assert.match(content, /^ {2}> After this: users can log in$/m, 'prefix is written exactly once');
     assert.ok(!content.includes('After this: After this:'), 'no doubled prefix');
+  } finally {
+    closeDatabase();
+    cleanupDir(tmpDir);
+  }
+});
+
+test('── markdown-renderer: roadmap renders the persisted Horizontal Checklist between Slices and Boundary Map ──', async () => {
+  const tmpDir = makeTmpDir();
+  const dbPath = path.join(tmpDir, '.gsd', 'gsd.db');
+  openDatabase(dbPath);
+  clearAllCaches();
+
+  try {
+    insertMilestone({ id: 'M021', title: 'Checklisted', status: 'active' });
+    insertSlice({ id: 'S01', milestoneId: 'M021', title: 'First slice', status: 'pending' });
+    scaffoldDirs(tmpDir, 'M021', ['S01']);
+
+    const { upsertMilestonePlanning } = await import('../gsd-db.ts');
+    upsertMilestonePlanning('M021', {
+      title: 'Checklisted',
+      status: 'active',
+      depends_on: [],
+      vision: 'A milestone with cross-cutting concerns',
+      horizontalChecklist: [
+        { item: 'Auth boundary documented — what is protected vs public', checked: true },
+        { item: 'Graceful shutdown / cleanup on termination verified', checked: false },
+        // The planner copied the template line verbatim, marker and all.
+        { item: '- [x] Revenue / billing path impact assessed (or N/A)', checked: true },
+        // Unsubstituted tokens must be dropped — the roadmap validator rejects
+        // any section that still contains them.
+        { item: '{{crossCuttingConcern}}', checked: false },
+        { item: '   ', checked: true },
+      ],
+      boundaryMapMarkdown: '### S01 → S02\n\nProduces:\n- a stable contract',
+    });
+
+    const result = await renderRoadmapFromDb(tmpDir, 'M021');
+    assert.ok('content' in result, 'planned milestone renders');
+    const { content } = result;
+
+    assert.ok(content.includes('## Horizontal Checklist'), 'checklist section is rendered');
+    assert.ok(
+      content.includes('- [x] Auth boundary documented — what is protected vs public'),
+      'considered concerns render as checked',
+    );
+    assert.ok(
+      content.includes('- [ ] Graceful shutdown / cleanup on termination verified'),
+      'open concerns render as unchecked',
+    );
+    assert.ok(
+      content.includes('- [x] Revenue / billing path impact assessed (or N/A)'),
+      'a template-copied checkbox marker is stripped rather than doubled',
+    );
+    assert.ok(!content.includes('{{'), 'unsubstituted template tokens are dropped');
+    assert.ok(!/^- \[[ x]\]\s*$/m.test(content), 'blank checklist items are dropped');
+
+    const checklistIndex = content.indexOf('## Horizontal Checklist');
+    assert.ok(
+      content.indexOf('## Slices') < checklistIndex
+        && checklistIndex < content.indexOf('## Boundary Map'),
+      'checklist sits between Slices and Boundary Map, as templates/roadmap.md defines',
+    );
+
+    // The section is a projection of DB rows, so it must survive a re-read.
+    const stored = getMilestone('M021');
+    assert.deepEqual(
+      stored?.horizontal_checklist.map((entry) => entry.item),
+      [
+        'Auth boundary documented — what is protected vs public',
+        'Graceful shutdown / cleanup on termination verified',
+        '- [x] Revenue / billing path impact assessed (or N/A)',
+        '{{crossCuttingConcern}}',
+        '   ',
+      ],
+      'the checklist round-trips through the milestones table verbatim',
+    );
+  } finally {
+    closeDatabase();
+    cleanupDir(tmpDir);
+  }
+});
+
+test('── markdown-renderer: roadmap omits the Horizontal Checklist section when nothing was checked ──', async () => {
+  const tmpDir = makeTmpDir();
+  const dbPath = path.join(tmpDir, '.gsd', 'gsd.db');
+  openDatabase(dbPath);
+  clearAllCaches();
+
+  try {
+    insertMilestone({ id: 'M022', title: 'Trivial', status: 'active' });
+    insertSlice({ id: 'S01', milestoneId: 'M022', title: 'Only slice', status: 'pending' });
+    scaffoldDirs(tmpDir, 'M022', ['S01']);
+
+    const result = await renderRoadmapFromDb(tmpDir, 'M022');
+
+    assert.ok('content' in result, 'planned milestone renders');
+    assert.ok(
+      !result.content.includes('Horizontal Checklist'),
+      'trivial milestones keep the frozen byte format — no empty checklist section',
+    );
   } finally {
     closeDatabase();
     cleanupDir(tmpDir);

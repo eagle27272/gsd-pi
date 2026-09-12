@@ -1,7 +1,8 @@
 // Project/App: gsd-pi
 // File Purpose: Plans milestone roadmap state through DB-backed workflow tools.
 
-import { isNonEmptyString, validateStringArray, validateTitle } from "../validation.js";
+import type { HorizontalChecklistItem } from "../db-milestone-artifact-rows.js";
+import { isNonEmptyString, validateHorizontalChecklist, validateStringArray, validateTitle } from "../validation.js";
 import { persistMilestonePlan } from "../milestone-planning-persistence.js";
 import type { PlanningInvocation } from "../planning-invocation.js";
 
@@ -24,6 +25,12 @@ export interface PlanMilestoneSliceInput {
   isSketch?: boolean;
   /** ADR-011: 2–3 sentence scope boundary, required when isSketch is true. */
   sketchScope?: string;
+}
+
+/** Tool-boundary shape: `checked` is optional and normalizes to false. */
+export interface HorizontalChecklistInput {
+  item: string;
+  checked?: boolean;
 }
 
 export interface PlanMilestoneParams {
@@ -55,6 +62,8 @@ export interface PlanMilestoneParams {
   definitionOfDone?: string[];
   /** @optional — defaults to "Not provided." when omitted */
   requirementCoverage?: string;
+  /** @optional — defaults to [] when omitted; omitted entirely for trivial milestones */
+  horizontalChecklist?: HorizontalChecklistInput[];
   /** @optional — defaults to "Not provided." when omitted */
   boundaryMapMarkdown?: string;
 }
@@ -190,7 +199,9 @@ function validateSlices(value: unknown): PlanMilestoneSliceInput[] {
   });
 }
 
-function validateParams(params: PlanMilestoneParams): PlanMilestoneParams {
+type ValidatedPlanMilestoneParams = PlanMilestoneParams & { horizontalChecklist: HorizontalChecklistItem[] };
+
+function validateParams(params: PlanMilestoneParams): ValidatedPlanMilestoneParams {
   if (!isNonEmptyString(params?.milestoneId)) throw new Error("milestoneId is required");
   if (!isNonEmptyString(params?.title)) throw new Error("title is required");
   if (!isNonEmptyString(params?.vision)) throw new Error("vision is required");
@@ -210,6 +221,7 @@ function validateParams(params: PlanMilestoneParams): PlanMilestoneParams {
     verificationUat: params.verificationUat ?? "",
     definitionOfDone: params.definitionOfDone ? validateStringArray(params.definitionOfDone, "definitionOfDone") : [],
     requirementCoverage: params.requirementCoverage ?? "Not provided.",
+    horizontalChecklist: params.horizontalChecklist ? validateHorizontalChecklist(params.horizontalChecklist, "horizontalChecklist") : [],
     boundaryMapMarkdown: params.boundaryMapMarkdown ?? "Not provided.",
     slices: validateSlices(params.slices),
   };
@@ -220,7 +232,7 @@ export async function handlePlanMilestone(
   basePath: string,
   invocation: PlanningInvocation,
 ): Promise<PlanMilestoneResult | { error: string }> {
-  let params: PlanMilestoneParams;
+  let params: ValidatedPlanMilestoneParams;
   try {
     params = validateParams(rawParams);
   } catch (err) {

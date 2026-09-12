@@ -1,128 +1,15 @@
-//! Fuzzy text matching and unified diff generation for the edit tool.
+//! Unified diff generation for the edit tool.
 //!
-//! Replaces the JS `edit-diff.ts` hot path with native Rust:
-//! - `normalizeForFuzzyMatch`: Unicode normalization (smart quotes, dashes, special spaces, trailing whitespace)
-//! - `fuzzyFindText`: exact-then-fuzzy substring search
 //! - `generateDiff`: unified diff with line numbers and context, matching the JS output format
+//!
+//! Fuzzy matching deliberately has no native counterpart. It is not a
+//! standalone substring search: applying a fuzzy match safely requires a map
+//! from each normalized code unit back to the source range that produced it,
+//! so the matched region can be spliced into the *original* text. See
+//! `buildFuzzySourceMap` in `packages/pi-coding-agent/src/core/tools/edit-diff.ts`
+//! and issue #4.
 
 use napi_derive::napi;
-
-// ---------------------------------------------------------------------------
-// normalizeForFuzzyMatch
-// ---------------------------------------------------------------------------
-
-/// Normalize text for fuzzy matching:
-/// - Strip trailing whitespace from each line
-/// - Smart single quotes → '
-/// - Smart double quotes → "
-/// - Various dashes/hyphens → -
-/// - Special Unicode spaces → regular space
-#[napi(js_name = "normalizeForFuzzyMatch")]
-pub fn normalize_for_fuzzy_match(text: String) -> String {
-    normalize_impl(&text)
-}
-
-fn normalize_impl(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-
-    for (i, line) in text.split('\n').enumerate() {
-        if i > 0 {
-            out.push('\n');
-        }
-        let trimmed = line.trim_end();
-        for ch in trimmed.chars() {
-            out.push(normalize_char(ch));
-        }
-    }
-
-    out
-}
-
-#[inline]
-fn normalize_char(ch: char) -> char {
-    match ch {
-        // Smart single quotes → '
-        '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}' => '\'',
-        // Smart double quotes → "
-        '\u{201C}' | '\u{201D}' | '\u{201E}' | '\u{201F}' => '"',
-        // Various dashes/hyphens → -
-        '\u{2010}' | '\u{2011}' | '\u{2012}' | '\u{2013}' | '\u{2014}' | '\u{2015}'
-        | '\u{2212}' => '-',
-        // Special spaces → regular space
-        '\u{00A0}' | '\u{2002}' | '\u{2003}' | '\u{2004}' | '\u{2005}' | '\u{2006}'
-        | '\u{2007}' | '\u{2008}' | '\u{2009}' | '\u{200A}' | '\u{202F}' | '\u{205F}'
-        | '\u{3000}' => ' ',
-        _ => ch,
-    }
-}
-
-// ---------------------------------------------------------------------------
-// fuzzyFindText
-// ---------------------------------------------------------------------------
-
-#[napi(object)]
-pub struct FuzzyMatchResult {
-    pub found: bool,
-    pub index: i32,
-    pub match_length: i32,
-    pub used_fuzzy_match: bool,
-    /// When exact match: original content. When fuzzy match: normalized content.
-    pub content_for_replacement: String,
-}
-
-/// Convert a UTF-8 byte offset to a JS string index (UTF-16 code unit offset).
-fn byte_offset_to_utf16(s: &str, byte_offset: usize) -> usize {
-    s[..byte_offset].chars().map(|c| c.len_utf16()).sum()
-}
-
-/// Get the UTF-16 code unit length of a UTF-8 string.
-fn utf16_len(s: &str) -> usize {
-    s.chars().map(|c| c.len_utf16()).sum()
-}
-
-/// Find `old_text` in `content`, trying exact match first, then fuzzy match.
-///
-/// Returns indices and lengths as UTF-16 code unit offsets (compatible with
-/// JS `String.prototype.substring()`).
-///
-/// When fuzzy matching is used, `content_for_replacement` is the normalized
-/// version of `content` (trailing whitespace stripped, Unicode quotes/dashes
-/// normalized to ASCII).
-#[napi(js_name = "fuzzyFindText")]
-pub fn fuzzy_find_text(content: String, old_text: String) -> FuzzyMatchResult {
-    // Try exact match first
-    if let Some(byte_idx) = content.find(&old_text) {
-        return FuzzyMatchResult {
-            found: true,
-            index: byte_offset_to_utf16(&content, byte_idx) as i32,
-            match_length: utf16_len(&old_text) as i32,
-            used_fuzzy_match: false,
-            content_for_replacement: content,
-        };
-    }
-
-    // Try fuzzy match
-    let fuzzy_content = normalize_impl(&content);
-    let fuzzy_old_text = normalize_impl(&old_text);
-
-    if let Some(byte_idx) = fuzzy_content.find(&fuzzy_old_text) {
-        FuzzyMatchResult {
-            found: true,
-            index: byte_offset_to_utf16(&fuzzy_content, byte_idx) as i32,
-            match_length: utf16_len(&fuzzy_old_text) as i32,
-            used_fuzzy_match: true,
-            content_for_replacement: fuzzy_content,
-        }
-    } else {
-        FuzzyMatchResult {
-            found: false,
-            index: -1,
-            match_length: 0,
-            used_fuzzy_match: false,
-            content_for_replacement: content,
-        }
-    }
-}
 
 // ---------------------------------------------------------------------------
 // generateDiff
@@ -322,55 +209,6 @@ fn generate_diff_impl(old_content: &str, new_content: &str, context_lines: usize
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_normalize_smart_quotes() {
-        let input = "\u{201C}hello\u{201D} \u{2018}world\u{2019}";
-        assert_eq!(normalize_impl(input), "\"hello\" 'world'");
-    }
-
-    #[test]
-    fn test_normalize_dashes() {
-        let input = "a\u{2013}b\u{2014}c\u{2212}d";
-        assert_eq!(normalize_impl(input), "a-b-c-d");
-    }
-
-    #[test]
-    fn test_normalize_special_spaces() {
-        let input = "a\u{00A0}b\u{2003}c\u{3000}d";
-        assert_eq!(normalize_impl(input), "a b c d");
-    }
-
-    #[test]
-    fn test_normalize_trailing_whitespace() {
-        let input = "hello   \nworld  ";
-        assert_eq!(normalize_impl(input), "hello\nworld");
-    }
-
-    #[test]
-    fn test_fuzzy_find_exact() {
-        let result = fuzzy_find_text("hello world".to_string(), "world".to_string());
-        assert!(result.found);
-        assert_eq!(result.index, 6);
-        assert_eq!(result.match_length, 5);
-        assert!(!result.used_fuzzy_match);
-    }
-
-    #[test]
-    fn test_fuzzy_find_with_smart_quotes() {
-        let content = "let x = \u{201C}hello\u{201D};".to_string();
-        let old_text = "let x = \"hello\";".to_string();
-        let result = fuzzy_find_text(content, old_text);
-        assert!(result.found);
-        assert!(result.used_fuzzy_match);
-    }
-
-    #[test]
-    fn test_fuzzy_find_not_found() {
-        let result = fuzzy_find_text("hello world".to_string(), "xyz".to_string());
-        assert!(!result.found);
-        assert_eq!(result.index, -1);
-    }
 
     #[test]
     fn test_generate_diff_basic() {

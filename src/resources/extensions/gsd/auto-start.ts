@@ -28,8 +28,9 @@ import {
   resolveSkillDiscoveryMode,
   getIsolationMode,
 } from "./preferences.js";
-import { ensureGsdSymlink, isInheritedRepo, validateProjectId } from "./repo-identity.js";
+import { isInheritedRepo, validateProjectId } from "./repo-identity.js";
 import { assertNoLegacyLayout } from "./legacy-layout-guard.js";
+import { ensureExternalState } from "./external-state-bootstrap.js";
 import { collectSecretsFromManifest } from "../get-secrets-from-user.js";
 import { gsdRoot, resolveMilestoneFile } from "./paths.js";
 import { findMilestoneIds } from "./milestone-ids.js";
@@ -87,7 +88,6 @@ import {
 import { readMilestoneMergeObservation } from "./db/milestone-closeout-readiness.js";
 import { immediateTransaction } from "./db/engine.js";
 import {
-  closeAllWorkflowDatabases,
   getWorkflowDatabaseStatus,
   openExistingWorkflowDatabase,
   openWorkflowDatabase,
@@ -1208,16 +1208,20 @@ export async function bootstrapAutoSession(
       nativeInit(base, mainBranch);
     }
 
-    // startAuto's interrupted-session assessment may already have opened the
-    // database. Retire every handle before the symlink step so the WAL is
-    // checkpointed and no cached adapter remains bound to a stale inode.
-    closeAllWorkflowDatabases();
-    // Fail closed on a pre-migration on-disk layout: every resolver below
-    // assumes flat-phase projections, so continuing would silently corrupt
-    // later checks.
+    // Fail closed on a pre-flat-phase on-disk layout before anything relocates
+    // or rewrites it: every resolver below assumes flat-phase projections, and
+    // nothing converts the old layout any more.
     assertNoLegacyLayout(base);
-    // Ensure symlink exists (handles fresh projects)
-    ensureGsdSymlink(base);
+    // Migrate legacy in-project .gsd/ to external state directory.
+    // Migration MUST run before ensureGitignore to avoid adding ".gsd" to
+    // .gitignore when .gsd/ is git-tracked (data-loss bug #1364).
+    const externalState = ensureExternalState(base);
+    if (externalState.migrationError) {
+      ctx.ui.notify(
+        `External state migration warning: ${externalState.migrationError}`,
+        externalState.migrationErrorSeverity ?? "warning",
+      );
+    }
 
     // The first acquisition above serialized bootstrap against the path as it
     // stood before ensureGsdSymlink ran. Re-acquire against whatever `.gsd`

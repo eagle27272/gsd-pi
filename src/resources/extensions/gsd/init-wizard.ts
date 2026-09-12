@@ -17,6 +17,7 @@ import {
 import { nativeIsRepo, nativeInit, nativeAddAll, nativeCommit, nativeDetectMainBranch } from "./native-git-bridge.js";
 import { ensureGitignore, untrackRuntimeFiles } from "./gitignore.js";
 import { gsdRoot } from "./paths.js";
+import { ensureExternalState } from "./external-state-bootstrap.js";
 import { assertSafeDirectory } from "./validate-directory.js";
 import type { ProjectDetection, ProjectSignals } from "./detection.js";
 import { runSkillInstallStep } from "./skill-catalog.js";
@@ -282,6 +283,10 @@ export async function showProjectInit(
   }
 
   // ── Step 10: Bootstrap .gsd/ + write preferences ───────────────────────────
+  // Externalize before the structure is written and before ensureDbOpen below,
+  // so the wizard populates the external store rather than a local directory
+  // that would then be migrated out from under an open database handle.
+  if (nativeIsRepo(basePath)) ensureExternalState(basePath);
   bootstrapGsdDirectoryStructure(basePath, signals);
   const prefillPrefs = mapInitPrefsToWizardShape(prefs);
   // Always derive the preferences path from basePath so init writing the

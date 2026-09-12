@@ -23,6 +23,7 @@ import {
   closeDatabase,
   openDatabase,
 } from "../gsd-db.ts";
+import { clearGSDPreferencesCache } from "../preferences.ts";
 import { claimTaskAttempt, settleTaskAttempt } from "../task-execution-domain-operation.ts";
 import { recordFailureAndSelectRecovery } from "../task-recovery-domain-operation.ts";
 import { executeTaskComplete } from "../tools/workflow-tool-executors.ts";
@@ -224,8 +225,25 @@ function completeCanonicalFixture(): void {
   });
 }
 
+/**
+ * Pin the escalation preference so these cases cannot be swung by whatever
+ * `~/.gsd/PREFERENCES.md` the developer running the suite happens to have.
+ */
+function writeEscalationPreference(basePath: string, enabled: boolean): void {
+  writeFileSync(join(basePath, ".gsd", "PREFERENCES.md"), [
+    "---",
+    "version: 1",
+    "phases:",
+    `  mid_execution_escalation: ${enabled}`,
+    "---",
+    "",
+  ].join("\n"));
+  clearGSDPreferencesCache();
+}
+
 afterEach(() => {
   closeDatabase();
+  clearGSDPreferencesCache();
   for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
   tempDirs.clear();
 });
@@ -429,8 +447,9 @@ test("a canonical blocker submission records a failed Result and routes instead 
   });
 });
 
-test("canonical escalation fails closed until the durable adapter can persist it", async () => {
+test("canonical hard-blocker escalation fails closed while the preference is disabled", async () => {
   const basePath = createBase();
+  writeEscalationPreference(basePath, false);
   claimCanonicalAttempt(basePath);
 
   const result = await executeTaskComplete({
@@ -448,13 +467,14 @@ test("canonical escalation fails closed until the durable adapter can persist it
   } as never, basePath, invocation("pi:gsd_task_complete:escalation-call"));
 
   assert.equal(result.isError, true);
-  assert.match(String(result.content[0]?.text), /canonical.*escalation|escalation.*durable/i);
+  assert.match(String(result.content[0]?.text), /mid_execution_escalation is disabled/);
   assert.equal(row("SELECT COUNT(*) AS count FROM workflow_attempt_results").count, 0);
   assert.equal(row("SELECT status FROM tasks WHERE id = 'T01'").status, "in_progress");
 });
 
 test("canonical soft escalation is dropped and staged instead of dead-ending closeout", async () => {
   const basePath = createBase();
+  writeEscalationPreference(basePath, false);
   const attemptId = claimCanonicalAttempt(basePath);
 
   // With phases.mid_execution_escalation disabled (the default) a soft

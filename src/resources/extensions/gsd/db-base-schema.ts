@@ -146,6 +146,7 @@ export function createBaseSchemaObjects(db: DbAdapter, hooks: BaseSchemaHooks): 
       verification_uat TEXT NOT NULL DEFAULT '',
       definition_of_done TEXT NOT NULL DEFAULT '[]',
       requirement_coverage TEXT NOT NULL DEFAULT '',
+      horizontal_checklist TEXT NOT NULL DEFAULT '[]',
       boundary_map_markdown TEXT NOT NULL DEFAULT '',
       sequence INTEGER DEFAULT 0
     )

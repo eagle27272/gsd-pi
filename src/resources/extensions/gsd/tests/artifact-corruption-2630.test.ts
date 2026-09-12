@@ -106,6 +106,7 @@ function makeMilestoneRow(overrides?: Partial<MilestoneRow>): MilestoneRow {
     verification_uat: '',
     definition_of_done: [],
     requirement_coverage: '',
+    horizontal_checklist: [],
     boundary_map_markdown: '',
     sequence: 0,
     ...overrides,

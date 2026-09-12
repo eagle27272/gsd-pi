@@ -23,6 +23,7 @@ import {
   insertTask,
   openDatabase,
   readDomainOperationFence,
+  upsertMilestonePlanning,
 } from "../gsd-db.ts";
 import type { PlanningInvocation } from "../planning-invocation.ts";
 import { writePlanningDirectory } from "../migrate/planning-writer.ts";
@@ -364,6 +365,64 @@ test("reassessment corrects milestone and completed-slice evidence metadata with
   assert.match(roadmap, /Runtime evidence proves the corrected acceptance policy/);
   assert.match(roadmap, /The corrected runtime acceptance policy is demonstrable/);
   assert.match(roadmap, /S01 -> runtime acceptance evidence/);
+});
+
+test("reassessment corrects the Horizontal Checklist into the milestone row and the re-rendered roadmap", async () => {
+  const { base } = fixture();
+  upsertMilestonePlanning("M001", {
+    vision: "Exercise checklist correction.",
+    horizontalChecklist: [
+      { item: "Auth boundary documented — what is protected vs public", checked: false },
+      { item: "Reconnection / retry behaviour specified", checked: true },
+    ],
+  });
+
+  const result = await reassess({
+    ...params(),
+    sliceChanges: { modified: [], added: [], removed: [] },
+    metadataCorrections: {
+      milestone: {
+        horizontalChecklist: [
+          { item: "Auth boundary documented — what is protected vs public", checked: true },
+          // `checked` is optional at the tool boundary and normalizes to false.
+          { item: "Graceful shutdown / cleanup on termination verified" },
+        ],
+      },
+    },
+  }, base, invocation("reassess/checklist-correction"));
+
+  assert.ok(!("error" in result), `unexpected error: ${"error" in result ? result.error : ""}`);
+  assert.deepEqual(
+    getMilestone("M001")?.horizontal_checklist,
+    [
+      { item: "Auth boundary documented — what is protected vs public", checked: true },
+      { item: "Graceful shutdown / cleanup on termination verified", checked: false },
+    ],
+    "the corrected checklist replaces the planned one with `checked` normalized to a boolean",
+  );
+
+  const roadmap = readFileSync((result as ReassessRoadmapResult).roadmapPath, "utf8");
+  assert.match(roadmap, /^- \[x\] Auth boundary documented — what is protected vs public$/m);
+  assert.match(roadmap, /^- \[ \] Graceful shutdown \/ cleanup on termination verified$/m);
+  assert.ok(
+    !roadmap.includes("Reconnection / retry behaviour specified"),
+    "the superseded checklist item must not survive in the projection",
+  );
+});
+
+test("Horizontal Checklist correction rejects entries without a usable item", async () => {
+  const { base } = fixture();
+  const result = await reassess({
+    ...params(),
+    sliceChanges: { modified: [], added: [], removed: [] },
+    metadataCorrections: {
+      milestone: { horizontalChecklist: [{ item: "   " }] },
+    },
+  }, base, invocation("reassess/checklist-rejection"));
+
+  assert.ok("error" in result, "a blank checklist item must not reach the DB");
+  assert.match(result.error, /metadataCorrections\.milestone\.horizontalChecklist\[0\]/);
+  assert.deepEqual(getMilestone("M001")?.horizontal_checklist, [], "rejected correction leaves no residue");
 });
 
 test("completed-slice metadata correction rejects pending slices without residue", async () => {

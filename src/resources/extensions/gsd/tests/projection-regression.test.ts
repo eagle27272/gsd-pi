@@ -90,6 +90,7 @@ function makeMilestoneRow() {
     verification_uat: '',
     definition_of_done: [],
     requirement_coverage: '',
+    horizontal_checklist: [],
     boundary_map_markdown: '',
     sequence: 0,
   };

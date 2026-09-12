@@ -51,6 +51,7 @@ import { removeProjectionTreeSync } from "./atomic-write.js";
 import { readSessionLockData, isSessionLockProcessAlive } from "./session-lock.js";
 import { nativeAddAll, nativeCommit, nativeHasCommittedHead, nativeIsRepo, nativeInit } from "./native-git-bridge.js";
 import { isInheritedRepo } from "./repo-identity.js";
+import { ensureExternalState } from "./external-state-bootstrap.js";
 import { ensureGitignore, ensurePreferences, untrackRuntimeFiles } from "./gitignore.js";
 import { getIsolationMode, loadEffectiveGSDPreferences, renderLanguageDirectiveForPrompt } from "./preferences.js";
 import { getAutoWorktreePath } from "./auto-worktree-path-resolution.js";
@@ -1105,6 +1106,10 @@ function bootstrapGsdProject(basePath: string): void {
     nativeInit(basePath, mainBranch);
   }
 
+  // Must run before gsdRoot() materializes `.gsd`, or state lands in a real
+  // local directory that nothing later converts.
+  ensureExternalState(basePath);
+
   const root = gsdRoot(basePath);
   mkdirSync(join(root, "runtime"), { recursive: true });
 
@@ -1114,6 +1119,8 @@ function bootstrapGsdProject(basePath: string): void {
   ensurePreferences(basePath);
   if (manageGitignore !== false) untrackRuntimeFiles(basePath);
 }
+
+export const _bootstrapGsdProjectForTest = bootstrapGsdProject;
 
 /**
  * Headless milestone creation from a seed specification document.
@@ -1943,7 +1950,7 @@ export async function showSmartEntry(
     if (!proceed) return;
   }
 
-  // ── Legacy-layout refusal — must precede the detection preamble ──────
+  // ── Legacy-layout refusal — must precede externalization and detection ──
   // Entering without `auto` reaches neither startAuto nor bootstrapAutoSession,
   // the two other assertNoLegacyLayout call sites. hasGsdBootstrapArtifacts
   // keys on `phases/`, so a pre-flat-phase project reports "no bootstrap" and
@@ -1951,7 +1958,22 @@ export async function showSmartEntry(
   // legacy tree. A pi hook cannot carry this refusal: the extension runner
   // catches every handler throw and downgrades it to an error event, so the
   // session proceeds regardless. This command funnel can actually refuse.
+  // Refusing first also keeps ensureExternalState from relocating a layout
+  // nothing can convert.
   assertNoLegacyLayout(basePath);
+
+  // ── Externalize state before anything resolves or writes `.gsd` ──────
+  // gsdRoot() below caches the resolved path, so a local `.gsd` left in place
+  // here would stay local for the rest of the process.
+  if (nativeIsRepo(basePath)) {
+    const externalState = ensureExternalState(basePath);
+    if (externalState.migrationError) {
+      ctx.ui.notify(
+        `External state migration warning: ${externalState.migrationError}`,
+        externalState.migrationErrorSeverity ?? "warning",
+      );
+    }
+  }
 
   // ── Detection preamble — run before any bootstrap ────────────────────
   // Check bootstrap completeness, not just .gsd/ directory existence.

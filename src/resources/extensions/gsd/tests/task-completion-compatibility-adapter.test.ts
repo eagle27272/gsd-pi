@@ -41,6 +41,9 @@ import {
   resumeTaskRecovery,
 } from "../task-recovery-domain-operation.js";
 import { resolveTaskCompletionAuthority } from "../task-completion-compatibility-adapter.js";
+import { readEscalationArtifact } from "../escalation.js";
+import { clearGSDPreferencesCache } from "../preferences.js";
+import { executeTaskComplete } from "../tools/workflow-tool-executors.js";
 import { recordTaskTechnicalVerdict } from "../task-verification-domain-operation.js";
 import { captureVerificationSourceSnapshot } from "../verification-source-integrity.js";
 import {
@@ -528,11 +531,212 @@ function settlementState(): Record<string, unknown> {
 afterEach(() => {
   _setDomainOperationFaultForTest(null);
   _setManagedMutationBoundaryForTest(null);
+  clearGSDPreferencesCache();
   closeDatabase();
   clearPathCache();
   clearParseCache();
   for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
   tempDirs.clear();
+});
+
+const SOFT_ESCALATION = {
+  question: "Should the cache use write-through or write-back?",
+  options: [
+    { id: "A", label: "Write-through", tradeoffs: "Simpler reads; slower writes." },
+    { id: "B", label: "Write-back", tradeoffs: "Faster writes; more flush complexity." },
+  ],
+  recommendation: "A",
+  recommendationRationale: "Correctness matters more than write latency here.",
+  continueWithDefault: true,
+};
+
+function writeEscalationPreference(basePath: string, enabled: boolean): void {
+  writeFileSync(join(basePath, ".gsd", "PREFERENCES.md"), [
+    "---",
+    "version: 1",
+    "phases:",
+    `  mid_execution_escalation: ${enabled}`,
+    "---",
+    "",
+  ].join("\n"));
+  clearGSDPreferencesCache();
+}
+
+function completeTaskParams(
+  escalation?: Record<string, unknown>,
+): Parameters<typeof executeTaskComplete>[0] {
+  return {
+    milestoneId: TASK.milestoneId,
+    sliceId: TASK.sliceId,
+    taskId: TASK.taskId,
+    oneLiner: "Implemented the compatibility seam",
+    narrative: "The executor produced a candidate result for host verification.",
+    verification: "Agent reported npm test passed; host verification is still required.",
+    ...(escalation ? { escalation } : {}),
+  } as Parameters<typeof executeTaskComplete>[0];
+}
+
+function escalationState(): Record<string, unknown> {
+  return row(`
+    SELECT escalation_pending, escalation_awaiting_review, escalation_artifact_path
+    FROM tasks WHERE milestone_id = 'M001' AND slice_id = 'S01' AND id = 'T01'
+  `);
+}
+
+test("#27: canonical completion records a soft escalation when the preference is enabled", async () => {
+  const { basePath } = createFixture();
+  writeEscalationPreference(basePath, true);
+
+  const result = await executeTaskComplete(
+    completeTaskParams(SOFT_ESCALATION),
+    basePath,
+    invocation("task-completion/escalation-soft"),
+  );
+
+  assert.equal(result.isError, undefined, String(result.content[0]?.text));
+  const state = escalationState();
+  assert.equal(state.escalation_awaiting_review, 1);
+  assert.equal(state.escalation_pending, 0);
+  const artifactPath = String(state.escalation_artifact_path);
+  assert.equal(existsSync(artifactPath), true, `escalation artifact missing at ${artifactPath}`);
+  assert.equal(readEscalationArtifact(artifactPath)?.question, SOFT_ESCALATION.question);
+  assert.equal(
+    (result.details.escalation as { question?: string } | undefined)?.question,
+    SOFT_ESCALATION.question,
+  );
+  assert.match(String(result.content[0]?.text), /\/gsd escalate resolve T01/);
+});
+
+test("#27: canonical completion records a hard-blocker escalation as pending", async () => {
+  const { basePath } = createFixture();
+  writeEscalationPreference(basePath, true);
+
+  const result = await executeTaskComplete(
+    completeTaskParams({ ...SOFT_ESCALATION, continueWithDefault: false }),
+    basePath,
+    invocation("task-completion/escalation-hard"),
+  );
+
+  assert.equal(result.isError, undefined, String(result.content[0]?.text));
+  const state = escalationState();
+  assert.equal(state.escalation_pending, 1);
+  assert.equal(state.escalation_awaiting_review, 0);
+  assert.equal(existsSync(String(state.escalation_artifact_path)), true);
+});
+
+test("#27: canonical completion drops a soft escalation when the preference is disabled", async () => {
+  const { basePath } = createFixture();
+  writeEscalationPreference(basePath, false);
+
+  const result = await executeTaskComplete(
+    completeTaskParams(SOFT_ESCALATION),
+    basePath,
+    invocation("task-completion/escalation-disabled-soft"),
+  );
+
+  assert.equal(result.isError, undefined, String(result.content[0]?.text));
+  assert.deepEqual(escalationState(), {
+    escalation_pending: 0,
+    escalation_awaiting_review: 0,
+    escalation_artifact_path: null,
+  });
+  assert.equal(result.details.escalation, undefined);
+  assert.equal(taskState().status, "in_progress");
+});
+
+test("#27: canonical completion rejects a hard-blocker escalation when the preference is disabled", async () => {
+  const { basePath } = createFixture();
+  writeEscalationPreference(basePath, false);
+
+  const result = await executeTaskComplete(
+    completeTaskParams({ ...SOFT_ESCALATION, continueWithDefault: false }),
+    basePath,
+    invocation("task-completion/escalation-disabled-hard"),
+  );
+
+  assert.equal(result.isError, true);
+  assert.match(String(result.content[0]?.text), /mid_execution_escalation is disabled/);
+  assert.equal(count("workflow_attempt_results"), 0, "a rejected payload must not settle the Attempt");
+  assert.equal(row("SELECT attempt_state FROM workflow_execution_attempts").attempt_state, "running");
+});
+
+test("#27: canonical completion rejects a malformed escalation before settling the Attempt", async () => {
+  const { basePath } = createFixture();
+  writeEscalationPreference(basePath, true);
+
+  const result = await executeTaskComplete(
+    completeTaskParams({ ...SOFT_ESCALATION, recommendation: "Z" }),
+    basePath,
+    invocation("task-completion/escalation-malformed"),
+  );
+
+  assert.equal(result.isError, true);
+  assert.match(String(result.content[0]?.text), /recommendation/i);
+  assert.equal(count("workflow_attempt_results"), 0, "a rejected payload must not settle the Attempt");
+  assert.equal(row("SELECT attempt_state FROM workflow_execution_attempts").attempt_state, "running");
+  assert.equal(taskState().status, "in_progress");
+});
+
+function failEscalationArtifactWrites(): void {
+  _setManagedMutationBoundaryForTest((boundary, target) => {
+    if (boundary === "before-write" && target.endsWith("ESCALATION.json")) {
+      throw new Error("simulated escalation projection failure");
+    }
+  });
+}
+
+test("#27: a failed soft-escalation projection still completes the staged Task", async () => {
+  const { basePath } = createFixture();
+  writeEscalationPreference(basePath, true);
+  failEscalationArtifactWrites();
+
+  const result = await executeTaskComplete(
+    completeTaskParams(SOFT_ESCALATION),
+    basePath,
+    invocation("task-completion/escalation-soft-projection-failure"),
+  );
+
+  assert.equal(result.isError, undefined, String(result.content[0]?.text));
+  assert.equal(result.details.escalation, undefined);
+  assert.equal(count("workflow_attempt_results"), 1, "the staged completion stays committed");
+});
+
+test("#27: a failed hard-blocker escalation projection surfaces an error", async () => {
+  const { basePath } = createFixture();
+  writeEscalationPreference(basePath, true);
+  failEscalationArtifactWrites();
+
+  const result = await executeTaskComplete(
+    completeTaskParams({ ...SOFT_ESCALATION, continueWithDefault: false }),
+    basePath,
+    invocation("task-completion/escalation-hard-projection-failure"),
+  );
+
+  assert.equal(result.isError, true);
+  assert.match(String(result.content[0]?.text), /escalation/i);
+});
+
+test("#27: a replayed canonical completion preserves an already-resolved escalation", async () => {
+  const { basePath } = createFixture();
+  writeEscalationPreference(basePath, true);
+  const params = completeTaskParams(SOFT_ESCALATION);
+  const key = invocation("task-completion/escalation-replay");
+  await executeTaskComplete(params, basePath, key);
+  const { resolveEscalation } = await import("../escalation.js");
+  assert.equal(
+    resolveEscalation(basePath, TASK.milestoneId, TASK.sliceId, TASK.taskId, "B", "Write-back it is.").status,
+    "resolved",
+  );
+  const resolved = readEscalationArtifact(String(escalationState().escalation_artifact_path));
+
+  const replay = await executeTaskComplete(params, basePath, key);
+
+  assert.equal(replay.isError, undefined, String(replay.content[0]?.text));
+  assert.deepEqual(
+    readEscalationArtifact(String(escalationState().escalation_artifact_path)),
+    resolved,
+    "a replay must not discard the user's recorded decision",
+  );
 });
 
 test("staging settles the canonical Attempt but leaves legacy completion and its checkbox pending", async () => {

@@ -44,7 +44,7 @@ import { hostname } from "node:os";
 import { join } from "node:path";
 import type { CompleteMilestoneParams } from "./complete-milestone.js";
 import { handleCompleteMilestone } from "./complete-milestone.js";
-import { handleCompleteTask, resolveTaskSummaryPath } from "./complete-task.js";
+import { handleCompleteTask, resolveTaskSummaryPath, type CompleteTaskResult } from "./complete-task.js";
 import {
   resolveTaskCompletionAuthority,
   stageTaskCompletion,
@@ -807,6 +807,18 @@ function deriveVerificationSummary(
   return `Verification evidence recorded: ${rendered.join("; ")}${suffix}.`;
 }
 
+function escalationResolutionLines(
+  taskId: string,
+  escalation: NonNullable<CompleteTaskResult["escalation"]>,
+): string[] {
+  const recommended = escalation.options.find((option) => option.id === escalation.recommendation);
+  const optionIds = escalation.options.map((option) => option.id).join("|");
+  return [
+    `Recommendation: ${escalation.recommendation}${recommended ? ` (${recommended.label})` : ""} — ${escalation.recommendationRationale}`,
+    `Resolve with: /gsd escalate resolve ${taskId} <${optionIds}|accept|reject-blocker> [rationale...]`,
+  ];
+}
+
 export type CompleteMilestoneExecutorParams = Partial<CompleteMilestoneParams> & Record<string, unknown>;
 export type SliceCompleteExecutorParams = CompleteSliceParams;
 export type PlanMilestoneExecutorParams = PlanMilestoneParams;
@@ -932,28 +944,6 @@ export async function executeTaskComplete(
       if (!invocation) {
         throw new Error("Canonical Task completion requires private invocation identity");
       }
-      if (params.escalation) {
-        // The durable completion adapter cannot yet record escalation
-        // artifacts. Rather than dead-ending the closeout, mirror the legacy
-        // escalation gating (see handleCompleteTask): escalation is only
-        // honored when phases.mid_execution_escalation is enabled. When it is
-        // disabled (the default), the legacy path drops a soft escalation
-        // (continueWithDefault !== false) with a warning and completes the
-        // task — so do the same here instead of throwing. Only cases the
-        // legacy path would actually honor (escalation enabled) or reject (a
-        // hard blocker with escalation disabled) have no canonical equivalent
-        // yet, so those still surface the unsupported error.
-        const escalationEnabled =
-          loadEffectiveGSDPreferences(basePath)?.preferences?.phases?.mid_execution_escalation === true;
-        const hardBlocker = params.escalation.continueWithDefault === false;
-        if (escalationEnabled || hardBlocker) {
-          throw new Error("Canonical Task completion escalation is not yet supported by the durable completion adapter");
-        }
-        logWarning(
-          "tool",
-          `complete_task received escalation payload but phases.mid_execution_escalation is not enabled; ignoring on the canonical completion path (${params.milestoneId}/${params.sliceId}/${params.taskId})`,
-        );
-      }
       const staged = await stageTaskCompletion({
         invocation,
         basePath,
@@ -971,14 +961,22 @@ export async function executeTaskComplete(
           keyDecisions: params.keyDecisions ?? [],
           blockerDiscovered: params.blockerDiscovered ?? false,
           verificationEvidence,
+          ...(params.escalation ? { escalation: params.escalation } : {}),
         },
       });
+      const stagedText = staged.nextStage === "verify"
+        ? `Staged task ${params.taskId}; awaiting host verification before completion.`
+        : `Recorded blocker for task ${params.taskId}; awaiting recovery routing.`;
       return {
         content: [{
           type: "text",
-          text: staged.nextStage === "verify"
-            ? `Staged task ${params.taskId}; awaiting host verification before completion.`
-            : `Recorded blocker for task ${params.taskId}; awaiting recovery routing.`,
+          text: staged.escalation
+            ? [
+              stagedText,
+              `Escalation decision required: ${staged.escalation.question}`,
+              ...escalationResolutionLines(params.taskId, staged.escalation),
+            ].join("\n")
+            : stagedText,
         }],
         details: {
           operation: "complete_task",
@@ -989,6 +987,7 @@ export async function executeTaskComplete(
           resultId: staged.resultId,
           summaryPath: staged.summaryPath,
           nextStage: staged.nextStage,
+          ...(staged.escalation ? { escalation: staged.escalation } : {}),
         },
       };
     }
@@ -1005,15 +1004,12 @@ export async function executeTaskComplete(
       ? "The readable status update is pending repair."
       : null;
     if (result.escalation) {
-      const recommended = result.escalation.options.find((option) => option.id === result.escalation?.recommendation);
-      const optionIds = result.escalation.options.map((option) => option.id).join("|");
       return {
         content: [{
           type: "text",
           text: [
             `Task completed with escalation decision required: ${result.escalation.question}`,
-            `Recommendation: ${result.escalation.recommendation}${recommended ? ` (${recommended.label})` : ""} — ${result.escalation.recommendationRationale}`,
-            `Resolve with: /gsd escalate resolve ${result.taskId} <${optionIds}|accept|reject-blocker> [rationale...]`,
+            ...escalationResolutionLines(result.taskId, result.escalation),
             ...(projectionNotice ? [projectionNotice] : []),
           ].join("\n"),
         }],
