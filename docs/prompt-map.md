@@ -251,7 +251,6 @@ complete-milestone
 | `worktree-merge.md` | Merge a worktree branch into a target branch from the main tree. | git merge (main tree CWD) |
 | `reassess-roadmap.md` | *(see Completion Flow above)* | — |
 | `rewrite-docs.md` | Apply OVERRIDES.md changes across all planning docs. | — |
-| `review-migration.md` | Audit `.planning → .gsd` migration correctness. | `deriveState` |
 | `doctor-heal.md` | Repair broken GSD artifacts (summaries, UAT, CONTEXT). | — |
 | `scan.md` | Codebase scan → STACK.md, INTEGRATIONS.md, ARCHITECTURE.md. No tool calls. | writes `{{outputDir}}` |
 | `forensics.md` | Debug GSD engine failures. Map failures to source files. | reads activity logs, journal, metrics |

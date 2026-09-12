@@ -103,13 +103,12 @@ After writing the file, GSD attempts to open it in a browser using the local pla
 | `/gsd skill-health --stale N` | Show skills unused for N+ days |
 | `/gsd hooks` | Show configured post-unit and pre-dispatch hooks |
 | `/gsd run-hook` | Manually trigger a specific hook |
-| `/gsd recover` | Preview an explicit legacy markdown import, then approve the exact hash shown with `/gsd recover --preview=<sha256>` |
 | `/gsd recover <recoveryActionId>` | Resume one repaired Task recovery abort or remediation after supplying repair and verification evidence |
 | `/gsd rebuild markdown` | Preserve externally edited modeled projections under `.gsd/quarantine/projections/`, then rebuild from the canonical database without importing markdown |
 | `/gsd rebuild database` | Reserved for DB-native rebuilds; does not import markdown projections |
 | `/gsd language <language\|off\|clear>` | Set or clear the global response language |
 
-The two `/gsd recover` forms serve different recovery domains. Use the no-argument command (and its `--preview`, `--application`, and related flags) only for the evidence-bound legacy markdown/database import flow. When auto mode reports a terminal Task recovery abort or a settled Task with a current `remediate` Recovery Action, repair the underlying defect and run `/gsd recover <recoveryActionId>`. GSD checks that the action is still eligible, prompts for a nonblank repair summary and concrete verification evidence, and authorizes exactly one fresh lineage-linked retry; it does not run that retry itself, so rerun `/gsd auto` after the command succeeds. Stale actions, duplicate authorizations, open blockers, and actions superseded by later Attempts remain rejected.
+`/gsd recover` takes a Recovery Action ID and serves exactly one purpose: resuming Task recovery. (The former no-argument markdown-import form is gone — nothing imports markdown into the database any more.) When auto mode reports a terminal Task recovery abort or a settled Task with a current `remediate` Recovery Action, repair the underlying defect and run `/gsd recover <recoveryActionId>`. GSD checks that the action is still eligible, prompts for a nonblank repair summary and concrete verification evidence, and authorizes exactly one fresh lineage-linked retry; it does not run that retry itself, so rerun `/gsd auto` after the command succeeds. Stale actions, duplicate authorizations, open blockers, and actions superseded by later Attempts remain rejected.
 
 ## Milestone Management
 
@@ -501,20 +500,6 @@ gsd headless discard-milestone M015 M016 --orphan-only
 ```
 
 The command always writes one structured JSON object with `before` and `after` snapshots. Exit `0` means every requested row was removed and the canonical post-delete query found none; exit `1` is a refusal or error.
-
-### `gsd headless recover`
-
-Non-TTY equivalent of the no-argument `/gsd recover` database-import preview and evidence-bound approval flow. It does not implement the interactive `/gsd recover <recoveryActionId>` Task-recovery resume form. It fingerprints legacy markdown and the current database, creates and verifies a retained backup only after the exact `--preview=<sha256>` approval, applies the unchanged preview through one atomic Import Application, and prints the recommended recovery action plus its exact evidence. Existing database rows absent from markdown are preserved. Designed for CI, cron, and any environment where the interactive database recovery prompt cannot run.
-
-```bash
-gsd headless recover
-```
-
-The first call prints the sealed Import Preview and exits without applying the import. Review that output, then rerun with the exact `--preview=<preview-hash>` value it prints. That approved run performs the Import Application and assessment.
-
-If assessment recommends destructive restore, rerun with the printed `--application=<operation-id> --restore --consent=proceed:destructive-database-restore:<evidence-hash>` values. Restore is permanently unavailable after any later canonical write or Authority Epoch cutover; follow the printed `--application=<operation-id> --forward-repair` route instead. When Forward Repair reports genuine overlap, supply one printed evidence-bound `--choice` for each target.
-
-Exit codes key on the assessment decision: `restore-consent-required`, `forward-repair-required`, and `already-restored` exit `0` (the printed next step is expected follow-up input, not a failure). A Forward Repair that still requires overlap choices exits `1`. Every other decision — `refused`, `transaction-rollback-only`, or `temporarily-unavailable` — fails closed: it exits non-zero and prints no `gsd-recover: recovered` marker, as do setup and action errors. Pair with `gsd headless query` afterwards to inspect canonical state.
 
 ### `gsd headless query`
 
