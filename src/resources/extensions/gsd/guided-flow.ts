@@ -57,6 +57,7 @@ import { getAutoWorktreePath } from "./auto-worktree-path-resolution.js";
 import { resolveUokFlags } from "./uok/flags.js";
 import { ensurePlanV2Graph, isMissingFinalizedContextResult } from "./uok/plan-v2.js";
 import { detectProjectState, hasGsdBootstrapArtifacts } from "./detection.js";
+import { assertNoLegacyLayout } from "./legacy-layout-guard.js";
 import { isFutureMilestoneStatus } from "./status-guards.js";
 import { showProjectInit } from "./init-wizard.js";
 import { validateDirectory } from "./validate-directory.js";
@@ -1941,6 +1942,16 @@ export async function showSmartEntry(
     });
     if (!proceed) return;
   }
+
+  // ── Legacy-layout refusal — must precede the detection preamble ──────
+  // Entering without `auto` reaches neither startAuto nor bootstrapAutoSession,
+  // the two other assertNoLegacyLayout call sites. hasGsdBootstrapArtifacts
+  // keys on `phases/`, so a pre-flat-phase project reports "no bootstrap" and
+  // showProjectInit below would bootstrap a second, empty .gsd alongside the
+  // legacy tree. A pi hook cannot carry this refusal: the extension runner
+  // catches every handler throw and downgrades it to an error event, so the
+  // session proceeds regardless. This command funnel can actually refuse.
+  assertNoLegacyLayout(basePath);
 
   // ── Detection preamble — run before any bootstrap ────────────────────
   // Check bootstrap completeness, not just .gsd/ directory existence.
