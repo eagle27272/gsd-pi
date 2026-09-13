@@ -50,6 +50,7 @@
     "packages/pi-coding-agent/src/core/tools/edit-diff.ts",
     "packages/pi-coding-agent/src/core/tools/edit.ts",
     "packages/pi-coding-agent/test/edit-line-ending-scope.test.ts",
+    "packages/pi-coding-agent/test/bash-execution-width.test.ts",
     "packages/pi-coding-agent/src/theme/**",
     "packages/pi-coding-agent/scripts/copy-assets.cjs",
     "packages/pi-tui/src/style.ts",
