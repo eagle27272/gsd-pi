@@ -522,10 +522,6 @@ type WorkflowWriteGateModule = {
   ) => { block: boolean; reason?: string };
 };
 
-type WorkflowDbBootstrapModule = {
-  ensureDbOpen: (basePath?: string) => Promise<boolean>;
-};
-
 let workflowToolExecutorsPromise: Promise<WorkflowToolExecutors> | null = null;
 let workflowExecutionQueue: Promise<void> = Promise.resolve();
 let workflowWriteGatePromise: Promise<WorkflowWriteGateModule> | null = null;
@@ -1648,13 +1644,6 @@ function inferMilestoneIdFromProjectDir(projectDir: string): string | undefined 
   const match = /^M\d+(?:-[A-Za-z0-9]+)?$/.exec(name);
   return match?.[0];
 }
-
-type GateDbModule = {
-  getAllMilestones?: () => Array<{ id?: unknown }>;
-  getMilestoneSlices?: (milestoneId: string) => Array<{ id?: unknown; sequence?: unknown; status?: unknown }>;
-  getPendingGates?: (milestoneId: string, sliceId: string) => Array<Record<string, unknown>>;
-  getGateResults?: (milestoneId: string, sliceId: string) => Array<Record<string, unknown>>;
-};
 
 async function inferSaveGateResultScope(
   projectDir: string,

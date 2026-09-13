@@ -31,7 +31,6 @@ export class Image implements Component {
 
 	private cachedLines?: string[];
 	private cachedWidth?: number;
-	private onDimensionsResolved?: (dimensions: ImageDimensions) => void;
 
 	constructor(
 		base64Data: string,
@@ -58,9 +57,12 @@ export class Image implements Component {
 		return this.dimensions;
 	}
 
-	/** Register callback when async dimension resolution completes (GSD compat). */
+	/**
+	 * Invoke a callback with the resolved dimensions (GSD compat).
+	 * Dimensions are resolved synchronously in the constructor, so this fires
+	 * immediately and exactly once.
+	 */
 	setOnDimensionsResolved(callback: (dimensions: ImageDimensions) => void): void {
-		this.onDimensionsResolved = callback;
 		callback(this.dimensions);
 	}
 

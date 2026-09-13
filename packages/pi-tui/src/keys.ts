@@ -526,9 +526,6 @@ interface ParsedModifyOtherKeysSequence {
 
 const LEGACY_FUNCTIONAL_FINAL_BYTES = ["A", "B", "C", "D", "H", "F"] as const;
 
-// Store the last parsed event type for isKeyRelease() to query
-let _lastEventType: KeyEventType = "press";
-
 function hasKittyEventType(data: string, eventType: 2 | 3): boolean {
 	const marker = `:${eventType}`;
 	if (data.includes(`${marker}u`) || data.includes(`${marker}~`) || data.includes(`~${marker}`)) {
@@ -598,7 +595,6 @@ function parseKittySequence(data: string): ParsedKittySequence | null {
 		const baseLayoutKey = csiUMatch[3] ? parseInt(csiUMatch[3], 10) : undefined;
 		const modValue = csiUMatch[4] ? parseInt(csiUMatch[4], 10) : 1;
 		const eventType = parseEventType(csiUMatch[5]);
-		_lastEventType = eventType;
 		return { codepoint, shiftedKey, baseLayoutKey, modifier: modValue - 1, eventType };
 	}
 
@@ -607,7 +603,6 @@ function parseKittySequence(data: string): ParsedKittySequence | null {
 	if (arrowMatch) {
 		const modValue = parseInt(arrowMatch[1]!, 10);
 		const eventType = parseEventType(arrowMatch[2]);
-		_lastEventType = eventType;
 		return { codepoint: ARROW_CODEPOINT_BY_FINAL_BYTE[arrowMatch[3]!]!, modifier: modValue - 1, eventType };
 	}
 
@@ -616,7 +611,6 @@ function parseKittySequence(data: string): ParsedKittySequence | null {
 	if (arrowSuffixMatch) {
 		const modValue = arrowSuffixMatch[1] ? parseInt(arrowSuffixMatch[1], 10) : 1;
 		const eventType = parseEventType(arrowSuffixMatch[3]);
-		_lastEventType = eventType;
 		return { codepoint: ARROW_CODEPOINT_BY_FINAL_BYTE[arrowSuffixMatch[2]!]!, modifier: modValue - 1, eventType };
 	}
 
@@ -636,7 +630,6 @@ function parseKittySequence(data: string): ParsedKittySequence | null {
 		};
 		const codepoint = funcCodes[keyNum];
 		if (codepoint !== undefined) {
-			_lastEventType = eventType;
 			return { codepoint, modifier: modValue - 1, eventType };
 		}
 	}
@@ -647,7 +640,6 @@ function parseKittySequence(data: string): ParsedKittySequence | null {
 		const modValue = parseInt(homeEndMatch[1]!, 10);
 		const eventType = parseEventType(homeEndMatch[2]);
 		const codepoint = homeEndMatch[3] === "H" ? FUNCTIONAL_CODEPOINTS.home : FUNCTIONAL_CODEPOINTS.end;
-		_lastEventType = eventType;
 		return { codepoint, modifier: modValue - 1, eventType };
 	}
 
@@ -656,7 +648,6 @@ function parseKittySequence(data: string): ParsedKittySequence | null {
 		const modValue = homeEndSuffixMatch[1] ? parseInt(homeEndSuffixMatch[1], 10) : 1;
 		const eventType = parseEventType(homeEndSuffixMatch[3]);
 		const codepoint = homeEndSuffixMatch[2] === "H" ? FUNCTIONAL_CODEPOINTS.home : FUNCTIONAL_CODEPOINTS.end;
-		_lastEventType = eventType;
 		return { codepoint, modifier: modValue - 1, eventType };
 	}
 
