@@ -23,7 +23,7 @@ import { formatUptime, formatTimeAgo } from "./utilities.js";
 
 // ── Output Analysis ────────────────────────────────────────────────────────
 
-export function analyzeLine(bg: BgProcess, line: string, stream: "stdout" | "stderr"): void {
+export function analyzeLine(bg: BgProcess, line: string, _stream: "stdout" | "stderr"): void {
 	// Error detection — single union regex instead of .some(p => p.test(line))
 	if (ERROR_PATTERN_UNION.test(line)) {
 		bg.recentErrors.push(line.trim().slice(0, 200)); // Cap line length

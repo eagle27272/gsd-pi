@@ -121,7 +121,7 @@ export interface IndexWorkspaceOptions {
   validate?: boolean;
 }
 
-export async function indexWorkspace(basePath: string, opts: IndexWorkspaceOptions = {}): Promise<GSDWorkspaceIndex> {
+export async function indexWorkspace(basePath: string, _opts: IndexWorkspaceOptions = {}): Promise<GSDWorkspaceIndex> {
   const milestoneIds = findMilestoneIds(basePath);
   const milestones: WorkspaceMilestoneTarget[] = [];
 

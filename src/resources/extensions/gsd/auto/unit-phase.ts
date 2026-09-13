@@ -165,7 +165,7 @@ export function resetSessionTimeoutState(): void {
 export async function runUnitPhase(
   ic: IterationContext,
   iterData: IterationData,
-  loopState: LoopState,
+  _loopState: LoopState,
   sidecarItem?: SidecarItem,
 ): Promise<PhaseResult<{ unitStartedAt?: number; requestDispatchedAt?: number; retryAfterMs?: number }>> {
   const { ctx, pi, s, deps, prefs } = ic;

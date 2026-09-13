@@ -40,7 +40,7 @@ function milestoneDir(base: string, mid: string): string {
   return dir;
 }
 
-function sliceDir(base: string, mid: string, sid: string): string {
+function sliceDir(base: string, mid: string, _sid: string): string {
   const dir = join(base, ".gsd", "phases", canonicalPhaseDirName(mid));
   mkdirSync(dir, { recursive: true });
   return dir;

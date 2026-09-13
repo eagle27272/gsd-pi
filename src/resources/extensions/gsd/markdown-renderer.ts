@@ -1462,7 +1462,7 @@ export function detectProjectionDrift(basePath: string): StaleEntry[] {
   return stale;
 }
 
-export function detectStaleRenders(basePath: string): StaleEntry[] {
+export function detectStaleRenders(_basePath: string): StaleEntry[] {
   // TODO(flat-phase): stale-render detection is temporarily fully disabled.
   // It produced false stale-render drift in the second reconcile cycle →
   // ReconciliationFailedError → auto-mode blocked (exit 10) for

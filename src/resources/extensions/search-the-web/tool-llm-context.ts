@@ -322,7 +322,7 @@ export function registerLLMContextTool(pi: ExtensionAPI) {
       ),
     }),
 
-    async execute(toolCallId, params, signal, onUpdate, ctx) {
+    async execute(_toolCallId, params, signal, onUpdate, _ctx) {
       if (signal?.aborted) {
         return { content: [{ type: "text", text: "Search cancelled." }], details: undefined as unknown };
       }

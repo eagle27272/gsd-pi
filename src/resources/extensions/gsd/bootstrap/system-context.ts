@@ -760,7 +760,7 @@ async function buildTaskExecutionContextInjection(
   milestoneId: string,
   sliceId: string,
   taskId: string,
-  taskTitle: string,
+  _taskTitle: string,
 ): Promise<string> {
   const taskPlanPath = resolveTaskFile(basePath, milestoneId, sliceId, taskId, "PLAN");
   const taskPlanRelPath = relTaskFile(basePath, milestoneId, sliceId, taskId, "PLAN");

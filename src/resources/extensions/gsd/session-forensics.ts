@@ -569,7 +569,7 @@ function extractResultText(msg: Record<string, unknown>): string {
  * Redact sensitive fields from tool inputs.
  * Keep paths and commands, drop large content bodies.
  */
-function redactInput(name: string, input: Record<string, unknown>): Record<string, unknown> {
+function redactInput(_name: string, input: Record<string, unknown>): Record<string, unknown> {
   const safe: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(input)) {
     if (key === "content" || key === "oldText" || key === "newText") {

@@ -1660,7 +1660,7 @@ function isCompletedSliceStatus(status: string): boolean {
  * - All slices are complete (milestone done — no point reassessing)
  */
 export async function checkNeedsReassessment(
-  base: string, mid: string, state: GSDState,
+  base: string, mid: string, _state: GSDState,
 ): Promise<{ sliceId: string } | null> {
   // DB read authority — post-cutover there is no markdown fallback. With no DB
   // there is no slice state to reason about, so returning null (never dispatch

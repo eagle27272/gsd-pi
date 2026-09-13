@@ -87,7 +87,7 @@ function formatBlockedResumeMessage(blockers: string[]): string {
  */
 export async function runPreDispatch(
   ic: IterationContext,
-  loopState: LoopState,
+  _loopState: LoopState,
 ): Promise<PhaseResult<PreDispatchData>> {
   const { ctx, pi, s, deps, prefs } = ic;
   const uokFlags = resolveUokFlags(prefs);

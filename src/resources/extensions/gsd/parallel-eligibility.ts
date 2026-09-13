@@ -33,7 +33,7 @@ export interface ParallelCandidates {
  * Returns a deduplicated list of file paths.
  */
 async function collectTouchedFiles(
-  basePath: string,
+  _basePath: string,
   milestoneId: string,
 ): Promise<string[]> {
   const files = new Set<string>();

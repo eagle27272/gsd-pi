@@ -832,7 +832,7 @@ export const DISPATCH_RULES: DispatchRule[] = [
   },
   {
     name: "rewrite-docs (override gate)",
-    match: async ({ mid, midTitle, state, basePath, session }) => {
+    match: async ({ mid, midTitle, state, basePath, session: _session }) => {
       const pendingOverrides = await loadActiveOverrides(basePath);
       if (pendingOverrides.length === 0) return null;
       const count = getRewriteCount(basePath);

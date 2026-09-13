@@ -288,7 +288,7 @@ function formatExecutionEvidenceCommand(toolName: string, input: Record<string, 
  */
 export function recordToolResult(
   toolCallId: string,
-  toolName: string,
+  _toolName: string,
   result: unknown,
   isError: boolean,
 ): void {

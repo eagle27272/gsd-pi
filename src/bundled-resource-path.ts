@@ -45,7 +45,7 @@ function resolveBundledResource(
 export function resolveBundledGsdExtensionModule(
   importUrl: string,
   moduleFile: string,
-  fileExists: FileExists = existsSync,
+  _fileExists: FileExists = existsSync,
 ): string {
   const packageRoot = resolvePackageRoot(importUrl);
   // Extension modules are loaded via jiti from raw TypeScript. Compiled dist/*.js

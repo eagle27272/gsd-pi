@@ -37,7 +37,7 @@ function helpMessage(): string {
 
 function formatListEntries(
   rows: ReturnType<typeof listActionableEscalations>,
-  basePath: string,
+  _basePath: string,
 ): string {
   if (rows.length === 0) return "No escalations.";
   return rows.map((t) => {

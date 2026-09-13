@@ -3168,10 +3168,10 @@ const widgetStateAccessors: WidgetStateAccessors = {
  * dispatching a unit. The LLM should never need to mkdir or git checkout.
  */
 export function ensurePreconditions(
-  unitType: string,
+  _unitType: string,
   unitId: string,
   base: string,
-  state: GSDState,
+  _state: GSDState,
 ): void {
   const { milestone: mid, slice: sid } = parseUnitId(unitId);
 

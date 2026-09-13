@@ -178,7 +178,7 @@ export async function handleQueueReorder(
 // ─── Queue Add ──────────────────────────────────────────────────────────────
 
 export async function showQueueAdd(
-  ctx: ExtensionCommandContext,
+  _ctx: ExtensionCommandContext,
   pi: ExtensionAPI,
   basePath: string,
   state: Awaited<ReturnType<typeof deriveState>>,

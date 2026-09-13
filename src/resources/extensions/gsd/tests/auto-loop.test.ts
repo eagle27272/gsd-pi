@@ -1646,7 +1646,7 @@ function makeLoopTestBase(prefix: string): string {
   return base;
 }
 
-test("autoLoop exits when s.active is set to false", async (t) => {
+test("autoLoop exits when s.active is set to false", async (_t) => {
   _resetPendingResolve();
 
   const ctx = makeMockCtx();
@@ -1928,7 +1928,7 @@ test("autoLoop pauses visibly when Auto Orchestration Module is not wired", asyn
   assert.equal(s.pendingOrchestrationDispatch, null);
 });
 
-test("autoLoop exits on terminal complete state", async (t) => {
+test("autoLoop exits on terminal complete state", async (_t) => {
   _resetPendingResolve();
 
   const ctx = makeMockCtx();
@@ -3261,7 +3261,7 @@ test("autoLoop dequeues sidecar item before session-lock break (mid-session, #53
   );
 });
 
-test("autoLoop exits on terminal blocked state", async (t) => {
+test("autoLoop exits on terminal blocked state", async (_t) => {
   _resetPendingResolve();
 
   const ctx = makeMockCtx();
@@ -3296,7 +3296,7 @@ test("autoLoop exits on terminal blocked state", async (t) => {
   );
 });
 
-test("autoLoop calls deriveState → resolveDispatch → runUnit in sequence", async (t) => {
+test("autoLoop calls deriveState → resolveDispatch → runUnit in sequence", async (_t) => {
   _resetPendingResolve();
 
   const ctx = makeMockCtx();
@@ -4199,7 +4199,7 @@ test("autoLoop journals iteration-end when dispatch skips the current unit", asy
   assert.equal(pi.calls.length, 0, "dispatch skip must not send a unit prompt");
 });
 
-test("crash lock records session file from AFTER newSession, not before (#1710)", async (t) => {
+test("crash lock records session file from AFTER newSession, not before (#1710)", async (_t) => {
   _resetPendingResolve();
 
   const ctx = makeMockCtx();
@@ -4307,7 +4307,7 @@ test("crash lock records session file from AFTER newSession, not before (#1710)"
   );
 });
 
-test("autoLoop handles verification retry by continuing loop", async (t) => {
+test("autoLoop handles verification retry by continuing loop", async (_t) => {
   _resetPendingResolve();
   mock.timers.enable({ apis: ["Date", "setTimeout"], now: 10_000 });
 
@@ -4612,7 +4612,7 @@ test("autoLoop pauses a predecessor task-recovery abort before any agent turn", 
   assert.match(notifications.join("\n"), /gsd_task_recovery_resume/);
 });
 
-test("autoLoop handles dispatch stop action", async (t) => {
+test("autoLoop handles dispatch stop action", async (_t) => {
   _resetPendingResolve();
 
   const ctx = makeMockCtx();
@@ -4644,7 +4644,7 @@ test("autoLoop handles dispatch stop action", async (t) => {
 });
 
 // #2474: warning-level dispatch stop should pause (resumable), not hard-stop
-test("autoLoop pauses instead of stopping for warning-level dispatch stop", async (t) => {
+test("autoLoop pauses instead of stopping for warning-level dispatch stop", async (_t) => {
   _resetPendingResolve();
 
   const ctx = makeMockCtx();
@@ -4746,7 +4746,7 @@ test("autoLoop retries warning-level unhandled phase with fresh state before pau
 });
 
 // #2474: error-level dispatch stop should still hard-stop
-test("autoLoop hard-stops for error-level dispatch stop", async (t) => {
+test("autoLoop hard-stops for error-level dispatch stop", async (_t) => {
   _resetPendingResolve();
 
   const ctx = makeMockCtx();
@@ -5571,7 +5571,7 @@ test("#1852/#2001: projection-lock transient pauses exhaust their backoff and ne
   }
 });
 
-test("autoLoop drains sidecar queue after postUnitPostVerification enqueues items", async (t) => {
+test("autoLoop drains sidecar queue after postUnitPostVerification enqueues items", async (_t) => {
   _resetPendingResolve();
 
   const ctx = makeMockCtx();
@@ -5631,7 +5631,7 @@ test("autoLoop drains sidecar queue after postUnitPostVerification enqueues item
   );
 });
 
-test("autoLoop exits when no active milestone found", async (t) => {
+test("autoLoop exits when no active milestone found", async (_t) => {
   _resetPendingResolve();
 
   const ctx = makeMockCtx();

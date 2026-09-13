@@ -40,7 +40,7 @@ function makeRoadmap(milestoneId: string, title: string, slices: Array<{ id: str
 }
 
 function addSliceToMilestone(
-  repo: string, wtPath: string, milestoneId: string,
+  _repo: string, wtPath: string, milestoneId: string,
   sliceId: string, sliceTitle: string,
   commits: Array<{ file: string; content: string; message: string }>,
 ): void {

@@ -88,7 +88,7 @@ function makeRoadmap(milestoneId: string, title: string, slices: Array<{ id: str
 
 /** Set up a slice branch on the worktree, add commits, merge it --no-ff to milestone. */
 function addSliceToMilestone(
-  repo: string,
+  _repo: string,
   wtPath: string,
   milestoneId: string,
   sliceId: string,

@@ -40,7 +40,7 @@ process.exit(match.status ?? 0);
   }
 
   const binaryPath = join(dir, "rtk");
-  const cases = Object.entries(mapping).map(([key, response], index) => {
+  const cases = Object.entries(mapping).map(([key, response], _index) => {
     const output = typeof response === "string" ? response : (response.stdout ?? "");
     const status = typeof response === "string" ? 0 : (response.status ?? 0);
     return `

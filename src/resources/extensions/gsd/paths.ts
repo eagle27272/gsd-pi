@@ -915,7 +915,7 @@ export function relMilestoneFile(
  *   Only consulted when no phase directory exists on disk yet.
  */
 export function relSlicePath(
-  basePath: string, milestoneId: string, sliceId: string, milestoneTitle?: string
+  basePath: string, milestoneId: string, _sliceId: string, milestoneTitle?: string
 ): string {
   // Flat-phase: plans are files inside the phase dir, no slices/ subdir.
   return relMilestonePath(basePath, milestoneId, milestoneTitle);

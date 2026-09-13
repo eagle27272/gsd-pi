@@ -417,7 +417,7 @@ export class GSDVisualizerOverlay {
     }
   }
 
-  private renderHelpContent(width: number): string[] {
+  private renderHelpContent(_width: number): string[] {
     const th = this.theme;
     const lines: string[] = [];
     lines.push(th.fg("accent", th.bold("Keyboard Shortcuts")));

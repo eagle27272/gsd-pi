@@ -410,7 +410,7 @@ let cachedSliceProgress: {
   taskDetails: CachedTaskDetail[] | null;
 } | null = null;
 
-export function updateSliceProgressCache(base: string, mid: string, activeSid?: string): void {
+export function updateSliceProgressCache(_base: string, mid: string, activeSid?: string): void {
   try {
     // Normalize slices: prefer DB, fall back to parser
     type NormSlice = { id: string; done: boolean; title: string };
@@ -708,7 +708,7 @@ export function updateProgressWidget(
   unitId: string,
   state: GSDState,
   accessors: WidgetStateAccessors,
-  tierBadge?: string,
+  _tierBadge?: string,
 ): void {
   if (!ctx.hasUI) return;
 
@@ -1017,7 +1017,7 @@ type TaskRef = NonNullable<GSDState["activeTask"]>;
 
 function buildGsdProgressPayload(
   accessors: WidgetStateAccessors,
-  unitType: string,
+  _unitType: string,
   unitId: string,
   mid: MilestoneRef | null | undefined,
   slice: SliceRef | null | undefined,

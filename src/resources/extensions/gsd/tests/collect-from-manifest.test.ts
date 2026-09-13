@@ -190,7 +190,7 @@ test("collectSecretsFromManifest: existing keys are excluded from the collection
 		cwd: tmp,
 		hasUI: true,
 		ui: {
-			custom: async (factory: any) => {
+			custom: async (_factory: any) => {
 				// Intercept the factory to check what key is being collected
 				if (!summaryShown) {
 					summaryShown = true;
