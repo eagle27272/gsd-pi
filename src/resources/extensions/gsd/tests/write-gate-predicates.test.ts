@@ -30,6 +30,13 @@ import {
  * gives each test file its own process but not its own state: whichever file
  * clears first wipes another file's setup mid-test. Every test gets a private
  * base path instead.
+ *
+ * The pending-gate cases below assert setPendingGate's return value because a
+ * shared base failed silently: the host adapter reconciles the disk snapshot
+ * before arming and then refuses to arm a gate whose milestone another process
+ * had already verified ("verified wins over pending"), so setPendingGate
+ * returned false and the block assertion failed three lines later instead of
+ * at the arm.
  */
 function gateBase(t: TestContext): string {
   const base = mkdtempSync(join(tmpdir(), 'gsd-write-gate-predicates-'));
@@ -85,7 +92,7 @@ test('shouldBlockPendingGate: no pending gate → allow any tool', (t) => {
 
 test('shouldBlockPendingGate: pending gate → block write', (t) => {
   const base = gateBase(t);
-  setPendingGate('depth_verification_M001', base);
+  assert.ok(setPendingGate('depth_verification_M001', base), 'gate must arm');
   const r = shouldBlockPendingGate('write', 'M001', undefined, base);
   assert.strictEqual(r.block, true);
   assert.ok(r.reason?.includes('depth_verification_M001'));
@@ -93,14 +100,14 @@ test('shouldBlockPendingGate: pending gate → block write', (t) => {
 
 test('shouldBlockPendingGate: pending gate → allow ask_user_questions', (t) => {
   const base = gateBase(t);
-  setPendingGate('depth_verification_M001', base);
+  assert.ok(setPendingGate('depth_verification_M001', base), 'gate must arm');
   const r = shouldBlockPendingGate('ask_user_questions', 'M001', undefined, base);
   assert.strictEqual(r.block, false);
 });
 
 test('shouldBlockPendingGate: pending gate → block read so approval question stays visible', (t) => {
   const base = gateBase(t);
-  setPendingGate('depth_verification_M001', base);
+  assert.ok(setPendingGate('depth_verification_M001', base), 'gate must arm');
   const r = shouldBlockPendingGate('read', 'M001', undefined, base);
   assert.strictEqual(r.block, true);
   assert.ok(r.reason?.includes('already asked for user confirmation'));
@@ -117,7 +124,7 @@ test('shouldBlockPendingGateBash: no pending gate → allow mutating bash', (t) 
 
 test('shouldBlockPendingGateBash: pending gate → block mutating bash', (t) => {
   const base = gateBase(t);
-  setPendingGate('depth_verification_M001', base);
+  assert.ok(setPendingGate('depth_verification_M001', base), 'gate must arm');
   const r = shouldBlockPendingGateBash('npm run build', 'M001', undefined, base);
   assert.strictEqual(r.block, true);
   assert.ok(r.reason?.includes('depth_verification_M001'));
@@ -125,7 +132,7 @@ test('shouldBlockPendingGateBash: pending gate → block mutating bash', (t) => 
 
 test('shouldBlockPendingGateBash: pending gate → block read-only bash (cat)', (t) => {
   const base = gateBase(t);
-  setPendingGate('depth_verification_M001', base);
+  assert.ok(setPendingGate('depth_verification_M001', base), 'gate must arm');
   const r = shouldBlockPendingGateBash('cat README.md', 'M001', undefined, base);
   assert.strictEqual(r.block, true);
   assert.ok(r.reason?.includes('already asked for user confirmation'));
@@ -133,7 +140,7 @@ test('shouldBlockPendingGateBash: pending gate → block read-only bash (cat)', 
 
 test('shouldBlockPendingGateBash: pending gate → block read-only bash (git log)', (t) => {
   const base = gateBase(t);
-  setPendingGate('depth_verification_M001', base);
+  assert.ok(setPendingGate('depth_verification_M001', base), 'gate must arm');
   const r = shouldBlockPendingGateBash('git log --oneline -10', 'M001', undefined, base);
   assert.strictEqual(r.block, true);
 });
