@@ -14,7 +14,7 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { resolveSlicePath, resolveTasksDir } from "./paths.js";
+import { resolveMilestonePath, resolveSlicePath, resolveTasksDir, taskJsonArtifactPath } from "./paths.js";
 import { atomicWriteSync, removeProjectionFileSync } from "./atomic-write.js";
 import { logWarning } from "./workflow-logger.js";
 
@@ -29,18 +29,21 @@ interface ReopenReasonArtifact {
 
 /**
  * Canonical reopen-reason artifact path, parallel to T##-SUMMARY.md and
- * T##-ESCALATION.json:
- *   .gsd/phases/{NN-slug}/{T}-REOPEN.json
+ * S##-T##-ESCALATION.json:
+ *   .gsd/phases/{NN-slug}/{S}-{T}-REOPEN.json
  * The artifact sits directly in the phase dir unless a tasks/ subdir exists.
+ * The phase dir is shared by every slice, so the name carries the slice id —
+ * without it, two slices reusing a task id overwrite each other and dispatch
+ * injects the wrong diagnosis (#5).
  */
 export function reopenReasonArtifactPath(
   basePath: string, milestoneId: string, sliceId: string, taskId: string,
 ): string | null {
-  const tDir = resolveTasksDir(basePath, milestoneId, sliceId);
-  if (tDir) return join(tDir, `${taskId}-REOPEN.json`);
-  const phaseDir = resolveSlicePath(basePath, milestoneId, sliceId);
-  if (!phaseDir) return null;
-  return join(phaseDir, `${taskId}-REOPEN.json`);
+  const sliceDir = resolveSlicePath(basePath, milestoneId, sliceId);
+  if (!sliceDir) return null;
+  const sliceOwnsDir = sliceDir !== resolveMilestonePath(basePath, milestoneId);
+  const dir = resolveTasksDir(basePath, milestoneId, sliceId) ?? sliceDir;
+  return taskJsonArtifactPath(dir, sliceOwnsDir ? null : sliceId, taskId, "REOPEN");
 }
 
 /**
