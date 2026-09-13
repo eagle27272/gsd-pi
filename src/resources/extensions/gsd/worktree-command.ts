@@ -45,19 +45,20 @@ import {
 
 export { getActiveWorktreeName, getWorktreeOriginalCwd } from "./worktree-session-state.js";
 
+/**
+ * Merge the worktree DB into the project DB before a manual squash merge.
+ *
+ * Returns the worktree-wins conflicts the merge resolved so the caller can
+ * show them. Throws on any failure — squash-merging the code while silently
+ * dropping the worktree's DB rows leaves the project DB permanently behind
+ * the branch it just absorbed (#6).
+ */
 export async function reconcileWorktreeDbBeforeManualMerge(
   mainDbPath: string,
   worktreeDbPath: string,
-): Promise<void> {
-  const {
-    CanonicalWorktreeDivergenceError,
-    reconcileWorktreeDb,
-  } = await import("./gsd-db.js");
-  try {
-    reconcileWorktreeDb(mainDbPath, worktreeDbPath);
-  } catch (error) {
-    if (error instanceof CanonicalWorktreeDivergenceError) throw error;
-  }
+): Promise<readonly string[]> {
+  const { reconcileWorktreeDb } = await import("./gsd-db.js");
+  return reconcileWorktreeDb(mainDbPath, worktreeDbPath).conflicts;
 }
 
 /**
@@ -666,13 +667,32 @@ async function handleMerge(
     const commitType = inferCommitType(name);
     const commitMessage = `${commitType}: merge worktree ${name}\n\nGSD-Worktree: ${name}`;
 
-    // Reconcile worktree DB into main DB before squash merge. Ordinary legacy
-    // failures remain best-effort; canonical divergence blocks the merge.
+    // Reconcile worktree DB into main DB before squash merge. A failed
+    // reconcile blocks the merge — the worktree is left intact so its
+    // un-merged DB rows can still be recovered (#6).
     const contract = resolveGsdPathContract(worktreePath(basePath, name), basePath);
     const wtDbPath = join(contract.worktreeGsd ?? join(contract.workRoot, ".gsd"), "gsd.db");
     const mainDbPath = contract.projectDb;
     if (existsSync(wtDbPath) && existsSync(mainDbPath)) {
-      await reconcileWorktreeDbBeforeManualMerge(mainDbPath, wtDbPath);
+      let conflicts: readonly string[];
+      try {
+        conflicts = await reconcileWorktreeDbBeforeManualMerge(mainDbPath, wtDbPath);
+      } catch (dbErr) {
+        const dbMsg = dbErr instanceof Error ? dbErr.message : String(dbErr);
+        ctx.ui.notify(
+          `Merge aborted — worktree DB not reconciled: ${dbMsg}\n` +
+            `  ${CLR.muted(`Worktree ${name} was left intact; its state is still in ${wtDbPath}.`)}`,
+          "error",
+        );
+        return;
+      }
+      if (conflicts.length > 0) {
+        ctx.ui.notify(
+          `${conflicts.length} DB conflict${conflicts.length === 1 ? "" : "s"} resolved worktree-wins:\n` +
+            conflicts.map((c) => `  - ${c}`).join("\n"),
+          "warning",
+        );
+      }
     }
 
     try {
