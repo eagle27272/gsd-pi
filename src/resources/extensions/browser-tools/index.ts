@@ -73,6 +73,7 @@ async function registerLegacyBrowserTools(pi: ExtensionAPI): Promise<void> {
 
       const deps = {
         ensureBrowser: lifecycle.ensureBrowser,
+        createBrowserSession: lifecycle.createBrowserSession,
         closeBrowser: lifecycle.closeBrowser,
         getActivePage: lifecycle.getActivePage,
         getActiveTarget: lifecycle.getActiveTarget,
