@@ -87,7 +87,10 @@ import {
 import { crossReferenceEvidence, type ClaimedEvidence } from "./safety/evidence-cross-ref.js";
 import { validateContent } from "./safety/content-validator.js";
 import { resolveSafetyHarnessConfig } from "./safety/safety-harness.js";
-import { resolveExpectedArtifactPath as resolveArtifactForContent } from "./auto-artifact-paths.js";
+import {
+  hasRoadmapReassessmentArtifact,
+  resolveExpectedArtifactPath as resolveArtifactForContent,
+} from "./auto-artifact-paths.js";
 import { getIsolationMode, loadEffectiveGSDPreferences, type GSDPreferences } from "./preferences.js";
 import { getSliceTasks } from "./gsd-db.js";
 import { runPreExecutionChecks, type PreExecutionResult } from "./pre-execution-checks.js";
@@ -236,21 +239,6 @@ function agentEndMessagesMentionTool(messages: unknown[] | undefined, toolName: 
 function hasIncompleteMilestoneSlice(milestoneId: string): boolean {
   if (!isDbAvailable()) return false;
   return getMilestoneSlices(milestoneId).some((slice) => !isClosedStatus(slice.status));
-}
-
-function hasRoadmapReassessmentArtifact(basePath: string, milestoneId: string): boolean {
-  const slicesDir = join(basePath, ".gsd", "milestones", milestoneId, "slices");
-  if (!existsSync(slicesDir)) return false;
-
-  try {
-    for (const entry of readdirSync(slicesDir, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      if (existsSync(join(slicesDir, entry.name, `${entry.name}-ASSESSMENT.md`))) return true;
-    }
-  } catch {
-    return false;
-  }
-  return false;
 }
 
 function unitActivityMentionsTool(basePath: string, unitType: string, unitId: string, toolName: string): boolean {

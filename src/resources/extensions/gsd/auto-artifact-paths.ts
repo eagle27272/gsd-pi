@@ -72,6 +72,21 @@ function resolveMilestoneArtifactPath(
   return null;
 }
 
+/**
+ * On-disk evidence that `gsd_reassess_roadmap` ran for `mid`.
+ *
+ * That tool writes exactly one file — the milestone-scoped
+ * `<NN>-ROADMAP-ASSESSMENT.md` (resolveRoadmapAssessmentProjectionPath). The
+ * slice-scoped `<NN>-<MM>-ASSESSMENT.md` belongs to run-uat and the
+ * phase-level `<NN>-ASSESSMENT.md` to milestone assessment; counting either
+ * would wave a still-unreassessed milestone through the validation gate.
+ */
+export function hasRoadmapReassessmentArtifact(base: string, mid: string): boolean {
+  const suffix = "ROADMAP-ASSESSMENT";
+  return (resolveProjectedMilestoneFile(base, mid, suffix)
+    ?? resolveProjectMilestoneFile(base, mid, suffix)) !== null;
+}
+
 function resolveSliceArtifactPath(
   base: string,
   mid: string,
