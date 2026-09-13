@@ -47,6 +47,9 @@ function makeRepo(gitignore: string): string {
   git(dir, ["init", "--initial-branch=main"]);
   git(dir, ["config", "user.email", "e2e@gsd.test"]);
   git(dir, ["config", "user.name", "GSD E2E"]);
+  // A developer's global ignore file may list .gsd; only the repo-local
+  // .gitignore written below should govern what this fixture can stage.
+  git(dir, ["config", "core.excludesFile", "/dev/null"]);
   writeFileSync(join(dir, ".gitignore"), gitignore);
   writeFileSync(join(dir, "README.md"), "# fixture\n");
   git(dir, ["add", ".gitignore", "README.md"]);

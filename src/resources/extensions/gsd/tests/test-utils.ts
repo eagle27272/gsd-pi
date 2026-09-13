@@ -61,6 +61,9 @@ export function makeTempRepo(prefix: string = "gsd-test-"): string {
   git(dir, "config", "user.email", "test@test.com");
   git(dir, "config", "user.name", "Test");
   git(dir, "config", "core.autocrlf", "false");
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add` of callers' .gsd fixtures stage nothing and their commits fail.
+  git(dir, "config", "core.excludesFile", "/dev/null");
   writeFileSync(join(dir, "README.md"), "# init\n");
   git(dir, "add", "-A");
   git(dir, "commit", "-m", "init");
