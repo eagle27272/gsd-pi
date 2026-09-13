@@ -6,12 +6,12 @@
 
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { hasFileConflict } from "../slice-parallel-conflict.js";
-import { _clearGsdRootCache } from "../paths.js";
+import { _clearGsdRootCache, clearPathCache } from "../paths.js";
 import { milestoneIdToPhaseNum, slicePlanFileName } from "../layout-policy.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -19,7 +19,8 @@ import { milestoneIdToPhaseNum, slicePlanFileName } from "../layout-policy.js";
 const PHASE_DIR = "01-test";
 
 function makeTmpBase(): string {
-  const base = mkdtempSync(join(tmpdir(), "gsd-slice-conflict-test-"));
+  // realpath so assertions and resolver output agree on macOS (/var → /private/var).
+  const base = realpathSync(mkdtempSync(join(tmpdir(), "gsd-slice-conflict-test-")));
   mkdirSync(join(base, ".gsd", "phases", PHASE_DIR), { recursive: true });
   return base;
 }
@@ -40,10 +41,13 @@ describe("hasFileConflict", () => {
 
   beforeEach(() => {
     base = makeTmpBase();
+    _clearGsdRootCache();
+    clearPathCache();
   });
 
   afterEach(() => {
     _clearGsdRootCache();
+    clearPathCache();
     rmSync(base, { recursive: true, force: true });
   });
 
