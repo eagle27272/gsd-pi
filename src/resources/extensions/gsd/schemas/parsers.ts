@@ -597,13 +597,16 @@ function _parsePlanImpl(content: string): SlicePlan {
         : null;
       if (cbMatch || hdMatch) {
         const taskId = cbMatch ? cbMatch[2] : hdMatch![1];
-        // Skip tasks already found in the Tasks section
+        // A repeated id is a detail heading for a task already captured — the
+        // canonical PLAN shape lists every task as a checkbox and then repeats
+        // each id as a `### T01: ...` heading. Re-point at that entry so the
+        // heading's Files/Verify/description lines merge into it rather than
+        // starting a duplicate.
         if (knownIds.has(taskId)) {
-          currentTask = null;
+          currentTask = tasks.find(t => t.id === taskId) ?? null;
           continue;
         }
         knownIds.add(taskId);
-        if (currentTask) tasks.push(currentTask);
 
         if (cbMatch) {
           // Two regex alternatives — distinguish by the shape of group 4.
@@ -643,6 +646,9 @@ function _parsePlanImpl(content: string): SlicePlan {
             estimate,
           };
         }
+        // Appended on sight so a later detail heading can find it by id;
+        // subsequent field lines still mutate it through `currentTask`.
+        tasks.push(currentTask);
       } else if (currentTask && line.match(/^\s*-\s+Files:\s*(.*)/)) {
         const filesMatch = line.match(/^\s*-\s+Files:\s*(.*)/);
         if (filesMatch) {
@@ -665,7 +671,6 @@ function _parsePlanImpl(content: string): SlicePlan {
         }
       }
     }
-    if (currentTask) tasks.push(currentTask);
   };
 
   const knownTaskIds = new Set<string>();
