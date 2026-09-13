@@ -4,7 +4,12 @@ import { mkdtempSync, mkdirSync, realpathSync, rmSync, utimesSync, writeFileSync
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { resolveExpectedArtifactPath, resolveSliceResearchLocation, resolveExistingSliceResearchPath, hasRoadmapReassessmentArtifact } from "../auto-artifact-paths.ts";
+import {
+  hasRoadmapReassessmentArtifact,
+  resolveExpectedArtifactPath,
+  resolveSliceResearchLocation,
+  resolveExistingSliceResearchPath,
+} from "../auto-artifact-paths.ts";
 import { clearPathCache, _clearGsdRootCache, milestonesDir } from "../paths.ts";
 
 // ── #852 follow-up: a stray milestones/<MID>/ must not divert resolution ──
@@ -455,59 +460,101 @@ test("reassess-roadmap expects the milestone-scoped ROADMAP-ASSESSMENT file (#19
   }
 });
 
-// ── hasRoadmapReassessmentArtifact: coverage beyond auto-verification.test.ts ──
+// ── hasRoadmapReassessmentArtifact: on-disk evidence that reassess ran ──
 //
-// The shared helper's flat-phase behaviour (slice ASSESSMENT found, phase-level
-// NN-ASSESSMENT ignored, other phases not matched, missing phase dir) is covered
-// by the `_hasRoadmapReassessmentArtifactForTest` tests in
-// tests/auto-verification.test.ts, which now exercise it through the re-export.
-// These two cases are not covered there.
+// The auto-mode guards treat this as proof gsd_reassess_roadmap executed, so it
+// must key off the one file that tool writes — the milestone-scoped
+// <NN>-ROADMAP-ASSESSMENT.md. Any looser match lets a run-uat slice ASSESSMENT
+// forge the evidence and wave a still-unreassessed milestone through the gate.
 
-test("hasRoadmapReassessmentArtifact counts the milestone-scoped ROADMAP-ASSESSMENT", () => {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "gsd-reassess-roadmap-scoped-")));
+function withFlatPhaseProject(body: (root: string) => void): void {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "gsd-reassess-evidence-")));
   try {
-    const phaseDir = join(root, ".gsd", "phases", "01-m001");
-    mkdirSync(phaseDir, { recursive: true });
-    writeFileSync(join(phaseDir, "01-ROADMAP.md"), "# M001 roadmap\n");
-    writeFileSync(join(phaseDir, "01-ROADMAP-ASSESSMENT.md"), "# M001 Roadmap Assessment\n");
-
+    mkdirSync(join(root, ".gsd", "phases", "01-payments-rework"), { recursive: true });
     _clearGsdRootCache();
     clearPathCache();
-
-    assert.equal(
-      hasRoadmapReassessmentArtifact(root, "M001"),
-      true,
-      "the file gsd_reassess_roadmap itself writes must count as reassessment evidence",
-    );
+    body(root);
   } finally {
     _clearGsdRootCache();
     clearPathCache();
     rmSync(root, { recursive: true, force: true });
   }
+}
+
+test("hasRoadmapReassessmentArtifact finds the flat-phase ROADMAP-ASSESSMENT", () => {
+  withFlatPhaseProject((root) => {
+    writeFileSync(
+      join(root, ".gsd", "phases", "01-payments-rework", "01-ROADMAP-ASSESSMENT.md"),
+      "# M001 Roadmap Assessment\n",
+    );
+    _clearGsdRootCache();
+    clearPathCache();
+
+    assert.equal(hasRoadmapReassessmentArtifact(root, "M001"), true);
+  });
 });
 
-test("hasRoadmapReassessmentArtifact ignores a leftover legacy milestones/ assessment tree", () => {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "gsd-reassess-legacy-")));
-  try {
-    const phaseDir = join(root, ".gsd", "phases", "01-m001");
-    mkdirSync(phaseDir, { recursive: true });
-    writeFileSync(join(phaseDir, "01-ROADMAP.md"), "# M001 roadmap\n");
+test("hasRoadmapReassessmentArtifact rejects a slice-scoped ASSESSMENT", () => {
+  withFlatPhaseProject((root) => {
+    // 01-02-ASSESSMENT.md is run-uat's output, not gsd_reassess_roadmap's.
+    writeFileSync(
+      join(root, ".gsd", "phases", "01-payments-rework", "01-02-ASSESSMENT.md"),
+      "---\nverdict: PARTIAL\n---\n",
+    );
+    _clearGsdRootCache();
+    clearPathCache();
 
-    const legacySliceDir = join(root, ".gsd", "milestones", "M001", "slices", "S02");
-    mkdirSync(legacySliceDir, { recursive: true });
-    writeFileSync(join(legacySliceDir, "S02-ASSESSMENT.md"), "# S02 Assessment\n");
+    assert.equal(hasRoadmapReassessmentArtifact(root, "M001"), false);
+  });
+});
 
+test("hasRoadmapReassessmentArtifact rejects the phase-level ASSESSMENT", () => {
+  withFlatPhaseProject((root) => {
+    writeFileSync(
+      join(root, ".gsd", "phases", "01-payments-rework", "01-ASSESSMENT.md"),
+      "---\nverdict: PASS\n---\n",
+    );
+    _clearGsdRootCache();
+    clearPathCache();
+
+    assert.equal(hasRoadmapReassessmentArtifact(root, "M001"), false);
+  });
+});
+
+test("hasRoadmapReassessmentArtifact is scoped to the requested milestone's phase", () => {
+  withFlatPhaseProject((root) => {
+    const otherPhase = join(root, ".gsd", "phases", "02-reporting");
+    mkdirSync(otherPhase, { recursive: true });
+    writeFileSync(join(otherPhase, "02-ROADMAP-ASSESSMENT.md"), "# M002 Roadmap Assessment\n");
     _clearGsdRootCache();
     clearPathCache();
 
     assert.equal(
       hasRoadmapReassessmentArtifact(root, "M001"),
       false,
-      "the legacy layout is gone; a leftover tree must not be read back as evidence",
+      "M002's reassessment must not count as evidence for M001",
     );
-  } finally {
+    assert.equal(hasRoadmapReassessmentArtifact(root, "M002"), true);
+  });
+});
+
+test("hasRoadmapReassessmentArtifact returns false when the milestone has no phase dir", () => {
+  withFlatPhaseProject((root) => {
+    assert.equal(hasRoadmapReassessmentArtifact(root, "M009"), false);
+  });
+});
+
+test("hasRoadmapReassessmentArtifact ignores a leftover pre-flat-phase slices tree", () => {
+  withFlatPhaseProject((root) => {
+    // The layout both dead copies used to scan. Wave-4 stopped creating it, so
+    // anything still on disk is stale — reading it back would resurrect the
+    // legacy fallback this helper exists to retire.
+    const legacySliceDir = join(root, ".gsd", "milestones", "M001", "slices", "S01");
+    mkdirSync(legacySliceDir, { recursive: true });
+    writeFileSync(join(legacySliceDir, "S01-ASSESSMENT.md"), "---\nverdict: PASS\n---\n");
     _clearGsdRootCache();
     clearPathCache();
-    rmSync(root, { recursive: true, force: true });
-  }
+
+    assert.equal(hasRoadmapReassessmentArtifact(root, "M001"), false);
+  });
 });
