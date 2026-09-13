@@ -75,7 +75,7 @@ function makeIterationContext(overrides: ScenarioOverrides): any {
       // was working on, and we use that to look up DB status.
       currentMilestoneId: "M001",
       currentUnit: null,
-      milestoneMergedInPhases: false,
+      milestoneMergedInPhasesFor: null,
       completionStopInProgress: overrides.completionStopInProgress,
     },
     prefs: undefined,
