@@ -689,6 +689,57 @@ describe("constrainScreenshot", () => {
 });
 
 // ---------------------------------------------------------------------------
+// browser_verify — zero-check runs must not report success
+// ---------------------------------------------------------------------------
+
+describe("browser_verify with no checks", () => {
+	function registerVerify(page) {
+		const { registerVerifyTools } = jiti("../tools/verify.ts");
+		const registeredTools = [];
+		const mockPi = { registerTool: (tool) => registeredTools.push(tool) };
+		const mockDeps = { ensureBrowser: async () => ({ page }) };
+		registerVerifyTools(mockPi, mockDeps);
+		return registeredTools[0];
+	}
+
+	it("does not report PASSED when the checks array is empty", async () => {
+		const tool = registerVerify({ goto: async () => {} });
+
+		const result = await tool.execute("call-1", { url: "http://localhost:3000", checks: [] }, undefined, undefined, undefined);
+
+		const text = result.content[0].text;
+		assert.equal(result.details.passed, false, "zero checks verified nothing, so details.passed must not be true");
+		assert.ok(!text.includes("PASSED"), `must not claim PASSED for a zero-check run: ${text}`);
+		assert.ok(text.includes("0 checks"), `should say how many checks ran: ${text}`);
+	});
+
+	it("still reports PASSED when every check passes", async () => {
+		const element = { isVisible: async () => true, textContent: async () => "Welcome" };
+		const tool = registerVerify({ goto: async () => {}, $: async () => element });
+
+		const result = await tool.execute(
+			"call-2",
+			{ url: "http://localhost:3000", checks: [{ description: "hero visible", selector: "h1", expectedVisible: true }] },
+			undefined,
+			undefined,
+			undefined,
+		);
+
+		assert.equal(result.details.passed, true);
+		assert.ok(result.content[0].text.includes("PASSED (1/1)"), result.content[0].text);
+	});
+
+	it("reports failure when navigation fails, even with no checks", async () => {
+		const tool = registerVerify({ goto: async () => { throw new Error("net::ERR_CONNECTION_REFUSED"); } });
+
+		const result = await tool.execute("call-3", { url: "http://localhost:3000", checks: [] }, undefined, undefined, undefined);
+
+		assert.equal(result.details.passed, false);
+		assert.ok(result.content[0].text.includes("Navigation failed"), result.content[0].text);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // browser_save_pdf — tool registration
 // ---------------------------------------------------------------------------
 
