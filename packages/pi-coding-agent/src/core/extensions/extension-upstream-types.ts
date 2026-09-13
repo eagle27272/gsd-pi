@@ -72,7 +72,6 @@ import type {
 	ToolPreparationErrorsTurnEventResult,
 	UnitEndEvent,
 	UnitStartEvent,
-	VerifyFailure,
 	VerifyResultEvent,
 } from "../gsd-extension-types.js";
 import type { EventBus } from "../event-bus.js";
