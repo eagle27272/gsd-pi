@@ -9,7 +9,7 @@ import { resolveMilestoneFile } from "./paths.js";
 import { isCompletedMilestoneTerminal } from "./milestone-closeout.js";
 import { deriveState } from "./state.js";
 import { isClosedStatus } from "./status-guards.js";
-import { allWorktreesDirs, createWorktree, listWorktrees, resolveGitDir } from "./worktree-manager.js";
+import { allWorktreesDirs, createWorktree, listWorktrees, removeWorktree, resolveGitDir } from "./worktree-manager.js";
 import { abortAndReset } from "./git-self-heal.js";
 import { RUNTIME_EXCLUSION_PATHS, resolveMilestoneIntegrationBranch, writeIntegrationBranch } from "./git-service.js";
 import { nativeIsRepo, nativeWorktreeList, nativeWorktreeRemove, nativeBranchList, nativeBranchListMerged, nativeBranchDelete, nativeDetectMainBranch, nativeLsFiles, nativeRmCached, nativeHasChanges, nativeLastCommitEpoch, nativeGetCurrentBranch, nativeAddTracked, nativeCommit, nativeIsCurrentUnbornBranch } from "./native-git-bridge.js";
@@ -282,7 +282,8 @@ export async function checkGitHealth(
           } catch {
             cwd = basePath;
           }
-          if (isSameOrNestedPath(cwd, wt.path)) {
+          const relocated = isSameOrNestedPath(cwd, wt.path);
+          if (relocated) {
             try {
               process.chdir(basePath);
             } catch {
@@ -291,10 +292,32 @@ export async function checkGitHealth(
             }
           }
           try {
-            nativeWorktreeRemove(basePath, wt.path, true);
-            fixesApplied.push(`removed orphaned worktree ${wt.path}`);
+            // removeWorktree() quarantines uncommitted work, rescues submodule
+            // and nested-.git state, and refuses paths outside the worktrees
+            // dir. A closed roadmap status alone is not evidence the tree is
+            // safe to force-delete — `cancelled` and `skipped` count as closed
+            // (#11). deleteBranch stays false: the branch is the recovery
+            // handle for anything the worktree held.
+            const removed = removeWorktree(basePath, wt.name, {
+              deleteBranch: false,
+              branch: wt.branch,
+            });
+            fixesApplied.push(
+              removed
+                ? `removed orphaned worktree ${wt.path}`
+                : `preserved orphaned worktree ${wt.path} (uncommitted work could not be quarantined)`,
+            );
           } catch {
             fixesApplied.push(`failed to remove worktree ${wt.path}`);
+          } finally {
+            // Leaving the process relocated silently changes process.cwd() for
+            // every later check. Only restore when the original directory
+            // survived the removal (#11).
+            if (relocated && existsSync(cwd)) {
+              try {
+                process.chdir(cwd);
+              } catch { /* original cwd is gone — stay at basePath */ }
+            }
           }
         }
       }

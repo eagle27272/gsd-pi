@@ -4,12 +4,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { runGSDDoctor } from "../doctor.ts";
-import { closeDatabase } from "../gsd-db.js";
+import { closeDatabase, insertMilestone, insertSlice, openDatabase } from "../gsd-db.js";
+import { createWorktree, worktreePath } from "../worktree-manager.ts";
 
 function runGit(args: string[], cwd: string): string {
   return execFileSync("git", args, {
@@ -82,4 +83,39 @@ test("doctor --fix keeps an unmerged legacy slice branch", async (t) => {
     true,
     "an unmerged legacy slice branch holds the only reference to its commits",
   );
+});
+
+test("doctor --fix quarantines rather than deletes a dirty worktree for a cancelled milestone", async (t) => {
+  const base = makeRepo("gsd-doctor-orphan-dirty-");
+  t.after(() => {
+    closeDatabase();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  openDatabase(join(base, ".gsd", "gsd.db"));
+  insertMilestone({ id: "M001", title: "Cancelled", status: "cancelled" });
+  insertSlice({ id: "S01", milestoneId: "M001", title: "Slice", status: "in_progress" });
+  writeFileSync(join(base, ".gsd", "PREFERENCES.md"), "---\ngit:\n  isolation: worktree\n---\n");
+
+  createWorktree(base, "M001", { branch: "milestone/M001" });
+  const wtPath = worktreePath(base, "M001");
+  // A commit of its own keeps the branch unmerged, so the sibling
+  // worktree_branch_merged check leaves it alone and this test isolates the
+  // orphaned_auto_worktree path.
+  writeFileSync(join(wtPath, "committed.txt"), "milestone work\n", "utf-8");
+  runGit(["add", "."], wtPath);
+  runGit(["commit", "-m", "feat: milestone work"], wtPath);
+  writeFileSync(join(wtPath, "unsaved.txt"), "work in progress\n", "utf-8");
+
+  const cwdBefore = process.cwd();
+  await runGSDDoctor(base, { fix: true, isolationMode: "worktree" });
+
+  assert.equal(process.cwd(), cwdBefore, "doctor must not relocate the process");
+
+  const quarantineRoot = join(base, ".gsd", "quarantine", "worktrees");
+  assert.ok(existsSync(quarantineRoot), "dirty worktree should have been quarantined, not deleted");
+  const preserved = readdirSync(quarantineRoot)
+    .some((entry) => existsSync(join(quarantineRoot, entry, "unsaved.txt")));
+  assert.ok(preserved, "uncommitted work must survive in the quarantine snapshot");
+  assert.ok(branchExists(base, "milestone/M001"), "the branch must be preserved");
 });
