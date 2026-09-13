@@ -2,3 +2,10 @@ merge_queue:
   max_parallel_checks: 3
 merge_protections_settings:
   auto_merge_conditions: true
+queue_rules:
+  - name: Auto Merge
+    branch_protection_injection_mode: none
+    queue_conditions:
+      - base = main
+    merge_conditions:
+      - check-success = @github-actions/build-and-test
