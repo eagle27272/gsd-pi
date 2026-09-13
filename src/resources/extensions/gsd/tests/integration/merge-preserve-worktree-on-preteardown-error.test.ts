@@ -30,6 +30,9 @@ beforeEach(() => {
   run("git init -b main", repo);
   run("git config user.email test@test.com", repo);
   run("git config user.name Test", repo);
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add .` stage nothing and the commit below fail.
+  run("git config core.excludesFile /dev/null", repo);
   writeFileSync(join(repo, "README.md"), "# test\n");
   writeFileSync(join(repo, ".gitignore"), ".gsd/worktrees/\n");
   mkdirSync(join(repo, ".gsd"), { recursive: true });
