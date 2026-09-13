@@ -12,6 +12,7 @@ export function registerVerifyTools(pi: ExtensionAPI, deps: ToolDeps): void {
 			"Use browser_verify for UAT verification flows that need structured evidence.",
 			"Each check produces a pass/fail result with captured evidence.",
 			"Prefer this over manual navigation + assertion sequences for verification tasks.",
+			"A run with no checks verifies nothing: it navigates and reports INCONCLUSIVE, never passed.",
 		],
 		parameters: Type.Object({
 			url: Type.String({ description: "URL to navigate to" }),
@@ -99,6 +100,18 @@ export function registerVerifyTools(pi: ExtensionAPI, deps: ToolDeps): void {
 						error: checkErr instanceof Error ? checkErr.message : String(checkErr),
 					});
 				}
+			}
+
+			if (results.length === 0) {
+				return {
+					content: [{ type: "text" as const, text: `Verification INCONCLUSIVE: navigated to ${params.url}, 0 checks run — nothing was verified.` }],
+					details: {
+						url: params.url,
+						passed: false,
+						checks: results,
+						duration: Date.now() - startTime,
+					},
+				};
 			}
 
 			const allPassed = results.every((r) => r.passed);
