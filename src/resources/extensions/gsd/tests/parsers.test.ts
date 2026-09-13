@@ -781,6 +781,43 @@ A heading-style task.
   assert.deepStrictEqual(p.tasks[2].done, true, 'mixed T03 done');
 });
 
+test('parsePlan: canonical shape — checkbox list plus matching ### T## detail headings', () => {
+  const content = `# S01: Update answer
+
+**Goal:** Make the answer implementation return ready.
+
+## Tasks
+
+- [ ] **T01: Update answer implementation** \`est:5m\`
+- [x] **T02: Document the change** \`est:2m\`
+
+### T01: Update answer implementation
+
+Inputs:
+- Files: \`src/answer.js\`
+- Verify: \`node --test test/answer.test.js\` exits 0.
+
+### T02: Document the change
+
+- Files: \`README.md\`
+
+## Files Likely Touched
+
+- \`src/answer.js\`
+`;
+
+  const p = parsePlan(content);
+  assert.deepStrictEqual(p.tasks.map(t => t.id), ['T01', 'T02'], 'detail headings must not drop the checkbox tasks');
+  assert.deepStrictEqual(p.tasks[0].title, 'Update answer implementation', 'checkbox title wins over the detail heading');
+  assert.deepStrictEqual(p.tasks[0].estimate, '5m', 'checkbox estimate survives the detail heading');
+  assert.deepStrictEqual(p.tasks[0].done, false, 'T01 not done');
+  assert.deepStrictEqual(p.tasks[1].done, true, 'checkbox done state survives the detail heading');
+  assert.deepStrictEqual(p.tasks[0].files, ['src/answer.js'], 'detail-heading Files merge into the checkbox task');
+  assert.ok(p.tasks[0].verify?.includes('node --test'), 'detail-heading Verify merges into the checkbox task');
+  assert.ok(p.tasks[0].description.includes('Inputs:'), 'detail-heading body merges into the checkbox task description');
+  assert.deepStrictEqual(p.tasks[1].files, ['README.md'], 'each detail heading merges into its own task');
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // parseSummary tests
 // ═══════════════════════════════════════════════════════════════════════════
