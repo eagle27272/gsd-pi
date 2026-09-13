@@ -1,7 +1,7 @@
 /**
  * GSD Slice Parallel Conflict Detection — File overlap analysis between slices.
  *
- * Reads each slice's PLAN projection and extracts file paths mentioned in task
+ * Reads each slice's PLAN and extracts file paths mentioned in task
  * descriptions. If two slices share more than 5 file paths, they are considered
  * conflicting and should not run in parallel.
  *
@@ -44,6 +44,13 @@ function extractFilePaths(content: string): Set<string> {
 /**
  * Check if two slices have file conflicts that would block parallel execution.
  *
+ * Plan lookup goes through resolveSliceFile so the flat-phase layout
+ * (`phases/NN-slug/NN-MM-PLAN.md`) is found. The fail-closed default is kept:
+ * a slice with no PLAN on disk has unknown file overlap, and an unplanned
+ * slice should not be dispatched in parallel anyway. Degrading to sequential
+ * execution is the safe direction — the wrong one is racing two agents over
+ * the same files.
+ *
  * @param basePath  Project root path.
  * @param mid       Milestone ID.
  * @param sliceA    First slice ID.
@@ -64,8 +71,15 @@ export function hasFileConflict(
     return true;
   }
 
-  const contentA = readFileSync(planPathA, "utf-8");
-  const contentB = readFileSync(planPathB, "utf-8");
+  let contentA: string;
+  let contentB: string;
+  try {
+    contentA = readFileSync(planPathA, "utf-8");
+    contentB = readFileSync(planPathB, "utf-8");
+  } catch {
+    // Unreadable plan carries the same unknown overlap as a missing one.
+    return true;
+  }
 
   const filesA = extractFilePaths(contentA);
   const filesB = extractFilePaths(contentB);

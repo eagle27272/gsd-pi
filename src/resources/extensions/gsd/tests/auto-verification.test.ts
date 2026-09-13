@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
+	_hasRoadmapReassessmentArtifactForTest,
 	_resolveVerificationTimeoutMsForTest,
 	_routeHostTechnicalFailureForTest,
 	runPostUnitVerification,
 } from "../auto-verification.ts";
 import { DEFAULT_COMMAND_TIMEOUT_MS } from "../constants.ts";
+import { _clearGsdRootCache } from "../paths.ts";
 import { describeHostVerificationRationale } from "../verification-verdict.ts";
 import { cleanup, makeTempRepo } from "./test-utils.ts";
 
@@ -399,4 +404,91 @@ test("identical gate failures count 1/2, then 2/2, then exhaust into a durable a
 	assert.equal(session.lastTaskRecoveryAbortId, "ra-3");
 	assert.equal(session.verificationRetryCount.size, 0, "abort clears the per-unit retry counter");
 	assert.equal(paused, false, "the gate defers the pause to the finalize abort path");
+});
+
+// ─── hasRoadmapReassessmentArtifact (flat-phase) ─────────────────────────────
+
+function makeFlatPhaseProject(): string {
+	const dir = mkdtempSync(join(tmpdir(), "gsd-reassess-artifact-"));
+	mkdirSync(join(dir, ".gsd", "phases", "01-payments-rework"), { recursive: true });
+	return dir;
+}
+
+test("reassessment artifact detection finds a flat-phase slice ASSESSMENT", (t) => {
+	const dir = makeFlatPhaseProject();
+	t.after(() => {
+		_clearGsdRootCache();
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	writeFileSync(
+		join(dir, ".gsd", "phases", "01-payments-rework", "01-02-ASSESSMENT.md"),
+		"---\nverdict: PARTIAL\n---\n",
+		"utf-8",
+	);
+
+	assert.equal(_hasRoadmapReassessmentArtifactForTest(dir, "M001"), true);
+});
+
+test("reassessment artifact detection returns false when the phase holds no ASSESSMENT", (t) => {
+	const dir = makeFlatPhaseProject();
+	t.after(() => {
+		_clearGsdRootCache();
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	writeFileSync(
+		join(dir, ".gsd", "phases", "01-payments-rework", "01-02-PLAN.md"),
+		"# Plan\n",
+		"utf-8",
+	);
+
+	assert.equal(_hasRoadmapReassessmentArtifactForTest(dir, "M001"), false);
+});
+
+test("reassessment artifact detection is scoped to the requested milestone's phase", (t) => {
+	const dir = makeFlatPhaseProject();
+	t.after(() => {
+		_clearGsdRootCache();
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	const otherPhase = join(dir, ".gsd", "phases", "02-reporting");
+	mkdirSync(otherPhase, { recursive: true });
+	writeFileSync(join(otherPhase, "02-01-ASSESSMENT.md"), "---\nverdict: PASS\n---\n", "utf-8");
+
+	assert.equal(
+		_hasRoadmapReassessmentArtifactForTest(dir, "M001"),
+		false,
+		"M002's assessment must not count as evidence for M001",
+	);
+	assert.equal(_hasRoadmapReassessmentArtifactForTest(dir, "M002"), true);
+});
+
+test("reassessment artifact detection ignores the phase-level ASSESSMENT file", (t) => {
+	const dir = makeFlatPhaseProject();
+	t.after(() => {
+		_clearGsdRootCache();
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	// NN-ASSESSMENT.md is the milestone-level artifact; the reassessment
+	// evidence this guard looks for is the per-slice NN-MM-ASSESSMENT.md.
+	writeFileSync(
+		join(dir, ".gsd", "phases", "01-payments-rework", "01-ASSESSMENT.md"),
+		"---\nverdict: PASS\n---\n",
+		"utf-8",
+	);
+
+	assert.equal(_hasRoadmapReassessmentArtifactForTest(dir, "M001"), false);
+});
+
+test("reassessment artifact detection returns false when the milestone has no phase dir", (t) => {
+	const dir = makeFlatPhaseProject();
+	t.after(() => {
+		_clearGsdRootCache();
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	assert.equal(_hasRoadmapReassessmentArtifactForTest(dir, "M009"), false);
 });

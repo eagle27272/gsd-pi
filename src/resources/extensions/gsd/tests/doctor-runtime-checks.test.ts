@@ -87,7 +87,7 @@ test("doctor fix resets run-uat counters at the dispatch cap", async (t) => {
   assert.equal(existsSync(counterPath), false);
 });
 
-test("doctor ignores an exhausted run-uat counter once the flat-phase ASSESSMENT has a verdict", async (t) => {
+test("doctor ignores an exhausted run-uat counter once the flat-phase ASSESSMENT carries a verdict", async (t) => {
   const dir = createGitProject();
   t.after(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -95,20 +95,51 @@ test("doctor ignores an exhausted run-uat counter once the flat-phase ASSESSMENT
   mkdirSync(runtimeDir, { recursive: true });
   writeFileSync(
     join(runtimeDir, "uat-count-M002-S01.json"),
-    JSON.stringify({ count: 3, updatedAt: "2026-06-02T19:40:23.289Z" }) + "\n",
+    JSON.stringify({ count: 5, updatedAt: "2026-06-02T19:40:23.289Z" }) + "\n",
     "utf-8",
   );
 
-  const phaseDir = join(dir, ".gsd", "phases", "02-payments");
+  // Flat-phase assessment: .gsd/phases/NN-slug/NN-MM-ASSESSMENT.md
+  const phaseDir = join(dir, ".gsd", "phases", "02-checkout-flow");
   mkdirSync(phaseDir, { recursive: true });
-  writeFileSync(join(phaseDir, "02-01-ASSESSMENT.md"), "# UAT\n\nVerdict: PASS\n", "utf-8");
+  writeFileSync(
+    join(phaseDir, "02-01-ASSESSMENT.md"),
+    "---\nverdict: PASS\n---\n\n# UAT assessment\n",
+    "utf-8",
+  );
 
   const detect = await runGSDDoctor(dir);
   assert.equal(
     detect.issues.some((candidate) => candidate.code === "uat_retry_exhausted"),
     false,
-    "the slice already has a recorded verdict, so the counter is not blocking anything",
+    "a recorded ASSESSMENT verdict means the retries produced a result, so the counter is not blocked",
   );
+});
+
+test("doctor still reports an exhausted run-uat counter when the flat-phase ASSESSMENT has no verdict", async (t) => {
+  const dir = createGitProject();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+  const runtimeDir = join(dir, ".gsd", "runtime");
+  mkdirSync(runtimeDir, { recursive: true });
+  writeFileSync(
+    join(runtimeDir, "uat-count-M002-S01.json"),
+    JSON.stringify({ count: 5, updatedAt: "2026-06-02T19:40:23.289Z" }) + "\n",
+    "utf-8",
+  );
+
+  const phaseDir = join(dir, ".gsd", "phases", "02-checkout-flow");
+  mkdirSync(phaseDir, { recursive: true });
+  writeFileSync(
+    join(phaseDir, "02-01-ASSESSMENT.md"),
+    "# UAT assessment\n\nThe run crashed before a verdict was recorded.\n",
+    "utf-8",
+  );
+
+  const detect = await runGSDDoctor(dir);
+  const issue = detect.issues.find((candidate) => candidate.code === "uat_retry_exhausted");
+  assert.ok(issue, "an ASSESSMENT without a verdict must not suppress the exhausted-counter report");
+  assert.equal(issue.unitId, "M002/S01");
 });
 
 test("doctor reports and repairs a paused session superseded by the active milestone", async (t) => {
