@@ -121,6 +121,21 @@ Fails if `packages/pi-*/src/` imports `@gsd/agent-*` or `@opengsd/*` outside the
 
 `verify:pi-boundary` also chains `bash scripts/check-mcp-bridge-boundary.sh`, which fails if `packages/mcp-server/src/workflow-tools.ts` imports core GSD extension modules (`bootstrap/write-gate`, `bootstrap/dynamic-tools`, `gsd-db`, `state`, `preferences`, `db-writer`, `doctor`, `journal`, `milestone-ids`) directly instead of through `src/resources/extensions/gsd/mcp-bridge.ts`.
 
+## Vendored test corpora are not run
+
+`packages/pi-*/test/` is the upstream pi test corpus that comes along with each vendor sync. **No runner executes it**, and that is deliberate:
+
+| Directory | Files | Status |
+|---|---:|---|
+| `packages/pi-coding-agent/test/` | 135 | Unrun. ~40 files import `../src/modes/**`, `../src/cli/**`, `../src/core/sdk.ts`, `../src/core/compaction/**` and `../src/core/export-html/**` — paths [ADR-010](./ADR-010-pi-clean-seam-architecture.md) deliberately deleted from the package. Enabling the suite wholesale fails immediately. |
+| `packages/pi-tui/test/` | 27 | Unrun. `vitest.config.ts` includes only `test/wrap-ansi.test.ts`, and the package has no `test` script. |
+| `packages/pi-agent-core/test/` | 20 | Unrun. Has a `"test": "vitest --run"` script, but nothing invokes it. |
+| `packages/pi-ai/test/` | 81 | **Runs**, but only via `pnpm --filter @gsd/pi-ai test` in [`scripts/verify-merge.sh`](../../scripts/verify-merge.sh) — not from `npm test`. |
+
+What *does* run per package is `packages/<pkg>/src/**`: `scripts/compile-tests.mjs` mirrors it into `dist-test/packages/<pkg>/src` (and explicitly deletes `dist-test/packages/<pkg>/test`), and `scripts/run-package-tests.cjs` globs only that mirrored `src` tree.
+
+`scripts/lib/test-audit-lib.mjs` encodes this: `packages/<pkg>/src/**` → `packages`, `packages/pi-ai/test/**` → `verify-merge`, the other three → `vendored-upstream`. The `vendored-upstream` bucket is recorded in `ACKNOWLEDGED_UNRUN_RUNNERS`, so `audit:test-gaps --strict-unwired` reports it with its reason instead of failing on it. Do not silence a *new* dead test by adding it there — wire it, or record it with a reason that stands on its own.
+
 ## Tool schema authoring
 
 GSD extension tools must pass golden B when sanitized for Claude. Authoring rules: [tool-schema-authoring.md](./tool-schema-authoring.md).
