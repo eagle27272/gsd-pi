@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 
 import {
@@ -77,7 +77,7 @@ const sampleOptions: EscalationOption[] = [
 // Tests
 // ═══════════════════════════════════════════════════════════════════════════
 
-test("ADR-011 P2: writeEscalationArtifact persists canonical JSON at tasks/T##-ESCALATION.json", (t) => {
+test("ADR-011 P2: writeEscalationArtifact persists canonical JSON at tasks/S##-T##-ESCALATION.json", (t) => {
   const base = makeBase();
   t.after(() => cleanup(base));
   seedCompletedTask(base, "T03");
@@ -92,7 +92,9 @@ test("ADR-011 P2: writeEscalationArtifact persists canonical JSON at tasks/T##-E
   });
   const path = writeEscalationArtifact(base, art);
   assert.ok(existsSync(path), "artifact file must exist");
-  assert.ok(path.endsWith("/tasks/T03-ESCALATION.json"), `path should end with tasks/T03-ESCALATION.json, got ${path}`);
+  // The phase-level tasks/ dir is shared by every slice in flat-phase, so the
+  // name carries the slice id (#5).
+  assert.ok(path.endsWith("/tasks/S01-T03-ESCALATION.json"), `path should end with tasks/S01-T03-ESCALATION.json, got ${path}`);
 
   const roundTrip = readEscalationArtifact(path);
   assert.ok(roundTrip, "artifact must round-trip");
@@ -809,4 +811,44 @@ test("ADR-011 P3 #25: artifact write failure surfaces, leaves DB flags clean, an
       && (e["payload"] as Record<string, unknown>)?.["taskId"] === "T90",
     );
   assert.equal(t90Events.length, 1, "successful retry must emit exactly one audit envelope");
+});
+
+test("#5: flat-phase escalation artifacts are slice-qualified so sibling slices cannot collide", (t) => {
+  const base = makeBase();
+  t.after(() => cleanup(base));
+  openDatabase(join(base, ".gsd", "gsd.db"));
+  insertMilestone({ id: "M001", title: "Test", status: "active" });
+  insertSlice({ id: "S01", milestoneId: "M001", title: "First" });
+  insertSlice({ id: "S02", milestoneId: "M001", title: "Second" });
+  insertTask({ id: "T03", sliceId: "S01", milestoneId: "M001", title: "Task", status: "complete" });
+  insertTask({ id: "T03", sliceId: "S02", milestoneId: "M001", title: "Task", status: "complete" });
+
+  const s01Path = escalationArtifactPath(base, "M001", "S01", "T03")!;
+  const s02Path = escalationArtifactPath(base, "M001", "S02", "T03")!;
+  assert.notEqual(s01Path, s02Path, "two slices reusing task id T03 must not share one artifact path");
+
+  writeEscalationArtifact(base, buildEscalationArtifact({
+    taskId: "T03", sliceId: "S01", milestoneId: "M001",
+    question: "S01's question?",
+    options: sampleOptions,
+    recommendation: "B",
+    recommendationRationale: "Rationale.",
+    continueWithDefault: false,
+  }));
+
+  assert.equal(existsSync(s01Path), true, "S01's artifact lands at S01's path");
+  assert.equal(existsSync(s02Path), false, "S01's escalation must not surface as S02's");
+});
+
+test("#5: an escalation artifact already on disk under the legacy bare name is still resolved", (t) => {
+  const base = makeBase();
+  t.after(() => cleanup(base));
+  const legacyPath = join(
+    base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test"), "tasks", "T04-ESCALATION.json",
+  );
+  writeFileSync(legacyPath, "{}");
+
+  const resolved = escalationArtifactPath(base, "M001", "S01", "T04")!;
+  assert.equal(basename(resolved), "T04-ESCALATION.json", "the legacy file name must be preserved, not replaced by the slice-qualified one");
+  assert.equal(existsSync(resolved), true, "an existing legacy-named artifact must keep resolving, not be orphaned by the rename");
 });
