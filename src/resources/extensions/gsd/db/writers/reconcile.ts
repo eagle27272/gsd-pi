@@ -7,7 +7,7 @@
 import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createHash } from "node:crypto";
-import { GSDError, GSD_STALE_STATE } from "../../errors.js";
+import { GSDError, GSD_IO_ERROR, GSD_STALE_STATE } from "../../errors.js";
 import { logError, logWarning } from "../../workflow-logger.js";
 import { getDbOrNull, openDatabase, snapshotDatabaseFile, transaction } from "../engine.js";
 import { TERMINAL_STATUS_SQL } from "../sql-constants.js";
@@ -23,10 +23,35 @@ export class CanonicalWorktreeDivergenceError extends GSDError {
 }
 
 /**
+ * A reconcile that was attempted and did not complete.
+ *
+ * Distinct from a zero-count ReconcileResult, which means the worktree had
+ * nothing to merge. Callers that delete the worktree afterwards MUST treat
+ * this as fatal: `.gsd/gsd.db*` is gitignored, so the worktree copy is the
+ * only one that exists.
+ */
+export class WorktreeReconciliationError extends GSDError {
+  readonly conflicts: readonly string[];
+
+  constructor(
+    reason: string,
+    options: { cause?: unknown; conflicts?: readonly string[] } = {},
+  ) {
+    super(
+      GSD_IO_ERROR,
+      `worktree DB reconciliation failed: ${reason}`,
+      options.cause === undefined ? undefined : { cause: options.cause },
+    );
+    this.name = "WorktreeReconciliationError";
+    this.conflicts = options.conflicts ?? [];
+  }
+}
+
+/**
  * Optional override for the project-root DB open inside reconcileWorktreeDb.
  * Production leaves this null so the real engine.openDatabase runs; tests
  * inject a function returning false to deterministically exercise the
- * cannot-open-main-DB branch (reconcile.ts:82), which is otherwise unreachable
+ * cannot-open-main-DB branch in requireMainDbAdapter, otherwise unreachable
  * without a contrived provider/OS fault (openDatabase rethrows on real failures
  * rather than returning false across providers).
  * @internal
@@ -43,6 +68,29 @@ export function _setMainDbOpenerFnForTests(
 
 function openMainDb(mainDbPath: string): boolean {
   return _mainDbOpenerFn ? _mainDbOpenerFn(mainDbPath) : openDatabase(mainDbPath);
+}
+
+type DbAdapter = NonNullable<ReturnType<typeof getDbOrNull>>;
+
+/**
+ * The engine handle for the project-root DB, opening it if nothing is open.
+ *
+ * A "successful" open that leaves the handle null would otherwise surface as a
+ * raw TypeError from the first `adapter.*` call.
+ */
+function requireMainDbAdapter(mainDbPath: string): DbAdapter {
+  if (!getDbOrNull() && !openMainDb(mainDbPath)) {
+    logError("db", "worktree DB reconciliation failed: cannot open main DB");
+    throw new WorktreeReconciliationError(`cannot open main DB at ${mainDbPath}`);
+  }
+  const adapter = getDbOrNull();
+  if (!adapter) {
+    logError("db", "worktree DB reconciliation failed: main DB handle unavailable after open");
+    throw new WorktreeReconciliationError(
+      `main DB handle unavailable after opening ${mainDbPath}`,
+    );
+  }
+  return adapter;
 }
 
 export function copyWorktreeDb(srcDbPath: string, destDbPath: string): boolean {
@@ -108,16 +156,11 @@ export function reconcileWorktreeDb(
   // so we use strict allowlist validation instead.
   if (/['";\x00]/.test(worktreeDbPath)) {
     logError("db", "worktree DB reconciliation failed: path contains unsafe characters");
-    return zero;
+    throw new WorktreeReconciliationError(
+      `path contains unsafe characters: ${worktreeDbPath}`,
+    );
   }
-  if (!getDbOrNull()!) {
-    const opened = openMainDb(mainDbPath);
-    if (!opened) {
-      logError("db", "worktree DB reconciliation failed: cannot open main DB");
-      return zero;
-    }
-  }
-  const adapter = getDbOrNull()!!;
+  const adapter = requireMainDbAdapter(mainDbPath);
   const conflicts: string[] = [];
   try {
     adapter.exec(`ATTACH DATABASE '${worktreeDbPath}' AS wt`);
@@ -733,7 +776,7 @@ export function reconcileWorktreeDb(
   } catch (err) {
     if (err instanceof CanonicalWorktreeDivergenceError) throw err;
     logError("db", "worktree DB reconciliation failed", { error: (err as Error).message });
-    return { ...zero, conflicts };
+    throw new WorktreeReconciliationError((err as Error).message, { cause: err, conflicts });
   }
 }
 

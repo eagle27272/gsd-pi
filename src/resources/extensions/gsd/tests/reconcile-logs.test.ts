@@ -2,10 +2,11 @@
 //
 // `reconcileWorktreeDb` / `copyWorktreeDb` in db/writers/reconcile.ts ATTACH-
 // and-merge a worktree's gsd.db back into the project-root DB. Each failure
-// branch logs a `db` error/warning so a failed merge never silently drops
-// worktree state — these logs are the only record that worktree-only decisions
-// were lost. The existing worktree-db tests assert only the merge RESULT counts;
-// none asserts any of the failure-path logs. This file pins them:
+// branch logs a `db` error/warning alongside the thrown
+// WorktreeReconciliationError (#6), so the DB log records which worktree-only
+// decisions were at risk even when a caller only reports the throw. The
+// existing worktree-db tests assert only the merge RESULT counts; none asserts
+// any of the failure-path logs. This file pins them:
 //   - copyWorktreeDb failed              (reconcile.ts:22)
 //   - realpathSync failed                 (reconcile.ts:71)
 //   - unsafe characters in path           (reconcile.ts:76)
@@ -111,10 +112,11 @@ test("reconcileWorktreeDb logs a db error for an unsafe path (rejected before AT
     fs.copyFileSync(mainDb, wtDb);
 
     openDatabase(mainDb);
-    const { result, logs } = captureLogs(() => reconcileWorktreeDb(mainDb, wtDb));
+    const { logs } = captureLogs(() => {
+      assert.throws(() => reconcileWorktreeDb(mainDb, wtDb), /unsafe characters/u);
+    });
     closeDatabase();
 
-    assert.equal(result.decisions, 0, "unsafe path must yield a zero reconcile");
     const err = dbLogs(logs).find((e) => e.severity === "error");
     assert.ok(err, "a db error must be logged for the rejected path");
     assert.match(err!.message, /worktree DB reconciliation failed: path contains unsafe characters/u);
@@ -152,7 +154,7 @@ test("reconcileWorktreeDb logs a db warning when realpathSync on the main path f
   }
 });
 
-test("reconcileWorktreeDb logs a db error and zero-result when the worktree DB is corrupt", () => {
+test("reconcileWorktreeDb logs a db error and throws when the worktree DB is corrupt", () => {
   const mainDir = tempDir();
   const wtDir = tempDir();
   try {
@@ -165,10 +167,15 @@ test("reconcileWorktreeDb logs a db error and zero-result when the worktree DB i
     fs.writeFileSync(wtDb, "this is not a sqlite database", "utf-8");
 
     openDatabase(mainDb);
-    const { result, logs } = captureLogs(() => reconcileWorktreeDb(mainDb, wtDb));
+    const { logs } = captureLogs(() => {
+      assert.throws(
+        () => reconcileWorktreeDb(mainDb, wtDb),
+        /worktree DB reconciliation failed/u,
+        "a corrupt worktree DB must not look like an empty merge",
+      );
+    });
     closeDatabase();
 
-    assert.equal(result.decisions, 0, "a corrupt worktree DB must yield a zero reconcile");
     const err = dbLogs(logs).find((e) => e.severity === "error");
     assert.ok(err, "a db error must be logged for the failed reconcile transaction");
     assert.match(err!.message, /worktree DB reconciliation failed/u);
@@ -226,10 +233,11 @@ test("reconcileWorktreeDb logs a db error when the main DB cannot be opened (rec
     // the only reliable way to exercise the `!opened` branch.
     const restore = _setMainDbOpenerFnForTests(() => false);
 
-    const { result, logs } = captureLogs(() => reconcileWorktreeDb(mainDb, wtDb));
+    const { logs } = captureLogs(() => {
+      assert.throws(() => reconcileWorktreeDb(mainDb, wtDb), /cannot open main DB/u);
+    });
     restore();
 
-    assert.equal(result.decisions, 0, "an unopenable main DB must yield a zero reconcile");
     const err = dbLogs(logs).find((e) => e.severity === "error");
     assert.ok(err, "a db error must be logged when the main DB cannot be opened");
     assert.match(err!.message, /worktree DB reconciliation failed: cannot open main DB/u);
