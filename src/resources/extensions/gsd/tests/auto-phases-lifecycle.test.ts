@@ -442,7 +442,7 @@ test("runFinalize merges a verified complete-milestone immediately and only once
   assert.equal(result.reason, "milestone-complete");
   assert.equal(lifecycleMergeCalls, 1);
   assert.equal(resolverMergeCalls, 0);
-  assert.equal(s.milestoneMergedInPhases, true);
+  assert.equal(s.milestoneMergedInPhasesFor, "M001");
   assert.equal(stopAutoCalls.length, 1);
   assert.equal(stopAutoCalls[0]?.reason, "Milestone M001 complete");
   assert.deepEqual(stopAutoCalls[0]?.options, {
