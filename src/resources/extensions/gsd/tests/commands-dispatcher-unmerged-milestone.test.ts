@@ -3,6 +3,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
@@ -68,6 +69,20 @@ function makeMockPi(): { pi: any; messages: SentMessage[] } {
       },
     },
     messages,
+  };
+}
+
+/**
+ * The repo and DB state a command must leave untouched to be considered
+ * blocked. Commands that share a fixture re-check this after every dispatch, so
+ * a regression that starts mutating fails here instead of silently
+ * contaminating the commands that run after it.
+ */
+function fixtureState(base: string): Record<string, string> {
+  return {
+    status: git(base, "status", "--porcelain", "--branch"),
+    branches: git(base, "branch", "--list", "--format=%(refname:short) %(objectname)"),
+    db: createHash("sha256").update(readFileSync(join(base, ".gsd", "gsd.db"))).digest("hex"),
   };
 }
 
@@ -211,10 +226,14 @@ test("dispatcher blocks workflow-advancing commands while completed branch is un
     "workstreams create",
   ];
 
-  for (const command of blockedCommands) {
-    const base = makeTempRepo("gsd-dispatch-unmerged-");
-    try {
-      seedCompletedUnmergedMilestone(base);
+  // A blocked command performs no work, so every command reuses one fixture
+  // rather than rebuilding a git repo per iteration.
+  const base = makeTempRepo("gsd-dispatch-unmerged-");
+  try {
+    seedCompletedUnmergedMilestone(base);
+    const seeded = fixtureState(base);
+
+    for (const command of blockedCommands) {
       const { ctx, calls } = makeMockCtx(base);
       const { pi, messages } = makeMockPi();
 
@@ -224,11 +243,14 @@ test("dispatcher blocks workflow-advancing commands while completed branch is un
       assert.equal(messages.length, 1, command);
       assert.equal(messages[0].display, true, command);
       assert.match(messages[0].content, /cannot start new workflow work/, command);
-    } finally {
-      closeDatabase();
+      assert.deepEqual(fixtureState(base), seeded, `${command} mutated the fixture`);
+
       invalidateStateCache();
-      cleanup(base);
     }
+  } finally {
+    closeDatabase();
+    invalidateStateCache();
+    cleanup(base);
   }
 });
 
@@ -260,10 +282,13 @@ test("dispatcher keeps manager read-only while completed branch is unmerged", as
 test("dispatcher allows read-only workstreams routes while completed branch is unmerged", async () => {
   const commands = ["workstreams list", "workstreams status", "workstreams progress"];
 
-  for (const command of commands) {
-    const base = makeTempRepo("gsd-dispatch-unmerged-");
-    try {
-      seedCompletedUnmergedMilestone(base);
+  // Read-only routes leave the repo alone, so one fixture serves all three.
+  const base = makeTempRepo("gsd-dispatch-unmerged-");
+  try {
+    seedCompletedUnmergedMilestone(base);
+    const seeded = fixtureState(base);
+
+    for (const command of commands) {
       const { ctx } = makeMockCtx(base);
       const { pi, messages } = makeMockPi();
 
@@ -273,11 +298,14 @@ test("dispatcher allows read-only workstreams routes while completed branch is u
       assert.equal(messages[0].customType, "gsd-parallel", command);
       assert.match(messages[0].content, /No parallel orchestration/, command);
       assert.doesNotMatch(messages[0].content, /cannot start new workflow work/, command);
-    } finally {
-      closeDatabase();
+      assert.deepEqual(fixtureState(base), seeded, `${command} mutated the fixture`);
+
       invalidateStateCache();
-      cleanup(base);
     }
+  } finally {
+    closeDatabase();
+    invalidateStateCache();
+    cleanup(base);
   }
 });
 
