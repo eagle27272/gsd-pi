@@ -73,6 +73,19 @@ function renderMarkdown(report) {
     }
   }
 
+  if (report.acknowledgedUnrunTests.length > 0) {
+    md += `\n## Acknowledged unrun test files\n\n`;
+    md += `No runner executes these. They are recorded rather than wired, and excluded from the strict gate.\n\n`;
+    const byReason = new Map();
+    for (const entry of report.acknowledgedUnrunTests) {
+      if (!byReason.has(entry.reason)) byReason.set(entry.reason, []);
+      byReason.get(entry.reason).push(entry.path);
+    }
+    for (const [reason, paths] of byReason) {
+      md += `- **${paths.length} file(s)** — ${reason}\n`;
+    }
+  }
+
   md += `\nRegenerate: \`npm run audit:test-matrix -- --write-report\`\n`;
   return md;
 }
@@ -100,6 +113,18 @@ function printHuman(report) {
       process.stdout.write(`  ... +${report.unwiredTests.length - 10} more\n`);
     }
     process.stdout.write('\n');
+  }
+
+  if (report.acknowledgedUnrunTests.length > 0) {
+    process.stdout.write(`Acknowledged unrun tests (${report.acknowledgedUnrunTests.length})\n`);
+    const byRunner = new Map();
+    for (const entry of report.acknowledgedUnrunTests) {
+      byRunner.set(entry.runner, (byRunner.get(entry.runner) ?? 0) + 1);
+    }
+    for (const [runner, count] of [...byRunner].sort((a, b) => b[1] - a[1])) {
+      process.stdout.write(`  ${runner}: ${count}\n`);
+    }
+    process.stdout.write('  Reasons: npm run audit:test-gaps\n\n');
   }
 
   const failures = strictMatrixFailures(report);
