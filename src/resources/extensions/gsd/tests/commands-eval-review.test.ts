@@ -171,9 +171,10 @@ describe("detectEvalReviewState", () => {
     );
     assert.equal(result.kind, "no-slice-dir");
     if (result.kind !== "no-slice-dir") return;
-    assert.ok(
-      result.expectedDir.endsWith(join("phases", "01-m001")),
-      `expectedDir must name the canonical flat-phase dir, got ${result.expectedDir}`,
+    assert.equal(
+      result.expectedDir,
+      join(realpathSync(basePath), ".gsd", "phases", "01-m001"),
+      "the user message must point at the flat-phase dir the renderer would create",
     );
     assert.ok(
       !result.expectedDir.includes(`${sep}milestones${sep}`),
