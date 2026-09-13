@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { runGSDDoctor } from "../doctor.ts";
 import { closeDatabase, insertMilestone, insertSlice, openDatabase } from "../gsd-db.js";
 import { createWorktree, worktreePath } from "../worktree-manager.ts";
+import type { DoctorIssue } from "../doctor-types.js";
 
 function runGit(args: string[], cwd: string): string {
   return execFileSync("git", args, {
@@ -118,4 +119,81 @@ test("doctor --fix quarantines rather than deletes a dirty worktree for a cancel
     .some((entry) => existsSync(join(quarantineRoot, entry, "unsaved.txt")));
   assert.ok(preserved, "uncommitted work must survive in the quarantine snapshot");
   assert.ok(branchExists(base, "milestone/M001"), "the branch must be preserved");
+});
+
+test("doctor --fix does not delete worktree directories when git worktree list comes back empty", async (t) => {
+  const base = makeRepo("gsd-doctor-worktree-dirs-");
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+
+  const { checkGitHealth } = await import("../doctor-git-checks.ts");
+  // Reproduce the CLI fallback's failure mode for real: `git worktree list`
+  // exits non-zero, gitExec(allowFailure) swallows it, nativeWorktreeList
+  // returns []. Every other git invocation passes through untouched.
+  const realGit = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf-8" }).trim();
+  const shimDir = mkdtempSync(join(tmpdir(), "gsd-git-shim-"));
+  writeFileSync(
+    join(shimDir, "git"),
+    `#!/bin/sh\nif [ "$1" = "worktree" ] && [ "$2" = "list" ]; then exit 128; fi\nexec ${realGit} "$@"\n`,
+    { encoding: "utf-8", mode: 0o755 },
+  );
+  // GIT_NO_PROMPT_ENV snapshots process.env at module load, so the shim has to
+  // be installed into that overlay too — it is what the git child actually gets.
+  const { GIT_NO_PROMPT_ENV } = await import("../git-constants.ts");
+  const originalPath = process.env["PATH"];
+  const originalGitPath = GIT_NO_PROMPT_ENV["PATH"];
+  process.env["PATH"] = `${shimDir}:${originalPath}`;
+  GIT_NO_PROMPT_ENV["PATH"] = `${shimDir}:${originalGitPath}`;
+  t.after(() => {
+    process.env["PATH"] = originalPath;
+    GIT_NO_PROMPT_ENV["PATH"] = originalGitPath;
+    rmSync(shimDir, { recursive: true, force: true });
+  });
+
+  const strayDir = join(base, ".gsd-worktrees", "M001");
+  mkdirSync(strayDir, { recursive: true });
+  writeFileSync(join(strayDir, "keep.txt"), "real work\n", "utf-8");
+
+  const issues: DoctorIssue[] = [];
+  const fixesApplied: string[] = [];
+  await checkGitHealth(base, issues, fixesApplied, () => true, "worktree");
+
+  assert.ok(
+    existsSync(join(strayDir, "keep.txt")),
+    "an empty worktree list means the git query failed, not that every dir is orphaned",
+  );
+  assert.ok(
+    !issues.some((issue) => issue.code === "worktree_directory_orphaned"),
+    "no orphan should be reported when the registered-worktree query yields nothing",
+  );
+});
+
+test("doctor --fix does not destroy a worktree whose only content is uncommitted .gsd state", async (t) => {
+  const base = makeRepo("gsd-doctor-empty-worktree-");
+  t.after(() => {
+    closeDatabase();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  openDatabase(join(base, ".gsd", "gsd.db"));
+  insertMilestone({ id: "M001", title: "Active", status: "active" });
+  writeFileSync(join(base, ".gsd", "PREFERENCES.md"), "---\ngit:\n  isolation: worktree\n---\n");
+
+  createWorktree(base, "M001", { branch: "milestone/M001" });
+  const wtPath = worktreePath(base, "M001");
+  for (const entry of readdirSync(wtPath)) {
+    if (entry !== ".git") rmSync(join(wtPath, entry), { recursive: true, force: true });
+  }
+  mkdirSync(join(wtPath, ".gsd", "milestones", "M001"), { recursive: true });
+  writeFileSync(
+    join(wtPath, ".gsd", "milestones", "M001", "M001-ROADMAP.md"),
+    "# M001 Roadmap\n\nUnsaved planning work.\n",
+    "utf-8",
+  );
+
+  await runGSDDoctor(base, { fix: true, isolationMode: "worktree" });
+
+  assert.ok(
+    existsSync(join(wtPath, ".gsd", "milestones", "M001", "M001-ROADMAP.md")),
+    "uncommitted .gsd planning state must not be destroyed by the empty-worktree recreate",
+  );
 });

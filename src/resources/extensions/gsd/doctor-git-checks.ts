@@ -42,6 +42,22 @@ function isDoctorArtifactOnly(dirPath: string): boolean {
   }
 }
 
+/**
+ * True when the worktree holds `.gsd/` state a remove-and-recreate would
+ * destroy. `hasProjectContentOnDisk` deliberately ignores `.gsd` segments and
+ * `.gsd/` is gitignored, so neither it nor `git status` can see uncommitted
+ * planning work — this is a direct disk read (#11).
+ */
+function hasWorktreeGsdState(dirPath: string): boolean {
+  const gsdDir = join(dirPath, ".gsd");
+  if (!existsSync(gsdDir)) return false;
+  try {
+    return readdirSync(gsdDir).some(entry => entry !== "doctor-history.jsonl");
+  } catch {
+    return true;
+  }
+}
+
 function normalizePathForComparison(path: string): string {
   const resolved = existsSync(path) ? realpathSync(path) : path;
   const normalized = resolved
@@ -230,7 +246,11 @@ export async function checkGitHealth(
           fixable: true,
         });
 
-        if (shouldFix("worktree_empty_with_project_content")) {
+        if (shouldFix("worktree_empty_with_project_content") && hasWorktreeGsdState(wt.path)) {
+          fixesApplied.push(
+            `skipped recreating empty worktree ${wt.path} — it holds uncommitted .gsd/ state`,
+          );
+        } else if (shouldFix("worktree_empty_with_project_content")) {
           try {
             nativeWorktreeRemove(basePath, wt.path, true);
             const recreated = createWorktree(basePath, milestoneId, {
@@ -552,25 +572,29 @@ export async function checkGitHealth(
   // that is no longer registered with git. These orphaned dirs cause
   // "already exists" errors when re-creating the same worktree name.
   try {
-    for (const wtDir of allWorktreesDirs(basePath)) {
-      if (!existsSync(wtDir)) continue;
-      // Resolve symlinks and normalize separators so that symlinked .gsd
-      // paths (e.g. ~/.gsd/projects/<hash>/worktrees/…) match the paths
-      // returned by `git worktree list`.
-      const normalizePath = (p: string): string => {
-        try { p = realpathSync(p); } catch { /* path may not exist */ }
-        return p.replaceAll("\\", "/");
-      };
-      const registeredPaths = new Set(
-        nativeWorktreeList(basePath).map(entry => normalizePath(entry.path)),
-      );
-      for (const entry of readdirSync(wtDir)) {
-        const fullPath = join(wtDir, entry);
-        try {
-          if (!statSync(fullPath).isDirectory()) continue;
-        } catch { continue; }
-        const normalizedFullPath = normalizePath(fullPath);
-        if (!registeredPaths.has(normalizedFullPath)) {
+    // Resolve symlinks and normalize separators so that symlinked .gsd
+    // paths (e.g. ~/.gsd/projects/<hash>/worktrees/…) match the paths
+    // returned by `git worktree list`.
+    const normalizePath = (p: string): string => {
+      try { p = realpathSync(p); } catch { /* path may not exist */ }
+      return p.replaceAll("\\", "/");
+    };
+    const registeredPaths = new Set(
+      nativeWorktreeList(basePath).map(entry => normalizePath(entry.path)),
+    );
+    // A successful listing always contains the main worktree. An empty set
+    // means the query failed — the CLI fallback returns [] on any non-zero
+    // exit — and treating that as "nothing is registered" would rm -rf every
+    // worktree directory, dirty ones included (#11).
+    if (registeredPaths.size > 0) {
+      for (const wtDir of allWorktreesDirs(basePath)) {
+        if (!existsSync(wtDir)) continue;
+        for (const entry of readdirSync(wtDir)) {
+          const fullPath = join(wtDir, entry);
+          try {
+            if (!statSync(fullPath).isDirectory()) continue;
+          } catch { continue; }
+          if (registeredPaths.has(normalizePath(fullPath))) continue;
           // Skip directories that only contain doctor artifacts (.gsd/doctor-history.jsonl).
           // appendDoctorHistory() can recreate these dirs during the audit itself,
           // causing a circular false positive (#3105 Bug 1).
