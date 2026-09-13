@@ -572,7 +572,8 @@ test("executeTaskComplete writes the escalation artifact in the phase dir and su
     ).get("M001", "S01", "T01") as Record<string, unknown> | undefined;
     assert.equal(row?.escalation_pending, 0);
     assert.equal(row?.escalation_awaiting_review, 1);
-    const expectedArtifactPath = join(normalizeRealPath(planDir), "T01-ESCALATION.json");
+    // The phase dir is shared by every slice, so the name carries the slice id (#5).
+    const expectedArtifactPath = join(normalizeRealPath(planDir), "S01-T01-ESCALATION.json");
     assert.equal(row?.escalation_artifact_path, expectedArtifactPath);
     assert.equal(existsSync(expectedArtifactPath), true);
   } finally {
