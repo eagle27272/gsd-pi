@@ -7,6 +7,7 @@ import { minimatch } from "minimatch";
 import { GSD_PHASE_SCOPE_DISPLAY_REASON, shouldBlockAutoUnitToolCall } from "../auto-unit-tool-scope.js";
 import { canonicalToolName } from "../engine-hook-contract.js";
 import { loadJsonFileOrNull } from "../json-persistence.js";
+import { milestoneIdToPhaseNum } from "../layout-policy.js";
 import { getIsolationMode, loadEffectiveGSDPreferences } from "../preferences.js";
 import { compileSubagentPermissionContract, type ToolsPolicy } from "../unit-context-manifest.js";
 import {
@@ -21,13 +22,35 @@ import { bashReferencesProjectRootOutsideWorktree } from "../worktree-shell-guar
 import { evaluateGateAnswer } from "../consent-verdict.js";
 
 /**
- * Regex matching milestone CONTEXT.md file names in both legacy M001
- * and unique M001-abc123 formats. Exported so regex-hardening tests
- * can exercise the real pattern rather than a drift-prone inline
- * re-implementation (see #4835).
+ * Pre-flat-phase milestone CONTEXT file name: `M001-CONTEXT.md`,
+ * `M001-abc123-CONTEXT.md`.
  */
-export const MILESTONE_CONTEXT_RE = /M\d+(?:-[a-z0-9]{6})?-CONTEXT\.md$/;
-const CONTEXT_MILESTONE_RE = /(?:^|[/\\])(M\d+(?:-[a-z0-9]{6})?)-CONTEXT\.md$/i;
+const LEGACY_MILESTONE_CONTEXT_SOURCE = String.raw`(M\d+(?:-[a-z0-9]{6})?)-CONTEXT\.md`;
+
+/**
+ * Flat-phase milestone CONTEXT path: `phases/NN-slug/NN-CONTEXT.md`
+ * (see buildMilestoneFileName / canonicalPhaseDirName). The phase directory
+ * segment is required: it is what identifies the milestone — `NN` alone is the
+ * phase number — and requiring it keeps slice plan contexts
+ * (`NN-MM-CONTEXT.md`) and unrelated `<digits>-CONTEXT.md` files out of the
+ * milestone gate.
+ */
+const FLAT_PHASE_CONTEXT_SOURCE = String.raw`(?:^|[/\\])(\d+)-([^/\\]+)[/\\](\d+)-CONTEXT\.md`;
+
+/**
+ * Regex matching milestone CONTEXT.md paths in the flat-phase layout as well
+ * as the legacy M001 / unique M001-abc123 file names. Exported so
+ * regex-hardening tests can exercise the real pattern rather than a
+ * drift-prone inline re-implementation (see #4835).
+ */
+export const MILESTONE_CONTEXT_RE = new RegExp(
+  `(?:${LEGACY_MILESTONE_CONTEXT_SOURCE}|${FLAT_PHASE_CONTEXT_SOURCE})$`,
+);
+const CONTEXT_MILESTONE_RE = new RegExp(
+  String.raw`(?:^|[/\\])${LEGACY_MILESTONE_CONTEXT_SOURCE}$`,
+  "i",
+);
+const FLAT_PHASE_CONTEXT_RE = new RegExp(`${FLAT_PHASE_CONTEXT_SOURCE}$`);
 const DEPTH_VERIFICATION_MILESTONE_RE = /depth_verification[_-](M\d+(?:-[a-z0-9]{6})?)/i;
 
 function normalizeMilestoneId(milestoneId: string): string {
@@ -547,12 +570,53 @@ export function extractDepthVerificationMilestoneId(questionId: string): string 
   return match?.[1] ? normalizeMilestoneId(match[1]) : null;
 }
 
+/** Milestone id encoded directly in a phase directory slug: `01-m001`, `01-m001-abc123`. */
+const PHASE_SLUG_MILESTONE_ID_RE = /^m(\d{3})(?:-([a-z0-9]{6}))?$/i;
+/** Team-mode unique suffix leading a phase directory slug: `01-abc123-foundation`. */
+const PHASE_SLUG_TEAM_SUFFIX_RE = /^([a-z0-9]{6})(?:-|$)/;
+
 /**
- * Extract the milestone ID from a milestone CONTEXT file path.
+ * Milestone ids a flat-phase directory can stand for, most specific first.
+ *
+ * A phase directory is `NN-slug`, so the milestone id is only fully recoverable
+ * when the slug encodes it (`01-m001`). Otherwise the phase number maps back to
+ * the canonical `M<NNN>` id, and a leading 6-char slug segment is treated as a
+ * team-mode unique suffix — the same convention phaseDirMatchesMilestoneId uses.
+ * That heuristic cannot distinguish a real suffix from a 6-letter title slug
+ * ("design"), so the plain id is kept as a second candidate: a milestone the
+ * user has genuinely depth-verified must never stay blocked on a naming guess.
  */
-function extractContextMilestoneId(inputPath: string): string | null {
-  const match = inputPath.match(CONTEXT_MILESTONE_RE);
-  return match?.[1] ? normalizeMilestoneId(match[1]) : null;
+function phaseDirMilestoneIds(slug: string, phaseNum: number): string[] {
+  const encoded = slug.match(PHASE_SLUG_MILESTONE_ID_RE);
+  if (encoded) {
+    return [normalizeMilestoneId(`M${encoded[1]}${encoded[2] ? `-${encoded[2]}` : ""}`)];
+  }
+  const canonical = `M${String(phaseNum).padStart(3, "0")}`;
+  const teamSuffix = slug.match(PHASE_SLUG_TEAM_SUFFIX_RE);
+  return teamSuffix ? [`${canonical}-${teamSuffix[1]!.toLowerCase()}`, canonical] : [canonical];
+}
+
+/**
+ * Milestone ids a CONTEXT write could belong to, most specific first. Empty
+ * when the milestone cannot be determined at all (the gate then hard-blocks).
+ *
+ * Legacy paths name the milestone in the file name. Flat-phase paths do not, so
+ * the caller-supplied milestone id wins whenever it names the same phase — it
+ * is the DB id the depth gate was recorded under, including team suffixes and
+ * legacy numeric ids — and the phase directory is the fallback.
+ */
+function contextMilestoneCandidates(inputPath: string, milestoneId: string | null): string[] {
+  const legacy = inputPath.match(CONTEXT_MILESTONE_RE);
+  if (legacy?.[1]) return [normalizeMilestoneId(legacy[1])];
+
+  const callerId = milestoneId ? normalizeMilestoneId(milestoneId) : null;
+  const flat = inputPath.match(FLAT_PHASE_CONTEXT_RE);
+  if (!flat) return callerId ? [callerId] : [];
+
+  const phaseNum = Number.parseInt(flat[3]!, 10);
+  const candidates = callerId && milestoneIdToPhaseNum(callerId) === phaseNum ? [callerId] : [];
+  candidates.push(...phaseDirMilestoneIds(flat[2]!, phaseNum));
+  return [...new Set(candidates)];
 }
 
 /**
@@ -993,7 +1057,8 @@ export function shouldBlockContextWrite(
   if (toolName !== "write") return { block: false };
   if (!MILESTONE_CONTEXT_RE.test(inputPath)) return { block: false };
 
-  const targetMilestoneId = extractContextMilestoneId(inputPath) ?? (milestoneId ? normalizeMilestoneId(milestoneId) : null);
+  const candidates = contextMilestoneCandidates(inputPath, milestoneId);
+  const targetMilestoneId = candidates[0] ?? null;
   if (!targetMilestoneId) {
     return {
       block: true,
@@ -1005,7 +1070,8 @@ export function shouldBlockContextWrite(
     };
   }
 
-  if (isMilestoneDepthVerified(targetMilestoneId, basePath)) return { block: false };
+  const snapshot = refreshWriteGateStateFromDisk(basePath);
+  if (candidates.some((id) => isMilestoneDepthVerifiedInSnapshot(snapshot, id))) return { block: false };
 
   return {
     block: true,

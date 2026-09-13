@@ -11,22 +11,31 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { deriveState } from "./state.js";
-import { gsdRoot, resolveSliceFile } from "./paths.js";
+import { resolveMilestonePath, resolveSliceFile } from "./paths.js";
+import { milestoneIdToPhaseNum } from "./layout-policy.js";
 import { loadPrompt } from "./prompt-loader.js";
 
-function findLastCompletedSlice(basePath: string, milestoneId: string): string | null {
-  // Scan disk for slices that have a SUMMARY.md (indicating completion)
-  const slicesDir = join(gsdRoot(basePath), "milestones", milestoneId, "slices");
-  if (!existsSync(slicesDir)) return null;
+export function findLastCompletedSlice(basePath: string, milestoneId: string): string | null {
+  const phaseDir = resolveMilestonePath(basePath, milestoneId);
+  if (!phaseDir) return null;
+
+  // Slice SUMMARY projections are NN-MM-SUMMARY.md in the phase dir. The
+  // NN- prefix keeps the milestone-level NN-SUMMARY.md and the per-task
+  // S##-T##-SUMMARY.md files out of the candidate set.
+  const phasePad = String(milestoneIdToPhaseNum(milestoneId)).padStart(2, "0");
+  const sliceSummary = new RegExp(`^${phasePad}-(\\d+)-SUMMARY\\.md$`, "i");
 
   try {
-    const entries = readdirSync(slicesDir, { withFileTypes: true })
-      .filter((e) => e.isDirectory() && /^S\d+$/.test(e.name))
-      .sort((a, b) => b.name.localeCompare(a.name)); // reverse order — latest first
+    const planNums = readdirSync(phaseDir, { withFileTypes: true })
+      .filter((e) => e.isFile())
+      .map((e) => sliceSummary.exec(e.name)?.[1])
+      .filter((num): num is string => num !== undefined)
+      .map((num) => Number.parseInt(num, 10))
+      .sort((a, b) => b - a); // latest slice first
 
-    for (const entry of entries) {
-      const summaryPath = join(slicesDir, entry.name, `${entry.name}-SUMMARY.md`);
-      if (existsSync(summaryPath)) return entry.name;
+    for (const planNum of planNums) {
+      const sliceId = `S${String(planNum).padStart(2, "0")}`;
+      if (resolveSliceFile(basePath, milestoneId, sliceId, "SUMMARY")) return sliceId;
     }
   } catch {
     // non-fatal

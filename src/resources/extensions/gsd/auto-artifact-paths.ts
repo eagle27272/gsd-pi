@@ -75,11 +75,16 @@ function resolveMilestoneArtifactPath(
 /**
  * On-disk evidence that `gsd_reassess_roadmap` ran for `mid`.
  *
- * That tool writes exactly one file — the milestone-scoped
- * `<NN>-ROADMAP-ASSESSMENT.md` (resolveRoadmapAssessmentProjectionPath). The
- * slice-scoped `<NN>-<MM>-ASSESSMENT.md` belongs to run-uat and the
- * phase-level `<NN>-ASSESSMENT.md` to milestone assessment; counting either
- * would wave a still-unreassessed milestone through the validation gate.
+ * Shared by the auto-mode post-unit gate and the verification gate — keeping
+ * one copy is what keeps both on the flat-phase layout (#53 follow-up).
+ *
+ * The tool writes exactly one file: the milestone-scoped
+ * `<NN>-ROADMAP-ASSESSMENT.md` (reassess-roadmap.ts renders only ROADMAP and
+ * ROADMAP-ASSESSMENT). A reassessment adds *slices*, but never their
+ * `<NN>-<MM>-ASSESSMENT.md` files — those are run-uat's output. Matching them
+ * would let a UAT assessment forge proof that a reassessment happened and wave
+ * a still-unreassessed milestone through the validation gate, so this is a
+ * single exact lookup rather than a phase-dir scan.
  */
 export function hasRoadmapReassessmentArtifact(base: string, mid: string): boolean {
   const suffix = "ROADMAP-ASSESSMENT";
