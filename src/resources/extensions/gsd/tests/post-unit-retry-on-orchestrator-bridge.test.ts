@@ -188,7 +188,7 @@ function seedPersistedTaskRetry(
 test("post-unit retry_on marks trigger unit as retry in orchestrator before redispatch", async () => {
   const originalCwd = process.cwd();
   const base = mkdtempSync(join(tmpdir(), "gsd-post-unit-retry-"));
-  const taskDir = join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks");
+  const taskDir = join(base, ".gsd", "phases", "01-m001", "tasks");
   mkdirSync(taskDir, { recursive: true });
 
   try {
@@ -236,7 +236,7 @@ test("post-unit retry_on marks trigger unit as retry in orchestrator before redi
 test("hook retry keeps its trigger and orchestration unchanged when canonical reopen fails", async () => {
   const originalCwd = process.cwd();
   const base = mkdtempSync(join(tmpdir(), "gsd-post-unit-retry-reopen-failure-"));
-  const taskDir = join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks");
+  const taskDir = join(base, ".gsd", "phases", "01-m001", "tasks");
   mkdirSync(taskDir, { recursive: true });
 
   try {
@@ -275,7 +275,7 @@ test("hook retry keeps its trigger and orchestration unchanged when canonical re
 test("hook retry replays after a lost orchestration response when the Task is already ready", async () => {
   const originalCwd = process.cwd();
   const base = mkdtempSync(join(tmpdir(), "gsd-post-unit-retry-lost-response-"));
-  const taskDir = join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks");
+  const taskDir = join(base, ".gsd", "phases", "01-m001", "tasks");
   mkdirSync(taskDir, { recursive: true });
 
   try {
@@ -331,7 +331,7 @@ test("hook retry replays after a lost orchestration response when the Task is al
 test("hook retry cannot reopen a newer Task completion", async () => {
   const originalCwd = process.cwd();
   const base = mkdtempSync(join(tmpdir(), "gsd-post-unit-retry-stale-completion-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), {
+  mkdirSync(join(base, ".gsd", "phases", "01-m001", "tasks"), {
     recursive: true,
   });
 
@@ -553,7 +553,7 @@ test("execute-task hook capture failure leaves registry state untouched", () => 
 test("hook retry persistence failure preserves the retry across restart", async () => {
   const originalCwd = process.cwd();
   const base = mkdtempSync(join(tmpdir(), "gsd-post-unit-retry-persist-failure-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), {
+  mkdirSync(join(base, ".gsd", "phases", "01-m001", "tasks"), {
     recursive: true,
   });
   const hookStatePath = join(base, ".gsd", "hook-state.json");
@@ -616,7 +616,7 @@ test("hook retry persistence failure preserves the retry across restart", async 
 test("failed post-unit hook pauses auto-mode even when its artifact exists", async () => {
   const originalCwd = process.cwd();
   const base = mkdtempSync(join(tmpdir(), "gsd-post-unit-hook-failed-"));
-  const taskDir = join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks");
+  const taskDir = join(base, ".gsd", "phases", "01-m001", "tasks");
   mkdirSync(taskDir, { recursive: true });
 
   try {
@@ -694,7 +694,7 @@ test("failed post-unit hook pauses auto-mode even when its artifact exists", asy
 test("post-unit blocking gate pauses auto-mode on needs-attention verdict", async () => {
   const originalCwd = process.cwd();
   const base = mkdtempSync(join(tmpdir(), "gsd-post-unit-gate-"));
-  const taskDir = join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks");
+  const taskDir = join(base, ".gsd", "phases", "01-m001", "tasks");
   mkdirSync(taskDir, { recursive: true });
 
   try {

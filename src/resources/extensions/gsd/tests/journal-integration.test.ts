@@ -721,7 +721,7 @@ test("terminal event is emitted on blocked state", async () => {
 
 test("#4671: plan-v2 missing CONTEXT.md reaches dispatch recovery instead of pausing", async () => {
   const basePath = makeTestBase("gsd-4671-predispatch-");
-  mkdirSync(join(basePath, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+  mkdirSync(join(basePath, ".gsd", "phases", "01-m001", "tasks"), { recursive: true });
   openDatabase(join(basePath, ".gsd", "gsd.db"));
   try {
     insertMilestone({ id: "M001", title: "Test", status: "active" });
@@ -776,9 +776,9 @@ test("#4671: plan-v2 missing CONTEXT.md reaches dispatch recovery instead of pau
 
 test("plan-v2 empty graph rederives state before pausing", async () => {
   const basePath = makeTestBase("gsd-plan-v2-empty-graph-");
-  mkdirSync(join(basePath, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(basePath, ".gsd", "phases", "01-m001"), { recursive: true });
   writeFileSync(
-    join(basePath, ".gsd", "milestones", "M001", "M001-CONTEXT.md"),
+    join(basePath, ".gsd", "phases", "01-m001", "01-CONTEXT.md"),
     "# M001: Test\n\nFinalized context.\n",
   );
   openDatabase(join(basePath, ".gsd", "gsd.db"));
@@ -837,9 +837,9 @@ test("plan-v2 empty graph rederives state before pausing", async () => {
 
 test("plan-v2 empty graph pauses after one failed rederive", async () => {
   const basePath = makeTestBase("gsd-plan-v2-empty-graph-pause-");
-  mkdirSync(join(basePath, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(basePath, ".gsd", "phases", "01-m001"), { recursive: true });
   writeFileSync(
-    join(basePath, ".gsd", "milestones", "M001", "M001-CONTEXT.md"),
+    join(basePath, ".gsd", "phases", "01-m001", "01-CONTEXT.md"),
     "# M001: Test\n\nFinalized context.\n",
   );
   openDatabase(join(basePath, ".gsd", "gsd.db"));

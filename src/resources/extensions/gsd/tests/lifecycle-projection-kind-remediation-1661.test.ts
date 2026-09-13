@@ -11,7 +11,6 @@ import { afterEach, test } from "node:test";
 import type { DbAdapter } from "../db-adapter.ts";
 import { checkLifecycleProjectionKinds } from "../doctor-engine-checks.ts";
 import type { DoctorIssue } from "../doctor-types.ts";
-import { legacyImportProjectionKind } from "../legacy-import-application-plan.ts";
 import {
   MARKDOWN_PROJECTION_KIND,
   MILESTONE_LIFECYCLE_PROJECTION_KIND,
@@ -91,9 +90,7 @@ function projectionChain(): Array<Record<string, unknown>> {
   `).all() as Array<Record<string, unknown>>;
 }
 
-test("projection-identity is the single kind authority and the import mapping delegates to it (#1661)", () => {
-  // legacyImportProjectionKind IS canonicalProjectionKind — a re-export, not a copy.
-  assert.equal(legacyImportProjectionKind, canonicalProjectionKind);
+test("projection-identity is the single kind authority (#1661)", () => {
   assert.equal(canonicalProjectionKind("lifecycle/m001"), MILESTONE_LIFECYCLE_PROJECTION_KIND);
   assert.equal(canonicalProjectionKind("lifecycle/m001/s01"), SLICE_LIFECYCLE_PROJECTION_KIND);
   assert.equal(canonicalProjectionKind("lifecycle/m001/s01/t01"), TASK_LIFECYCLE_PROJECTION_KIND);

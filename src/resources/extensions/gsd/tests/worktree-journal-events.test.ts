@@ -85,6 +85,7 @@ type LegacyTestDeps = WorktreeLifecycleDeps & {
 };
 import { AutoSession } from "../auto/session.js";
 import type { JournalEntry } from "../journal.js";
+import { canonicalPhaseDirName, milestoneIdToPhaseNum } from "../layout-policy.ts";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -149,9 +150,9 @@ function setupMergeWorktree(basePath: string, milestoneId: string): string {
   execFileSync("git", ["checkout", "main"], { cwd: basePath, stdio: "pipe" });
   const wt = join(basePath, ".gsd", "worktrees", milestoneId);
   execFileSync("git", ["worktree", "add", wt, `milestone/${milestoneId}`], { cwd: basePath, stdio: "pipe" });
-  mkdirSync(join(basePath, ".gsd", "milestones", milestoneId), { recursive: true });
+  mkdirSync(join(basePath, ".gsd", "phases", canonicalPhaseDirName(milestoneId)), { recursive: true });
   writeFileSync(
-    join(basePath, ".gsd", "milestones", milestoneId, `${milestoneId}-ROADMAP.md`),
+    join(basePath, ".gsd", "phases", canonicalPhaseDirName(milestoneId), `${String(milestoneIdToPhaseNum(milestoneId)).padStart(2, "0")}-ROADMAP.md`),
     `# ${milestoneId}\n- [x] S01: Slice one\n`,
   );
   return wt;
@@ -275,9 +276,9 @@ describe("worktree journal events", () => {
     execFileSync("git", ["checkout", "main"], { cwd: tmp, stdio: "pipe" });
     const wt = join(tmp, ".gsd", "worktrees", "M001");
     execFileSync("git", ["worktree", "add", wt, "milestone/M001"], { cwd: tmp, stdio: "pipe" });
-    mkdirSync(join(tmp, ".gsd", "milestones", "M001"), { recursive: true });
+    mkdirSync(join(tmp, ".gsd", "phases", "01-m001"), { recursive: true });
     writeFileSync(
-      join(tmp, ".gsd", "milestones", "M001", "M001-ROADMAP.md"),
+      join(tmp, ".gsd", "phases", "01-m001", "01-ROADMAP.md"),
       "# M001\n- [x] S01: Slice one\n",
     );
 

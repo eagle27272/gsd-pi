@@ -413,8 +413,8 @@ export function parseProjectionRoadmap(content: string): Roadmap {
 /**
  * ADR-011: the roadmap renderer writes a `[sketch]` badge for sketch slices,
  * but the native parser does not surface it. Re-scan the markdown and set
- * isSketch on the matching slice so the flag survives a markdown → DB re-import
- * (e.g. /gsd recover) instead of being silently dropped.
+ * isSketch on the matching slice so the flag survives a markdown → DB re-read
+ * instead of being silently dropped.
  */
 function applySketchFlags(roadmap: Roadmap, content: string): void {
   const sketchIds = new Set<string>();

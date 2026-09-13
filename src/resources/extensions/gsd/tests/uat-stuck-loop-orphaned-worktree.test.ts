@@ -51,7 +51,7 @@ function makeBaseRepo(): string {
   git(["config", "user.name", "Test"], base);
   git(["config", "user.email", "test@test.com"], base);
   writeFileSync(join(base, "README.md"), "# test\n");
-  mkdirSync(join(base, ".gsd", "milestones", "M011"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "11-m011"), { recursive: true });
   git(["add", "."], base);
   git(["commit", "-m", "init"], base);
   return base;
@@ -66,10 +66,10 @@ describe("#2821 Bug 1 — ASSESSMENT file force-synced on resume", () => {
   beforeEach(() => {
     mainBase = mkdtempSync(join(tmpdir(), "gsd-pi-2821-main-"));
     wtBase = mkdtempSync(join(tmpdir(), "gsd-pi-2821-wt-"));
-    mkdirSync(join(mainBase, ".gsd", "milestones", "M011", "slices", "S01"), {
+    mkdirSync(join(mainBase, ".gsd", "phases", "11-m011"), {
       recursive: true,
     });
-    mkdirSync(join(wtBase, ".gsd", "milestones", "M011", "slices", "S01"), {
+    mkdirSync(join(wtBase, ".gsd", "phases", "11-m011"), {
       recursive: true,
     });
   });
@@ -84,11 +84,9 @@ describe("#2821 Bug 1 — ASSESSMENT file force-synced on resume", () => {
     const prAssessment = join(
       mainBase,
       ".gsd",
-      "milestones",
-      "M011",
-      "slices",
-      "S01",
-      "S01-ASSESSMENT.md",
+      "phases",
+      "11-m011",
+      "11-01-ASSESSMENT.md",
     );
     writeFileSync(
       prAssessment,
@@ -99,11 +97,9 @@ describe("#2821 Bug 1 — ASSESSMENT file force-synced on resume", () => {
     const wtAssessment = join(
       wtBase,
       ".gsd",
-      "milestones",
-      "M011",
-      "slices",
-      "S01",
-      "S01-ASSESSMENT.md",
+      "phases",
+      "11-m011",
+      "11-01-ASSESSMENT.md",
     );
     writeFileSync(
       wtAssessment,
@@ -125,11 +121,9 @@ describe("#2821 Bug 1 — ASSESSMENT file force-synced on resume", () => {
     const prAssessment = join(
       mainBase,
       ".gsd",
-      "milestones",
-      "M011",
-      "slices",
-      "S01",
-      "S01-ASSESSMENT.md",
+      "phases",
+      "11-m011",
+      "11-01-ASSESSMENT.md",
     );
     writeFileSync(
       prAssessment,
@@ -144,11 +138,9 @@ describe("#2821 Bug 1 — ASSESSMENT file force-synced on resume", () => {
     const wtAssessment = join(
       wtBase,
       ".gsd",
-      "milestones",
-      "M011",
-      "slices",
-      "S01",
-      "S01-ASSESSMENT.md",
+      "phases",
+      "11-m011",
+      "11-01-ASSESSMENT.md",
     );
     assert.ok(
       existsSync(wtAssessment),
@@ -166,11 +158,9 @@ describe("#2821 Bug 1 — ASSESSMENT file force-synced on resume", () => {
     const prAssessment = join(
       mainBase,
       ".gsd",
-      "milestones",
-      "M011",
-      "slices",
-      "S01",
-      "S01-ASSESSMENT.md",
+      "phases",
+      "11-m011",
+      "11-01-ASSESSMENT.md",
     );
     writeFileSync(prAssessment, "# S01 Assessment\nIn progress...\n");
 
@@ -178,11 +168,9 @@ describe("#2821 Bug 1 — ASSESSMENT file force-synced on resume", () => {
     const wtAssessment = join(
       wtBase,
       ".gsd",
-      "milestones",
-      "M011",
-      "slices",
-      "S01",
-      "S01-ASSESSMENT.md",
+      "phases",
+      "11-m011",
+      "11-01-ASSESSMENT.md",
     );
     writeFileSync(
       wtAssessment,
@@ -220,18 +208,16 @@ describe("#2821 Bug 2 — removeWorktree cleans up despite untracked files", () 
 
     // Simulate run-uat writing untracked files (S01-UAT-RESULT.md, ASSESSMENT)
     mkdirSync(
-      join(info.path, ".gsd", "milestones", "M011", "slices", "S01"),
+      join(info.path, ".gsd", "phases", "11-m011"),
       { recursive: true },
     );
     writeFileSync(
       join(
         info.path,
         ".gsd",
-        "milestones",
-        "M011",
-        "slices",
-        "S01",
-        "S01-UAT-RESULT.md",
+        "phases",
+        "11-m011",
+        "11-01-UAT-RESULT.md",
       ),
       "# UAT Result\nverdict: fail\n",
     );
@@ -239,11 +225,9 @@ describe("#2821 Bug 2 — removeWorktree cleans up despite untracked files", () 
       join(
         info.path,
         ".gsd",
-        "milestones",
-        "M011",
-        "slices",
-        "S01",
-        "S01-ASSESSMENT.md",
+        "phases",
+        "11-m011",
+        "11-01-ASSESSMENT.md",
       ),
       "---\nverdict: fail\n---\n# Assessment\n",
     );

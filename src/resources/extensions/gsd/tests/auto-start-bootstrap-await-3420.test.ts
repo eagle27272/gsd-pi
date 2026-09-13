@@ -29,7 +29,7 @@ test("checkAutoStartAfterDiscuss waits until discussion artifacts exist before r
   const notifications: string[] = [];
   openDatabase(":memory:");
   t.after(() => rmSync(base, { recursive: true, force: true }));
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
   setPendingAutoStart(base, {
     basePath: base,
     milestoneId: "M001",
@@ -41,7 +41,7 @@ test("checkAutoStartAfterDiscuss waits until discussion artifacts exist before r
   assert.equal(checkAutoStartAfterDiscuss(), false);
   assert.deepEqual(notifications, []);
 
-  writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md"), "# Context\n", "utf-8");
+  writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-CONTEXT.md"), "# Context\n", "utf-8");
   writeFileSync(join(base, ".gsd", "STATE.md"), "# State\n", "utf-8");
 
   assert.equal(checkAutoStartAfterDiscuss(), true);

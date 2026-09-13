@@ -30,7 +30,7 @@ import {
 function makeBase(prefix = "gsd-blocker-logs-"): string {
   const base = mkdtempSync(join(tmpdir(), prefix));
   // Slice projection dirs so the placeholder path resolves.
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001", "tasks"), { recursive: true });
   return base;
 }
 
@@ -147,7 +147,7 @@ test("writeBlockerPlaceholder never appends Slice lifecycle events", () => {
 
 test("writeBlockerPlaceholder never appends plan-milestone lifecycle events", () => {
   const base = mkdtempSync(join(tmpdir(), "gsd-blocker-logs-pm-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
   try {
     openDatabase(join(base, ".gsd", "gsd.db"));
     insertMilestone({ id: "M001", title: "M", status: "active" });
@@ -171,7 +171,7 @@ test("writeBlockerPlaceholder never appends plan-milestone lifecycle events", ()
 
 test("writeReactiveExecuteBlocker does not append lifecycle events from SUMMARY projections", () => {
   const base = mkdtempSync(join(tmpdir(), "gsd-blocker-logs-reactive-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001", "tasks"), { recursive: true });
   try {
     openDatabase(join(base, ".gsd", "gsd.db"));
     insertMilestone({ id: "M001", title: "M", status: "active" });
@@ -180,7 +180,7 @@ test("writeReactiveExecuteBlocker does not append lifecycle events from SUMMARY 
     insertTask({ id: "T02", sliceId: "S01", milestoneId: "M001", title: "T2", status: "active" });
     // T01 has a SUMMARY projection and T02 does not. Neither projection may
     // change canonical Task state or drive a workflow event.
-    writeFileSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T01-SUMMARY.md"), "# T01\n", "utf-8");
+    writeFileSync(join(base, ".gsd", "phases", "01-m001", "S01-T01-SUMMARY.md"), "# T01\n", "utf-8");
     // If the diagnostic still tries to append a lifecycle event, this path
     // forces the append to fail and emit a recovery warning.
     mkdirSync(join(base, ".gsd", "event-log.jsonl"), { recursive: true });

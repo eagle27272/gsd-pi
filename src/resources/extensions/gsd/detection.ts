@@ -13,6 +13,7 @@ import { homedir } from "node:os";
 import { gsdRoot } from "./paths.js";
 import { gsdHome } from "./gsd-home.js";
 import { detectPackageManager, buildScriptCommand } from "./package-manager.js";
+import { LAYOUT_SEGMENTS } from "./layout-policy.js";
 
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
@@ -391,11 +392,12 @@ function detectV2Gsd(basePath: string): V2Detection | null {
 
   const hasContext = existsSync(join(gsdPath, "CONTEXT.md"));
 
+  // A milestone is one flat-phase directory under .gsd/phases/.
   let milestoneCount = 0;
-  const milestonesPath = join(gsdPath, "milestones");
-  if (existsSync(milestonesPath)) {
+  const phasesPath = join(gsdPath, LAYOUT_SEGMENTS.level1);
+  if (existsSync(phasesPath)) {
     try {
-      const entries = readdirSync(milestonesPath, { withFileTypes: true });
+      const entries = readdirSync(phasesPath, { withFileTypes: true });
       milestoneCount = entries.filter(e => e.isDirectory()).length;
     } catch {
       // unreadable — report 0
@@ -1275,7 +1277,8 @@ export function hasProjectFileInAncestor(
 
 /**
  * Check whether a project's `.gsd/` directory contains the bootstrap artifacts
- * (`PREFERENCES.md` or `milestones/`) that indicate a completed init run.
+ * (`PREFERENCES.md` or the flat-phase `phases/` root) that indicate a
+ * completed init run.
  *
  * A zombie `.gsd/` state — symlink exists but neither artifact is present —
  * must be treated as "needs init wizard". The previous guard checked only
@@ -1293,7 +1296,7 @@ export function hasGsdBootstrapArtifacts(
     existsFn(gsdPath) &&
     (existsFn(join(gsdPath, "PREFERENCES.md")) ||
       existsFn(join(gsdPath, "preferences.md")) ||
-      existsFn(join(gsdPath, "milestones")))
+      existsFn(join(gsdPath, LAYOUT_SEGMENTS.level1)))
   );
 }
 

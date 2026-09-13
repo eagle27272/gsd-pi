@@ -27,21 +27,22 @@ import {
   _resetLogs,
   type LogEntry,
 } from "../workflow-logger.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 function createFixtureBase(prefix = "gsd-recovery-logs-"): string {
   const base = mkdtempSync(join(tmpdir(), prefix));
-  mkdirSync(join(base, ".gsd", "milestones"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases"), { recursive: true });
   return base;
 }
 
 function milestoneDir(base: string, mid: string): string {
-  const dir = join(base, ".gsd", "milestones", mid);
+  const dir = join(base, ".gsd", "phases", canonicalPhaseDirName(mid));
   mkdirSync(dir, { recursive: true });
   return dir;
 }
 
 function sliceDir(base: string, mid: string, sid: string): string {
-  const dir = join(base, ".gsd", "milestones", mid, "slices", sid);
+  const dir = join(base, ".gsd", "phases", canonicalPhaseDirName(mid));
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -81,7 +82,7 @@ test("plan-milestone verify-fail logs a recovery warning naming the zero-slice r
   const base = createFixtureBase();
   try {
     const dir = milestoneDir(base, "M001");
-    writeFileSync(join(dir, "M001-ROADMAP.md"), "# M001: Stub\n\n## Slices\n\n_TBD_\n", "utf-8");
+    writeFileSync(join(dir, "01-ROADMAP.md"), "# M001: Stub\n\n## Slices\n\n_TBD_\n", "utf-8");
 
     const { result, logs } = verifyAndCaptureLogs("plan-milestone", "M001", base);
 
@@ -100,7 +101,7 @@ test("run-uat verify-fail logs a recovery warning when the assessment has no ver
   try {
     const dir = sliceDir(base, "M001", "S01");
     // No `verdict:` frontmatter → hasVerdict() returns false → warning fires.
-    writeFileSync(join(dir, "S01-ASSESSMENT.md"), "# UAT\n\nNo verdict yet.\n", "utf-8");
+    writeFileSync(join(dir, "01-01-ASSESSMENT.md"), "# UAT\n\nNo verdict yet.\n", "utf-8");
 
     const { result, logs } = verifyAndCaptureLogs("run-uat", "M001/S01", base);
 
@@ -119,7 +120,7 @@ test("validate-milestone verify-fail logs a recovery warning when the validation
   try {
     const dir = milestoneDir(base, "M001");
     // No `verdict:` → isValidationTerminal() returns false → warning fires.
-    writeFileSync(join(dir, "M001-VALIDATION.md"), "# Validation\n\nStill in progress.\n", "utf-8");
+    writeFileSync(join(dir, "01-VALIDATION.md"), "# Validation\n\nStill in progress.\n", "utf-8");
 
     const { result, logs } = verifyAndCaptureLogs("validate-milestone", "M001", base);
 
@@ -158,7 +159,7 @@ test("a passing verification produces no recovery warnings", () => {
   try {
     const dir = milestoneDir(base, "M001");
     writeFileSync(
-      join(dir, "M001-ROADMAP.md"),
+      join(dir, "01-ROADMAP.md"),
       ["# M001: Real roadmap", "", "## Slices", "", "- [ ] **S01: First slice** `risk:low` `depends:[]`", ""].join("\n"),
       "utf-8",
     );
@@ -186,7 +187,7 @@ test("plan-slice verify-fail logs a recovery warning when the plan has no task e
   try {
     const dir = sliceDir(base, "M001", "S01");
     // A PLAN with neither a `- [ ] **T0x:**` checkbox nor a `## T0x --` heading.
-    writeFileSync(join(dir, "S01-PLAN.md"), "# S01: Stub\n\n## Tasks\n\n_TBD_\n", "utf-8");
+    writeFileSync(join(dir, "01-01-PLAN.md"), "# S01: Stub\n\n## Tasks\n\n_TBD_\n", "utf-8");
 
     const { result, logs } = verifyAndCaptureLogs("plan-slice", "M001/S01", base);
 
@@ -202,37 +203,12 @@ test("plan-slice verify-fail logs a recovery warning when the plan has no task e
   }
 });
 
-test("plan-slice verify-fail logs a recovery warning when the tasks dir is missing", () => {
-  const base = createFixtureBase("gsd-recovery-logs-tasksdir-");
-  try {
-    const dir = sliceDir(base, "M001", "S01");
-    // Valid checkbox task, but we deliberately do NOT create the tasks/ dir.
-    writeFileSync(
-      join(dir, "S01-PLAN.md"),
-      "# S01: Has task\n\n## Tasks\n\n- [ ] **T01: A** `est:15m`\n",
-      "utf-8",
-    );
-
-    const { result, logs } = verifyAndCaptureLogs("plan-slice", "M001/S01", base);
-
-    assert.equal(result, false, "a plan without its tasks dir must fail verification");
-    const recovery = findRecovery(logs);
-    assert.ok(recovery, "a recovery warning must be logged");
-    assert.match(
-      recovery!.message,
-      /verify-fail plan-slice M001\/S01: tasks dir missing/u,
-    );
-  } finally {
-    rmSync(base, { recursive: true, force: true });
-  }
-});
-
 test("plan-slice verify-fail logs a recovery warning when an individual task artifact is missing", () => {
   const base = createFixtureBase("gsd-recovery-logs-taskplan-");
   try {
     const dir = sliceDir(base, "M001", "S01");
     writeFileSync(
-      join(dir, "S01-PLAN.md"),
+      join(dir, "01-01-PLAN.md"),
       "# S01: Has task\n\n## Tasks\n\n- [ ] **T01: A** `est:15m`\n",
       "utf-8",
     );
@@ -284,7 +260,7 @@ test("parallel-research verify-fail logs a recovery warning when a research-read
     // The roadmap projection must exist so verification passes the
     // roadmap-missing guard; slice state itself comes from the DB (ADR-017).
     writeFileSync(
-      join(dir, "M001-ROADMAP.md"),
+      join(dir, "01-ROADMAP.md"),
       ["# M001: Roadmap", "", "## Slices", "", "- [ ] **S01: First** `risk:low` `depends:[]`", ""].join("\n"),
       "utf-8",
     );
@@ -364,7 +340,7 @@ test("plan-milestone verify logs a recovery warning when the roadmap parser thro
   try {
     const dir = milestoneDir(base, "M001");
     // A real ROADMAP file must exist so verification reaches the parser.
-    writeFileSync(join(dir, "M001-ROADMAP.md"), "# M001: x\n\n## Slices\n\n- [ ] **S01: A**\n", "utf-8");
+    writeFileSync(join(dir, "01-ROADMAP.md"), "# M001: x\n\n## Slices\n\n- [ ] **S01: A**\n", "utf-8");
 
     const { result, logs } = verifyAndCaptureLogs("plan-milestone", "M001", base);
 
@@ -386,12 +362,12 @@ test("complete-slice verify fails closed and logs a recovery warning when the DB
     // complete-slice verification: SUMMARY + UAT present, but this fixture base
     // carries no gsd.db, so the slice row cannot be read. Slice completion is
     // DB-authoritative (ADR-017) — the artifacts alone must NOT verify.
-    writeFileSync(join(dir, "S01-SUMMARY.md"), "# S01 done\n", "utf-8");
+    writeFileSync(join(dir, "01-01-SUMMARY.md"), "# S01 done\n", "utf-8");
     // UAT file required so the complete-slice guard does not return false
     // before reaching the DB read.
-    writeFileSync(join(dir, "S01-UAT.md"), "# UAT\n", "utf-8");
+    writeFileSync(join(dir, "01-01-UAT.md"), "# UAT\n", "utf-8");
     // A roadmap projection marking S01 not-done must not be consulted at all.
-    writeFileSync(join(base, ".gsd", "milestones", "M001", "ROADMAP.md"), "# M001\n\n## Slices\n\n- [ ] **S01: A**\n", "utf-8");
+    writeFileSync(join(milestoneDir(base, "M001"), "01-ROADMAP.md"), "# M001\n\n## Slices\n\n- [ ] **S01: A**\n", "utf-8");
 
     const { result, logs } = verifyAndCaptureLogs("complete-slice", "M001/S01", base);
 
@@ -413,7 +389,7 @@ test("parallel-research verify fails closed and logs a recovery warning when the
     // fixture base carries no gsd.db. Slice state is DB-authoritative
     // (ADR-017): an empty slice list must not read as "every slice researched".
     writeFileSync(
-      join(dir, "M001-ROADMAP.md"),
+      join(dir, "01-ROADMAP.md"),
       ["# M001: Roadmap", "", "## Slices", "", "- [ ] **S01: First** `risk:low` `depends:[]`", ""].join("\n"),
       "utf-8",
     );
@@ -434,17 +410,16 @@ test("execute-task verify fails closed and logs a recovery warning when the DB i
   const base = createFixtureBase("gsd-recovery-logs-et-nodb-");
   try {
     const dir = sliceDir(base, "M001", "S01");
-    mkdirSync(join(dir, "tasks"), { recursive: true });
     // A PLAN projection that ticks T01 as done, plus the task SUMMARY the
     // generic artifact check looks for. Task completion is DB-authoritative
     // (ADR-017): with no gsd.db under this fixture base, a `- [x] **T01:`
     // checkbox must NOT be accepted as proof of completion.
     writeFileSync(
-      join(dir, "S01-PLAN.md"),
+      join(dir, "01-01-PLAN.md"),
       "# S01: Test Slice\n\n## Tasks\n\n- [x] **T01: Implement feature** `est:15m`\n",
       "utf-8",
     );
-    writeFileSync(join(dir, "tasks", "T01-SUMMARY.md"), "# T01 Summary\n\nDone.\n", "utf-8");
+    writeFileSync(join(dir, "S01-T01-SUMMARY.md"), "# T01 Summary\n\nDone.\n", "utf-8");
 
     const { result, logs } = verifyAndCaptureLogs("execute-task", "M001/S01/T01", base);
 
@@ -467,7 +442,7 @@ test("complete-milestone verify fails closed and logs a recovery warning when th
     // proveMilestoneCloseout cannot clear the closeout consistency gate.
     // Milestone closeout is DB-authoritative (ADR-017): SUMMARY content must
     // never rescue a failed closeout proof into a verify-pass.
-    writeFileSync(join(dir, "M001-SUMMARY.md"), "# M001: Milestone Summary\n\nDone.\n", "utf-8");
+    writeFileSync(join(dir, "01-SUMMARY.md"), "# M001: Milestone Summary\n\nDone.\n", "utf-8");
 
     const { result, logs } = verifyAndCaptureLogs("complete-milestone", "M001", base);
 

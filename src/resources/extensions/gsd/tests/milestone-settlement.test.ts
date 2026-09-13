@@ -48,14 +48,14 @@ function seedClosedMilestone(root: string, worktree: string): void {
     verificationResult: "passed",
   });
   insertAssessment({
-    path: ".gsd/milestones/M001/M001-VALIDATION.md",
+    path: ".gsd/phases/01-m001/01-VALIDATION.md",
     milestoneId: "M001",
     status: "pass",
     scope: "milestone-validation",
     fullContent: "verdict: pass\n",
   });
 
-  const worktreeMilestoneDir = join(worktree, ".gsd", "milestones", "M001");
+  const worktreeMilestoneDir = join(worktree, ".gsd", "phases", "01-m001");
   mkdirSync(worktreeMilestoneDir, { recursive: true });
   // A content-bearing legacy milestone dir requires at least one non-META file
   // (dirIsContentBearingLegacyMilestone) so the layout sniffer treats it as a

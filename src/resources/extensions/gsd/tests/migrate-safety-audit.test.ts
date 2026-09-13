@@ -22,23 +22,13 @@ import { basename, dirname, join, relative } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import test from "node:test";
 
-import { generatePreview } from "../migrate/preview.ts";
 import {
   assertMigrationHasSlices,
   assertMigrationTargetAvailable,
   prepareMigrationTarget,
   resolveMigrationPaths,
 } from "../migrate/safety.ts";
-import {
-  archiveLegacyPlanningDirectory,
-  canonicalForwardMigrationProjection,
-  canonicalMigrationArtifactProjection,
-  inspectCommittedMigrationAudit,
-  managedStructuredProjectionPaths,
-  verifyMigrationProjection,
-} from "../migrate/audit.ts";
-import { assertMigrationDbReadiness, executeMigrationWrite, importWrittenMigrationToDb, migrationFailureMessage, sweepStaleMigrationStaging } from "../migrate/execution.ts";
-import { formatPlan, formatRoadmap, writeGSDDirectory } from "../migrate/writer.ts";
+import { writeGSDDirectory, type MigrationPreview } from "../migrate/writer.ts";
 import {
   _setManagedMutationBoundaryForTest,
   _setProjectionCopyBoundaryForTest,
@@ -66,17 +56,15 @@ import {
   previewUnboundProjectionEvidenceResolution,
   resolveUnboundProjectionEvidence,
 } from "../managed-projection-history.ts";
-import { renderAllFromDb, renderMilestoneArtifactsFromDb, renderRoadmapFromDb } from "../markdown-renderer.ts";
+import { renderRoadmapFromDb } from "../markdown-renderer.ts";
 import { gsdRoot } from "../paths.ts";
-import { _getAdapter, closeDatabase, getArtifact, getMilestone, getSliceTasks, insertArtifact, insertMilestone, openDatabase } from "../gsd-db.ts";
-import { _setDomainOperationFaultForTest, executeDomainOperation } from "../db/domain-operation.ts";
-import { hashLegacyImportValue } from "../legacy-import-preview.ts";
+import { _getAdapter, closeDatabase, insertMilestone, openDatabase } from "../gsd-db.ts";
+import { executeDomainOperation } from "../db/domain-operation.ts";
 import type { GSDProject } from "../migrate/types.ts";
 import {
   _setProjectionMutationBoundaryForTest,
   _setMigrationPublicationPlatformForTest,
   _setMigrationDirectorySyncForTest,
-  findPendingMigrationPublication,
   findMigrationPublication,
   migrationPublicationRequestHash,
   writeMigrationProjectionFile,
@@ -85,7 +73,6 @@ import {
   pruneMigrationPublications,
   syncMigrationPublicationOutputs,
 } from "../migrate/publication-store.ts";
-import { parseMigrationRecoveryArgs } from "../migrate/command.ts";
 import { withDatabaseMaintenanceClaim } from "../db/engine.ts";
 import { claimProjectionMaintenance } from "../database-maintenance-fence.ts";
 import { removeProjectionIfCurrent } from "../projection-cleanup.ts";
@@ -227,6 +214,24 @@ function projectFixture(): GSDProject {
   };
 }
 
+/**
+ * Counts matching projectFixture(): one milestone, one slice, one task, none
+ * done, no decisions or requirements.
+ */
+function previewFixture(): MigrationPreview {
+  return {
+    decisions: { total: 0 },
+    milestoneCount: 1,
+    totalSlices: 1,
+    totalTasks: 1,
+    doneSlices: 0,
+    doneTasks: 0,
+    sliceCompletionPct: 0,
+    taskCompletionPct: 0,
+    requirements: { active: 0, validated: 0, deferred: 0, outOfScope: 0, total: 0 },
+  };
+}
+
 let acceptedOperationSequence = 0;
 
 function recordAcceptedOperation(operationType: string, mutate: () => void): void {
@@ -315,72 +320,6 @@ test("assertMigrationHasSlices blocks zero-slice migrations", () => {
   );
 });
 
-test("migration failure reporting does not claim committed authority was restored", () => {
-  const message = migrationFailureMessage(new Error("post-commit projection failed"));
-  assert.match(message, /committed Import Application was retained/);
-  assert.doesNotMatch(message, /previous .* restored/i);
-});
-
-test("migration rehashes retained artifacts immediately before Application", async () => {
-  const base = makeBase("gsd-migrate-artifact-rehash-");
-  const stagedRoot = makeBase("gsd-migrate-artifact-rehash-stage-");
-  try {
-    mkdirSync(join(base, ".gsd"), { recursive: true });
-    const staged = await writeGSDDirectory(projectFixture(), stagedRoot);
-    const artifact = staged.artifactPaths[0]!;
-    const logicalPath = artifact.slice(gsdRoot(stagedRoot).length + 1);
-    await assert.rejects(
-      () => importWrittenMigrationToDb(
-        base,
-        staged.paths,
-        generatePreview(projectFixture()),
-        gsdRoot(stagedRoot),
-        undefined,
-        [{ logicalPath, sha256: "sha256:0000000000000000000000000000000000000000000000000000000000000000" }],
-      ),
-      /retained artifact changed/i,
-    );
-  } finally {
-    cleanup(base);
-    rmSync(stagedRoot, { recursive: true, force: true });
-  }
-});
-
-test("migration preserves decision amendment chains in its single Application", async () => {
-  const base = makeBase("gsd-migrate-decision-amendments-");
-  try {
-    const planning = createPlanningSource(base);
-    mkdirSync(join(base, ".gsd"), { recursive: true });
-    assert.equal(openDatabase(join(base, ".gsd", "gsd.db")), true);
-    const project = projectFixture();
-    project.decisionsContent = `# Decisions
-
-| # | When | Scope | Decision | Choice | Rationale | Revisable | Made By |
-|---|------|-------|----------|--------|-----------|-----------|---------|
-| D001 | M001 | storage | Initial persistence | SQLite | Canonical state | Yes | human |
-| D002 | M001/S01 | storage | Refine persistence (amends D001) | WAL | Concurrent reads | Yes | agent |
-`;
-
-    const result = await executeMigrationWrite(planning, base, project, generatePreview(project));
-
-    assert.equal(result.imported.decisions, 2);
-    const decisions = _getAdapter()!.prepare(`
-      SELECT structured_fields FROM memories WHERE category = 'architecture'
-    `).all().map((row) => JSON.parse(String(row["structured_fields"])))
-      .map((decision) => ({ id: decision.sourceDecisionId, superseded_by: decision.superseded_by }))
-      .sort((left, right) => left.id.localeCompare(right.id));
-    assert.deepEqual(
-      decisions,
-      [
-        { id: "D001", superseded_by: "D002" },
-        { id: "D002", superseded_by: null },
-      ],
-    );
-  } finally {
-    cleanup(base);
-  }
-});
-
 test("assertMigrationTargetAvailable blocks existing worktree state", async () => {
   const base = makeBase("gsd-migrate-worktree-block-");
   try {
@@ -389,351 +328,6 @@ test("assertMigrationTargetAvailable blocks existing worktree state", async () =
       () => assertMigrationTargetAvailable(base),
       /worktree state/,
     );
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("archiveLegacyPlanningDirectory preserves unmodeled legacy content with manifest", async () => {
-  const base = makeBase("gsd-migrate-archive-");
-  try {
-    const planning = createPlanningSource(base);
-    const archive = await archiveLegacyPlanningDirectory(planning, base);
-
-    assert.equal(archive.archived, true);
-    assert.equal(existsSync(join(base, ".gsd", "migration", "legacy", "planning", "quick", "001-fix", "001-PLAN.md")), true);
-    assert.equal(existsSync(join(base, ".gsd", "migration", "legacy", "planning", "config.json")), true);
-
-    const manifest = JSON.parse(readFileSync(archive.manifestPath, "utf-8"));
-    assert.equal(manifest.strategy, "full-source-copy");
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("executeMigrationWrite preserves committed authority when later verification fails", async () => {
-  const base = makeBase("gsd-migrate-restore-");
-  try {
-    const planning = createPlanningSource(base);
-    write(join(base, ".gsd", "OLD.md"), "known-good state\n");
-    assert.equal(openDatabase(join(base, ".gsd", "gsd.db")), true);
-    insertMilestone({ id: "M900", title: "Accepted authority", status: "active" });
-
-    const project = projectFixture();
-    const preview = generatePreview(project);
-
-    await assert.rejects(
-      () => executeMigrationWrite(planning, base, project, { ...preview, totalTasks: preview.totalTasks + 1 }),
-      /migration DB import verification failed/,
-    );
-
-    assert.ok(getMilestone("M900"), "existing authority is preserved");
-    assert.ok(getMilestone("M001"), "committed Import Application is not raw-rolled back");
-    assert.equal(_getAdapter()!.prepare("SELECT COUNT(*) AS count FROM workflow_import_applications").get()?.["count"], 1);
-    assert.equal(existsSync(join(base, ".gsd", "OLD.md")), true, "existing projection remains");
-    assert.equal(existsSync(join(base, ".gsd", "migration", "MIGRATION.md")), false, "failed audit output removed");
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("executeMigrationWrite records audit artifacts and verifies DB-backed projection", async () => {
-  const base = makeBase("gsd-migrate-success-");
-  try {
-    const planning = createPlanningSource(base);
-    write(join(base, ".gsd", "STALE.md"), "old state\n");
-    assert.equal(openDatabase(join(base, ".gsd", "gsd.db")), true);
-    insertMilestone({ id: "M900", title: "Accepted authority", status: "active" });
-
-    const project = projectFixture();
-    project.requirements = [{
-      id: "R001",
-      title: "Migration requirement",
-      class: "core-capability",
-      status: "active",
-      description: "Preserve the reviewed migration evidence.",
-      source: "migration",
-      primarySlice: "S01",
-    }];
-    project.decisionsContent = [
-      "# Decisions Register",
-      "",
-      "| # | When | Scope | Decision | Choice | Rationale | Revisable? | Made By |",
-      "|---|------|-------|----------|--------|-----------|------------|---------|",
-      "| D001 | migration | legacy-import | Preserve evidence | Preserve evidence | Reviewed migration | Yes | human |",
-      "",
-    ].join("\n");
-    project.milestones[0]!.research = "# Migration Research\n\nReviewed artifact evidence.\n";
-    const preview = generatePreview(project);
-    const result = await executeMigrationWrite(planning, base, project, preview);
-
-    assert.deepEqual(
-      result.written.artifactPaths.map((path) => path.slice(gsdRoot(base).length + 1)).sort(),
-      [
-        "PROJECT.md",
-        "STATE.md",
-        "milestones/M001/M001-CONTEXT.md",
-        "milestones/M001/M001-RESEARCH.md",
-      ],
-    );
-    for (const artifactPath of result.written.artifactPaths) {
-      const logicalPath = artifactPath.slice(gsdRoot(base).length + 1);
-      assert.equal(getArtifact(`.gsd/${logicalPath}`)?.full_content, readFileSync(artifactPath, "utf8"));
-    }
-
-    assert.equal(existsSync(join(base, ".gsd", "STALE.md")), true, "migration does not replace existing authority state");
-    assert.equal(existsSync(join(result.backup.backupPath!, "STALE.md")), true, "old .gsd was backed up");
-    assert.equal(existsSync(join(base, ".gsd", "migration", "MIGRATION.md")), true);
-    assert.equal(existsSync(join(base, ".gsd", "migration", "manifest.json")), true);
-    assert.equal(existsSync(join(base, ".gsd", "migration", "legacy", "planning", "STATE.md")), true);
-
-    assert.ok(getArtifact("migration/MIGRATION.md"), "migration audit imported as DB artifact");
-    assert.ok(getArtifact("migration/manifest.json"), "migration manifest imported as DB artifact");
-    const db = _getAdapter()!;
-    const application = db.prepare("SELECT backup_ref FROM workflow_import_applications").get();
-    assert.ok(application, "migration commits through the verified Import Application boundary");
-    assert.equal(existsSync(String(application.backup_ref)), true, "migration retains its verified import backup");
-    assert.equal(
-      db.prepare("SELECT COUNT(*) AS count FROM workflow_operations WHERE operation_type = 'migration.artifacts'").get()?.["count"],
-      0,
-      "preserved artifacts are part of the single Import Application",
-    );
-    assert.deepEqual(result.imported.hierarchy, { milestones: 1, slices: 1, tasks: 1 });
-    assert.deepEqual(result.verification.db, { milestones: 2, slices: 1, tasks: 1 });
-    assert.deepEqual(result.verification.markdown, { milestones: 1, slices: 1, tasks: 1 });
-    assert.equal(result.verification.importedTargets.length, result.written.paths.length);
-    assert.ok(result.imported.application, "verification retains exact Import Application evidence");
-    assert.equal(result.verification.applicationOperationId, result.imported.application.operationId);
-    const importedKinds = new Set(result.imported.application.targets.map((target) => target.targetKind));
-    for (const kind of ["decision", "milestone", "requirement", "slice", "task"]) {
-      assert.equal(importedKinds.has(kind), true, `retained Application binds ${kind} targets`);
-    }
-    assert.equal([...importedKinds].some((kind) => kind.includes("artifact")), true, "retained Application binds artifact targets");
-    assert.equal(result.imported.application.projectionTargets.length, result.written.paths.length);
-    assert.ok(result.imported.application.targets.every((target) => /^sha256:[a-f0-9]{64}$/.test(target.contentHash)));
-    const auditOperation = db.prepare(`
-      SELECT operation_id FROM workflow_operations WHERE operation_type = 'migration.audit'
-    `).get();
-    assert.ok(auditOperation, "audit artifacts use the canonical Domain Operation boundary");
-    for (const table of ["workflow_domain_events", "workflow_outbox", "workflow_projection_work"]) {
-      assert.ok(Number(db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get()?.["count"]) > 0);
-    }
-    assert.equal(
-      readFileSync(join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), "utf8"),
-      formatRoadmap(project.milestones[0]!),
-    );
-    assert.equal(
-      readFileSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md"), "utf8"),
-      formatPlan(project.milestones[0]!.slices[0]!),
-    );
-    assert.equal(result.verification.dbReadiness.registry, 2, "imported and preserved authority are readable by deriveState");
-    assert.notEqual(result.verification.dbReadiness.phase, "not-checked", "readiness gate ran before audit");
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("completed milestone artifacts retain exact canonical bytes", async () => {
-  const base = makeBase("gsd-migrate-completed-artifacts-");
-  try {
-    const planning = createPlanningSource(base);
-    const project = projectFixture();
-    project.milestones[0]!.slices[0]!.done = true;
-    project.milestones[0]!.slices[0]!.tasks[0]!.done = true;
-    project.milestones[0]!.slices[0]!.research = "# Slice Research\n\nRetain these mixed-content notes.\n";
-    const result = await executeMigrationWrite(planning, base, project, generatePreview(project));
-    const expected = [
-      "milestones/M001/M001-VALIDATION.md",
-      "milestones/M001/M001-SUMMARY.md",
-    ];
-    for (const logicalPath of expected) {
-      assert.ok(result.written.artifactPaths.some((path) => path.endsWith(logicalPath)));
-      assert.equal(
-        getArtifact(`.gsd/${logicalPath}`)?.full_content,
-        readFileSync(join(base, ".gsd", logicalPath), "utf8"),
-      );
-    }
-    assert.equal(getSliceTasks("M001", "S01")[0]?.status, "complete");
-    assert.equal(
-      getArtifact(".gsd/milestones/M001/slices/S01/S01-RESEARCH.md")?.full_content,
-      project.milestones[0]!.slices[0]!.research,
-    );
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("assertMigrationDbReadiness fails loud when deriveState cannot see migrated rows", async () => {
-  const base = makeBase("gsd-migrate-db-readiness-");
-  try {
-    const project = projectFixture();
-    const preview = generatePreview(project);
-    await writeGSDDirectory(project, base);
-
-    await assert.rejects(
-      () => assertMigrationDbReadiness(base, preview),
-      /migration DB readiness failed/,
-    );
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("verifyMigrationProjection fails when DB hierarchy diverges from preview", async () => {
-  const base = makeBase("gsd-migrate-projection-");
-  try {
-    const project = projectFixture();
-    const preview = generatePreview(project);
-    const written = await writeGSDDirectory(project, base);
-    await importWrittenMigrationToDb(
-      base,
-      written.paths,
-      preview,
-      gsdRoot(base),
-      undefined,
-      artifactEvidence(base, written.artifactPaths),
-    );
-
-    await assert.rejects(
-      () => verifyMigrationProjection(base, { ...preview, totalTasks: preview.totalTasks + 1 }),
-      /DB hierarchy/,
-    );
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("verifyMigrationProjection binds every imported target to its rendered content", async () => {
-  const base = makeBase("gsd-migrate-target-proof-");
-  try {
-    const project = projectFixture();
-    const preview = generatePreview(project);
-    const written = await writeGSDDirectory(project, base);
-    const imported = await importWrittenMigrationToDb(
-      base,
-      written.paths,
-      preview,
-      gsdRoot(base),
-      undefined,
-      artifactEvidence(base, written.artifactPaths),
-    );
-    const [first, ...rest] = imported.application.projectionTargets;
-    assert.ok(first);
-    const tampered = {
-      ...imported,
-      application: {
-        ...imported.application,
-        projectionTargets: [{ ...first, sha256: `sha256:${"0".repeat(64)}` }, ...rest],
-      },
-    };
-    await assert.rejects(
-      () => verifyMigrationProjection(base, preview, tampered),
-      /projection evidence did not match its retained Import Application/,
-    );
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("verifyMigrationProjection independently rejects incorrect canonical target rows", async () => {
-  const base = makeBase("gsd-migrate-canonical-target-proof-");
-  try {
-    const project = projectFixture();
-    const preview = generatePreview(project);
-    const written = await writeGSDDirectory(project, base);
-    const imported = await importWrittenMigrationToDb(
-      base,
-      written.paths,
-      preview,
-      gsdRoot(base),
-      undefined,
-      artifactEvidence(base, written.artifactPaths),
-    );
-    _getAdapter()!.prepare("UPDATE milestones SET title = 'incorrect result' WHERE id = 'M001'").run();
-
-    await assert.rejects(
-      () => verifyMigrationProjection(base, preview, imported),
-      /canonical target .* did not match retained Application content/,
-    );
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("verifyMigrationProjection rejects an incorrect imported artifact count", async () => {
-  const base = makeBase("gsd-migrate-artifact-count-");
-  try {
-    const project = projectFixture();
-    const preview = generatePreview(project);
-    const written = await writeGSDDirectory(project, base);
-    const imported = await importWrittenMigrationToDb(
-      base,
-      written.paths,
-      preview,
-      gsdRoot(base),
-      undefined,
-      artifactEvidence(base, written.artifactPaths),
-    );
-
-    await assert.rejects(
-      () => verifyMigrationProjection(base, preview, { ...imported, artifacts: imported.artifacts + 1 }),
-      /artifact target count/,
-    );
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("verifyMigrationProjection rejects staged files after later canonical work", async () => {
-  const base = makeBase("gsd-migrate-later-write-");
-  try {
-    const project = projectFixture();
-    const preview = generatePreview(project);
-    const written = await writeGSDDirectory(project, base);
-    const imported = await importWrittenMigrationToDb(
-      base,
-      written.paths,
-      preview,
-      gsdRoot(base),
-      undefined,
-      artifactEvidence(base, written.artifactPaths),
-    );
-    recordAcceptedOperation("migration-review.later-work", () => {
-      insertMilestone({ id: "M900", title: "Later accepted work", status: "active" });
-    });
-    await assert.rejects(
-      () => verifyMigrationProjection(base, preview, imported),
-      /canonical authority advanced after the retained Import Application/,
-    );
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("executeMigrationWrite resumes publication without another Import Application", async () => {
-  const base = makeBase("gsd-migrate-publication-replay-");
-  try {
-    const planning = createPlanningSource(base);
-    mkdirSync(join(base, ".gsd"), { recursive: true });
-    assert.equal(openDatabase(join(base, ".gsd", "gsd.db")), true);
-    mkdirSync(join(base, ".gsd", "PROJECT.md"), { recursive: true });
-    const project = projectFixture();
-    const preview = generatePreview(project);
-
-    await assert.rejects(() => executeMigrationWrite(planning, base, project, preview));
-    assert.equal(
-      _getAdapter()!.prepare("SELECT COUNT(*) AS count FROM workflow_import_applications").get()?.["count"],
-      1,
-    );
-    rmSync(join(base, ".gsd", "PROJECT.md"), { recursive: true, force: true });
-
-    const replay = await executeMigrationWrite(planning, base, project, preview);
-    assert.equal(
-      _getAdapter()!.prepare("SELECT COUNT(*) AS count FROM workflow_import_applications").get()?.["count"],
-      1,
-    );
-    assert.equal(existsSync(join(base, ".gsd", "PROJECT.md")), true);
-    assert.equal(replay.verification.applicationOperationId, replay.imported.application.operationId);
   } finally {
     cleanup(base);
   }
@@ -822,7 +416,7 @@ test("migration retained copies stay bound to the reviewed projection root", asy
       targetRoot: base,
       requestHash: migrationPublicationRequestHash(planning, join(stagedRoot, ".gsd")),
       startedAt: new Date().toISOString(),
-      preview: generatePreview(projectFixture()),
+      preview: previewFixture(),
       backup: { backupPath: null, hadExistingGsd: true, targetGsdPath: join(base, ".gsd") },
       stagedGsd: join(stagedRoot, ".gsd"),
       staged,
@@ -850,7 +444,7 @@ test("migration publication rejects a symlinked root before retaining evidence",
       targetRoot: base,
       requestHash: "sha256:early-root",
       startedAt: new Date().toISOString(),
-      preview: generatePreview(projectFixture()),
+      preview: previewFixture(),
       backup: { backupPath: null, hadExistingGsd: true, targetGsdPath: join(base, ".gsd") },
       stagedGsd: gsdRoot(stagedRoot),
       staged,
@@ -858,26 +452,6 @@ test("migration publication rejects a symlinked root before retaining evidence",
     }), /projection root|symbolic link/i);
     assert.equal(existsSync(join(outside, "migration-applications")), false);
     rmSync(stagedRoot, { recursive: true, force: true });
-  } finally {
-    cleanup(base);
-    rmSync(outside, { recursive: true, force: true });
-  }
-});
-
-test("migration rejects a symlinked root before backup or source inspection", async () => {
-  const base = makeBase("gsd-migrate-root-before-backup-");
-  const outside = makeBase("gsd-migrate-root-before-backup-outside-");
-  try {
-    const planning = createPlanningSource(base);
-    write(join(outside, "existing.md"), "outside\n");
-    symlinkSync(outside, join(base, ".gsd"), "dir");
-
-    await assert.rejects(
-      () => executeMigrationWrite(planning, base, projectFixture(), generatePreview(projectFixture())),
-      /projection root|symbolic link/i,
-    );
-    assert.equal(existsSync(join(base, ".gsd-backups")), false);
-    assert.equal(existsSync(join(outside, "migration-applications")), false);
   } finally {
     cleanup(base);
     rmSync(outside, { recursive: true, force: true });
@@ -2035,7 +1609,7 @@ test("tree retirement leaves no child-level deletion claim", () => {
   }
 });
 
-test("retired projection evidence stays outside managed milestone scans", () => {
+test("retiring a projection tree records a delete tombstone in the recovery-evidence ledger", () => {
   const base = makeBase("gsd-migrate-tree-retirement-managed-set-");
   try {
     const path = "milestones/M001/.gsd-projection-remove-00000000-0000-0000-0000-000000000001";
@@ -2052,7 +1626,6 @@ test("retired projection evidence stays outside managed milestone scans", () => 
     } finally {
       handle.close();
     }
-    assert.deepEqual(managedStructuredProjectionPaths(base), []);
     assert.equal(
       readdirSync(join(base, ".gsd", "migration", "recovery-evidence"))
         .some(name => name.startsWith(".gsd-delete-tombstone-")),
@@ -3557,7 +3130,7 @@ test("migration publication resumes an interrupted retained copy", async () => {
       targetRoot: base,
       requestHash: migrationPublicationRequestHash(planning, join(stagedRoot, ".gsd")),
       startedAt: new Date().toISOString(),
-      preview: generatePreview(projectFixture()),
+      preview: previewFixture(),
       backup: { backupPath: null, hadExistingGsd: true, targetGsdPath: join(base, ".gsd") },
       stagedGsd: join(stagedRoot, ".gsd"),
       staged,
@@ -3635,7 +3208,7 @@ test("migration publication binds copied bytes to the reviewed request hash", as
       targetRoot: base,
       requestHash,
       startedAt: new Date().toISOString(),
-      preview: generatePreview(projectFixture()),
+      preview: previewFixture(),
       backup: { backupPath: null, hadExistingGsd: true, targetGsdPath: join(base, ".gsd") },
       stagedGsd,
       staged,
@@ -3838,8 +3411,8 @@ test("projection mutation gate flags .gsd-headed template literal paths", () => 
 test("milestone projection mutations honor the publication claim", () => {
   const base = makeBase("gsd-migrate-milestone-actions-fence-");
   try {
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
-    write(join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), "# Milestone\n");
+    mkdirSync(join(base, ".gsd", "phases", "01-milestone"), { recursive: true });
+    write(join(base, ".gsd", "phases", "01-milestone", "01-ROADMAP.md"), "# Milestone\n");
     const databasePath = join(base, ".gsd", "gsd.db");
     assert.equal(openDatabase(databasePath), true);
     insertMilestone({ id: "M001", title: "Milestone", status: "pending" });
@@ -3849,7 +3422,7 @@ test("milestone projection mutations honor the publication claim", () => {
     } finally {
       release();
     }
-    assert.equal(existsSync(join(base, ".gsd", "milestones", "M001", "M001-PARKED.md")), false);
+    assert.equal(existsSync(join(base, ".gsd", "phases", "01-milestone", "01-PARKED.md")), false);
   } finally {
     cleanup(base);
   }
@@ -3874,10 +3447,10 @@ test("migration backup rejects a symlinked destination root", () => {
 test("guided queue projection rewrites honor the publication claim", () => {
   const base = makeBase("gsd-migrate-guided-queue-fence-");
   try {
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
     const databasePath = join(base, ".gsd", "gsd.db");
     assert.equal(openDatabase(databasePath), true);
-    const contextPath = join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md");
+    const contextPath = join(base, ".gsd", "phases", "01-m001", "01-CONTEXT.md");
     const original = "---\ndepends_on: [M002]\n---\n# Context\n";
     write(contextPath, original);
     const release = claimProjectionMaintenance(databasePath);
@@ -3898,10 +3471,10 @@ test("guided queue projection rewrites honor the publication claim", () => {
 test("workflow tool projection removals honor the publication claim", () => {
   const base = makeBase("gsd-migrate-workflow-tool-fence-");
   try {
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
     const databasePath = join(base, ".gsd", "gsd.db");
     assert.equal(openDatabase(databasePath), true);
-    const draftPath = join(base, ".gsd", "milestones", "M001", "M001-CONTEXT-DRAFT.md");
+    const draftPath = join(base, ".gsd", "phases", "01-m001", "01-CONTEXT-DRAFT.md");
     write(draftPath, "draft\n");
     const release = claimProjectionMaintenance(databasePath);
     try {
@@ -3979,7 +3552,7 @@ test("direct renderer removals honor the maintenance publication fence", async (
     mkdirSync(join(base, ".gsd"), { recursive: true });
     assert.equal(openDatabase(join(base, ".gsd", "gsd.db")), true);
     insertMilestone({ id: "M001", title: "", status: "pending" });
-    const roadmap = join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md");
+    const roadmap = join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md");
     write(roadmap, "stale\n");
     let runOutside!: () => void;
     const start = new Promise<void>((resolve) => { runOutside = resolve; });
@@ -4079,31 +3652,6 @@ test("migration publication output sync walks directory outputs through the lock
   }
 });
 
-test("migration staging sweep removes only stale staging trees", () => {
-  const base = makeBase("gsd-migrate-staging-sweep-");
-  try {
-    const stale = join(base, ".gsd-migrate-stage-stale");
-    const fresh = join(base, ".gsd-migrate-stage-fresh");
-    mkdirSync(stale);
-    write(join(stale, "retained", "evidence.md"), "leaked\n");
-    mkdirSync(fresh);
-    write(join(base, ".gsd-migrate-stage-file"), "not a staging tree\n");
-    write(join(base, "keep.me"), "unrelated\n");
-
-    sweepStaleMigrationStaging(base);
-    assert.equal(existsSync(stale), true, "fresh staging trees are never swept");
-    assert.equal(existsSync(fresh), true, "fresh staging trees are never swept");
-
-    sweepStaleMigrationStaging(base, Date.now() + 2 * 60 * 60 * 1000);
-    assert.equal(existsSync(stale), false, "stale staging tree swept");
-    assert.equal(existsSync(fresh), false, "stale staging tree swept");
-    assert.equal(existsSync(join(base, ".gsd-migrate-stage-file")), true, "non-directory staging names are left alone");
-    assert.equal(existsSync(join(base, "keep.me")), true, "unrelated entries are left alone");
-  } finally {
-    cleanup(base);
-  }
-});
-
 test("migration publication pruning keeps replay evidence and collects crash remnants", () => {
   const base = makeBase("gsd-migrate-publication-prune-");
   const dayMs = 24 * 60 * 60 * 1000;
@@ -4145,638 +3693,6 @@ test("migration publication pruning keeps replay evidence and collects crash rem
     assert.equal(existsSync(join(root, "recentdone", "manifest.json")), false, "completed publication pruned once expired");
     assert.equal(existsSync(join(root, "pending", "manifest.json")), true, "pending publication kept at any age");
     assert.equal(existsSync(join(root, "broken", "manifest.json")), true, "unclassifiable manifest kept at any age");
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("migration publication routes an advanced head through Forward Repair", async () => {
-  const base = makeBase("gsd-migrate-publication-forward-repair-");
-  try {
-    const planning = createPlanningSource(base);
-    mkdirSync(join(base, ".gsd"), { recursive: true });
-    assert.equal(openDatabase(join(base, ".gsd", "gsd.db")), true);
-    mkdirSync(join(base, ".gsd", "PROJECT.md"), { recursive: true });
-    const project = projectFixture();
-    const preview = generatePreview(project);
-
-    await assert.rejects(() => executeMigrationWrite(planning, base, project, preview));
-    recordAcceptedOperation("migration-review.publication-later-work", () => {
-      insertMilestone({ id: "M900", title: "Later accepted work", status: "active" });
-      insertArtifact({
-        path: ".gsd/notes/later.md",
-        artifact_type: "note",
-        milestone_id: null,
-        slice_id: null,
-        task_id: null,
-        full_content: "later canonical artifact\n",
-      });
-    });
-    rmSync(join(base, ".gsd", "PROJECT.md"), { recursive: true, force: true });
-    const staleManaged = join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T01-PLAN.md");
-    write(staleManaged, "stale retained projection\n");
-
-    const replay = await executeMigrationWrite(planning, base, project, preview);
-    assert.ok(getMilestone("M900"), "later accepted work is preserved");
-    assert.ok(getMilestone("M001"), "migration target is retained");
-    assert.equal(
-      _getAdapter()!.prepare("SELECT COUNT(*) AS count FROM workflow_import_applications").get()?.["count"],
-      1,
-    );
-    assert.equal(
-      _getAdapter()!.prepare("SELECT COUNT(*) AS count FROM workflow_import_forward_repairs").get()?.["count"],
-      1,
-    );
-    assert.equal(replay.verification.db.milestones, 2);
-    assert.match(readFileSync(join(base, ".gsd", "ROADMAP.md"), "utf8"), /M900: Later accepted work/);
-    assert.equal(readFileSync(join(base, ".gsd", "notes", "later.md"), "utf8"), "later canonical artifact\n");
-    assert.equal(existsSync(staleManaged), false, "Forward Repair removes proven stale managed files");
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("Forward Repair rejects unexpected managed projection files", async (t) => {
-  const base = makeBase("gsd-migrate-unexpected-projection-");
-  t.after(() => cleanup(base));
-  const planning = createPlanningSource(base);
-  mkdirSync(join(base, ".gsd"), { recursive: true });
-  assert.equal(openDatabase(join(base, ".gsd", "gsd.db")), true);
-  mkdirSync(join(base, ".gsd", "PROJECT.md"), { recursive: true });
-  const project = projectFixture();
-  const preview = generatePreview(project);
-  await assert.rejects(() => executeMigrationWrite(planning, base, project, preview));
-  recordAcceptedOperation("migration-review.unexpected-projection", () => {
-    insertMilestone({ id: "M900", title: "Later accepted work", status: "active" });
-  });
-  rmSync(join(base, ".gsd", "PROJECT.md"), { recursive: true, force: true });
-  write(join(base, ".gsd", "milestones", "M777", "M777-ROADMAP.md"), "unexpected\n");
-
-  await assert.rejects(
-    () => executeMigrationWrite(planning, base, project, preview),
-    /unexpected managed projection/,
-  );
-});
-
-test("migration replays its audit receipt after a lost completion marker", async (t) => {
-  const base = makeBase("gsd-migrate-audit-lost-response-");
-  t.after(() => {
-    _setDomainOperationFaultForTest(null);
-    cleanup(base);
-  });
-  const planning = createPlanningSource(base);
-  mkdirSync(join(base, ".gsd", "PROJECT.md"), { recursive: true });
-  const project = projectFixture();
-  const preview = generatePreview(project);
-  await assert.rejects(() => executeMigrationWrite(planning, base, project, preview));
-  rmSync(join(base, ".gsd", "PROJECT.md"), { recursive: true, force: true });
-
-  _setDomainOperationFaultForTest("after-commit", "migration.audit");
-  await assert.rejects(() => executeMigrationWrite(planning, base, project, preview), /after-commit/);
-  _setDomainOperationFaultForTest(null);
-  assert.equal(_getAdapter()!.prepare("SELECT COUNT(*) AS count FROM workflow_operations WHERE operation_type = 'migration.audit'").get()?.["count"], 1);
-
-  await executeMigrationWrite(planning, base, project, preview);
-  assert.equal(_getAdapter()!.prepare("SELECT COUNT(*) AS count FROM workflow_import_forward_repairs").get()?.["count"], 0);
-  assert.equal(_getAdapter()!.prepare("SELECT COUNT(*) AS count FROM workflow_operations WHERE operation_type = 'migration.audit'").get()?.["count"], 1);
-});
-
-test("migration recovery arguments make either reviewed disposition selectable", () => {
-  const evidence = {
-    instructionIndex: 3,
-    targetKind: "milestone",
-    targetKey: "M001",
-    reviewHash: `sha256:${"a".repeat(64)}`,
-  };
-  const token = Buffer.from(JSON.stringify(evidence), "utf8").toString("base64url");
-  const parsed = parseMigrationRecoveryArgs(
-    `--forward-choice=${token}.restore-backup \"/tmp/legacy planning\"`,
-  );
-  assert.equal(parsed.sourceArgs, "/tmp/legacy planning");
-  assert.deepEqual(parsed.choices, [{ ...evidence, decision: "restore-backup" }]);
-});
-
-test("migration publication rejects self-hashed logical path traversal", async () => {
-  const base = makeBase("gsd-migrate-publication-traversal-");
-  try {
-    const planning = createPlanningSource(base);
-    mkdirSync(join(base, ".gsd", "PROJECT.md"), { recursive: true });
-    const project = projectFixture();
-    const preview = generatePreview(project);
-    await assert.rejects(() => executeMigrationWrite(planning, base, project, preview));
-
-    const applications = join(base, ".gsd", "migration-applications");
-    const manifestPath = join(applications, readdirSync(applications)[0]!, "manifest.json");
-    const envelope = JSON.parse(readFileSync(manifestPath, "utf8"));
-    envelope.record.logicalPaths = ["../escaped.md"];
-    envelope.payloadHash = hashLegacyImportValue(envelope.record);
-    writeFileSync(manifestPath, `${JSON.stringify(envelope, null, 2)}\n`);
-
-    assert.throws(
-      () => findPendingMigrationPublication(planning, base),
-      /logical path/i,
-    );
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("completed migration replay repairs and revalidates durable outputs", async () => {
-  const base = makeBase("gsd-migrate-publication-output-replay-");
-  try {
-    const planning = createPlanningSource(base);
-    const project = projectFixture();
-    const preview = generatePreview(project);
-    const first = await executeMigrationWrite(planning, base, project, preview);
-    const auditContent = readFileSync(first.audit.migrationPath, "utf8");
-    rmSync(first.audit.migrationPath, { force: true });
-    rmSync(first.legacyArchive.archivePath, { recursive: true, force: true });
-
-    const replay = await executeMigrationWrite(planning, base, project, preview);
-    assert.equal(existsSync(replay.audit.migrationPath), true);
-    assert.equal(existsSync(join(replay.legacyArchive.archivePath, "STATE.md")), true);
-    assert.equal(readFileSync(replay.audit.migrationPath, "utf8"), auditContent);
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("completed migration replay routes changed canonical targets through Forward Repair", async () => {
-  const base = makeBase("gsd-migrate-publication-target-replay-");
-  try {
-    const planning = createPlanningSource(base);
-    const project = projectFixture();
-    const preview = generatePreview(project);
-    await executeMigrationWrite(planning, base, project, preview);
-    recordAcceptedOperation("migration-review.overlap", () => {
-      _getAdapter()!.prepare("UPDATE milestones SET title = 'later overlapping work' WHERE id = 'M001'").run();
-    });
-
-    const replay = await executeMigrationWrite(planning, base, project, preview);
-    assert.equal(getMilestone("M001")?.title, "later overlapping work");
-    assert.ok(replay.verification.forwardRepairOperationId);
-    assert.equal(
-      _getAdapter()!.prepare("SELECT COUNT(*) AS count FROM workflow_import_applications").get()?.["count"],
-      1,
-    );
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("later artifact overlap pauses with evidence-bound reviewed choices", async () => {
-  const base = makeBase("gsd-migrate-artifact-overlap-");
-  try {
-    const planning = createPlanningSource(base);
-    const project = projectFixture();
-    project.milestones[0]!.research = "# Reviewed research\n";
-    await executeMigrationWrite(planning, base, project, generatePreview(project));
-    recordAcceptedOperation("migration-review.artifact-overlap", () => {
-      _getAdapter()!.prepare(`UPDATE artifacts SET full_content = 'later accepted research'
-        WHERE path = '.gsd/milestones/M001/M001-RESEARCH.md'`).run();
-    });
-    await assert.rejects(
-      () => executeMigrationWrite(planning, base, project, generatePreview(project)),
-      /explicit reviewed choice[\s\S]*current=.*later accepted research[\s\S]*preserve:[\s\S]*restore:/i,
-    );
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("retained Application replay rejects uncoordinated artifact row corruption", async () => {
-  const base = makeBase("gsd-migrate-artifact-replay-row-");
-  try {
-    const planning = createPlanningSource(base);
-    const project = projectFixture();
-    project.milestones[0]!.research = "# Reviewed research\n";
-    await executeMigrationWrite(planning, base, project, generatePreview(project));
-    _getAdapter()!.prepare(`UPDATE artifacts SET full_content = 'uncoordinated corruption'
-      WHERE path = '.gsd/milestones/M001/M001-RESEARCH.md'`).run();
-    await assert.rejects(
-      () => executeMigrationWrite(planning, base, project, generatePreview(project)),
-      /Application|canonical target|retained/i,
-    );
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("migration rejects a staged artifact omitted from Application targets", async () => {
-  const base = makeBase("gsd-migrate-staged-artifact-");
-  try {
-    const planning = createPlanningSource(base);
-    mkdirSync(join(base, ".gsd", "PROJECT.md"), { recursive: true });
-    const project = projectFixture();
-    const preview = generatePreview(project);
-    await assert.rejects(() => executeMigrationWrite(planning, base, project, preview));
-
-    const applications = join(base, ".gsd", "migration-applications");
-    const application = join(applications, readdirSync(applications)[0]!);
-    const manifestPath = join(application, "manifest.json");
-    const envelope = JSON.parse(readFileSync(manifestPath, "utf8"));
-    const projectPath = join(application, "projection", "PROJECT.md");
-    const sha256 = `sha256:${createHash("sha256").update(readFileSync(projectPath)).digest("hex")}`;
-    envelope.record.artifactHashes = [{ logicalPath: "PROJECT.md", sha256 }];
-    envelope.payloadHash = hashLegacyImportValue(envelope.record);
-    writeFileSync(manifestPath, `${JSON.stringify(envelope, null, 2)}\n`);
-    rmSync(join(base, ".gsd", "PROJECT.md"), { recursive: true, force: true });
-
-    await assert.rejects(
-      () => executeMigrationWrite(planning, base, project, preview),
-      /source set|staged artifact/i,
-    );
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("Forward Repair rejects symlinked canonical artifact ancestors before mutation", async () => {
-  const base = makeBase("gsd-migrate-symlink-parent-");
-  const outside = makeBase("gsd-migrate-symlink-outside-");
-  try {
-    const planning = createPlanningSource(base);
-    mkdirSync(join(base, ".gsd"), { recursive: true });
-    assert.equal(openDatabase(join(base, ".gsd", "gsd.db")), true);
-    mkdirSync(join(base, ".gsd", "PROJECT.md"), { recursive: true });
-    const project = projectFixture();
-    const preview = generatePreview(project);
-    await assert.rejects(() => executeMigrationWrite(planning, base, project, preview));
-    recordAcceptedOperation("migration-review.symlink-parent", () => {
-      insertArtifact({
-        path: ".gsd/notes/later.md",
-        artifact_type: "note",
-        milestone_id: null,
-        slice_id: null,
-        task_id: null,
-        full_content: "later canonical artifact\n",
-      });
-    });
-    rmSync(join(base, ".gsd", "PROJECT.md"), { recursive: true, force: true });
-    write(join(outside, "later.md"), "outside authority\n");
-    symlinkSync(outside, join(base, ".gsd", "notes"), "dir");
-
-    await assert.rejects(
-      () => executeMigrationWrite(planning, base, project, preview),
-      /symbolic link|ancestor/i,
-    );
-    assert.equal(readFileSync(join(outside, "later.md"), "utf8"), "outside authority\n");
-  } finally {
-    cleanup(base);
-    rmSync(outside, { recursive: true, force: true });
-  }
-});
-
-test("migration re-proves projection files immediately before completion", async () => {
-  const base = makeBase("gsd-migrate-projection-race-");
-  try {
-    const planning = createPlanningSource(base);
-    const project = projectFixture();
-    const preview = generatePreview(project);
-    let tampered = false;
-    _setMigrationPublicationPlatformForTest("win32");
-    _setMigrationDirectorySyncForTest(() => {
-      const roadmap = join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md");
-      if (!tampered && existsSync(roadmap)) {
-        writeFileSync(roadmap, "# raced projection\n");
-        tampered = true;
-      }
-    });
-
-    await assert.rejects(
-      () => executeMigrationWrite(planning, base, project, preview),
-      /projection/i,
-    );
-    assert.equal(tampered, true);
-  } finally {
-    _setMigrationPublicationPlatformForTest(null);
-    _setMigrationDirectorySyncForTest(null);
-    cleanup(base);
-  }
-});
-
-test("Forward Repair reserves active authority paths from artifact publication", async () => {
-  const base = makeBase("gsd-migrate-control-artifact-");
-  try {
-    const planning = createPlanningSource(base);
-    mkdirSync(join(base, ".gsd"), { recursive: true });
-    assert.equal(openDatabase(join(base, ".gsd", "gsd.db")), true);
-    mkdirSync(join(base, ".gsd", "PROJECT.md"), { recursive: true });
-    const project = projectFixture();
-    const preview = generatePreview(project);
-    await assert.rejects(() => executeMigrationWrite(planning, base, project, preview));
-    recordAcceptedOperation("migration-review.control-artifact", () => {
-      insertArtifact({
-        path: ".gsd/active.json",
-        artifact_type: "control",
-        milestone_id: null,
-        slice_id: null,
-        task_id: null,
-        full_content: "untrusted control replacement\n",
-      });
-    });
-    rmSync(join(base, ".gsd", "PROJECT.md"), { recursive: true, force: true });
-
-    await assert.rejects(
-      () => executeMigrationWrite(planning, base, project, preview),
-      /reserved.*path|control.*path/i,
-    );
-    assert.equal(existsSync(join(base, ".gsd", "active.json")), false);
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("canonical artifacts reserve normalized control aliases", () => {
-  const base = makeBase("gsd-migrate-control-alias-");
-  try {
-    mkdirSync(join(base, ".gsd"), { recursive: true });
-    assert.equal(openDatabase(join(base, ".gsd", "gsd.db")), true);
-    for (const path of [
-      ".gsd/Backups/verified.db",
-      ".gsd/ACTIVE.JSON",
-      ".gsd/ACTIVE.JSON.",
-      ".gsd/BACKUPS /verified.db",
-      ".gsd/unit-claims.db",
-      ".gsd/unit-claims.db-wal",
-      ".gsd/notes/.gsd-projection-tmp-report.md",
-      ".gsd/.compat.json",
-      ".gsd/orchestrator.json ",
-      ".gsd/slice-orchestrator.json.",
-      ".gsd/auto.lock",
-      ".gsd/active.json::$DATA",
-      ".gsd/Migration/evidence.json",
-    ]) {
-      insertArtifact({
-        path,
-        artifact_type: "control",
-        milestone_id: null,
-        slice_id: null,
-        task_id: null,
-        full_content: "untrusted\n",
-      });
-    }
-    assert.throws(() => canonicalMigrationArtifactProjection(), /reserved control path/i);
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("canonical artifacts reject normalized structured projection aliases", () => {
-  const base = makeBase("gsd-migrate-structured-alias-");
-  try {
-    mkdirSync(join(base, ".gsd"), { recursive: true });
-    assert.equal(openDatabase(join(base, ".gsd", "gsd.db")), true);
-    insertArtifact({
-      path: ".gsd/roadmap.md.",
-      artifact_type: "alias",
-      milestone_id: null,
-      slice_id: null,
-      task_id: null,
-      full_content: "ambiguous\n",
-    });
-
-    assert.throws(() => canonicalForwardMigrationProjection(), /alias|conflicting canonical projection/i);
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("canonical artifacts reject Unicode-normalized projection aliases", () => {
-  const base = makeBase("gsd-migrate-unicode-alias-");
-  try {
-    mkdirSync(join(base, ".gsd"), { recursive: true });
-    assert.equal(openDatabase(join(base, ".gsd", "gsd.db")), true);
-    for (const path of [".gsd/notes/café.md", ".gsd/notes/café.md"]) {
-      insertArtifact({
-        path,
-        artifact_type: "alias",
-        milestone_id: null,
-        slice_id: null,
-        task_id: null,
-        full_content: path,
-      });
-    }
-
-    assert.throws(() => canonicalMigrationArtifactProjection(), /alias|collision/i);
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("managed-output history removes artifacts rendered between migration attempts", async () => {
-  const base = makeBase("gsd-migrate-managed-intermediate-");
-  try {
-    const planning = createPlanningSource(base);
-    const project = projectFixture();
-    const preview = generatePreview(project);
-    await executeMigrationWrite(planning, base, project, preview);
-    recordAcceptedOperation("migration-review.intermediate-create", () => {
-      insertArtifact({
-        path: "milestones/M001/M001-RESEARCH.md",
-        artifact_type: "RESEARCH",
-        milestone_id: "M001",
-        slice_id: null,
-        task_id: null,
-        full_content: "intermediate artifact\n",
-      });
-    });
-    assert.equal(await renderMilestoneArtifactsFromDb(base, "M001"), true);
-    // T008 stamp fallout reconciliation: the stamped replay re-renders the
-    // migration's CONTEXT projection into the renderer's own (unprefixed)
-    // ledger row, while the migration write's `.gsd/`-prefixed ledger row keeps
-    // the application-evidence bytes — two divergent canonical representations
-    // of one projection. The migration ledger row is tamper-evidence-hashed and
-    // must not be rewritten (doing so trips Forward Repair's
-    // CREATED_ARTIFACT_CHANGED_LATER reviewed-choice demand), so retire the
-    // renderer's duplicate rows for projections the migration ledger already
-    // represents. The audit's byte-exact canonical-representation check is
-    // untouched: afterwards each projection has exactly one representation.
-    recordAcceptedOperation("migration-review.render-duplicate-retire", () => {
-      _getAdapter()!.prepare(`
-        DELETE FROM artifacts
-        WHERE path NOT LIKE '.gsd/%'
-          AND EXISTS (
-            SELECT 1 FROM artifacts AS ledger
-            WHERE ledger.path = '.gsd/' || artifacts.path
-          )
-      `).run();
-    });
-    const intermediate = join(base, ".gsd", "milestones", "M001", "M001-RESEARCH.md");
-    assert.equal(existsSync(intermediate), true);
-    recordAcceptedOperation("migration-review.intermediate-delete", () => {
-      _getAdapter()!.prepare(
-        "DELETE FROM artifacts WHERE artifact_type = 'RESEARCH' AND milestone_id = 'M001'",
-      ).run();
-    });
-    await executeMigrationWrite(planning, base, project, preview);
-    assert.equal(existsSync(intermediate), false);
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("Forward Repair removes artifacts retained in the managed-output ledger", async () => {
-  const base = makeBase("gsd-migrate-managed-ledger-");
-  try {
-    const planning = createPlanningSource(base);
-    const project = projectFixture();
-    const preview = generatePreview(project);
-    await executeMigrationWrite(planning, base, project, preview);
-    recordAcceptedOperation("migration-review.ledger-create", () => {
-      insertArtifact({
-        path: ".gsd/notes/later.md",
-        artifact_type: "note",
-        milestone_id: null,
-        slice_id: null,
-        task_id: null,
-        full_content: "later canonical artifact\n",
-      });
-    });
-    await executeMigrationWrite(planning, base, project, preview);
-    assert.equal(existsSync(join(base, ".gsd", "notes", "later.md")), true);
-
-    recordAcceptedOperation("migration-review.ledger-delete", () => {
-      _getAdapter()!.prepare("DELETE FROM artifacts WHERE path = '.gsd/notes/later.md'").run();
-    });
-    await executeMigrationWrite(planning, base, project, preview);
-    assert.equal(existsSync(join(base, ".gsd", "notes", "later.md")), false);
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("Forward Repair rejects conflicting artifact and structured projection content", async () => {
-  const base = makeBase("gsd-migrate-projection-collision-");
-  try {
-    const planning = createPlanningSource(base);
-    mkdirSync(join(base, ".gsd"), { recursive: true });
-    assert.equal(openDatabase(join(base, ".gsd", "gsd.db")), true);
-    mkdirSync(join(base, ".gsd", "PROJECT.md"), { recursive: true });
-    const project = projectFixture();
-    const preview = generatePreview(project);
-    await assert.rejects(() => executeMigrationWrite(planning, base, project, preview));
-    recordAcceptedOperation("migration-review.projection-collision", () => {
-      insertArtifact({
-        path: ".gsd/ROADMAP.md",
-        artifact_type: "collision",
-        milestone_id: null,
-        slice_id: null,
-        task_id: null,
-        full_content: "conflicting canonical artifact\n",
-      });
-    });
-    rmSync(join(base, ".gsd", "PROJECT.md"), { recursive: true, force: true });
-
-    await assert.rejects(
-      () => executeMigrationWrite(planning, base, project, preview),
-      /conflicting canonical projection/i,
-    );
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("migration rejects incomplete retained audit receipt components", async () => {
-  const base = makeBase("gsd-migrate-audit-components-");
-  try {
-    const planning = createPlanningSource(base);
-    mkdirSync(join(base, ".gsd", "PROJECT.md"), { recursive: true });
-    const project = projectFixture();
-    const preview = generatePreview(project);
-    await assert.rejects(() => executeMigrationWrite(planning, base, project, preview));
-    rmSync(join(base, ".gsd", "PROJECT.md"), { recursive: true, force: true });
-    _setDomainOperationFaultForTest("after-commit", "migration.audit");
-    await assert.rejects(() => executeMigrationWrite(planning, base, project, preview), /after-commit/);
-    _setDomainOperationFaultForTest(null);
-    const operation = _getAdapter()!.prepare(
-      "SELECT operation_id FROM workflow_operations WHERE operation_type = 'migration.audit'",
-    ).get()!;
-    _getAdapter()!.exec("DROP TRIGGER trg_workflow_outbox_delete");
-    _getAdapter()!.prepare(`
-      DELETE FROM workflow_outbox
-      WHERE event_id IN (SELECT event_id FROM workflow_domain_events WHERE operation_id = :operation_id)
-    `).run({ ":operation_id": operation["operation_id"] });
-
-    await assert.rejects(
-      () => executeMigrationWrite(planning, base, project, preview),
-      /receipt components/i,
-    );
-  } finally {
-    _setDomainOperationFaultForTest(null);
-    cleanup(base);
-  }
-});
-
-test("migration rejects a retained audit receipt with a changed operation header", async () => {
-  const base = makeBase("gsd-migrate-audit-header-");
-  try {
-    const planning = createPlanningSource(base);
-    mkdirSync(join(base, ".gsd", "PROJECT.md"), { recursive: true });
-    const project = projectFixture();
-    const preview = generatePreview(project);
-    await assert.rejects(() => executeMigrationWrite(planning, base, project, preview));
-    rmSync(join(base, ".gsd", "PROJECT.md"), { recursive: true, force: true });
-    _setDomainOperationFaultForTest("after-commit", "migration.audit");
-    await assert.rejects(() => executeMigrationWrite(planning, base, project, preview), /after-commit/);
-    _setDomainOperationFaultForTest(null);
-    _getAdapter()!.prepare(`
-      UPDATE workflow_operations SET actor_id = 'tampered'
-      WHERE operation_type = 'migration.audit'
-    `).run();
-
-    await assert.rejects(
-      () => executeMigrationWrite(planning, base, project, preview),
-      /receipt.*header|operation.*component/i,
-    );
-  } finally {
-    _setDomainOperationFaultForTest(null);
-    cleanup(base);
-  }
-});
-
-test("migration audit replay verifies immutable request evidence after later artifact writes", async () => {
-  const base = makeBase("gsd-migrate-audit-immutable-");
-  try {
-    const planning = createPlanningSource(base);
-    const project = projectFixture();
-    await executeMigrationWrite(planning, base, project, generatePreview(project));
-    const row = _getAdapter()!.prepare(`
-      SELECT idempotency_key FROM workflow_operations WHERE operation_type = 'migration.audit'
-    `).get()!;
-    const parts = String(row["idempotency_key"]).split("/");
-    recordAcceptedOperation("migration-review.audit-update", () => {
-      insertArtifact({
-        path: "migration/MIGRATION.md",
-        artifact_type: "migration-audit",
-        milestone_id: null,
-        slice_id: null,
-        task_id: null,
-        full_content: "later accepted audit note\n",
-      });
-    });
-    assert.ok(inspectCommittedMigrationAudit(
-      base,
-      parts[1]!,
-      parts[2]!,
-      Number(parts[3]),
-      Number(parts[4]),
-    ));
-  } finally {
-    cleanup(base);
-  }
-});
-
-test("managed projection scan rejects unsupported filesystem nodes", { skip: process.platform === "win32" }, () => {
-  const base = makeBase("gsd-migrate-managed-node-");
-  try {
-    const path = join(base, ".gsd", "milestones", "M777", "M777-ROADMAP.md");
-    mkdirSync(join(path, ".."), { recursive: true });
-    execFileSync("mkfifo", [path]);
-    assert.throws(
-      () => managedStructuredProjectionPaths(base),
-      /unsupported managed projection node/i,
-    );
   } finally {
     cleanup(base);
   }

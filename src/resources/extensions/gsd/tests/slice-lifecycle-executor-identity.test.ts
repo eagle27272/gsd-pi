@@ -1,5 +1,5 @@
 // Project/App: gsd-pi
-// File Purpose: Proves Pi lifecycle aliases share canonical private executor identity.
+// File Purpose: Proves Pi lifecycle tools resolve to private executor identity.
 
 import assert from "node:assert/strict";
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
@@ -11,7 +11,6 @@ import { afterEach, test } from "node:test";
 process.env.GSD_WORKFLOW_EXECUTORS_MODULE = fileURLToPath(
   new URL("./fixtures/slice-lifecycle-executor-capture.ts", import.meta.url),
 );
-process.env.GSD_ADVERTISE_TOOL_ALIASES = "1";
 
 import { registerDbTools } from "../bootstrap/db-tools.ts";
 import {
@@ -44,13 +43,13 @@ afterEach(() => {
   resetCapturedLifecycleCalls();
 });
 
-test("Pi canonical and alias lifecycle calls share canonical executor identity", async (t) => {
+test("Pi lifecycle calls resolve to canonical executor identity", async (t) => {
   const basePath = mkdtempSync(join(tmpdir(), "gsd-slice-executor-identity-"));
   try {
     const tools = registeredTools();
     const cases = [
       {
-        names: ["gsd_slice_complete", "gsd_complete_slice"],
+        names: ["gsd_slice_complete"],
         executor: "complete",
         canonicalName: "gsd_slice_complete",
         params: {
@@ -63,7 +62,7 @@ test("Pi canonical and alias lifecycle calls share canonical executor identity",
         },
       },
       {
-        names: ["gsd_slice_reopen", "gsd_reopen_slice"],
+        names: ["gsd_slice_reopen"],
         executor: "reopen",
         canonicalName: "gsd_slice_reopen",
         params: { milestoneId: "M001", sliceId: "S01", reason: "Redo the Slice." },
@@ -75,7 +74,7 @@ test("Pi canonical and alias lifecycle calls share canonical executor identity",
         params: { milestoneId: "M001", sliceId: "S01", reason: "Descoped." },
       },
       {
-        names: ["gsd_validate_milestone", "gsd_milestone_validate"],
+        names: ["gsd_validate_milestone"],
         executor: "validate",
         canonicalName: "gsd_validate_milestone",
         params: {
@@ -103,7 +102,7 @@ test("Pi canonical and alias lifecycle calls share canonical executor identity",
         },
       },
       {
-        names: ["gsd_complete_milestone", "gsd_milestone_complete"],
+        names: ["gsd_complete_milestone"],
         executor: "milestone-complete",
         canonicalName: "gsd_complete_milestone",
         params: {
@@ -115,7 +114,7 @@ test("Pi canonical and alias lifecycle calls share canonical executor identity",
         },
       },
       {
-        names: ["gsd_milestone_reopen", "gsd_reopen_milestone"],
+        names: ["gsd_milestone_reopen"],
         executor: "milestone-reopen",
         canonicalName: "gsd_milestone_reopen",
         params: { milestoneId: "M001", reason: "Redo the Milestone." },

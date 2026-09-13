@@ -5,10 +5,12 @@ import type { ExtensionCommandContext } from "@gsd/pi-coding-agent";
 import assert from "node:assert/strict";
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
+  readlinkSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -31,7 +33,20 @@ import {
   isDbAvailable,
   openDatabase,
 } from "../gsd-db.ts";
-import { fingerprintLegacyImportCorpusTree } from "./helpers/legacy-import-corpus.ts";
+import { hashBytes, hashValue, type Sha256 } from "../canonical-json.ts";
+
+function fingerprintTree(path: string, relative = ""): Sha256 {
+  const rows: unknown[] = [];
+  for (const name of readdirSync(join(path, relative)).sort()) {
+    const child = relative ? `${relative}/${name}` : name;
+    const physical = join(path, child);
+    const stat = lstatSync(physical);
+    if (stat.isDirectory()) rows.push([child, "directory", fingerprintTree(path, child)]);
+    else if (stat.isSymbolicLink()) rows.push([child, "symlink", readlinkSync(physical)]);
+    else rows.push([child, "file", hashBytes(readFileSync(physical))]);
+  }
+  return hashValue(rows);
+}
 
 const WORKFLOW_AUTHORITY_TABLES = [
   "milestones",
@@ -243,14 +258,14 @@ test("/gsd sync still accepts active .planning passthrough drift", async () => {
     piVersion: "test",
   });
   const sourceBefore = readFileSync(sourcePath);
-  const passthroughTreeBefore = fingerprintLegacyImportCorpusTree(join(base, ".planning", "codebase"));
+  const passthroughTreeBefore = fingerprintTree(join(base, ".planning", "codebase"));
   const { ctx, notifications } = makeContext();
 
   await handleSync(ctx, base);
 
   assert.deepEqual(readFileSync(sourcePath), sourceBefore, "passthrough content remains user-owned");
   assert.equal(
-    fingerprintLegacyImportCorpusTree(join(base, ".planning", "codebase")),
+    fingerprintTree(join(base, ".planning", "codebase")),
     passthroughTreeBefore,
     "safe checksum refresh leaves the complete passthrough subtree exact",
   );

@@ -47,7 +47,7 @@ const tmpDirs: string[] = [];
 function makeTmpBase(): string {
   const base = mkdtempSync(join(tmpdir(), `gsd-test-4973-${randomUUID().slice(0, 8)}-`));
   tmpDirs.push(base);
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
   return base;
 }
 
@@ -55,7 +55,7 @@ function makeBrokenIsolatedWorktree(): string {
   const root = mkdtempSync(join(tmpdir(), `gsd-test-5848-${randomUUID().slice(0, 8)}-`));
   tmpDirs.push(root);
   const base = join(root, ".gsd", "projects", "project-id", "worktrees", "M003");
-  mkdirSync(join(base, ".gsd", "milestones", "M003", "slices", "S03"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "03-m003"), { recursive: true });
   return base;
 }
 
@@ -258,7 +258,7 @@ describe("Test 5 — postUnitPreVerification short-circuits on deterministic err
     assert.strictEqual(pauseCalled, false, "pauseAuto must NOT be called for deterministic errors");
 
     // The blocker placeholder must exist on disk so the pipeline can advance.
-    const placeholderPath = join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md");
+    const placeholderPath = join(base, ".gsd", "phases", "01-m001", "01-CONTEXT.md");
     assert.ok(
       existsSync(placeholderPath),
       `blocker placeholder must be written at ${placeholderPath}`,

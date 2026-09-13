@@ -24,7 +24,7 @@ import assert from 'node:assert/strict';
 
 function createBase(name: string): string {
   const base = mkdtempSync(join(tmpdir(), `gsd-wt-respawn-${name}-`));
-  mkdirSync(join(base, '.gsd', 'milestones'), { recursive: true });
+  mkdirSync(join(base, '.gsd', 'phases'), { recursive: true });
   return base;
 }
 
@@ -42,9 +42,9 @@ describe('worktree-db-respawn-truncation (#2815)', async () => {
 
     try {
       // Set up milestone artifacts in main project root
-      const m001Dir = join(mainBase, '.gsd', 'milestones', 'M001');
+      const m001Dir = join(mainBase, '.gsd', 'phases', '01-m001');
       mkdirSync(m001Dir, { recursive: true });
-      writeFileSync(join(m001Dir, 'M001-ROADMAP.md'), '# Roadmap');
+      writeFileSync(join(m001Dir, '01-ROADMAP.md'), '# Roadmap');
 
       // Simulate a freshly-migrated worktree DB (non-empty, like after gsd-migrate)
       // Real DBs are ~1.7MB; we use a smaller payload to prove the size check works
@@ -80,9 +80,9 @@ describe('worktree-db-respawn-truncation (#2815)', async () => {
     const wtBase = createBase('wt');
 
     try {
-      const m001Dir = join(mainBase, '.gsd', 'milestones', 'M001');
+      const m001Dir = join(mainBase, '.gsd', 'phases', '01-m001');
       mkdirSync(m001Dir, { recursive: true });
-      writeFileSync(join(m001Dir, 'M001-ROADMAP.md'), '# Roadmap');
+      writeFileSync(join(m001Dir, '01-ROADMAP.md'), '# Roadmap');
 
       // Create an empty (0-byte) gsd.db — this is stale/corrupt and should be deleted
       writeFileSync(join(wtBase, '.gsd', 'gsd.db'), '');
@@ -107,9 +107,9 @@ describe('worktree-db-respawn-truncation (#2815)', async () => {
     const wtBase = createBase('wt');
 
     try {
-      const m001Dir = join(mainBase, '.gsd', 'milestones', 'M001');
+      const m001Dir = join(mainBase, '.gsd', 'phases', '01-m001');
       mkdirSync(m001Dir, { recursive: true });
-      writeFileSync(join(m001Dir, 'M001-ROADMAP.md'), '# Roadmap');
+      writeFileSync(join(m001Dir, '01-ROADMAP.md'), '# Roadmap');
 
       // Create an empty (0-byte) gsd.db plus orphaned WAL and SHM files —
       // this is the exact state that causes Node 24 node:sqlite CPU spin (#2478).
@@ -149,9 +149,9 @@ describe('worktree-db-respawn-truncation (#2815)', async () => {
     const wtBase = createBase('wt');
 
     try {
-      const m001Dir = join(mainBase, '.gsd', 'milestones', 'M001');
+      const m001Dir = join(mainBase, '.gsd', 'phases', '01-m001');
       mkdirSync(m001Dir, { recursive: true });
-      writeFileSync(join(m001Dir, 'M001-ROADMAP.md'), '# Roadmap');
+      writeFileSync(join(m001Dir, '01-ROADMAP.md'), '# Roadmap');
 
       // Orphaned WAL/SHM with NO gsd.db at all — can happen from a previous
       // partial cleanup. These must still be cleaned up.
@@ -186,11 +186,10 @@ describe('worktree-db-respawn-truncation (#2815)', async () => {
     const wtBase = createBase('wt');
 
     try {
-      const m001Dir = join(mainBase, '.gsd', 'milestones', 'M001');
+      const m001Dir = join(mainBase, '.gsd', 'phases', '01-m001');
       mkdirSync(m001Dir, { recursive: true });
-      writeFileSync(join(m001Dir, 'M001-ROADMAP.md'), '# Roadmap');
-      mkdirSync(join(m001Dir, 'slices', 'S01'), { recursive: true });
-      writeFileSync(join(m001Dir, 'slices', 'S01', 'S01-PLAN.md'), '# Plan');
+      writeFileSync(join(m001Dir, '01-ROADMAP.md'), '# Roadmap');
+      writeFileSync(join(m001Dir, '01-01-PLAN.md'), '# Plan');
 
       // Non-empty DB in worktree
       writeFileSync(join(wtBase, '.gsd', 'gsd.db'), 'populated-db-data');
@@ -199,11 +198,11 @@ describe('worktree-db-respawn-truncation (#2815)', async () => {
 
       // Artifacts must still be synced
       assert.ok(
-        existsSync(join(wtBase, '.gsd', 'milestones', 'M001', 'M001-ROADMAP.md')),
+        existsSync(join(wtBase, '.gsd', 'phases', '01-m001', '01-ROADMAP.md')),
         'milestone artifacts synced even with preserved DB',
       );
       assert.ok(
-        existsSync(join(wtBase, '.gsd', 'milestones', 'M001', 'slices', 'S01', 'S01-PLAN.md')),
+        existsSync(join(wtBase, '.gsd', 'phases', '01-m001', '01-01-PLAN.md')),
         'slice artifacts synced even with preserved DB',
       );
       // DB must still exist

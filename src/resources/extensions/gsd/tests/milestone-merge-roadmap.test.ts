@@ -18,7 +18,7 @@ import { cleanup, makeTempRepo } from "./test-utils.ts";
 test("resolveRoadmapForMilestoneMerge reads an existing ROADMAP projection", () => {
   const base = makeTempRepo("gsd-merge-roadmap-existing-");
   try {
-    const roadmapDir = join(base, ".gsd", "milestones", "M010");
+    const roadmapDir = join(base, ".gsd", "phases", "10-m010");
     mkdirSync(roadmapDir, { recursive: true });
     const roadmapPath = join(roadmapDir, "M010-ROADMAP.md");
     writeFileSync(roadmapPath, "# M010: Existing roadmap\n");

@@ -20,9 +20,18 @@
  * in the isolated tmp cwd.
  */
 import { execFileSync } from "node:child_process";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { gsdAsync, gsdSync, stripAnsi, type SpawnSyncResult, type TmpProject } from "../e2e/_shared/index.ts";
+import { gsdAsync, stripAnsi, type SpawnSyncResult, type TmpProject } from "../e2e/_shared/index.ts";
+import {
+  canonicalPhaseDirName,
+  LAYOUT_SEGMENTS,
+  milestoneIdToPhaseNum,
+  slicePlanFileName,
+} from "../../src/resources/extensions/gsd/layout-policy.ts";
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const CRED_RE = /_API_KEY$|_OAUTH_TOKEN$/;
 const USE_HOME_ENV = "GSD_LIVE_WORKFLOW_USE_HOME";
@@ -114,27 +123,51 @@ function git(dir: string, args: string[]): void {
   execFileSync("git", args, { cwd: dir, stdio: "pipe" });
 }
 
+interface SeedCounts {
+  hierarchy: { milestones: number; slices: number; tasks: number };
+}
+
 /**
- * `gsd headless recover` is two-step: the first call prints an import preview
- * (`re-run with --preview=sha256:<hash>`) and exits non-zero; the second call
- * with that hash applies it. Same dance as tests/acceptance-bed.
+ * Load the fixture's on-disk markdown into the project database.
+ *
+ * This used to shell out to the two-step `gsd headless recover`, the
+ * operator-facing markdown→DB import. That command and the kernel behind it
+ * are gone: the database is the sole authority and no production path adopts
+ * markdown. What survives for exactly this purpose is md-importer's
+ * `migrateFromMarkdown`, the explicitly test-only scaffolding importer.
+ *
+ * It runs in a child process so the harness never holds a SQLite handle on the
+ * project the agent is about to run against.
  */
-function recoverWithApproval(dir: string): void {
-  const preview = gsdSync(["headless", "recover"], { cwd: dir, timeoutMs: 60_000, env: liveEnv() });
-  const previewHash = /re-run with --preview=(sha256:[0-9a-f]{64})/u.exec(preview.stderrClean)?.[1];
-  if (!previewHash) {
-    throw new Error(
-      `headless recover printed no preview hash (code=${preview.code}):\n${preview.stderrClean.slice(0, 1200)}`,
-    );
+function seedDatabaseFromMarkdown(dir: string): SeedCounts {
+  const moduleUrl = (name: string) =>
+    JSON.stringify(pathToFileURL(join(REPO_ROOT, "dist", "resources", "extensions", "gsd", name)).href);
+  const script = [
+    `const { migrateFromMarkdown } = await import(${moduleUrl("md-importer.js")});`,
+    `const { closeDatabase } = await import(${moduleUrl("gsd-db.js")});`,
+    "const counts = migrateFromMarkdown(process.argv[1]);",
+    "closeDatabase();",
+    "process.stdout.write(JSON.stringify(counts));",
+  ].join("\n");
+
+  let raw: string;
+  try {
+    raw = execFileSync(process.execPath, ["--input-type=module", "-e", script, dir], {
+      cwd: dir,
+      encoding: "utf8",
+      timeout: 60_000,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (err) {
+    const detail = (err as { stderr?: string })?.stderr ?? String(err);
+    throw new Error(`fixture DB seeding failed:\n${detail.slice(0, 1200)}`);
   }
-  const approved = gsdSync(["headless", "recover", `--preview=${previewHash}`], {
-    cwd: dir,
-    timeoutMs: 60_000,
-    env: liveEnv(),
-  });
-  if (approved.code !== 0) {
-    throw new Error(`headless recover approval failed (code=${approved.code}):\n${approved.stderrClean.slice(0, 1200)}`);
+
+  const counts = JSON.parse(raw) as SeedCounts;
+  if (counts.hierarchy.milestones < 1 || counts.hierarchy.slices < 1 || counts.hierarchy.tasks < 1) {
+    throw new Error(`fixture DB seeding imported an empty hierarchy: ${raw}`);
   }
+  return counts;
 }
 
 /** One task of a seeded fixture: a source file the agent must write/fix and a node:test file that fails until it does. */
@@ -312,16 +345,22 @@ function seedMilestone(project: TmpProject, slices: FixtureSlice[], testScript: 
     project.writeFile(task.testFile, task.testSource);
   }
 
-  // GSD milestone structure (mirrors the layout the fake-LLM headless tests seed).
-  const milestoneDir = join(".gsd", "milestones", "M001");
+  // GSD flat-phase structure (mirrors the layout the fake-LLM headless tests
+  // seed). The pre-flat-phase milestones/<MID>/ shape is rejected by the
+  // legacy-layout guard, so names come from the layout policy itself.
+  const milestoneId = "M001";
+  const title = "Answer Fixture";
+  const phaseNum = milestoneIdToPhaseNum(milestoneId);
+  const phasePrefix = String(phaseNum).padStart(2, "0");
+  const phaseDir = join(".gsd", LAYOUT_SEGMENTS.level1, canonicalPhaseDirName(milestoneId, title));
   project.writeFile(
-    join(milestoneDir, "M001-CONTEXT.md"),
-    ["# M001: Answer Fixture", "", "## Purpose", "Live end-to-end smoke of the auto-orchestration loop.", ""].join("\n"),
+    join(phaseDir, `${phasePrefix}-CONTEXT.md`),
+    [`# ${milestoneId}: ${title}`, "", "## Purpose", "Live end-to-end smoke of the auto-orchestration loop.", ""].join("\n"),
   );
   project.writeFile(
-    join(milestoneDir, "M001-ROADMAP.md"),
+    join(phaseDir, `${phasePrefix}-ROADMAP.md`),
     [
-      "# M001: Answer Fixture",
+      `# ${milestoneId}: ${title}`,
       "",
       "## Slices",
       "",
@@ -333,23 +372,22 @@ function seedMilestone(project: TmpProject, slices: FixtureSlice[], testScript: 
     ].join("\n"),
   );
   for (const slice of slices) {
-    project.writeFile(join(milestoneDir, "slices", slice.id, `${slice.id}-PLAN.md`), planMarkdown(slice));
+    project.writeFile(join(phaseDir, slicePlanFileName(phaseNum, slice.id, "PLAN")), planMarkdown(slice));
   }
 
-  // Commit the fixture so recover starts from a clean tree.
+  // Commit the fixture so seeding starts from a clean tree.
   git(project.dir, ["add", "-A"]);
   git(project.dir, ["commit", "-m", "test: seed live-workflow answer fixture"]);
 
-  // Rebuild the DB hierarchy from the on-disk markdown so auto can dispatch.
-  recoverWithApproval(project.dir);
+  // Load the DB hierarchy from the on-disk markdown so auto can dispatch.
+  seedDatabaseFromMarkdown(project.dir);
 
-  // recover rewrites the markdown projection (canonical formatting) and drops
-  // the DB / backups, leaving the tree dirty — and gsd's pre-dispatch guard
-  // runs `git diff --check`, which reads recover's own trailing whitespace as a
-  // "product git conflict" and blocks auto before any agent runs. Commit the
-  // recovered state so the tree is clean, exactly as real usage would.
+  // Seeding creates .gsd/gsd.db and may touch untracked sidecar files. gsd's
+  // pre-dispatch guard runs `git diff --check` and reads any leftover as a
+  // "product git conflict", blocking auto before an agent runs. Commit whatever
+  // seeding left behind so the tree is clean, exactly as real usage would.
   git(project.dir, ["add", "-A"]);
-  git(project.dir, ["commit", "--allow-empty", "-m", "chore: absorb gsd recover state"]);
+  git(project.dir, ["commit", "--allow-empty", "-m", "chore: absorb seeded DB state"]);
 }
 
 /**

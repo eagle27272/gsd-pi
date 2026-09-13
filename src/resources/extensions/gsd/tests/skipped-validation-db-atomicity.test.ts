@@ -14,17 +14,18 @@ import {
   insertSlice,
   openDatabase,
 } from "../gsd-db.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 test("skipped validation dispatch persists the validation file and DB assessment together", async () => {
   const basePath = mkdtempSync(join(tmpdir(), "gsd-skip-validation-"));
-  const milestoneDir = join(basePath, ".gsd", "milestones", "M001");
-  const sliceDir = join(milestoneDir, "slices", "S01");
+  const milestoneDir = join(basePath, ".gsd", "phases", canonicalPhaseDirName("M001", "Validation"));
+  const sliceDir = milestoneDir;
   const rule = DISPATCH_RULES.find((r) => r.name === "validating-milestone → validate-milestone");
   assert.ok(rule, "validate-milestone rule is registered");
 
   try {
     mkdirSync(sliceDir, { recursive: true });
-    writeFileSync(join(sliceDir, "S01-SUMMARY.md"), "# S01 Summary\n", "utf-8");
+    writeFileSync(join(sliceDir, "01-01-SUMMARY.md"), "# S01 Summary\n", "utf-8");
     openDatabase(join(basePath, ".gsd", "gsd.db"));
     insertMilestone({ id: "M001", title: "Validation", status: "active", depends_on: [] });
     insertSlice({
@@ -47,9 +48,9 @@ test("skipped validation dispatch persists the validation file and DB assessment
     } as any);
 
     assert.deepEqual(action, { action: "skip" });
-    assert.equal(existsSync(join(milestoneDir, "M001-VALIDATION.md")), true);
-    assert.equal(existsSync(join(sliceDir, "S01-ASSESSMENT.md")), true);
-    const artifactPath = "milestones/M001/slices/S01/S01-ASSESSMENT.md";
+    assert.equal(existsSync(join(milestoneDir, "01-VALIDATION.md")), true);
+    assert.equal(existsSync(join(sliceDir, "01-01-ASSESSMENT.md")), true);
+    const artifactPath = `phases/${canonicalPhaseDirName("M001", "Validation")}/01-01-ASSESSMENT.md`;
     const assessmentPath = `.gsd/${artifactPath}`;
     assert.equal(getArtifact(artifactPath)?.artifact_type, "ASSESSMENT");
     // #1258: the per-slice ASSESSMENT fabricated by the pre-validation backfill

@@ -144,7 +144,7 @@ function setupTestEnvironment(): void {
   const gsdDir = join(tempDir, ".gsd");
   mkdirSync(gsdDir, { recursive: true });
 
-  const milestonesDir = join(gsdDir, "milestones", "M001", "slices", "S01", "tasks");
+  const milestonesDir = join(gsdDir, "phases", "01-m001", "tasks");
   mkdirSync(milestonesDir, { recursive: true });
 
   process.chdir(tempDir);
@@ -195,7 +195,7 @@ ${yamlLines.join("\n")}
 }
 
 function useFlatPhaseLayout(): string {
-  rmSync(join(tempDir, ".gsd", "milestones"), { recursive: true, force: true });
+  rmSync(join(tempDir, ".gsd", "phases"), { recursive: true, force: true });
   const phaseDir = join(tempDir, ".gsd", "phases", "01-m001");
   mkdirSync(phaseDir, { recursive: true });
   invalidateAllCaches();
@@ -1031,12 +1031,9 @@ describe("Post-execution blocking failure retry bypass", () => {
     const evidencePath = join(
       tempDir,
       ".gsd",
-      "milestones",
-      "M001",
-      "slices",
-      "S01",
-      "tasks",
-      "T01-VERIFY.json",
+      "phases",
+      "01-m001",
+      "S01-T01-VERIFY.json",
     );
     const previousProjection = '{"passed":false,"sentinel":"previous"}\n';
     writeFileSync(evidencePath, previousProjection, "utf-8");
@@ -1159,12 +1156,9 @@ describe("Post-execution blocking failure retry bypass", () => {
     const evidencePath = join(
       tempDir,
       ".gsd",
-      "milestones",
-      "M001",
-      "slices",
-      "S01",
-      "tasks",
-      "T01-VERIFY.json",
+      "phases",
+      "01-m001",
+      "S01-T01-VERIFY.json",
     );
     const evidence = JSON.parse(readFileSync(evidencePath, "utf-8"));
     assert.equal(evidence.passed, false, "inconclusive checker failure must not project a pass");
@@ -1330,7 +1324,7 @@ describe("Post-execution blocking failure retry bypass", () => {
       "no-host-checks failure should enter the automated repair loop",
     );
 
-    const evidencePath = join(tempDir, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T01-VERIFY.json");
+    const evidencePath = join(tempDir, ".gsd", "phases", "01-m001", "S01-T01-VERIFY.json");
     const evidence = JSON.parse(readFileSync(evidencePath, "utf-8"));
     assert.equal(evidence.passed, false);
     assert.equal(evidence.discoverySource, "none");
@@ -1366,7 +1360,7 @@ describe("Post-execution blocking failure retry bypass", () => {
       "completed web tasks without task-level commands should explain browser UAT handoff",
     );
 
-    const evidencePath = join(tempDir, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T01-VERIFY.json");
+    const evidencePath = join(tempDir, ".gsd", "phases", "01-m001", "S01-T01-VERIFY.json");
     const evidence = JSON.parse(readFileSync(evidencePath, "utf-8"));
     assert.equal(evidence.passed, false);
     assert.equal(evidence.discoverySource, "none");
@@ -1419,7 +1413,7 @@ describe("Post-execution blocking failure retry bypass", () => {
     assert.equal(s.pendingVerificationRetry?.unitId, "M001/S01/T01");
     assert.equal(s.verificationRetryCount.get("execute-task:M001/S01/T01"), 1);
 
-    const evidencePath = join(tempDir, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T01-VERIFY.json");
+    const evidencePath = join(tempDir, ".gsd", "phases", "01-m001", "S01-T01-VERIFY.json");
     const evidence = JSON.parse(readFileSync(evidencePath, "utf-8"));
     assert.equal(evidence.passed, false);
     assert.equal(evidence.retryAttempt, 1);

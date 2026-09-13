@@ -21,12 +21,13 @@ import { deriveState, deriveStateFromDb, invalidateStateCache } from "../state.t
 import { reconcileBeforeDispatch } from "../state-reconciliation.ts";
 import { resolveDispatch } from "../auto-dispatch.ts";
 import type { DispatchContext } from "../auto-dispatch.ts";
+import { milestoneIdToPhaseNum, slicePlanFileName } from "../layout-policy.ts";
 
 function makeFixtureBase(): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-adr011-"));
   mkdirSync(join(base, ".gsd"), { recursive: true });
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S02"), { recursive: true });
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
   return base;
 }
 
@@ -82,8 +83,8 @@ function seedMilestoneWithSketchedS02(base: string): void {
 }
 
 function writeS01Artifacts(base: string): void {
-  writeFileSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md"), "# S01 Plan\n");
-  writeFileSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-SUMMARY.md"), "# S01 Summary\n");
+  writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-01-PLAN.md"), "# S01 Plan\n");
+  writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-01-SUMMARY.md"), "# S01 Summary\n");
 }
 
 function writeFlatS01Artifacts(base: string): void {
@@ -257,14 +258,14 @@ test("ADR-011: autoHealSketchFlags flips is_sketch=0 when PLAN file exists", asy
   // Simulate crash between plan-slice write and sketch flip: PLAN.md exists
   // but is_sketch is still 1.
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "slices", "S02", "S02-PLAN.md"),
+    join(base, ".gsd", "phases", "01-m001", "01-02-PLAN.md"),
     "# S02 Plan\n",
   );
   assert.equal(getSlice("M001", "S02")?.is_sketch, 1, "pre: flagged as sketch");
 
   const { existsSync } = await import("node:fs");
   autoHealSketchFlags("M001", (sid) => {
-    const planPath = join(base, ".gsd", "milestones", "M001", "slices", sid, `${sid}-PLAN.md`);
+    const planPath = join(base, ".gsd", "phases", "01-m001", slicePlanFileName(milestoneIdToPhaseNum("M001"), sid, "PLAN"));
     return existsSync(planPath);
   });
 
@@ -532,7 +533,7 @@ test("ADR-011 P3 #19: refine-slice prompt incorporates prior slice findings + sk
 
   // Minimal roadmap so inlineRoadmapExcerpt has something to read.
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "ROADMAP.md"),
+    join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md"),
     [
       "# M001: Integration test milestone",
       "",
@@ -548,7 +549,7 @@ test("ADR-011 P3 #19: refine-slice prompt incorporates prior slice findings + sk
   // Write S01 artifacts — the SUMMARY carries findings that S02's refine pass
   // must incorporate. The specific markers below are what the assertion pins.
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md"),
+    join(base, ".gsd", "phases", "01-m001", "01-01-PLAN.md"),
     "# S01 Plan\n",
   );
   const s01Findings = [
@@ -564,7 +565,7 @@ test("ADR-011 P3 #19: refine-slice prompt incorporates prior slice findings + sk
     "- Do not introduce a background worker yet — premature.",
   ].join("\n");
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-SUMMARY.md"),
+    join(base, ".gsd", "phases", "01-m001", "01-01-SUMMARY.md"),
     s01Findings,
   );
 
@@ -634,7 +635,7 @@ test("ADR-011 P3 #26: refine-slice dispatch latency is bounded vs plan-slice bas
   seedMilestoneWithSketchedS02(base);
   writeS01Artifacts(base);
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "ROADMAP.md"),
+    join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md"),
     [
       "# M001: Test",
       "",

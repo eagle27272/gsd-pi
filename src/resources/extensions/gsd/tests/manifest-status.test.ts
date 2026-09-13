@@ -23,7 +23,7 @@ function makeTempDir(prefix: string): string {
 
 /** Create the .gsd/milestones/M001/ directory structure and write a secrets manifest. */
 function writeManifest(base: string, content: string): void {
-  const mDir = join(base, '.gsd', 'milestones', 'M001');
+  const mDir = join(base, '.gsd', 'phases', '01-m001');
   mkdirSync(mDir, { recursive: true });
   writeFileSync(join(mDir, 'M001-SECRETS.md'), content);
 }

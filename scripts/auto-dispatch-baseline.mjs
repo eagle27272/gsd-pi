@@ -55,6 +55,9 @@ const { invalidateStateCache, resetDeriveTelemetry, getDeriveTelemetry } = await
 const { reconcileBeforeDispatch } = await import(`${REPO_ROOT}/${GSD}/state-reconciliation.ts`);
 const { detectStaleRenders } = await import(`${REPO_ROOT}/${GSD}/markdown-renderer.ts`);
 const { preDispatchHealthGate } = await import(`${REPO_ROOT}/${GSD}/doctor-proactive.ts`);
+const { canonicalPhaseDirName, LAYOUT_SEGMENTS, milestoneIdToPhaseNum, slicePlanFileName } = await import(
+  `${REPO_ROOT}/${GSD}/layout-policy.ts`
+);
 
 // ─── args ───────────────────────────────────────────────────────────────────
 
@@ -105,8 +108,16 @@ function planMd(sliceId, tasks) {
 
 function buildSyntheticFixture() {
   const base = mkdtempSync(join(tmpdir(), "gsd-auto-dispatch-baseline-"));
-  const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
-  mkdirSync(join(sliceDir, "tasks"), { recursive: true });
+  // Flat-phase layout. Naming comes from layout-policy so the fixture cannot
+  // drift from the resolvers: on the pre-flat-phase milestones/<MID>/ shape
+  // every resolver returns null, runDispatchPass swallows the resulting stage
+  // errors, and the counters this harness gates on collapse to zero.
+  const milestoneId = "M001";
+  const milestoneTitle = "Bench Milestone";
+  const phaseNum = milestoneIdToPhaseNum(milestoneId);
+  const phasePrefix = String(phaseNum).padStart(2, "0");
+  const phaseDir = join(base, ".gsd", LAYOUT_SEGMENTS.level1, canonicalPhaseDirName(milestoneId, milestoneTitle));
+  mkdirSync(phaseDir, { recursive: true });
 
   // The health gate shells out to git, so the fixture must be a real repo.
   const gitEnv = { ...process.env, GIT_AUTHOR_NAME: "bench", GIT_AUTHOR_EMAIL: "bench@x", GIT_COMMITTER_NAME: "bench", GIT_COMMITTER_EMAIL: "bench@x" };
@@ -115,22 +126,24 @@ function buildSyntheticFixture() {
   git(["checkout", "-q", "-b", "main"]);
 
   openDatabase(join(base, ".gsd", "gsd.db"));
-  insertMilestone({ id: "M001", title: "Bench Milestone", status: "active" });
-  insertSlice({ id: "S01", milestoneId: "M001", title: "Bench Slice", status: "active", risk: "medium", depends: [], sequence: 1 });
-  insertSlice({ id: "S02", milestoneId: "M001", title: "Second Slice", status: "pending", risk: "low", depends: [], sequence: 2 });
-  insertTask({ id: "T01", sliceId: "S01", milestoneId: "M001", title: "First task", status: "active" });
-  insertTask({ id: "T02", sliceId: "S01", milestoneId: "M001", title: "Second task", status: "pending" });
+  insertMilestone({ id: milestoneId, title: milestoneTitle, status: "active" });
+  insertSlice({ id: "S01", milestoneId, title: "Bench Slice", status: "active", risk: "medium", depends: [], sequence: 1 });
+  insertSlice({ id: "S02", milestoneId, title: "Second Slice", status: "pending", risk: "low", depends: [], sequence: 2 });
+  insertTask({ id: "T01", sliceId: "S01", milestoneId, title: "First task", status: "active" });
+  insertTask({ id: "T02", sliceId: "S01", milestoneId, title: "Second task", status: "pending" });
 
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"),
+    join(phaseDir, `${phasePrefix}-ROADMAP.md`),
     roadmapMd([{ id: "S01", title: "Bench Slice", done: false }, { id: "S02", title: "Second Slice", done: false }]),
   );
   writeFileSync(
-    join(sliceDir, "S01-PLAN.md"),
+    join(phaseDir, slicePlanFileName(phaseNum, "S01", "PLAN")),
     planMd("S01", [{ id: "T01", title: "First task", done: false }, { id: "T02", title: "Second task", done: false }]),
   );
 
-  git(["add", "-A"]);
+  // -f: a developer's global gitignore commonly excludes `.gsd`, which would
+  // leave nothing to commit and abort the run before a single counter is read.
+  git(["add", "-A", "-f"]);
   git(["commit", "-q", "-m", "bench fixture"]);
   return base;
 }

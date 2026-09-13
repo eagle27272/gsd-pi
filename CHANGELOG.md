@@ -17,6 +17,28 @@ upstream **v1.18.0**. Later changes are tracked in this repository's git history
   because every row path still pointed at a file that existed
   ([#2](https://github.com/eagle27272/gsd-pi/issues/2)).
 
+### Removed
+
+- The obsolete migration surfaces, in four waves. Nothing imports markdown into the
+  database any more, and nothing converts an old on-disk layout:
+  - **Telemetry and alias shims** — the legacy telemetry counters and the in-process
+    MCP tool aliases, along with the `GSD_ADVERTISE_TOOL_ALIASES` switch that
+    registered them. The packaged `gsd-workflow` MCP server keeps its own
+    `GSD_MCP_ADVERTISE_ALIASES` switch.
+  - **`/gsd migrate`** — the `.planning/` → `.gsd/` import command. gsd-pi still
+    observes `.planning/` edits as drift and still projects database state back to a
+    recorded `.planning/` layout, but it cannot adopt one.
+  - **The legacy-import kernel** (38 modules), the no-argument `/gsd recover`
+    markdown-import form, and the `gsd headless recover` entrypoint. `/gsd recover
+    <recoveryActionId>` — Task recovery resume — is unaffected. The canonical-JSON
+    primitives the kernel owned now live in `canonical-json.ts`.
+  - **Pathing and relocation** — `flat-phase-migration.ts`, `migrate-external.ts`
+    (the in-repo `.gsd/` → `~/.gsd/projects/<hash>/` relocation), and `paths.ts`'s
+    pre-flat-phase resolver branches. A real in-repo `.gsd/` directory is a supported
+    layout and is no longer moved. In its place, `legacy-layout-guard.ts` refuses to
+    start on a content-bearing `.gsd/milestones/<MID>/`; **v1.18.0 is the last
+    release that can convert that layout to `.gsd/phases/`.**
+
 ### Fixed
 
 - Renaming a milestone no longer splits its artifacts between two `phases/NN-slug/`

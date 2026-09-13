@@ -10,7 +10,7 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, realpathSync, writeFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 
@@ -160,6 +160,41 @@ describe("detectEvalReviewState", () => {
     if (result.kind === "no-slice-dir") {
       assert.equal(result.sliceId, "S07");
     }
+  });
+
+  it("reports a flat-phase expectedDir, not a pre-flat-phase milestones/<MID>/slices/<SID> path", () => {
+    mkdirSync(join(basePath, ".gsd", "phases", "02-other"), { recursive: true });
+    const result = detectEvalReviewState(
+      { sliceId: "S07", force: false, show: false },
+      basePath,
+      "M001",
+    );
+    assert.equal(result.kind, "no-slice-dir");
+    if (result.kind !== "no-slice-dir") return;
+    assert.ok(
+      result.expectedDir.endsWith(join("phases", "01-m001")),
+      `expectedDir must name the canonical flat-phase dir, got ${result.expectedDir}`,
+    );
+    assert.ok(
+      !result.expectedDir.includes(`${sep}milestones${sep}`),
+      "expectedDir must not point into the removed milestones/ tree",
+    );
+    assert.ok(
+      !result.expectedDir.includes(`${sep}slices${sep}`),
+      "flat-phase has no slices/ subdirectory",
+    );
+  });
+
+  it("advances past no-slice-dir for a phase dir whose slug does not match the milestone id", () => {
+    // The phase slug comes from the milestone title, so resolution must scan
+    // phases/ rather than construct a path from the milestone id.
+    mkdirSync(join(basePath, ".gsd", "phases", "01-payments-rework"), { recursive: true });
+    const result = detectEvalReviewState(
+      { sliceId: "S07", force: false, show: false },
+      basePath,
+      "M001",
+    );
+    assert.equal(result.kind, "no-summary");
   });
 
   it("returns no-summary when the slice directory exists but SUMMARY.md is missing", () => {

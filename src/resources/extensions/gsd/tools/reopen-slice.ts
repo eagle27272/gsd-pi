@@ -43,9 +43,7 @@ import {
 import {
   buildFlatTaskFileName,
   buildTaskFileName,
-  legacyMilestonesDir,
   resolveMilestonePath,
-  resolveTasksDir,
   resolveSliceFile,
   resolveSlicePath,
   targetSliceFile,
@@ -126,21 +124,14 @@ export async function handleReopenSlice(
     const slice = { milestoneId: params.milestoneId, sliceId: params.sliceId };
     const isCurrent = () => isCurrentSliceReopenOperation(operationId, slice);
     const milestoneDir = resolveMilestonePath(basePath, params.milestoneId);
-    const legacyBase = legacyMilestonesDir(basePath);
-    const isLegacy = !!milestoneDir && (
-      milestoneDir.startsWith(legacyBase + "/") || milestoneDir.startsWith(legacyBase + "\\")
-    );
-    const tasksDir = resolveTasksDir(basePath, params.milestoneId, params.sliceId);
     const tasks = getSliceTasks(params.milestoneId, params.sliceId);
     cleanup: for (const task of tasks) {
-      const summaryPaths = isLegacy
-        ? (tasksDir ? [join(tasksDir, buildTaskFileName(task.id, "SUMMARY"))] : [])
-        : milestoneDir
-          ? [
-            join(milestoneDir, buildFlatTaskFileName(params.sliceId, task.id, "SUMMARY")),
-            join(milestoneDir, buildTaskFileName(task.id, "SUMMARY")),
-          ]
-          : [];
+      const summaryPaths = milestoneDir
+        ? [
+          join(milestoneDir, buildFlatTaskFileName(params.sliceId, task.id, "SUMMARY")),
+          join(milestoneDir, buildTaskFileName(task.id, "SUMMARY")),
+        ]
+        : [];
       for (const summaryPath of summaryPaths) {
         if (!removeProjectionIfCurrent({ artifactPath: summaryPath, operationId, isCurrent })) {
           projectionStale = true;

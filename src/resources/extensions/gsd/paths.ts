@@ -2,12 +2,9 @@
 /**
  * GSD Paths — ID-based path resolution
  *
- * Directories use bare IDs: M001/, S01/, etc.
- * Files use ID-SUFFIX: M001-ROADMAP.md, S01-PLAN.md, T01-PLAN.md
- *
- * Resolvers still handle legacy descriptor-suffixed names
- * (e.g. M001-FLIGHT-SIMULATOR/, T03-INSTALL-PACKAGES-PLAN.md)
- * via prefix matching, so existing projects work without migration.
+ * Milestones live in the flat-phase layout: phases/NN-slug/, with phase-level
+ * files named NN-SUFFIX.md and plan files NN-MM-SUFFIX.md. Slice directories,
+ * when present, use bare IDs (S01/) and files use ID-SUFFIX (S01-PLAN.md).
  */
 
 import { readdirSync, existsSync, realpathSync, statSync, Dirent } from "node:fs";
@@ -247,72 +244,49 @@ export function buildFlatTaskFileName(sliceId: string, taskId: string, suffix: s
 }
 
 /**
- * Extract the task ID from a task artifact filename.
- * Supports flat-phase S##-T##-SUFFIX.md plus legacy T##-SUFFIX.md and
- * T##-DESCRIPTOR-SUFFIX.md names.
+ * Extract the task ID from a task artifact filename: the flat-phase
+ * S##-T##-SUFFIX.md form, or the bare T##-SUFFIX.md that buildTaskFileName
+ * still produces. Descriptor-suffixed names are not recognized.
  */
 export function taskIdFromTaskFileName(fileName: string, suffix: string): string | null {
   const flat = new RegExp(`^S\\d+-(T\\d+)-${suffix}\\.md$`, "i").exec(fileName);
   if (flat?.[1]) return flat[1].toUpperCase();
-  const legacy = new RegExp(`^(T\\d+)(?:-.*)?-${suffix}\\.md$`, "i").exec(fileName);
-  return legacy?.[1]?.toUpperCase() ?? null;
+  const bare = new RegExp(`^(T\\d+)-${suffix}\\.md$`, "i").exec(fileName);
+  return bare?.[1]?.toUpperCase() ?? null;
 }
 
 // ─── Resolvers ─────────────────────────────────────────────────────────────
 
 /**
- * Find a directory entry by ID prefix within a parent directory.
- * Exact match first (M001), then prefix match (M001-SOMETHING) for
- * backward compatibility with legacy descriptor directories.
- * Returns the full directory name or null.
+ * Find a directory entry by bare ID within a parent directory (e.g. S01).
+ * Matching is case-insensitive. Returns the directory name or null.
  */
 export function resolveDir(parentDir: string, idPrefix: string): string | null {
   if (!existsSync(parentDir)) return null;
   try {
     const entries = cachedReaddirWithTypes(parentDir);
-    // Exact match first (current convention: bare ID)
     const exact = entries.find(e => e.isDirectory() && e.name === idPrefix);
     if (exact) return exact.name;
     const idLower = idPrefix.toLowerCase();
     const exactCaseInsensitive = entries.find(
       e => e.isDirectory() && e.name.toLowerCase() === idLower
     );
-    if (exactCaseInsensitive) return exactCaseInsensitive.name;
-    // Prefix match for legacy descriptor dirs: M001-SOMETHING
-    const prefixed = entries.find(
-      e => e.isDirectory() && e.name.toLowerCase().startsWith(idLower + "-")
-    );
-    return prefixed ? prefixed.name : null;
+    return exactCaseInsensitive ? exactCaseInsensitive.name : null;
   } catch {
     return null;
   }
 }
 
 /**
- * Find a file by ID prefix and suffix within a directory.
- * Checks in order:
- *   1. Direct: ID-SUFFIX.md (e.g. M001-ROADMAP.md, T03-PLAN.md)
- *   2. Legacy descriptor: ID-DESCRIPTOR-SUFFIX.md (e.g. T03-INSTALL-PACKAGES-PLAN.md)
- *   3. Legacy bare: suffix.md (e.g. roadmap.md)
+ * Find a file by ID prefix and suffix within a directory:
+ * ID-SUFFIX.md (e.g. M001-ROADMAP.md, T03-PLAN.md).
  */
 export function resolveFile(dir: string, idPrefix: string, suffix: string): string | null {
   if (!existsSync(dir)) return null;
   const target = `${idPrefix}-${suffix}.md`.toUpperCase();
   try {
     const entries = cachedReaddirWithTypes(dir).filter(e => e.isFile()).map(e => e.name);
-    // Direct match: ID-SUFFIX.md
-    const direct = entries.find(e => e.toUpperCase() === target);
-    if (direct) return direct;
-    // Legacy pattern match: ID-DESCRIPTOR-SUFFIX.md
-    const pattern = new RegExp(
-      `^${idPrefix}-.*-${suffix}\\.md$`, "i"
-    );
-    const match = entries.find(e => pattern.test(e));
-    if (match) return match;
-    // Legacy fallback: suffix.md
-    const legacy = entries.find(e => e.toLowerCase() === `${suffix.toLowerCase()}.md`);
-    if (legacy) return legacy;
-    return null;
+    return entries.find(e => e.toUpperCase() === target) ?? null;
   } catch {
     return null;
   }
@@ -320,8 +294,7 @@ export function resolveFile(dir: string, idPrefix: string, suffix: string): stri
 
 /**
  * Find all task files matching a pattern in a tasks directory or flat phase dir.
- * Returns sorted file names matching S##-T##-SUFFIX.md, T##-SUFFIX.md,
- * or legacy T##-*-SUFFIX.md.
+ * Returns sorted file names matching S##-T##-SUFFIX.md.
  */
 export function resolveTaskFiles(tasksDir: string, suffix: string): string[] {
   if (!existsSync(tasksDir)) return [];
@@ -338,15 +311,14 @@ export function resolveTaskFiles(tasksDir: string, suffix: string): string[] {
 
 /**
  * Find all task JSON files matching a pattern in a tasks directory.
- * Returns sorted file names matching T##-SUFFIX.json or legacy T##-*-SUFFIX.json
+ * Returns sorted file names matching T##-SUFFIX.json
  */
 export function resolveTaskJsonFiles(tasksDir: string, suffix: string): string[] {
   if (!existsSync(tasksDir)) return [];
   try {
     const currentPattern = new RegExp(`^T\\d+-${suffix}\\.json$`, "i");
-    const legacyPattern = new RegExp(`^T\\d+-.*-${suffix}\\.json$`, "i");
     return cachedReaddir(tasksDir)
-      .filter(f => currentPattern.test(f) || legacyPattern.test(f))
+      .filter(f => currentPattern.test(f))
       .sort();
   } catch {
     return [];
@@ -368,17 +340,6 @@ export const GSD_ROOT_FILES = {
 
 export type GSDRootFileKey = keyof typeof GSD_ROOT_FILES;
 
-const LEGACY_GSD_ROOT_FILES: Record<GSDRootFileKey, string> = {
-  PROJECT: "project.md",
-  DECISIONS: "decisions.md",
-  QUEUE: "queue.md",
-  STATE: "state.md",
-  REQUIREMENTS: "requirements.md",
-  OVERRIDES: "overrides.md",
-  KNOWLEDGE: "knowledge.md",
-  CODEBASE: "codebase.md",
-};
-
 // ─── GSD Root Discovery ───────────────────────────────────────────────────────
 
 // Process-lifetime cache for gsdRoot() results.
@@ -398,7 +359,7 @@ export interface GsdPathContract {
   workRoot: string;
   /** Canonical authoritative .gsd directory. */
   projectGsd: string;
-  /** Legacy worktree-local .gsd projection directory, when applicable. */
+  /** Worktree-local .gsd projection directory, when applicable. */
   worktreeGsd: string | null;
   /** Canonical authoritative SQLite DB path. */
   projectDb: string;
@@ -548,7 +509,7 @@ function isInsideGsdWorktree(p: string): boolean {
   return name.length > 0;
 }
 
-/** Prefix used by executeMigrationWrite temp dirs (`mkdtempSync(join(targetRoot, prefix))`). */
+/** Prefix used by staged-write temp dirs (`mkdtempSync(join(targetRoot, prefix))`). */
 export const MIGRATION_STAGING_DIR_PREFIX = ".gsd-migrate-stage-";
 
 /**
@@ -636,102 +597,13 @@ function probeGsdRoot(rawBasePath: string): string {
   // 4. Fallback for init/creation
   return local;
 }
-function legacyMilestonesHasSubdirsIn(projectionRoot: string): boolean {
-  const legacy = join(projectionRoot, "milestones");
-  if (!existsSync(legacy)) return false;
-  try {
-    return readdirSync(legacy).some(e => statSync(join(legacy, e)).isDirectory() && dirIsContentBearingLegacyMilestone(join(legacy, e)));
-  } catch {
-    return false;
-  }
-}
-
-function legacyMilestonesHasSubdirs(basePath: string): boolean {
-  return legacyMilestonesHasSubdirsIn(gsdProjectionRoot(basePath));
-}
-
-/**
- * A `milestones/<MID>/` directory is only a real legacy layout entry if it
- * contains content files (CONTEXT/ROADMAP/SUMMARY/…). git-service.ts creates
- * `milestones/<MID>/` to store the integration-branch metadata
- * (`<MID>-META.json`) even in flat-phase projects, so a directory holding only
- * `*-META.json` must NOT count as legacy — otherwise layout detection flips to
- * legacy and artifact verification resolves to the wrong path
- * (`milestones/<MID>/<MID>-CONTEXT.md` instead of `phases/NN-slug/NN-CONTEXT.md`),
- * trapping the unit in a finalize-retry loop (#852 follow-up).
- *
- * See the matching TODO in markdown-renderer.ts detectStaleRenders, which
- * disabled stale-render detection for the same reason.
- */
-const LEGACY_MILESTONE_RUNTIME_DIRS = new Set(["anchors"]);
-
-export function dirIsContentBearingLegacyMilestone(dir: string): boolean {
-  try {
-    const entries = readdirSync(dir, { withFileTypes: true });
-    // 1. Any non-META regular file → real legacy content.
-    if (entries.some(e => e.isFile() && !e.name.endsWith("-META.json"))) return true;
-    // 2. A non-empty non-runtime subdirectory → real legacy content (e.g. slices/ with slice dirs).
-    //    An *empty* subdir is treated as scaffolding (e.g. git-service.ts may create
-    //    an empty slices/ alongside the integration META file) and must NOT flip the
-    //    layout — that is the Bugbot finding this guard addresses.
-    return entries.some(e => {
-      if (!e.isDirectory()) return false;
-      if (LEGACY_MILESTONE_RUNTIME_DIRS.has(e.name)) return false;
-      try { return readdirSync(join(dir, e.name)).length > 0; } catch { return false; }
-    });
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Returns true iff the directory exists, is non-empty, and ALL entries are
- * `*-META.json` files (git-service integration-branch metadata pollution in a
- * flat-phase project). Used by resolveProjectMilestonePath to skip dirs that
- * only hold metadata — not as a layout-detection guard.
- *
- * Deliberately distinct from dirIsContentBearingLegacyMilestone: an EMPTY dir
- * (new milestone, no content written yet) returns false here because it is not
- * META-only — it is a valid placeholder that a writer may target.
- */
-export function dirIsMetaOnlyLegacyMilestone(dir: string): boolean {
-  try {
-    const entries = readdirSync(dir);
-    if (entries.length === 0) return false; // empty = not META-only
-    return entries.every(name => name.endsWith("-META.json"));
-  } catch {
-    return false;
-  }
-}
-
-export function isLegacyMilestonesLayout(basePath: string): boolean {
-  return legacyMilestonesHasSubdirs(basePath);
-}
-
-/** isLegacyMilestonesLayout for callers that already hold the projection root. */
-export function isLegacyMilestonesLayoutIn(projectionRoot: string): boolean {
-  return legacyMilestonesHasSubdirsIn(projectionRoot);
-}
 
 export function milestonesDirIn(projectionRoot: string): string {
-  // Layout-aware: return milestones/ when it has legacy content, otherwise phases/.
-  if (legacyMilestonesHasSubdirsIn(projectionRoot)) {
-    return join(projectionRoot, "milestones");
-  }
   return join(projectionRoot, LAYOUT_SEGMENTS.level1);
 }
 
 export function milestonesDir(basePath: string): string {
   return milestonesDirIn(gsdProjectionRoot(basePath));
-}
-
-/**
- * Legacy milestones directory (pre-flat-phase). Used as a fallback for
- * projects that haven't been migrated yet. The migration (flat-phase-migration.ts)
- * moves content from here to phases/ on startup.
- */
-export function legacyMilestonesDir(basePath: string): string {
-  return join(gsdProjectionRoot(basePath), "milestones");
 }
 
 /**
@@ -785,8 +657,6 @@ export function phaseDirMatchesMilestoneId(
  * state dir (#2).
  */
 export function resolvePhaseDirIn(projectionRoot: string, milestoneId: string): string | null {
-  // Try flat-phase layout first: phases/NN-slug/ (always scan phases/, even when
-  // legacy milestones/ coexists during partial migration).
   const phasesDir = join(projectionRoot, LAYOUT_SEGMENTS.level1);
   if (existsSync(phasesDir)) {
     const phaseNum = milestoneIdToPhaseNum(milestoneId);
@@ -821,17 +691,6 @@ export function resolvePhaseDirIn(projectionRoot: string, milestoneId: string): 
       return join(phasesDir, preferred);
     }
   }
-  // Legacy fallback: milestones/M001/ (pre-flat-phase layout). Only consider a
-  // milestone dir legacy if it actually carries content — git-service.ts creates
-  // milestones/<MID>/ for integration-branch metadata even in flat-phase
-  // projects, so a metadata-only dir must not flip the layout (#852 follow-up).
-  const legacyDir = join(projectionRoot, "milestones");
-  if (existsSync(legacyDir)) {
-    const candidate = resolveDir(legacyDir, milestoneId);
-    if (candidate && dirIsContentBearingLegacyMilestone(join(legacyDir, candidate))) {
-      return join(legacyDir, candidate);
-    }
-  }
   return null;
 }
 
@@ -844,12 +703,7 @@ export function resolveRuntimeFile(basePath: string): string {
 }
 
 export function resolveGsdRootFile(basePath: string, key: GSDRootFileKey): string {
-  const root = gsdRoot(basePath);
-  const canonical = join(root, GSD_ROOT_FILES[key]);
-  if (existsSync(canonical)) return canonical;
-  const legacy = join(root, LEGACY_GSD_ROOT_FILES[key]);
-  if (existsSync(legacy)) return legacy;
-  return canonical;
+  return join(gsdRoot(basePath), GSD_ROOT_FILES[key]);
 }
 
 export function relGsdRootFile(key: GSDRootFileKey): string {
@@ -862,47 +716,15 @@ export function relGsdRootFile(key: GSDRootFileKey): string {
  */
 export function resolveMilestonePath(basePath: string, milestoneId: string): string | null {
   // Flat-phase: scan phases/ for NN-slug dir matching the milestone number.
-  const phaseDir = resolvePhaseDir(basePath, milestoneId);
-  if (phaseDir) return phaseDir;
-  // Legacy fallback: try old milestones/ dir (pre-flat-phase layout). Same
-  // content-bearing guard as resolvePhaseDir — a metadata-only milestones/<MID>/
-  // (created by git-service.ts for the integration branch) must not be treated
-  // as a real legacy milestone dir (#852 follow-up).
-  const oldMilestonesDir = join(gsdProjectionRoot(basePath), "milestones");
-  if (existsSync(oldMilestonesDir)) {
-    const legacyDir = resolveDir(oldMilestonesDir, milestoneId);
-    if (legacyDir && dirIsContentBearingLegacyMilestone(join(oldMilestonesDir, legacyDir))) {
-      return join(oldMilestonesDir, legacyDir);
-    }
-  }
-  return null;
+  return resolvePhaseDir(basePath, milestoneId);
 }
 
 /**
- * Returns true iff a milestone directory physically exists on disk, regardless
- * of whether it is content-bearing.
- *
- * Distinct from resolveMilestonePath, which intentionally returns null for a
- * legacy `milestones/<MID>/` directory that holds only scaffolding (e.g. an
- * empty `slices/` created by discuss/queue flows before any CONTEXT/ROADMAP is
- * written). That content-bearing gate is right for artifact resolution but
- * wrong as a "directory is missing from disk" proxy: the workflow prompts
- * create the milestone directory early, so a queued milestone in normal
- * in-flight planning would otherwise look like an orphan. Use this to decide
- * whether a milestone directory is truly absent (no directory at all) vs merely
- * empty. See doctor-runtime-checks.ts orphan_milestone_db (#1524).
+ * Returns true iff a milestone directory physically exists on disk.
+ * See doctor-runtime-checks.ts orphan_milestone_db (#1524).
  */
 export function milestoneDirExists(basePath: string, milestoneId: string): boolean {
-  // Flat-phase dirs (and content-bearing legacy dirs) resolve directly.
-  if (resolveMilestonePath(basePath, milestoneId)) return true;
-  // Legacy layout: a scaffold-only milestones/<MID>/ directory exists on disk
-  // but is not content-bearing, so resolveMilestonePath returns null. Treat the
-  // bare directory as present.
-  const oldMilestonesDir = join(gsdProjectionRoot(basePath), "milestones");
-  if (existsSync(oldMilestonesDir) && resolveDir(oldMilestonesDir, milestoneId)) {
-    return true;
-  }
-  return false;
+  return resolveMilestonePath(basePath, milestoneId) !== null;
 }
 
 /**
@@ -919,7 +741,8 @@ export function resolveMilestoneFile(
   const flatName = `${prefix}-${suffix}.md`;
   const flatPath = join(mDir, flatName);
   if (isExistingFile(flatPath)) return flatPath;
-  // Legacy fallback: M001-SUFFIX.md
+  // Compatibility: an <MID>-SUFFIX.md written into the phase dir by an older
+  // projection is still readable.
   const file = resolveFile(mDir, milestoneId, suffix);
   return file ? join(mDir, file) : null;
 }
@@ -932,7 +755,7 @@ export function resolveSlicePath(
 ): string | null {
   const mDir = resolveMilestonePath(basePath, milestoneId);
   if (!mDir) return null;
-  // Legacy: slice files live under slices/SID/ when that subdir exists.
+  // Slice files live under slices/SID/ when that subdir exists.
   const slicesDir = join(mDir, "slices");
   const dir = resolveDir(slicesDir, sliceId);
   if (dir) return join(slicesDir, dir);
@@ -957,10 +780,15 @@ export function resolveSliceFile(
   const flatName = slicePlanFileName(phaseNum, sliceId, suffix);
   const flatPath = join(phaseDir, flatName);
   if (isExistingFile(flatPath)) return flatPath;
-  // Also check plan-number-only format MM-SUFFIX.md (written by buildSliceFileName)
-  const planOnlyName = `${planSegment}-${suffix}.md`;
-  const planOnlyPath = join(phaseDir, planOnlyName);
-  if (isExistingFile(planOnlyPath)) return planOnlyPath;
+  // Also check plan-number-only format MM-SUFFIX.md (written by buildSliceFileName).
+  // Skip it when the plan segment equals the phase number: `01-RESEARCH.md` in
+  // phase 01 is the MILESTONE artifact, and claiming it as S01's would hand a
+  // slice-scoped reader the milestone's file.
+  const phasePad = String(phaseNum).padStart(2, "0");
+  if (planSegment !== phasePad) {
+    const planOnlyPath = join(phaseDir, `${planSegment}-${suffix}.md`);
+    if (isExistingFile(planOnlyPath)) return planOnlyPath;
+  }
   // Try prefix match for the phase+plan number (handles suffix variations)
   const planPrefix = `${String(phaseNum).padStart(2, "0")}-${planSegment}-`;
   try {
@@ -972,7 +800,7 @@ export function resolveSliceFile(
   } catch {
     // unreadable
   }
-  // Legacy fallback: try old slices/SID/ dir structure
+  // Fall back to a slices/SID/ subdir when the phase dir has one.
   const sDir = resolveSlicePath(basePath, milestoneId, sliceId);
   if (sDir && sDir !== phaseDir) {
     const file = resolveFile(sDir, sliceId, suffix);
@@ -988,7 +816,7 @@ export function resolveTasksDir(
   basePath: string, milestoneId: string, sliceId: string
 ): string | null {
   // Flat-phase: no tasks/ subdir. Tasks live as checkboxes inside plan files.
-  // Legacy fallback for old layouts:
+  // Returns a tasks/ dir only when the resolved slice dir actually has one.
   const sDir = resolveSlicePath(basePath, milestoneId, sliceId);
   if (!sDir) return null;
   const tDir = join(sDir, "tasks");
@@ -1005,14 +833,14 @@ export function resolveTaskFile(
   const phaseDir = resolveMilestonePath(basePath, milestoneId);
   if (!phaseDir) return null;
 
-  const legacyBase = legacyMilestonesDir(basePath);
-  const isLegacy = phaseDir.startsWith(legacyBase + "/") || phaseDir.startsWith(legacyBase + "\\");
-
-  if (suffix !== "PLAN" && !isLegacy) {
+  if (suffix !== "PLAN") {
+    // Flat-phase writes task artifacts at the phase root. A tasks/ subdir may
+    // still exist for auxiliary task-scoped artifacts, and a stale summary
+    // inside it must NOT satisfy the canonical phase-root artifact (#1208).
     const flatPath = join(phaseDir, buildFlatTaskFileName(sliceId, taskId, suffix));
     if (isExistingFile(flatPath)) return flatPath;
-    const legacyFlatPath = join(phaseDir, buildTaskFileName(taskId, suffix));
-    return isExistingFile(legacyFlatPath) ? legacyFlatPath : null;
+    const bareTaskPath = join(phaseDir, buildTaskFileName(taskId, suffix));
+    return isExistingFile(bareTaskPath) ? bareTaskPath : null;
   }
 
   const tDir = resolveTasksDir(basePath, milestoneId, sliceId);
@@ -1037,15 +865,9 @@ export function resolveTaskFile(
  * import.meta.url which breaks the Next.js SSR build path).
  */
 export function relMilestonePath(basePath: string, milestoneId: string, title?: string): string {
-  // resolvePhaseDir handles both flat-phase (phases/NN-*) and legacy (milestones/M001).
   const phaseDir = resolvePhaseDir(basePath, milestoneId);
   if (phaseDir) {
     const name = phaseDir.split(/[/\\]/).pop()!;
-    // Use the correct segment based on which layout the resolved dir lives under.
-    const legacyBase = legacyMilestonesDir(basePath);
-    if (phaseDir.startsWith(legacyBase + "/") || phaseDir.startsWith(legacyBase + "\\")) {
-      return `.gsd/milestones/${name}`;
-    }
     return `.gsd/${LAYOUT_SEGMENTS.level1}/${name}`;
   }
   // No dir on disk yet — derive canonical flat-phase name.
@@ -1063,19 +885,9 @@ export function relMilestonePath(basePath: string, milestoneId: string, title?: 
 export function targetMilestoneFile(
   basePath: string, milestoneId: string, suffix: string, title?: string
 ): string {
-  const mDir = resolveMilestonePath(basePath, milestoneId);
-  const legacyBase = legacyMilestonesDir(basePath);
-  const isLegacy = mDir
-    ? mDir.startsWith(legacyBase + "/") || mDir.startsWith(legacyBase + "\\")
-    : isLegacyMilestonesLayout(basePath);
-  const dir = mDir ?? join(
-    isLegacy ? legacyBase : milestonesDir(basePath),
-    isLegacy ? milestoneId : canonicalPhaseDirName(milestoneId, title),
-  );
-  const fileName = isLegacy
-    ? `${milestoneId}-${suffix}.md`
-    : `${String(milestoneIdToPhaseNum(milestoneId)).padStart(2, "0")}-${suffix}.md`;
-  return join(dir, fileName);
+  const dir = resolveMilestonePath(basePath, milestoneId)
+    ?? join(milestonesDir(basePath), canonicalPhaseDirName(milestoneId, title));
+  return join(dir, `${String(milestoneIdToPhaseNum(milestoneId)).padStart(2, "0")}-${suffix}.md`);
 }
 
 /**
@@ -1095,8 +907,7 @@ export function relMilestoneFile(
 
 /**
  * Build relative .gsd/ path to a slice directory.
- * Layout-aware: legacy projects include a slices/S01/ subdir;
- * flat-phase projects use the phase dir directly.
+ * Flat-phase projects use the phase dir directly.
  *
  * @param milestoneTitle - Optional milestone title passed through to
  *   relMilestonePath so the flat-phase fallback dir name uses the human-readable
@@ -1106,17 +917,6 @@ export function relMilestoneFile(
 export function relSlicePath(
   basePath: string, milestoneId: string, sliceId: string, milestoneTitle?: string
 ): string {
-  const mDir = resolveMilestonePath(basePath, milestoneId);
-  if (mDir) {
-    const legacyBase = legacyMilestonesDir(basePath);
-    if (mDir.startsWith(legacyBase + "/") || mDir.startsWith(legacyBase + "\\")) {
-      // Legacy: slices live under milestones/M001/slices/S01/
-      const mRel = relMilestonePath(basePath, milestoneId);
-      const slicesDir = join(mDir, "slices");
-      const dir = resolveDir(slicesDir, sliceId);
-      return `${mRel}/slices/${dir ?? sliceId}`;
-    }
-  }
   // Flat-phase: plans are files inside the phase dir, no slices/ subdir.
   return relMilestonePath(basePath, milestoneId, milestoneTitle);
 }
@@ -1129,26 +929,17 @@ export function relSlicePath(
 export function targetSliceFile(
   basePath: string, milestoneId: string, sliceId: string, suffix: string, milestoneTitle?: string
 ): string {
-  const mDir = resolveMilestonePath(basePath, milestoneId);
-  const legacyBase = legacyMilestonesDir(basePath);
-  const isLegacy = mDir
-    ? mDir.startsWith(legacyBase + "/") || mDir.startsWith(legacyBase + "\\")
-    : isLegacyMilestonesLayout(basePath);
-  const milestoneDir = mDir
+  const milestoneDir = resolveMilestonePath(basePath, milestoneId)
     ?? dirname(targetMilestoneFile(basePath, milestoneId, "ROADMAP", milestoneTitle));
-  const slicesDir = join(milestoneDir, "slices");
-  const dir = isLegacy
-    ? join(slicesDir, resolveDir(slicesDir, sliceId) ?? sliceId)
-    : milestoneDir;
-  const fileName = isLegacy
-    ? `${sliceId}-${suffix}.md`
-    : slicePlanFileName(milestoneIdToPhaseNum(milestoneId), sliceId, suffix);
-  return join(dir, fileName);
+  return join(
+    milestoneDir,
+    slicePlanFileName(milestoneIdToPhaseNum(milestoneId), sliceId, suffix),
+  );
 }
 
 /**
  * Build the canonical absolute write target for a task file.
- * Readers that need legacy flat-phase fallback should call resolveTaskFile.
+ * Readers that must honour an existing on-disk filename call resolveTaskFile.
  */
 export function targetTaskFile(
   basePath: string, milestoneId: string, sliceId: string,
@@ -1158,20 +949,8 @@ export function targetTaskFile(
     return targetSliceFile(basePath, milestoneId, sliceId, "PLAN", milestoneTitle);
   }
 
-  const mDir = resolveMilestonePath(basePath, milestoneId);
-  const legacyBase = legacyMilestonesDir(basePath);
-  const isLegacy = mDir
-    ? mDir.startsWith(legacyBase + "/") || mDir.startsWith(legacyBase + "\\")
-    : isLegacyMilestonesLayout(basePath);
-  const milestoneDir = mDir
+  const milestoneDir = resolveMilestonePath(basePath, milestoneId)
     ?? dirname(targetMilestoneFile(basePath, milestoneId, "ROADMAP", milestoneTitle));
-
-  if (isLegacy) {
-    const slicesDir = join(milestoneDir, "slices");
-    const sliceDir = join(slicesDir, resolveDir(slicesDir, sliceId) ?? sliceId);
-    return join(sliceDir, "tasks", buildTaskFileName(taskId, suffix));
-  }
-
   return join(milestoneDir, buildFlatTaskFileName(sliceId, taskId, suffix));
 }
 
@@ -1194,9 +973,9 @@ export function relSliceFile(
 /**
  * Build relative .gsd/ path to a task file.
  *
- * Legacy layout:  slices/SID/tasks/TID-SUFFIX.md (inside a slices/ subdir)
- * Flat-phase:     PLAN → slice plan path (tasks as checkboxes); other suffixes
- *                 (e.g. SUMMARY) → phase dir / TID-SUFFIX.md
+ * slices/ subdir present: slices/SID/tasks/TID-SUFFIX.md
+ * Flat-phase:              PLAN → slice plan path (tasks as checkboxes); other
+ *                          suffixes (e.g. SUMMARY) → phase dir / TID-SUFFIX.md
  */
 export function relTaskFile(
   basePath: string, milestoneId: string, sliceId: string,
@@ -1204,7 +983,7 @@ export function relTaskFile(
 ): string {
   const sDir = resolveSlicePath(basePath, milestoneId, sliceId);
   const phaseDir = resolveMilestonePath(basePath, milestoneId);
-  // Legacy: slice path is a slices/SID/ subdir inside the milestone dir
+  // The slice resolved to a slices/SID/ subdir inside the phase dir.
   if (sDir && phaseDir && sDir !== phaseDir) {
     const relS = relSlicePath(basePath, milestoneId, sliceId);
     return `${relS}/tasks/${taskId}-${suffix}.md`;
