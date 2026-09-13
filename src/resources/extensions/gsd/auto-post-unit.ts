@@ -49,6 +49,7 @@ import {
   diagnoseWorktreeIntegrityFailure,
   writeReactiveExecuteBlocker,
 } from "./auto-recovery.js";
+import { hasRoadmapReassessmentArtifact } from "./auto-artifact-paths.js";
 import { regenerateIfMissing } from "./workflow-projections.js";
 import { WorktreeStateProjection } from "./worktree-state-projection.js";
 import { createWorkspace, scopeMilestone } from "./workspace.js";
@@ -236,21 +237,6 @@ function agentEndMessagesMentionTool(messages: unknown[] | undefined, toolName: 
 function hasIncompleteMilestoneSlice(milestoneId: string): boolean {
   if (!isDbAvailable()) return false;
   return getMilestoneSlices(milestoneId).some((slice) => !isClosedStatus(slice.status));
-}
-
-function hasRoadmapReassessmentArtifact(basePath: string, milestoneId: string): boolean {
-  const slicesDir = join(basePath, ".gsd", "milestones", milestoneId, "slices");
-  if (!existsSync(slicesDir)) return false;
-
-  try {
-    for (const entry of readdirSync(slicesDir, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      if (existsSync(join(slicesDir, entry.name, `${entry.name}-ASSESSMENT.md`))) return true;
-    }
-  } catch {
-    return false;
-  }
-  return false;
 }
 
 function unitActivityMentionsTool(basePath: string, unitType: string, unitId: string, toolName: string): boolean {
