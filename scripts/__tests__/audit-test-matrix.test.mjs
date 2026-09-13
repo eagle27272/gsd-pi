@@ -13,6 +13,16 @@ test("audit:test-matrix strict passes after P0 extension backfill", async () => 
   assert.equal(result.status, 0, result.stderr || result.stdout || "matrix strict failed");
 });
 
+test("audit:test-matrix human output surfaces acknowledged unrun tests", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const result = spawnSync(process.execPath, ["scripts/audit-test-matrix.mjs"], {
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /Acknowledged unrun tests \(\d+\)/);
+  assert.match(result.stdout, /vendored-upstream: \d+/);
+});
+
 test("audit:test-matrix counts reachable suite tests as indirect source coverage", () => {
   const root = mkdtempSync(join(tmpdir(), "audit-test-matrix-"));
   mkdirSync(join(root, "src/tests"), { recursive: true });
@@ -66,6 +76,62 @@ test("audit:test-matrix json reports no untested source files for current covera
   assert.equal(report.summary.highUntested, 0);
   assert.equal(report.unwiredTests.length, 0);
   assert.equal(report.unreachableTests.length, 0);
+});
+
+test("audit:test-matrix separates acknowledged unrun tests from unwired and unreachable", () => {
+  const root = mkdtempSync(join(tmpdir(), "audit-test-matrix-ack-"));
+  mkdirSync(join(root, "packages/pi-coding-agent/test"), { recursive: true });
+  mkdirSync(join(root, "packages/pi-coding-agent/src"), { recursive: true });
+  mkdirSync(join(root, "packages/db/tests"), { recursive: true });
+  mkdirSync(join(root, "packages/db/src"), { recursive: true });
+  writeFileSync(join(root, "packages/pi-coding-agent/src/agent.ts"), "export const agent = 1;\n");
+  writeFileSync(
+    join(root, "packages/pi-coding-agent/src/agent.test.ts"),
+    "import test from 'node:test';\ntest('agent', () => {});\n",
+  );
+  writeFileSync(
+    join(root, "packages/pi-coding-agent/test/vendored.test.ts"),
+    "import test from 'node:test';\ntest('vendored', () => {});\n",
+  );
+  writeFileSync(join(root, "packages/db/src/client.ts"), "export const db = 1;\n");
+  writeFileSync(
+    join(root, "packages/db/tests/schema.test.ts"),
+    "import test from 'node:test';\ntest('schema', () => {});\n",
+  );
+
+  const matrix = buildMatrix(root);
+  assert.deepEqual(matrix.unwiredTests, []);
+  assert.deepEqual(matrix.unreachableTests, []);
+  assert.deepEqual(matrix.acknowledgedUnrunTests.map((t) => t.path).sort(), [
+    "packages/db/tests/schema.test.ts",
+    "packages/pi-coding-agent/test/vendored.test.ts",
+  ]);
+  for (const entry of matrix.acknowledgedUnrunTests) {
+    assert.ok(entry.reason.length > 40, `${entry.path} needs a reason`);
+  }
+  // packages/db/src loses its only (dead) test but is an acknowledged source.
+  assert.equal(matrix.summary.untested, 0);
+  assert.equal(matrix.summary.acknowledgedUnrun, 2);
+  assert.deepEqual(strictMatrixFailures(matrix), []);
+});
+
+test("audit:test-matrix still fails strict on a package test dir nobody acknowledged", () => {
+  const root = mkdtempSync(join(tmpdir(), "audit-test-matrix-newdead-"));
+  mkdirSync(join(root, "packages/rpc-client/test"), { recursive: true });
+  mkdirSync(join(root, "packages/rpc-client/src"), { recursive: true });
+  writeFileSync(join(root, "packages/rpc-client/src/rpc.ts"), "export const rpc = 1;\n");
+  writeFileSync(
+    join(root, "packages/rpc-client/test/rpc.test.ts"),
+    "import test from 'node:test';\ntest('rpc', () => {});\n",
+  );
+
+  const matrix = buildMatrix(root);
+  assert.deepEqual(matrix.unwiredTests, ["packages/rpc-client/test/rpc.test.ts"]);
+  assert.deepEqual(matrix.acknowledgedUnrunTests, []);
+  assert.ok(
+    strictMatrixFailures(matrix).some((f) => f.includes("unwired test file(s)")),
+    "expected an unwired-test strict failure",
+  );
 });
 
 test("audit:test-matrix strict fails when literal matrix counts are nonzero", () => {
