@@ -35,6 +35,9 @@ export function createGsdIntegrationProject(
   git(root, "config", "user.email", "test@test.com");
   git(root, "config", "user.name", "Test");
   git(root, "config", "core.autocrlf", "false");
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add .` stage nothing and the commit below fail.
+  git(root, "config", "core.excludesFile", "/dev/null");
 
   writeProjectFile(root, "README.md", "# test\n");
   for (const [relativePath, content] of Object.entries(resolvedOptions.initialFiles ?? {})) {

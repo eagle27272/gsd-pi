@@ -19,10 +19,19 @@ import {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
+/**
+ * A developer's global ignore file may list tooling paths these tests stage
+ * (.gsd, .agents), which would make `git add` of them fail or stage nothing.
+ */
+function gitInit(cwd: string): void {
+  execSync("git init", { cwd, stdio: "ignore" });
+  execSync("git config core.excludesFile /dev/null", { cwd, stdio: "ignore" });
+}
+
 function makeTmpRepo(): string {
   const base = join(tmpdir(), `gsd-codebase-test-${randomUUID()}`);
   mkdirSync(join(base, ".gsd"), { recursive: true });
-  execSync("git init", { cwd: base, stdio: "ignore" });
+  gitInit(base);
   return base;
 }
 
@@ -754,7 +763,7 @@ test("ensureCodebaseMapFresh: uses TTL cache before enumerating files", () => {
 function makeTmpParentWorkspace(children: string[]): string {
   const base = join(tmpdir(), `gsd-codebase-parent-${randomUUID()}`);
   mkdirSync(join(base, ".gsd"), { recursive: true });
-  execSync("git init", { cwd: base, stdio: "ignore" });
+  gitInit(base);
 
   const repoLines = children.map((id) => `    ${id}:\n      path: ${id}`).join("\n");
   writeFileSync(
@@ -766,7 +775,7 @@ function makeTmpParentWorkspace(children: string[]): string {
   for (const child of children) {
     const childPath = join(base, child);
     mkdirSync(childPath, { recursive: true });
-    execSync("git init", { cwd: childPath, stdio: "ignore" });
+    gitInit(childPath);
   }
   return base;
 }
@@ -916,7 +925,7 @@ test("workspace-aware: overlapping paths dedupe without falsely reporting trunca
   // count toward the maxFiles cap, so the map must not be flagged as truncated.
   const base = join(tmpdir(), `gsd-codebase-parent-${randomUUID()}`);
   mkdirSync(join(base, ".gsd"), { recursive: true });
-  execSync("git init", { cwd: base, stdio: "ignore" });
+  gitInit(base);
   writeFileSync(
     join(base, ".gsd", "PREFERENCES.md"),
     `---\nversion: 1\nworkspace:\n  mode: parent\n  repositories:\n    lib:\n      path: lib\n---\n`,
@@ -926,7 +935,7 @@ test("workspace-aware: overlapping paths dedupe without falsely reporting trunca
     // The project repo tracks lib/util.ts before lib becomes its own repo; the child
     // repo then tracks util.ts, so both resolve to the same workspace path lib/util.ts.
     addFile(base, "lib/util.ts");
-    execSync("git init", { cwd: join(base, "lib"), stdio: "ignore" });
+    gitInit(join(base, "lib"));
     execSync("git add util.ts", { cwd: join(base, "lib"), stdio: "ignore" });
 
     const result = generateCodebaseMap(base);
@@ -1043,7 +1052,7 @@ test("workspace-aware: files sharing a directory across repos keep their own rep
   // instead of collapsing into one section labelled with a single (wrong) repo.
   const base = join(tmpdir(), `gsd-codebase-parent-${randomUUID()}`);
   mkdirSync(join(base, ".gsd"), { recursive: true });
-  execSync("git init", { cwd: base, stdio: "ignore" });
+  gitInit(base);
   writeFileSync(
     join(base, ".gsd", "PREFERENCES.md"),
     `---\nversion: 1\nworkspace:\n  mode: parent\n  repositories:\n    lib:\n      path: lib\n---\n`,
@@ -1054,7 +1063,7 @@ test("workspace-aware: files sharing a directory across repos keep their own rep
     // repo then tracks helper.ts → workspace path lib/helper.ts. Different files,
     // same directory, different repos.
     addFile(base, "lib/app.ts");
-    execSync("git init", { cwd: join(base, "lib"), stdio: "ignore" });
+    gitInit(join(base, "lib"));
     writeFileSync(join(base, "lib", "helper.ts"), "// helper\n", "utf-8");
     execSync("git add helper.ts", { cwd: join(base, "lib"), stdio: "ignore" });
 
@@ -1090,7 +1099,7 @@ test("ensureCodebaseMapFresh: editing declared repos within the TTL window bypas
 
     // Declare a second child repo and back it with a real nested repo + file.
     mkdirSync(join(base, "backend"), { recursive: true });
-    execSync("git init", { cwd: join(base, "backend"), stdio: "ignore" });
+    gitInit(join(base, "backend"));
     addChildFile(base, "backend", "src/server.ts");
     writeFileSync(
       join(base, ".gsd", "PREFERENCES.md"),

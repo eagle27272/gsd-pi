@@ -280,6 +280,9 @@ async function withProjectionBackedProject<T>(
       git(basePath, ["init"], "ignore");
       git(basePath, ["config", "user.email", "test@example.invalid"]);
       git(basePath, ["config", "user.name", "Test"]);
+      // A developer's global ignore file may list .gsd, which would silently make
+      // `git add .gsd` stage nothing and the commit below fail.
+      git(basePath, ["config", "core.excludesFile", "/dev/null"]);
       git(basePath, ["add", ".gsd"]);
       git(basePath, ["commit", "-m", "initial projections"], "ignore");
     }
@@ -701,6 +704,9 @@ test("failed pre-merge ignored snapshot still suppresses rebuild over restored i
       git(basePath, ["init"], "ignore");
       git(basePath, ["config", "user.email", "test@example.invalid"]);
       git(basePath, ["config", "user.name", "Test"]);
+      // Only the repo-local .gitignore written below may ignore .gsd here; a
+      // developer's global ignore file must not also affect this fixture.
+      git(basePath, ["config", "core.excludesFile", "/dev/null"]);
       writeFileSync(join(basePath, ".gitignore"), ".gsd\n", "utf8");
       git(basePath, ["add", ".gitignore"]);
       git(basePath, ["commit", "-m", "ignore gsd projections"], "ignore");
