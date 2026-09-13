@@ -162,6 +162,23 @@ describe("detectEvalReviewState", () => {
     }
   });
 
+  it("names the canonical flat-phase directory in expectedDir, not a legacy milestones/ path", () => {
+    mkdirSync(join(basePath, ".gsd", "phases", "02-other"), { recursive: true });
+    const result = detectEvalReviewState(
+      { sliceId: "S07", force: false, show: false },
+      basePath,
+      "M001",
+    );
+    assert.equal(result.kind, "no-slice-dir");
+    if (result.kind === "no-slice-dir") {
+      assert.equal(
+        result.expectedDir,
+        join(realpathSync(basePath), ".gsd", "phases", "01-m001"),
+        "the user message must point at the flat-phase dir the renderer would create",
+      );
+    }
+  });
+
   it("returns no-summary when the slice directory exists but SUMMARY.md is missing", () => {
     setupSliceLayout({});
     const result = detectEvalReviewState(

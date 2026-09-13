@@ -6,24 +6,27 @@
 
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { hasFileConflict } from "../slice-parallel-conflict.js";
+import { canonicalPhaseDirName, milestoneIdToPhaseNum, slicePlanFileName } from "../layout-policy.js";
+import { _clearGsdRootCache, clearPathCache } from "../paths.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeTmpBase(): string {
-  const base = mkdtempSync(join(tmpdir(), "gsd-slice-conflict-test-"));
+  const base = realpathSync(mkdtempSync(join(tmpdir(), "gsd-slice-conflict-test-")));
   mkdirSync(join(base, ".gsd"), { recursive: true });
   return base;
 }
 
+/** Write a flat-phase slice plan: .gsd/phases/NN-slug/NN-MM-PLAN.md */
 function writeSlicePlan(base: string, mid: string, sid: string, content: string): void {
-  const dir = join(base, ".gsd", "milestones", mid, "slices", sid);
+  const dir = join(base, ".gsd", "phases", canonicalPhaseDirName(mid));
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${sid}-PLAN.md`), content, "utf-8");
+  writeFileSync(join(dir, slicePlanFileName(milestoneIdToPhaseNum(mid), sid, "PLAN")), content, "utf-8");
 }
 
 describe("hasFileConflict", () => {
@@ -31,9 +34,13 @@ describe("hasFileConflict", () => {
 
   beforeEach(() => {
     base = makeTmpBase();
+    _clearGsdRootCache();
+    clearPathCache();
   });
 
   afterEach(() => {
+    _clearGsdRootCache();
+    clearPathCache();
     rmSync(base, { recursive: true, force: true });
   });
 
@@ -88,5 +95,26 @@ describe("hasFileConflict", () => {
     writeSlicePlan(base, "M001", "S01", "# Plan S01\n## Tasks\n- T01: Create src/foo.ts");
     writeSlicePlan(base, "M001", "S02", "# Plan S02\n## Tasks\n(no tasks yet)");
     assert.equal(hasFileConflict(base, "M001", "S01", "S02"), false);
+  });
+
+  it("reads plans from a titled flat-phase directory, not a legacy milestones/ tree", () => {
+    const phaseDir = join(base, ".gsd", "phases", "02-payments");
+    mkdirSync(phaseDir, { recursive: true });
+    writeFileSync(
+      join(phaseDir, "02-01-PLAN.md"),
+      "# Plan S01\n- T01: Create src/pay/charge.ts\n",
+      "utf-8",
+    );
+    writeFileSync(
+      join(phaseDir, "02-02-PLAN.md"),
+      "# Plan S02\n- T01: Create src/ui/cart.ts\n",
+      "utf-8",
+    );
+
+    assert.equal(
+      hasFileConflict(base, "M002", "S01", "S02"),
+      false,
+      "both plans resolve in the flat-phase dir, so the disjoint file sets must allow parallel",
+    );
   });
 });

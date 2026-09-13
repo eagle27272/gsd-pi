@@ -32,6 +32,8 @@ import { join, relative } from "node:path";
 
 import {
   buildSliceFileName,
+  canonicalPhaseDirName,
+  milestonesDir,
   resolveMilestonePath,
   resolveSliceFile,
   resolveSlicePath,
@@ -225,10 +227,10 @@ export function detectEvalReviewState(
   const { sliceId } = args;
   const sliceDir = resolveSlicePath(basePath, milestoneId, sliceId);
   if (!sliceDir || !existsSync(sliceDir)) {
-    const milestoneDir = resolveMilestonePath(basePath, milestoneId);
-    const expectedDir = milestoneDir
-      ? join(milestoneDir, "slices", sliceId)
-      : join(basePath, ".gsd", "milestones", milestoneId, "slices", sliceId);
+    // Flat-phase keeps slice artifacts in the phase dir itself, so the dir the
+    // user should look for is the phase dir the renderer would create.
+    const expectedDir = resolveMilestonePath(basePath, milestoneId)
+      ?? join(milestonesDir(basePath), canonicalPhaseDirName(milestoneId));
     return { kind: "no-slice-dir", sliceId, expectedDir };
   }
 

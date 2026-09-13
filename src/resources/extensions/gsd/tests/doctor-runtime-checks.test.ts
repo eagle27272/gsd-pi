@@ -87,6 +87,30 @@ test("doctor fix resets run-uat counters at the dispatch cap", async (t) => {
   assert.equal(existsSync(counterPath), false);
 });
 
+test("doctor ignores an exhausted run-uat counter once the flat-phase ASSESSMENT has a verdict", async (t) => {
+  const dir = createGitProject();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+  const runtimeDir = join(dir, ".gsd", "runtime");
+  mkdirSync(runtimeDir, { recursive: true });
+  writeFileSync(
+    join(runtimeDir, "uat-count-M002-S01.json"),
+    JSON.stringify({ count: 3, updatedAt: "2026-06-02T19:40:23.289Z" }) + "\n",
+    "utf-8",
+  );
+
+  const phaseDir = join(dir, ".gsd", "phases", "02-payments");
+  mkdirSync(phaseDir, { recursive: true });
+  writeFileSync(join(phaseDir, "02-01-ASSESSMENT.md"), "# UAT\n\nVerdict: PASS\n", "utf-8");
+
+  const detect = await runGSDDoctor(dir);
+  assert.equal(
+    detect.issues.some((candidate) => candidate.code === "uat_retry_exhausted"),
+    false,
+    "the slice already has a recorded verdict, so the counter is not blocking anything",
+  );
+});
+
 test("doctor reports and repairs a paused session superseded by the active milestone", async (t) => {
   const dir = createGitProject();
   t.after(() => {

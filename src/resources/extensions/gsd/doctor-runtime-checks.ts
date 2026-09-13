@@ -4,7 +4,7 @@ import { basename, dirname, join } from "node:path";
 import type { DoctorIssue, DoctorIssueCode } from "./doctor-types.js";
 import { removeLockDirectory } from "./session-lock.js";
 import { cleanNumberedGsdVariants } from "./repo-identity.js";
-import { milestonesDir, gsdRoot, relMilestonePath, resolveGsdRootFile, resolveMilestonePath, milestoneDirExists } from "./paths.js";
+import { milestonesDir, gsdRoot, relMilestonePath, resolveGsdRootFile, resolveMilestonePath, resolveSliceFile, milestoneDirExists } from "./paths.js";
 import { deriveState, isGhostMilestone, isReusableGhostMilestone } from "./state.js";
 import { saveFile } from "./files.js";
 import { nativeIsRepo, nativeForEachRef, nativeUpdateRef } from "./native-git-bridge.js";
@@ -33,8 +33,8 @@ import { deleteRuntimeKv, getRuntimeKv } from "./db/runtime-kv.js";
 const MAX_UAT_ATTEMPTS = 3;
 
 function hasAssessmentVerdict(basePath: string, mid: string, sid: string): boolean {
-  const assessmentPath = join(gsdRoot(basePath), "milestones", mid, "slices", sid, `${sid}-ASSESSMENT.md`);
-  if (!existsSync(assessmentPath)) return false;
+  const assessmentPath = resolveSliceFile(basePath, mid, sid, "ASSESSMENT");
+  if (!assessmentPath) return false;
   try {
     return /^\s*verdict\s*:\s*(PASS|FAIL|PARTIAL)\b/im.test(readFileSync(assessmentPath, "utf-8"));
   } catch {
