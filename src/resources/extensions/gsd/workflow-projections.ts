@@ -511,28 +511,9 @@ export async function regenerateIfMissing(
   sliceId: string,
   fileType: "PLAN" | "ROADMAP" | "SUMMARY" | "STATE",
 ): Promise<boolean> {
-  let filePath: string;
-
-  switch (fileType) {
-    case "PLAN":
-      // Use resolveSliceFile so both flat-phase and legacy layouts are detected.
-      // Falls back to "" (non-existent) when the file hasn't been rendered yet.
-      filePath = resolveSliceFile(basePath, milestoneId, sliceId, "PLAN") ?? "";
-      break;
-    case "ROADMAP":
-      filePath = resolveMilestoneFile(basePath, milestoneId, "ROADMAP") ?? "";
-      break;
-    case "SUMMARY":
-      // For SUMMARY, we regenerate all task summaries in the slice
-      filePath = join(basePath, ".gsd", "milestones", milestoneId, "slices", sliceId, "tasks");
-      break;
-    case "STATE":
-      filePath = join(basePath, ".gsd", "STATE.md");
-      break;
-  }
-
   if (fileType === "SUMMARY") {
-    // Check each completed task's SUMMARY file individually (not just the directory)
+    // There is no slice-level SUMMARY artifact — check each completed task's
+    // own SUMMARY file, which resolveTaskFile locates in the flat phase dir.
     const taskRows = getSliceTasks(milestoneId, sliceId);
     const doneTasks = taskRows.filter(t => t.status === "done" || t.status === "complete");
     let regenerated = 0;
@@ -548,6 +529,20 @@ export async function regenerateIfMissing(
       }
     }
     return regenerated > 0;
+  }
+
+  let filePath: string;
+  switch (fileType) {
+    case "PLAN":
+      // Falls back to "" (non-existent) when the file hasn't been rendered yet.
+      filePath = resolveSliceFile(basePath, milestoneId, sliceId, "PLAN") ?? "";
+      break;
+    case "ROADMAP":
+      filePath = resolveMilestoneFile(basePath, milestoneId, "ROADMAP") ?? "";
+      break;
+    case "STATE":
+      filePath = join(basePath, ".gsd", "STATE.md");
+      break;
   }
 
   if (existsSync(filePath)) {
