@@ -8,7 +8,7 @@
  */
 
 import { readdirSync, existsSync, realpathSync, statSync, Dirent } from "node:fs";
-import { join, dirname, isAbsolute as isAbsolutePath, normalize, relative, resolve } from "node:path";
+import { basename, join, dirname, isAbsolute as isAbsolutePath, normalize, relative, resolve } from "node:path";
 import { homedir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { nativeScanGsdTree, type GsdTreeEntry } from "./native-parser-bridge.js";
@@ -227,25 +227,27 @@ export function buildSliceFileName(sliceId: string, suffix: string): string {
  * ("T03", "PLAN") → "T03-PLAN.md"
  * ("T03", "SUMMARY") → "T03-SUMMARY.md"
  */
-export function buildTaskFileName(taskId: string, suffix: string): string {
+export function buildTaskFileName(taskId: string, suffix: string, ext = "md"): string {
   // Flat-phase: tasks are checkboxes inside plan files, not separate files.
   // This helper is deprecated but kept for backward-compat callers.
   assertSafePathSegment(taskId, "task id");
-  return `${taskId}-${suffix}.md`;
+  return `${taskId}-${suffix}.${ext}`;
 }
 
 /**
  * Build a flat-phase task artifact file name.
  * ("S06", "T03", "SUMMARY") → "S06-T03-SUMMARY.md"
  */
-export function buildFlatTaskFileName(sliceId: string, taskId: string, suffix: string): string {
+export function buildFlatTaskFileName(
+  sliceId: string, taskId: string, suffix: string, ext = "md",
+): string {
   assertSafePathSegment(sliceId, "slice id");
   assertSafePathSegment(taskId, "task id");
   const redundantPrefix = `${sliceId}-`;
   const bareTaskId = taskId.toUpperCase().startsWith(redundantPrefix.toUpperCase())
     ? taskId.slice(redundantPrefix.length)
     : taskId;
-  return `${sliceId}-${bareTaskId}-${suffix}.md`;
+  return `${sliceId}-${bareTaskId}-${suffix}.${ext}`;
 }
 
 /**
@@ -1019,4 +1021,68 @@ export function relTaskFile(
   }
   const relS = relSlicePath(basePath, milestoneId, sliceId, milestoneTitle);
   return `${relS}/${buildFlatTaskFileName(sliceId, taskId, suffix)}`;
+}
+
+// ─── Slice-Scoped Task Artifact Helpers ────────────────────────────────────
+
+/**
+ * Where a slice's task SUMMARY files live, plus the `.gsd/`-relative prefix of
+ * that directory.
+ *
+ * Only a real slices/<SID>/ subdir keeps its summaries under tasks/. In
+ * flat-phase the slice path IS the phase dir, where a tasks/ subdir may hold
+ * auxiliary artifacts only — resolveTaskFile writes summaries at the phase
+ * root, so reading from tasks/ there would find nothing (#1208).
+ *
+ * The flat-phase dir is shared by every slice in the milestone, so a listing of
+ * it is NOT slice-scoped. Filter it through taskSummaryBelongsToSlice (#5).
+ */
+export function resolveTaskSummariesLocation(
+  basePath: string, milestoneId: string, sliceId: string,
+): { dir: string; relPrefix: string } | null {
+  const slicePath = resolveSlicePath(basePath, milestoneId, sliceId);
+  if (!slicePath) return null;
+  const sRel = relSlicePath(basePath, milestoneId, sliceId);
+  if (slicePath !== resolveMilestonePath(basePath, milestoneId)) {
+    const tDir = resolveTasksDir(basePath, milestoneId, sliceId);
+    if (tDir) return { dir: tDir, relPrefix: `${sRel}/tasks` };
+  }
+  return { dir: slicePath, relPrefix: sRel };
+}
+
+/**
+ * True when `fileName`, listed out of resolveTaskSummariesLocation's dir, is
+ * this slice's summary rather than a sibling slice's.
+ *
+ * Re-resolving through the slice-qualified resolveTaskFile is what makes the
+ * check slice-aware: taskIdFromTaskFileName deliberately ignores the S##
+ * prefix, so a raw listing of a shared flat-phase dir mixes every slice's
+ * summaries together.
+ */
+export function taskSummaryBelongsToSlice(
+  fileName: string, basePath: string, milestoneId: string, sliceId: string,
+): boolean {
+  const tid = taskIdFromTaskFileName(fileName, "SUMMARY");
+  if (!tid) return false;
+  const resolved = resolveTaskFile(basePath, milestoneId, sliceId, tid, "SUMMARY");
+  return resolved !== null && basename(resolved) === fileName;
+}
+
+/**
+ * Path for a task-scoped JSON artifact (ESCALATION, REOPEN).
+ *
+ * Pass `sharedSliceId` when `dir` is a flat-phase directory that every slice in
+ * the milestone shares; the name then carries the slice id so two slices
+ * reusing a task id do not overwrite each other (#5). Pass null when the slice
+ * owns `dir` (a slices/<SID>/ layout), where a bare name is unambiguous.
+ *
+ * An artifact already on disk under the older bare name keeps it, so the
+ * qualified naming never orphans one mid-flight.
+ */
+export function taskJsonArtifactPath(
+  dir: string, sharedSliceId: string | null, taskId: string, suffix: string,
+): string {
+  const bare = join(dir, buildTaskFileName(taskId, suffix, "json"));
+  if (!sharedSliceId || isExistingFile(bare)) return bare;
+  return join(dir, buildFlatTaskFileName(sharedSliceId, taskId, suffix, "json"));
 }

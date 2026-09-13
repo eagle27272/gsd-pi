@@ -3,7 +3,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -116,6 +116,43 @@ test('handleReopenTask: no reason provided leaves nothing to claim', async () =>
     );
 
     assert.equal(claimReopenReasonForInjection(base, 'M001', 'S01', 'T01'), null);
+  } finally {
+    cleanup(base);
+  }
+});
+
+test('#5: flat-phase reopen reasons are slice-qualified so sibling slices cannot collide', () => {
+  const base = makeTmpBase();
+  try {
+    const s01Path = reopenReasonArtifactPath(base, 'M001', 'S01', 'T03')!;
+    const s02Path = reopenReasonArtifactPath(base, 'M001', 'S02', 'T03')!;
+    assert.notEqual(s01Path, s02Path, 'two slices reusing task id T03 must not share one artifact path');
+
+    writeReopenReason(base, 'M001', 'S01', 'T03', "S01's diagnosis.");
+
+    assert.ok(existsSync(s01Path), "S01's artifact lands at S01's path");
+    assert.equal(
+      claimReopenReasonForInjection(base, 'M001', 'S02', 'T03'),
+      null,
+      "S01's reopen reason must not be injected into S02's dispatch",
+    );
+  } finally {
+    cleanup(base);
+  }
+});
+
+test('#5: a reopen reason already on disk under the legacy bare name is still claimable', () => {
+  const base = makeTmpBase();
+  try {
+    const legacyPath = join(base, '.gsd', 'phases', '01-m001', 'tasks', 'T05-REOPEN.json');
+    writeFileSync(legacyPath, JSON.stringify({
+      version: 1, milestoneId: 'M001', sliceId: 'S01', taskId: 'T05',
+      reason: 'Legacy-named diagnosis.', createdAt: new Date().toISOString(),
+    }));
+
+    const claimed = claimReopenReasonForInjection(base, 'M001', 'S01', 'T05');
+    assert.ok(claimed, 'an existing legacy-named artifact must stay claimable, not be orphaned by the rename');
+    assert.match(claimed!.injectionBlock, /Legacy-named diagnosis/);
   } finally {
     cleanup(base);
   }
