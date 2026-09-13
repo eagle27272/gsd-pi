@@ -196,6 +196,125 @@ test('write-gate: markDepthVerified unlocks only the matching milestone', () => 
   assert.strictEqual(isMilestoneDepthVerified('M002'), false);
 });
 
+// ─── Scenario 10b: flat-phase CONTEXT paths (phases/NN-slug/NN-CONTEXT.md) ──
+//
+// The current on-disk layout names the milestone CONTEXT file after the phase
+// number, not the milestone id (buildMilestoneFileName). Before these cases the
+// gate only recognised the pre-flat-phase `M001-CONTEXT.md` name, so it never
+// fired for a real project.
+
+test('write-gate: blocks flat-phase CONTEXT write without depth verification (relative path)', () => {
+  clearDiscussionFlowState(process.cwd());
+  const result = shouldBlockContextWrite(
+    'write',
+    '.gsd/phases/01-m001/01-CONTEXT.md',
+    'M001',
+  );
+  assert.strictEqual(result.block, true, 'should block the flat-phase write');
+  assert.ok(result.reason!.includes('depth_verification_M001_confirm'), 'reason names the milestone gate');
+});
+
+test('write-gate: blocks flat-phase CONTEXT write without depth verification (absolute path)', () => {
+  clearDiscussionFlowState(process.cwd());
+  const result = shouldBlockContextWrite(
+    'write',
+    '/Users/dev/project/.gsd/phases/01-m001/01-CONTEXT.md',
+    'M001',
+  );
+  assert.strictEqual(result.block, true, 'should block the flat-phase write');
+  assert.ok(result.reason, 'should provide a reason');
+});
+
+test('write-gate: allows flat-phase CONTEXT write after depth verification', () => {
+  clearDiscussionFlowState(process.cwd());
+  markDepthVerified('M001');
+
+  assert.strictEqual(
+    shouldBlockContextWrite('write', '.gsd/phases/01-m001/01-CONTEXT.md', 'M001').block,
+    false,
+    'relative flat-phase path should pass after verification',
+  );
+  assert.strictEqual(
+    shouldBlockContextWrite('write', '/Users/dev/project/.gsd/phases/01-m001/01-CONTEXT.md', 'M001').block,
+    false,
+    'absolute flat-phase path should pass after verification',
+  );
+  assert.strictEqual(
+    shouldBlockContextWrite('write', '.gsd/phases/02-m002/02-CONTEXT.md', 'M002').block,
+    true,
+    'another phase stays blocked',
+  );
+});
+
+test('write-gate: flat-phase milestone is derived from the phase dir when no milestoneId is supplied', () => {
+  // Queue mode passes milestoneId=null — the phase directory has to supply it.
+  clearDiscussionFlowState(process.cwd());
+  markDepthVerified('M003');
+
+  assert.strictEqual(
+    shouldBlockContextWrite('write', '.gsd/phases/03-m003/03-CONTEXT.md', null, true).block,
+    false,
+    'verified phase resolves from the directory alone',
+  );
+  assert.strictEqual(
+    shouldBlockContextWrite('write', '.gsd/phases/04-m004/04-CONTEXT.md', null, true).block,
+    true,
+    'unverified phase stays blocked',
+  );
+});
+
+test('write-gate: flat-phase gate resolves a human-readable phase slug to its milestone', () => {
+  // The phase dir usually carries the milestone title ("05-payments-api"), not
+  // the milestone id, so the phase number is what maps back to M005.
+  clearDiscussionFlowState(process.cwd());
+  assert.strictEqual(
+    shouldBlockContextWrite('write', '.gsd/phases/05-payments-api/05-CONTEXT.md', null).block,
+    true,
+    'blocked before verification',
+  );
+
+  markDepthVerified('M005');
+  assert.strictEqual(
+    shouldBlockContextWrite('write', '.gsd/phases/05-payments-api/05-CONTEXT.md', null).block,
+    false,
+    'phase number resolves to M005',
+  );
+});
+
+test('write-gate: flat-phase gate honours team-mode unique suffixes in the phase dir', () => {
+  clearDiscussionFlowState(process.cwd());
+  const path = '.gsd/phases/06-ab12cd-payments/06-CONTEXT.md';
+
+  const blocked = shouldBlockContextWrite('write', path, null);
+  assert.strictEqual(blocked.block, true, 'blocked before verification');
+  assert.ok(
+    blocked.reason!.includes('depth_verification_M006-ab12cd_confirm'),
+    'reason names the team-suffixed milestone gate',
+  );
+
+  markDepthVerified('M006-ab12cd');
+  assert.strictEqual(
+    shouldBlockContextWrite('write', path, null).block,
+    false,
+    'team-suffixed verification unlocks the write',
+  );
+});
+
+test('write-gate: flat-phase gate does not fire for slice plan CONTEXT files', () => {
+  clearDiscussionFlowState(process.cwd());
+  // Slice artifacts are NN-MM-SUFFIX.md (slicePlanFileName) — never gated.
+  assert.strictEqual(
+    shouldBlockContextWrite('write', '.gsd/phases/01-m001/01-01-CONTEXT.md', 'M001').block,
+    false,
+    'slice plan CONTEXT should pass',
+  );
+  assert.strictEqual(
+    shouldBlockContextWrite('write', '.gsd/phases/01-m001/01-ROADMAP.md', 'M001').block,
+    false,
+    'other phase-level artifacts should pass',
+  );
+});
+
 // ─── Scenario 11: gsd_summary_save CONTEXT contract is milestone-scoped ──
 
 test('write-gate: gsd_summary_save only blocks final milestone CONTEXT writes', () => {
