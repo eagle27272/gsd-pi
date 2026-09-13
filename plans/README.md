@@ -88,8 +88,10 @@ previously-orphaned `message-batcher.test.js` into the daemon test script.
   byte-stability regression test exists). 035 (DONE), 038, 039 are independent
   of each other and of 036/037. 036 and 039 both read `context-budget.ts` but
   039 only adds exports — no conflict expected. 035 changed the model-facing
-  tool surface: release notes must mention `GSD_MCP_ADVERTISE_ALIASES=1` /
-  `GSD_ADVERTISE_TOOL_ALIASES=1` for external clients on legacy alias names.
+  tool surface: release notes must mention `GSD_MCP_ADVERTISE_ALIASES=1` for
+  external clients on legacy alias names. (The native in-process counterpart
+  `GSD_ADVERTISE_TOOL_ALIASES` was removed with the in-process aliases on
+  2026-09-11; only the packaged MCP switch survives.)
   036 (DONE, `advisor/036-stabilize-prompt-cache-prefix`): step 4's actual
   seam was `packages/pi-agent-core/src/agent.ts` (`Agent`/`AgentOptions`/
   `createLoopConfig`), not the harness file the plan named — the harness
@@ -151,7 +153,7 @@ Confirmed but below the planning cut this round — batch opportunistically:
 Grounded in repo evidence; each selected one becomes a design/spike plan, not a
 build-everything plan. Effort estimates are coarse.
 
-1. **Finish the flat-phase migration** — ADR-045 written (plan 023, DONE); Option B stage-1 now broken into code plans **032 → 033 → 034** (added 2026-07-08). Stage 2 / Option A (forced migration + legacy-branch deletion) remains release-gated and needs maintainer sign-off on ADR-045's open questions. The drift alarm `detectStaleRenders` is still hard-disabled at HEAD; 034 turns it back on once 032/033 land.
+1. **Finish the flat-phase migration** — ADR-045 written (plan 023, DONE); Option B stage-1 now broken into code plans **032 → 033 → 034** (added 2026-07-08). *Superseded in part on 2026-09-11*: the migration itself was deleted rather than finished. `flat-phase-migration.ts` and the legacy resolver branches are gone, and `legacy-layout-guard.ts` now refuses to start on a content-bearing `.gsd/milestones/<MID>/` — GSD v1.18.0 is the last release that can convert one. 033/034 remain open on their own merits: the drift alarm `detectStaleRenders` is still hard-disabled at HEAD, and 034 turns it back on once 033's fixtures land.
 2. **Linux systemd service packaging for the daemon**: the brief requires macOS AND Linux service install; only `launchd.ts` exists (`packages/daemon/src/cli.ts` wires install/uninstall/status exclusively to launchd). A `systemd.ts` mirroring the launchd trio (user unit in `~/.config/systemd/user/`) + a platform switch is a bounded M. Always-on daemon deployments commonly run on Linux.
 3. **Bidirectional GitHub sync**: `github-sync` is export-only by design (all ops are `ghCreate*/ghClose*/ghAddComment`; zero inbound reads). Maintainers whose backlog lives in GitHub Issues must re-enter everything. Spike a read-only `github-sync import` preview (issues → milestone/task mapping) to surface the DB-single-writer conflict questions before committing to two-way. M–L (coarse).
 4. **Productize the repo's own triage/PR-risk automation as an extension**: `scripts/{ai-triage-policy,issue-dedupe,pr-risk-check,issue-lifecycle}.mjs` (~950 lines, proven in this repo's CI) solve friction every gsd user with a GitHub repo has; the extension host + `gh` wrapper already exist. Spike: wrap `pr-risk-check.mjs` behind a `/pr-risk` command. M (coarse).

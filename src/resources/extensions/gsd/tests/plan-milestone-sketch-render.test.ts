@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { openDatabase, closeDatabase } from "../gsd-db.ts";
 import { handlePlanMilestone as handlePlanMilestoneWithInvocation, type PlanMilestoneParams } from "../tools/plan-milestone.ts";
 import { internalPlanningInvocation } from "../planning-invocation.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 function handlePlanMilestone(params: PlanMilestoneParams, basePath: string) {
   return handlePlanMilestoneWithInvocation(params, basePath, internalPlanningInvocation());
@@ -21,12 +22,12 @@ function handlePlanMilestone(params: PlanMilestoneParams, basePath: string) {
 
 function makeTmpBase(): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-plan-sketch-render-"));
-  const mDir = join(base, ".gsd", "milestones", "M001");
+  const mDir = join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Progressive Planning Demo"));
   mkdirSync(mDir, { recursive: true });
   // A content-bearing legacy milestone dir requires at least one non-META file
   // (dirIsContentBearingLegacyMilestone) so the layout sniffer treats it as a
   // real legacy milestone rather than a metadata-only placeholder.
-  writeFileSync(join(mDir, "M001-CONTEXT.md"), "# M001\n");
+  writeFileSync(join(mDir, "01-CONTEXT.md"), "# M001\n");
   openDatabase(join(base, ".gsd", "gsd.db"));
   return base;
 }
@@ -100,7 +101,7 @@ test("ROADMAP renders sketch slices with [sketch] badge and full slices without"
       assert.fail(`handlePlanMilestone failed: ${result.error}`);
     }
 
-    const roadmapPath = join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md");
+    const roadmapPath = join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Progressive Planning Demo"), "01-ROADMAP.md");
     const roadmap = readFileSync(roadmapPath, "utf-8");
 
     // S01 is a full slice — no sketch badge.
@@ -152,7 +153,7 @@ test("ROADMAP omits sketch badge when no slices are sketches", async () => {
     }
 
     const roadmap = readFileSync(
-      join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"),
+      join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Progressive Planning Demo"), "01-ROADMAP.md"),
       "utf-8",
     );
 

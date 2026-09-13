@@ -80,7 +80,7 @@ function makeFixture(opts: FixtureOptions = {}): Fixture {
   const base = mkdtempSync(join(tmpdir(), "gsd-orch-logs-"));
   gitInit(base);
 
-  const milestoneDir = join(base, ".gsd", "milestones", "M001");
+  const milestoneDir = join(base, ".gsd", "phases", "01-m001");
   const sliceDir = join(milestoneDir, "slices", "S01");
   mkdirSync(join(sliceDir, "tasks"), { recursive: true });
 
@@ -293,7 +293,7 @@ test("advance() logs an engine warning when the post-settlement projection rebui
     verificationResult: "passed",
   });
   insertAssessment({
-    path: ".gsd/milestones/M001/M001-VALIDATION.md",
+    path: ".gsd/phases/01-m001/01-VALIDATION.md",
     milestoneId: "M001",
     status: "pass",
     scope: "milestone-validation",
@@ -301,7 +301,7 @@ test("advance() logs an engine warning when the post-settlement projection rebui
   });
   // Create the milestone projection dir in the worktree BEFORE resolving the
   // summary artifact path (resolveExpectedArtifactPath needs the dir to exist).
-  const milestoneProjDir = join(worktree, ".gsd", "milestones", "M001");
+  const milestoneProjDir = join(worktree, ".gsd", "phases", "01-m001");
   mkdirSync(milestoneProjDir, { recursive: true });
   // A content-bearing legacy milestone dir requires at least one non-META file
   // (dirIsContentBearingLegacyMilestone) so the layout sniffer treats it as a

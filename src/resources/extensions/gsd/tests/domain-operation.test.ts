@@ -20,29 +20,18 @@ import {
 import { snapshotDatabaseFile } from "../db/engine.ts";
 import { createDbAdapter } from "../db-adapter.ts";
 import {
-  _executeAuthorityCutoverDomainOperation,
   _setDomainOperationFaultForTest,
   assertDomainOperationReceiptComponents,
-  executeImportDomainOperation,
   executeDomainOperation,
-  type AuthorityCutoverDomainOperationRequest,
   type DomainOperationContext,
   type DomainOperationMutation,
   type DomainOperationRequest,
   type DomainOperationResult,
-  type ImportDomainOperationRequest,
 } from "../db/domain-operation.ts";
-import { insertAuthorityCutoverReceipt } from "../db/writers/authority-recovery.ts";
 import {
   GSD_IDEMPOTENCY_CONFLICT,
   GSD_REVISION_CONFLICT,
 } from "../errors.ts";
-import {
-  canonicalLegacyImportJson,
-  hashLegacyImportValue,
-  sealLegacyImportPreview,
-  type LegacyImportPreviewArtifact,
-} from "../legacy-import-preview.ts";
 import { rebuildMarkdownProjectionsFromDb } from "../commands-maintenance.ts";
 import {
   captureCurrentProjectionWork,
@@ -140,121 +129,6 @@ function request(overrides: Partial<DomainOperationRequest> = {}): DomainOperati
   };
 }
 
-function importPreview(
-  baseProjectRevision = 0,
-  baseAuthorityEpoch = 0,
-  identity = "default",
-): LegacyImportPreviewArtifact {
-  const emptyHash = hashLegacyImportValue([]);
-  return sealLegacyImportPreview({
-    import_kind: "legacy-markdown",
-    importer_version: "1",
-    base: {
-      snapshot_schema_version: 1,
-      database_schema_version: SCHEMA_VERSION,
-      authority: {
-        singleton: 1,
-        project_id: "project-1",
-        project_root_realpath: `/tmp/project-1/${identity}`,
-        revision: baseProjectRevision,
-        authority_epoch: baseAuthorityEpoch,
-        created_at: "2026-07-17T00:00:00.000Z",
-        updated_at: "2026-07-17T00:00:00.000Z",
-      },
-      rows: [],
-      relevant_rows_hash: emptyHash,
-    },
-    source_set_hash: emptyHash,
-    change_set_hash: emptyHash,
-    counts: { create: 0, update: 0, delete: 0, preserve: 0, unparsed: 0, unresolved: 0 },
-    sources: [],
-    changes: [],
-    diagnoses: [],
-    resolutions: [],
-  });
-}
-
-function importRequest(
-  payload = importPreview(),
-  overrides: Partial<ImportDomainOperationRequest> = {},
-): ImportDomainOperationRequest {
-  return {
-    operationType: "import.apply",
-    idempotencyKey: "legacy-import/application-1",
-    expectedRevision: payload.preview.base_project_revision,
-    expectedAuthorityEpoch: payload.preview.base_authority_epoch,
-    actorType: "agent",
-    actorId: "legacy-import",
-    sourceTransport: "internal",
-    traceId: "legacy-import-trace-1",
-    turnId: "legacy-import-turn-1",
-    payload,
-    ...overrides,
-  };
-}
-
-function insertImportApplication(
-  context: Readonly<DomainOperationContext>,
-  artifact: LegacyImportPreviewArtifact,
-  previewJson = canonicalLegacyImportJson(artifact.preview),
-): void {
-  const db = _getAdapter();
-  assert.ok(db);
-  const preview = artifact.preview;
-  db.prepare(`
-    INSERT INTO workflow_import_applications (
-      operation_id, project_id, import_kind, importer_version,
-      preview_schema_version, preview_id, preview_hash,
-      base_project_revision, base_authority_epoch, base_database_schema_version,
-      source_set_hash, change_set_hash,
-      create_count, update_count, delete_count, preserve_count, unparsed_count, unresolved_count,
-      preview_json,
-      backup_ref, backup_sha256, backup_byte_size, backup_schema_version,
-      backup_project_revision, backup_authority_epoch, backup_quick_check, backup_verified_at,
-      applied_at, resulting_project_revision, resulting_authority_epoch
-    ) VALUES (
-      :operation_id, :project_id, :import_kind, :importer_version,
-      :preview_schema_version, :preview_id, :preview_hash,
-      :base_project_revision, :base_authority_epoch, :base_database_schema_version,
-      :source_set_hash, :change_set_hash,
-      :create_count, :update_count, :delete_count, :preserve_count, :unparsed_count, :unresolved_count,
-      :preview_json,
-      :backup_ref, :backup_sha256, :backup_byte_size, :backup_schema_version,
-      :backup_project_revision, :backup_authority_epoch, 'ok', :backup_verified_at,
-      :applied_at, :resulting_project_revision, :resulting_authority_epoch
-    )
-  `).run({
-    ":operation_id": context.operationId,
-    ":project_id": context.projectId,
-    ":import_kind": preview.import_kind,
-    ":importer_version": preview.importer_version,
-    ":preview_schema_version": preview.preview_schema_version,
-    ":preview_id": preview.preview_id,
-    ":preview_hash": artifact.preview_hash,
-    ":base_project_revision": preview.base_project_revision,
-    ":base_authority_epoch": preview.base_authority_epoch,
-    ":base_database_schema_version": preview.base_database_schema_version,
-    ":source_set_hash": preview.source_set_hash,
-    ":change_set_hash": preview.change_set_hash,
-    ":create_count": preview.counts.create,
-    ":update_count": preview.counts.update,
-    ":delete_count": preview.counts.delete,
-    ":preserve_count": preview.counts.preserve,
-    ":unparsed_count": preview.counts.unparsed,
-    ":unresolved_count": preview.counts.unresolved,
-    ":preview_json": previewJson,
-    ":backup_ref": "/tmp/verified-backup.sqlite",
-    ":backup_sha256": `sha256:${"2".repeat(64)}`,
-    ":backup_byte_size": 1,
-    ":backup_schema_version": preview.base_database_schema_version,
-    ":backup_project_revision": preview.base_project_revision,
-    ":backup_authority_epoch": preview.base_authority_epoch,
-    ":backup_verified_at": "2026-07-17T00:00:00.000Z",
-    ":applied_at": "2026-07-17T00:00:01.000Z",
-    ":resulting_project_revision": context.resultingRevision,
-    ":resulting_authority_epoch": context.resultingAuthorityEpoch,
-  });
-}
 
 function mutation(
   projectionKey = "status/project",
@@ -473,7 +347,7 @@ test("projection delivery leaves work enqueued during rendering pending", (t) =>
   );
 });
 
-test("import.apply Domain Operation: generic executor refuses the reserved operation", (t) => {
+test("generic executor refuses the retired import-kernel operation types", (t) => {
   openFixture(t);
   const before = durableSnapshot();
   let mutationCalls = 0;
@@ -483,300 +357,20 @@ test("import.apply Domain Operation: generic executor refuses the reserved opera
       mutationCalls += 1;
       return mutation();
     }),
-    /import\.apply.*executeImportDomainOperation/i,
+    /import\.apply is a retired operation type/,
   );
-  assert.equal(mutationCalls, 0);
-  assert.deepEqual(durableSnapshot(), before);
-});
-
-test("import.apply Domain Operation: typed executor is internal and hard-requires its fixed mode", async (t) => {
-  openFixture(t);
-  const publicDatabase = await import("../gsd-db.ts");
-  const before = durableSnapshot();
-  let mutationCalls = 0;
-  const invalidRequests = [
-    { ...importRequest(), operationType: "milestone.describe" },
-    { ...importRequest(), advanceAuthorityEpoch: true },
-    { ...importRequest(), expectedRevision: 1 },
-    { ...importRequest(), expectedAuthorityEpoch: 1 },
-  ] as unknown as ImportDomainOperationRequest[];
-
-  assert.equal("executeImportDomainOperation" in publicDatabase, false);
-  for (const invalid of invalidRequests) {
-    assert.throws(
-      () => executeImportDomainOperation(invalid, () => {
-        mutationCalls += 1;
-        return mutation();
-      }),
-      /import\.apply|Authority Epoch|advanceAuthorityEpoch/i,
-    );
-    assert.deepEqual(durableSnapshot(), before);
-  }
-  assert.equal(mutationCalls, 0);
-});
-
-test("import.apply Domain Operation: rejects accessor-backed request identity without reading it", (t) => {
-  openFixture(t);
-  const before = durableSnapshot();
-  const accessorRequest = importRequest() as unknown as Record<string, unknown>;
-  let operationTypeReads = 0;
-  Object.defineProperty(accessorRequest, "operationType", {
-    enumerable: true,
-    get: () => {
-      operationTypeReads += 1;
-      return operationTypeReads < 3 ? "milestone.describe" : "import.apply";
-    },
-  });
-
   assert.throws(
-    () => executeDomainOperation(
-      accessorRequest as unknown as DomainOperationRequest,
-      () => mutation(),
-    ),
-    /operationType.*data property/i,
-  );
-  assert.equal(operationTypeReads, 0);
-  assert.deepEqual(durableSnapshot(), before);
-});
-
-test("import.apply Domain Operation: rejects an unsealed Preview before mutation", (t) => {
-  openFixture(t);
-  const before = durableSnapshot();
-  const malformed = structuredClone(importPreview()) as unknown as {
-    preview: Record<string, unknown>;
-    preview_hash: string;
-  };
-  malformed.preview["extra"] = true;
-  malformed.preview_hash = hashLegacyImportValue(malformed.preview);
-  let mutationCalls = 0;
-
-  assert.throws(
-    () => executeImportDomainOperation(
-      importRequest(malformed as unknown as LegacyImportPreviewArtifact),
-      () => {
-        mutationCalls += 1;
-        return mutation();
-      },
-    ),
-    /sealed.*Preview|Preview.*invalid/i,
-  );
-  assert.equal(mutationCalls, 0);
-  assert.deepEqual(durableSnapshot(), before);
-});
-
-test("import.apply Domain Operation: rejects nested Preview accessors without invoking them", (t) => {
-  openFixture(t);
-  const before = durableSnapshot();
-  const artifact = structuredClone(importPreview());
-  const preview = artifact.preview;
-  let previewReads = 0;
-  Object.defineProperty(artifact, "preview", {
-    enumerable: true,
-    get: () => {
-      previewReads += 1;
-      _getAdapter()?.prepare(`
-        INSERT INTO runtime_kv (scope, scope_id, key, value_json, updated_at)
-        VALUES ('project', '', 'domain-operation-fault-probe', '{}', '2026-07-17T00:00:00.000Z')
-      `).run();
-      return preview;
-    },
-  });
-  const operationRequest = {
-    ...importRequest(),
-    payload: artifact,
-  } as unknown as ImportDomainOperationRequest;
-
-  assert.throws(
-    () => executeImportDomainOperation(operationRequest, () => mutation()),
-    /Preview.*strict data|accessor/i,
-  );
-  assert.equal(previewReads, 0);
-  assert.deepEqual(durableSnapshot(), before);
-});
-
-test("import.apply Domain Operation: typed executor commits one exact Application receipt", (t) => {
-  openFixture(t);
-  const preview = importPreview();
-  const result = executeImportDomainOperation(importRequest(preview), (context) => {
-    insertImportApplication(context, preview);
-    return mutation();
-  });
-
-  assertCommittedReceipt(result, 1, 0);
-  assert.equal(result.requestHash, preview.preview_hash);
-  assert.deepEqual(
-    row(`SELECT operation_type, request_hash, expected_revision, resulting_revision,
-               expected_authority_epoch, resulting_authority_epoch
-         FROM workflow_operations WHERE operation_id = '${result.operationId}'`),
-    {
-      operation_type: "import.apply",
-      request_hash: preview.preview_hash,
-      expected_revision: 0,
-      resulting_revision: 1,
-      expected_authority_epoch: 0,
-      resulting_authority_epoch: 0,
-    },
-  );
-  assert.deepEqual(
-    row(`SELECT COUNT(*) AS count, preview_id, preview_hash, base_project_revision,
-               resulting_project_revision, base_authority_epoch, resulting_authority_epoch
-         FROM workflow_import_applications WHERE operation_id = '${result.operationId}'`),
-    {
-      count: 1,
-      preview_id: preview.preview.preview_id,
-      preview_hash: preview.preview_hash,
-      base_project_revision: 0,
-      resulting_project_revision: 1,
-      base_authority_epoch: 0,
-      resulting_authority_epoch: 0,
-    },
-  );
-  assert.deepEqual(row("SELECT revision, authority_epoch FROM project_authority WHERE singleton = 1"), {
-    revision: 1,
-    authority_epoch: 0,
-  });
-});
-
-test("import.apply Domain Operation: missing Application receipt rolls back before authority CAS", (t) => {
-  openFixture(t);
-  const before = durableSnapshot();
-  _setDomainOperationFaultForTest("before-cas");
-
-  assert.throws(
-    () => executeImportDomainOperation(importRequest(), () => mutation()),
-    /exactly one matching Application receipt/i,
-  );
-  assert.deepEqual(durableSnapshot(), before);
-});
-
-test("import.apply Domain Operation: noncanonical Application Preview JSON rolls back", (t) => {
-  openFixture(t);
-  const before = durableSnapshot();
-  const preview = importPreview();
-
-  assert.throws(
-    () => executeImportDomainOperation(importRequest(preview), (context) => {
-      insertImportApplication(context, preview, JSON.stringify(preview.preview));
-      return mutation();
-    }),
-    /exactly one matching Application receipt/i,
-  );
-  assert.deepEqual(durableSnapshot(), before);
-});
-
-test("import.apply Domain Operation: caller mutation cannot change the validated Preview", (t) => {
-  openFixture(t);
-  const before = durableSnapshot();
-  const preview = structuredClone(importPreview());
-
-  assert.throws(
-    () => executeImportDomainOperation(importRequest(preview), (context) => {
-      preview.preview.importer_version = "changed-during-mutation";
-      insertImportApplication(context, preview);
-      return mutation();
-    }),
-    /exactly one matching Application receipt/i,
-  );
-  assert.deepEqual(durableSnapshot(), before);
-});
-
-test("import.apply Domain Operation: pre-CAS fault rolls back its Application and shared output", (t) => {
-  openFixture(t);
-  const before = durableSnapshot();
-  const preview = importPreview();
-  _setDomainOperationFaultForTest("before-cas");
-
-  assert.throws(
-    () => executeImportDomainOperation(importRequest(preview), (context) => {
-      insertImportApplication(context, preview);
-      return mutation();
-    }),
-    /before-cas/,
-  );
-  assert.deepEqual(durableSnapshot(), before);
-});
-
-test("import.apply Domain Operation: exact retry replays and scalar or Preview drift conflicts", (t) => {
-  openFixture(t);
-  const preview = importPreview();
-  let mutationCalls = 0;
-  const original = executeImportDomainOperation(importRequest(preview), (context) => {
-    mutationCalls += 1;
-    insertImportApplication(context, preview);
-    return mutation();
-  });
-  const committed = durableSnapshot();
-  const replay = executeImportDomainOperation(importRequest(preview), () => {
-    mutationCalls += 1;
-    throw new Error("import replay must not invoke mutation");
-  });
-
-  assert.equal(mutationCalls, 1);
-  assert.deepEqual(replay, { ...original, status: "replayed" });
-  for (const conflicting of [
-    importRequest(preview, { actorId: "different-agent" }),
-    importRequest(importPreview(0, 0, "changed")),
-  ]) {
-    assertErrorCode(
-      () => executeImportDomainOperation(conflicting, () => mutation()),
-      GSD_IDEMPOTENCY_CONFLICT,
-      /idempotency conflict/i,
-    );
-    assert.deepEqual(durableSnapshot(), committed);
-  }
-});
-
-test("import.apply Domain Operation: stale Preview revision and epoch leave no import residue", (t) => {
-  openFixture(t);
-  let mutationCalls = 0;
-  const revisionBefore = durableSnapshot();
-  assertErrorCode(
-    () => executeImportDomainOperation(importRequest(importPreview(1, 0)), () => {
+    () => executeDomainOperation(request({
+      operationType: "import.forward_repair",
+      idempotencyKey: "retired/forward-repair",
+    }), () => {
       mutationCalls += 1;
       return mutation();
     }),
-    GSD_REVISION_CONFLICT,
-    /stale project revision/i,
-  );
-  assert.deepEqual(durableSnapshot(), revisionBefore);
-
-  _getAdapter()?.prepare(`
-    UPDATE project_authority SET revision = 1, authority_epoch = 1
-    WHERE singleton = 1
-  `).run();
-  const epochBefore = durableSnapshot();
-  assertErrorCode(
-    () => executeImportDomainOperation(importRequest(importPreview(1, 0)), () => {
-      mutationCalls += 1;
-      return mutation();
-    }),
-    GSD_REVISION_CONFLICT,
-    /stale authority epoch/i,
+    /import\.forward_repair is a retired operation type/,
   );
   assert.equal(mutationCalls, 0);
-  assert.deepEqual(durableSnapshot(), epochBefore);
-});
-
-test("import.apply Domain Operation: writer contention remains a revision conflict", (t) => {
-  const dbPath = openFixture(t);
-  const blocker = createDbAdapter(new DatabaseSync(dbPath));
-  blocker.exec("BEGIN IMMEDIATE");
-  t.after(() => {
-    blocker.exec("ROLLBACK");
-    blocker.close();
-  });
-  _getAdapter()?.exec("PRAGMA busy_timeout = 1");
-  let mutationCalls = 0;
-
-  assertErrorCode(
-    () => executeImportDomainOperation(importRequest(), () => {
-      mutationCalls += 1;
-      return mutation();
-    }),
-    GSD_REVISION_CONFLICT,
-    /writer contention/i,
-  );
-  assert.equal(mutationCalls, 0);
+  assert.deepEqual(durableSnapshot(), before);
 });
 
 test("exact idempotency replay returns the original receipt without rerunning mutation", (t) => {
@@ -1131,7 +725,7 @@ test("generic Domain Operation cannot select Authority Epoch advancement or invo
       operationType: "authority.cutover",
       idempotencyKey: "characterization/generic-cutover",
     })),
-    /authority\.cutover.*typed|typed authority cutover/i,
+    /authority\.cutover is a retired operation type/,
   );
   assert.deepEqual(durableSnapshot(), before);
 });
@@ -1257,84 +851,28 @@ test("two real processes racing one expected tuple yield one commit and one stal
   assert.equal(row("SELECT COUNT(*) AS count FROM workflow_projection_work").count, 1);
 });
 
-test("receipt component verification accepts the import.apply and authority.cutover stored hashes", (t) => {
-  openFixture(t);
-
-  // import.apply durably stores the sealed Preview hash as request_hash, not
-  // the conventional requestHash(request) — verification must recompute the
-  // operation-type-appropriate stored hash or it rejects every import receipt.
-  const preview = importPreview();
-  const applyRequest = importRequest(preview);
-  const applyMutation = mutation();
-  const applied = executeImportDomainOperation(applyRequest, (context) => {
-    insertImportApplication(context, preview);
-    return applyMutation;
-  });
-  assert.equal(applied.requestHash, preview.preview_hash);
-  assertDomainOperationReceiptComponents(
-    applied,
-    applyRequest as unknown as DomainOperationRequest,
-    applyMutation,
-  );
-
-  // authority.cutover durably stores the epoch-advancing request hash, while
-  // the assert path used to recompute unconditionally with
-  // advanceAuthorityEpoch=false and reject every cutover receipt.
-  const evidenceHash = `sha256:${"3".repeat(64)}`;
-  const consentHash = `sha256:${"4".repeat(64)}`;
-  const cutoverRequest: AuthorityCutoverDomainOperationRequest = {
-    operationType: "authority.cutover",
-    idempotencyKey: "cutover/receipt-components",
-    expectedRevision: 1,
-    expectedAuthorityEpoch: 0,
-    actorType: "agent",
-    actorId: "authority-cutover",
-    sourceTransport: "internal",
-    payload: {
-      authorityContractVersion: 1,
-      evidenceHash,
-      consentHash,
-    },
-  };
-  const cutoverMutation = mutation();
-  const cutover = _executeAuthorityCutoverDomainOperation(cutoverRequest, (context) => {
-    insertAuthorityCutoverReceipt(context, {
-      authorityContractVersion: 1,
-      evidenceHash,
-      consentHash,
-    });
-    return cutoverMutation;
-  });
-  assert.equal(cutover.resultingAuthorityEpoch, 1);
-  assertDomainOperationReceiptComponents(cutover, cutoverRequest, cutoverMutation);
-});
 
 test("receipt component verification still rejects request identity drift", (t) => {
   openFixture(t);
-  const preview = importPreview();
-  const applyRequest = importRequest(preview);
-  const applied = executeImportDomainOperation(applyRequest, (context) => {
-    insertImportApplication(context, preview);
-    return mutation();
-  });
+  const applyRequest = request({ idempotencyKey: "receipt-components/original" });
+  const applyMutation = mutation();
+  const applied = execute(applyRequest, () => applyMutation);
 
+  assertDomainOperationReceiptComponents(applied, applyRequest, applyMutation);
   assert.throws(
     () => assertDomainOperationReceiptComponents(
       applied,
-      {
-        ...applyRequest,
-        idempotencyKey: "legacy-import/application-drifted",
-      } as unknown as DomainOperationRequest,
-      mutation(),
+      { ...applyRequest, idempotencyKey: "receipt-components/drifted" },
+      applyMutation,
     ),
     /receipt components or header are incomplete or corrupt/,
   );
   assert.throws(
     () => assertDomainOperationReceiptComponents(
       applied,
-      { ...applyRequest, payload: {} } as unknown as DomainOperationRequest,
-      mutation(),
+      { ...applyRequest, payload: {} },
+      applyMutation,
     ),
-    /sealed Preview artifact|receipt components or header/i,
+    /receipt components or header are incomplete or corrupt/,
   );
 });

@@ -91,7 +91,7 @@ test("checkAutoStartAfterDiscuss completes when discussion manifest is absent", 
   const notifications: Array<{ message: string; level: string }> = [];
   let scheduled = false;
   try {
-    const milestoneDir = join(base, ".gsd", "milestones", "M001");
+    const milestoneDir = join(base, ".gsd", "phases", "01-m001");
     mkdirSync(milestoneDir, { recursive: true });
     writeFileSync(join(milestoneDir, "M001-CONTEXT.md"), "# Context\n", "utf-8");
     writeFileSync(join(base, ".gsd", "STATE.md"), "# State\n", "utf-8");

@@ -18,18 +18,19 @@ import {
 } from "../gsd-db.ts";
 import { checkNeedsRunUat } from "../uat-dispatch.ts";
 import type { GSDState } from "../types.ts";
+import { canonicalPhaseDirName, milestoneIdToPhaseNum, slicePlanFileName } from "../layout-policy.ts";
 
 function createFixtureBase(): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-uat-dispatch-test-"));
-  mkdirSync(join(base, ".gsd", "milestones"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases"), { recursive: true });
   return base;
 }
 
 function writeRoadmap(base: string, milestoneId: string): void {
-  const dir = join(base, ".gsd", "milestones", milestoneId);
+  const dir = join(base, ".gsd", "phases", canonicalPhaseDirName(milestoneId));
   mkdirSync(dir, { recursive: true });
   writeFileSync(
-    join(dir, `${milestoneId}-ROADMAP.md`),
+    join(dir, `${String(milestoneIdToPhaseNum(milestoneId)).padStart(2, "0")}-ROADMAP.md`),
     [
       `# ${milestoneId}: UAT dispatch`,
       "",
@@ -51,9 +52,9 @@ function writeSliceFile(
   suffix: string,
   content: string,
 ): void {
-  const dir = join(base, ".gsd", "milestones", milestoneId, "slices", sliceId);
+  const dir = join(base, ".gsd", "phases", canonicalPhaseDirName(milestoneId));
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${sliceId}-${suffix}.md`), content);
+  writeFileSync(join(dir, slicePlanFileName(milestoneIdToPhaseNum(milestoneId), sliceId, suffix)), content);
 }
 
 test("checkNeedsRunUat resolves runtime harness dispatch from UAT plus summary context", async (t) => {
@@ -165,10 +166,10 @@ test("checkNeedsRunUat does not retry roadmap-scoped assessments as UAT", async 
     "UAT",
     "---\nverdict: PASS\n---\n# UAT\n\n## UAT Type\n- UAT mode: runtime-executable\n",
   );
-  const assessmentPath = join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-ASSESSMENT.md");
+  const assessmentPath = join(base, ".gsd", "phases", canonicalPhaseDirName("M001"), "01-01-ASSESSMENT.md");
   writeFileSync(assessmentPath, "---\nverdict: FAIL\n---\n# Roadmap Assessment\n");
   insertAssessment({
-    path: ".gsd/milestones/M001/slices/S01/S01-ASSESSMENT.md",
+    path: ".gsd/phases/01-m001/01-01-ASSESSMENT.md",
     milestoneId: "M001",
     sliceId: "S01",
     status: "fail",

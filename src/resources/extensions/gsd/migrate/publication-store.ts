@@ -1,5 +1,12 @@
 // Project/App: gsd-pi
 // File Purpose: Durable migration publication staging and lost-response replay state.
+//
+// NOT PRODUCTION CODE — DO NOT DELETE AS DEAD. No production path reaches this
+// module since /gsd migrate was removed. It survives only as a fixture for
+// tests/migrate-safety-audit.test.ts, which is the only coverage of the native
+// engine's fault-injection seams that live code — atomic-write.ts,
+// managed-projection-history.ts, db/engine.ts, database-maintenance-fence.ts,
+// projection-cleanup.ts — depends on. Deleting this deletes that coverage.
 
 import {
   closeSync,
@@ -16,9 +23,7 @@ import {
 import { dirname, join, relative, resolve } from "node:path";
 import { createHash } from "node:crypto";
 
-import { hashLegacyImportValue } from "../legacy-import-preview.js";
-import type { LegacyImportValue } from "../legacy-import-contract.js";
-import type { VerifiedMigrationCounts } from "../db-workspace.js";
+import { hashValue, type CanonicalValue } from "../canonical-json.js";
 import type { MigrationBackup } from "./safety.js";
 import type { MigrationPreview, WrittenFiles } from "./writer.js";
 import { syncDirectoryEntry } from "@gsd/native/directory-sync";
@@ -33,6 +38,42 @@ export function _setProjectionMutationBoundaryForTest(
   hook: ((boundary: "before-copy" | "after-copy") => void) | null,
 ): void {
   projectionMutationBoundaryForTest = hook;
+}
+
+export interface VerifiedMigrationCounts {
+  decisions: number;
+  requirements: number;
+  artifacts: number;
+  hierarchy: {
+    milestones: number;
+    slices: number;
+    tasks: number;
+  };
+  targets: readonly {
+    targetKind: string;
+    targetKey: string;
+    contentHash: string;
+  }[];
+  application: {
+    operationId: string;
+    previewId: string;
+    resultingRevision: number;
+    resultingAuthorityEpoch: number;
+    previewHash: string;
+    sourceSetHash: string;
+    changeSetHash: string;
+    applicationRelevantRowsHash: string;
+    projectionTargets: readonly {
+      sourceId: string;
+      logicalPath: string;
+      sha256: string;
+    }[];
+    targets: readonly {
+      targetKind: string;
+      targetKey: string;
+      contentHash: string;
+    }[];
+  };
 }
 
 export interface MigrationPublicationRecord {
@@ -100,7 +141,7 @@ function contentHash(path: string): string {
 }
 
 function publicationKey(sourcePath: string, targetRoot: string, requestHash: string): string {
-  return hashLegacyImportValue({ sourcePath, targetRoot, requestHash } as unknown as LegacyImportValue).slice(7);
+  return hashValue({ sourcePath, targetRoot, requestHash } as unknown as CanonicalValue).slice(7);
 }
 
 function publicationDirectory(targetRoot: string, key: string): string {
@@ -282,8 +323,8 @@ function persistPublicationIntent(
   const expected = publicationIntent(input, key);
   if (handle.pathExists(path)) {
     const observed = JSON.parse(handle.readFile(path).toString("utf8")) as unknown;
-    if (hashLegacyImportValue(observed as LegacyImportValue)
-      !== hashLegacyImportValue(expected as unknown as LegacyImportValue)) {
+    if (hashValue(observed as CanonicalValue)
+      !== hashValue(expected as unknown as CanonicalValue)) {
       throw new Error("migration publication recovery intent does not match the reviewed request");
     }
     return;
@@ -312,7 +353,7 @@ function persistAtRoot(
   assertProjectionRoot(normalized, false, normalized.projectionRootIdentity);
   const logicalPath = `migration-applications/${normalized.publicationKey}/manifest.json`;
   const path = join(projectionRoot, logicalPath);
-  const payloadHash = hashLegacyImportValue(normalized as unknown as LegacyImportValue);
+  const payloadHash = hashValue(normalized as unknown as CanonicalValue);
   handle.writeFile(logicalPath, Buffer.from(`${JSON.stringify({ record: normalized, payloadHash }, null, 2)}\n`));
   syncPath(path);
   syncDirectory(dirname(dirname(path)));
@@ -357,13 +398,13 @@ function load(
   const observedLegacyHashes = handle === undefined
     ? treeHashes(join(retainedRoot, "legacy", "planning"))
     : retainedTreeHashes(handle, `migration-applications/${record.publicationKey}/legacy/planning`);
-  if (parsed["payloadHash"] !== hashLegacyImportValue(record as unknown as LegacyImportValue)
+  if (parsed["payloadHash"] !== hashValue(record as unknown as CanonicalValue)
     || record.publicationKey !== publicationKey(record.sourcePath, record.targetRoot, record.requestHash)
     || manifestPath(record) !== canonicalPath
-    || hashLegacyImportValue(observedProjectionHashes)
-      !== hashLegacyImportValue(record.projectionHashes)
-    || hashLegacyImportValue(observedLegacyHashes)
-      !== hashLegacyImportValue(record.legacyHashes)) {
+    || hashValue(observedProjectionHashes)
+      !== hashValue(record.projectionHashes)
+    || hashValue(observedLegacyHashes)
+      !== hashValue(record.legacyHashes)) {
     throw new Error("migration publication manifest is invalid");
   }
   assertProjectionRoot(record, false, record.projectionRootIdentity);
@@ -411,7 +452,7 @@ export function findPendingMigrationPublication(
 }
 
 export function migrationPublicationRequestHash(sourcePath: string, stagedGsd: string): string {
-  return hashLegacyImportValue({
+  return hashValue({
     legacy: treeHashes(sourcePath),
     projection: treeHashes(stagedGsd),
   });
@@ -478,7 +519,7 @@ export function prepareMigrationPublication(input: {
     )));
     const artifactHashes = projectionHashes.filter((entry) => stagedArtifacts.has(entry.logicalPath));
     const legacyHashes = retainedTreeHashes(handle, `migration-applications/${key}/legacy/planning`);
-    const retainedRequestHash = hashLegacyImportValue({ legacy: legacyHashes, projection: projectionHashes });
+    const retainedRequestHash = hashValue({ legacy: legacyHashes, projection: projectionHashes });
     if (retainedRequestHash !== input.requestHash) {
       removeRetainedTree(handle, `migration-applications/${key}`);
       throw new Error("migration publication retained evidence does not match the reviewed request hash");

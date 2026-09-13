@@ -21,9 +21,9 @@ import {
 
 function createBase(): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-park-db-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md"),
+    join(base, ".gsd", "phases", "01-m001", "01-CONTEXT.md"),
     "# M001\n\nContext.",
   );
   return base;
@@ -54,7 +54,7 @@ test("parkMilestone ignores blocked SUMMARY.md when DB milestone is active (#582
     openDatabase(":memory:");
     insertMilestone({ id: "M001", title: "Test", status: "active" });
     writeFileSync(
-      join(base, ".gsd", "milestones", "M001", "M001-SUMMARY.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-SUMMARY.md"),
       [
         "---",
         "status: closeout_blocked",
@@ -71,7 +71,7 @@ test("parkMilestone ignores blocked SUMMARY.md when DB milestone is active (#582
 
     assert.ok(parked, "active DB row should allow parking despite a blocked SUMMARY.md");
     assert.ok(
-      existsSync(join(base, ".gsd", "milestones", "M001", "M001-PARKED.md")),
+      existsSync(join(base, ".gsd", "phases", "01-m001", "01-PARKED.md")),
       "PARKED.md should be written",
     );
     assert.equal(getMilestone("M001")!.status, "parked", "DB status should be parked");
@@ -91,7 +91,7 @@ test("parkMilestone refuses DB-complete milestones (#5828)", () => {
 
     assert.equal(parked, false, "complete DB row should not be parkable");
     assert.equal(
-      existsSync(join(base, ".gsd", "milestones", "M001", "M001-PARKED.md")),
+      existsSync(join(base, ".gsd", "phases", "01-m001", "01-PARKED.md")),
       false,
       "PARKED.md should not be written",
     );

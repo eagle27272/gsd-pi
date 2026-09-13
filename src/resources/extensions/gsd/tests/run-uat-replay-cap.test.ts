@@ -49,7 +49,7 @@ function seedSliceRows(): void {
 
 function makeUatProject(): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-uat-cap-"));
-  const milestone = join(base, ".gsd", "milestones", "M001");
+  const milestone = join(base, ".gsd", "phases", "01-m001");
   mkdirSync(join(milestone, "slices", "S01"), { recursive: true });
   mkdirSync(join(milestone, "slices", "S02"), { recursive: true });
   writeFileSync(

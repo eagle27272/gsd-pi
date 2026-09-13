@@ -18,7 +18,6 @@ import {
   getTemplateInfo,
   loadWorkflowTemplate,
   loadRegistry,
-  isLegacyWorkflowMode,
   type TemplateMatch,
 } from "./workflow-templates.js";
 import { loadPrompt } from "./prompt-loader.js";
@@ -29,7 +28,6 @@ import { getErrorMessage } from "./error-utils.js";
 import { resolvePlugin, type WorkflowPlugin } from "./workflow-plugins.js";
 import { currentDirectoryRoot } from "./commands/context.js";
 import { formatRecommendedProcessPaths } from "./process-task-path.js";
-import { incrementLegacyTelemetry } from "./legacy-telemetry.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -500,9 +498,6 @@ export async function handleStart(
   if (artifactDir) infoLines.push(`Artifacts: ${artifactDir}`);
   infoLines.push(`Branch: ${actualBranch}`);
   ctx.ui.notify(infoLines.join("\n"), "info");
-  if (isLegacyWorkflowMode(template.mode)) {
-    incrementLegacyTelemetry("legacy.workflowEngineUsed");
-  }
 
   const prompt = loadPrompt("workflow-start", {
     templateId,
@@ -668,7 +663,6 @@ export function dispatchMarkdownPhasePlugin(
   if (artifactDir) infoLines.push(`Artifacts: ${artifactDir}`);
   infoLines.push(`Branch: ${actualBranch}`);
   ctx.ui.notify(infoLines.join("\n"), "info");
-  incrementLegacyTelemetry("legacy.workflowEngineUsed");
 
   const prompt = loadPrompt("workflow-start", {
     templateId,

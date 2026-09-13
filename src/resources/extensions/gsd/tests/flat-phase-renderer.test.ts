@@ -8,8 +8,10 @@ import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 
 import { renderPlanFromDb, renderRoadmapFromDb, renderAssessmentFromDb, renderReplanFromDb } from "../markdown-renderer.ts";
-import { clearPathCache } from "../paths.ts";
+import { clearPathCache, gsdProjectionRoot, resolveMilestoneFile } from "../paths.ts";
 import { openDatabase, closeDatabase, insertMilestone, insertSlice, insertTask } from "../gsd-db.ts";
+import { renderRoadmapProjection } from "../workflow-projections.ts";
+import { detectLegacyLayout } from "../legacy-layout-guard.ts";
 
 const tmpDirs: string[] = [];
 function makeTmp(): string {
@@ -42,6 +44,34 @@ test("renderRoadmapFromDb writes to .gsd/phases/ not .gsd/milestones/", async ()
   const milestonesDir = join(base, ".gsd", "milestones");
   assert.ok(existsSync(phasesDir), "expected .gsd/phases/ to exist");
   assert.ok(!existsSync(milestonesDir), "expected .gsd/milestones/ to NOT exist");
+});
+
+test("renderRoadmapProjection writes the flat-phase roadmap that resolveMilestoneFile finds", () => {
+  const base = makeTmp();
+
+  renderRoadmapProjection(base, "M001");
+
+  const resolved = resolveMilestoneFile(base, "M001", "ROADMAP");
+  assert.equal(
+    resolved,
+    join(gsdProjectionRoot(base), "phases", "01-foundation", "01-ROADMAP.md"),
+  );
+  assert.match(readFileSync(resolved!, "utf-8"), /^# M001: Foundation$/m);
+  assert.ok(
+    !existsSync(join(base, ".gsd", "milestones")),
+    "expected .gsd/milestones/ to NOT exist",
+  );
+});
+
+// The legacy-layout guard refuses to start a session on a content-bearing
+// .gsd/milestones/<MID>/, and nothing converts that layout any more — so a
+// projection writer that produces it bricks the project (#task-10 Critical).
+test("renderRoadmapProjection leaves detectLegacyLayout clean", () => {
+  const base = makeTmp();
+
+  renderRoadmapProjection(base, "M001");
+
+  assert.equal(detectLegacyLayout(base), null);
 });
 
 test("renderPlanFromDb writes NN-MM-PLAN.md inside the phase dir", async () => {

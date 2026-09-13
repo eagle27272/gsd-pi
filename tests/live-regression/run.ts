@@ -31,6 +31,13 @@ import {
 import { join, resolve } from "path";
 import { tmpdir } from "os";
 
+import {
+  canonicalPhaseDirName,
+  LAYOUT_SEGMENTS,
+  milestoneIdToPhaseNum,
+  slicePlanFileName,
+} from "../../src/resources/extensions/gsd/layout-policy.ts";
+
 // ─── Config ───────────────────────────────────────────────────────────────
 
 // GSD_SMOKE_BINARY may name either a filesystem path to a JS entrypoint
@@ -215,36 +222,29 @@ function buildMinimalPlan(
   return lines.join("\n");
 }
 
-// Recover DB hierarchy from on-disk markdown projections. DB is authoritative
-// at runtime, so live-regression fixtures that exist only as markdown must be
-// imported via `gsd headless recover` before `headless query` can derive
-// their state. The interactive `gsd recover` command requires a TTY; the
-// headless subcommand is the non-interactive parallel.
-// Since the import-application gate landed, recover is two-step: the first
-// invocation prints the import preview and exits 1, and only a re-run carrying
-// that exact `--preview=<hash>` applies it.
-function recover(dir: string): void {
-  const preview = gsd(["headless", "recover"], dir);
-  assert(
-    preview.code === 1,
-    `gsd headless recover preview should exit 1, got ${preview.code}: ${preview.stderr}`,
+// Fixtures below seed the flat-phase layout, the only on-disk shape GSD still
+// reads. The pre-flat-phase milestones/<MID>/ tree is refused by the
+// legacy-layout guard, so names come from the layout policy rather than being
+// spelled out by hand.
+const FIXTURE_MILESTONE_ID = "M001";
+const FIXTURE_MILESTONE_TITLE = "Test Milestone";
+const FIXTURE_PHASE_NUM = milestoneIdToPhaseNum(FIXTURE_MILESTONE_ID);
+
+function fixturePhaseDir(dir: string): string {
+  return join(
+    dir,
+    ".gsd",
+    LAYOUT_SEGMENTS.level1,
+    canonicalPhaseDirName(FIXTURE_MILESTONE_ID, FIXTURE_MILESTONE_TITLE),
   );
-  const previewHash = /^Preview hash: (sha256:[0-9a-f]{64})$/mu.exec(
-    preview.stderr,
-  )?.[1];
-  assert(
-    previewHash !== undefined,
-    `gsd headless recover should print a preview hash, got ${preview.code}: ${preview.stderr}`,
-  );
-  const result = gsd(["headless", "recover", `--preview=${previewHash}`], dir);
-  assert(
-    result.code === 0,
-    `gsd headless recover should succeed for fixture, got ${result.code}: ${result.stderr}`,
-  );
-  assert(
-    result.stderr.includes("gsd-recover: recovered"),
-    `gsd headless recover should reach success path, got stderr: ${result.stderr}`,
-  );
+}
+
+function fixturePhaseFile(suffix: string): string {
+  return `${String(FIXTURE_PHASE_NUM).padStart(2, "0")}-${suffix}.md`;
+}
+
+function fixturePlanFile(sliceId: string): string {
+  return slicePlanFileName(FIXTURE_PHASE_NUM, sliceId, "PLAN");
 }
 
 // ─── Test: headless query returns valid JSON ──────────────────────────────
@@ -299,116 +299,110 @@ run("headless query: empty project reports pre-planning or idle", () => {
   }
 });
 
-// ─── Test: state derivation — milestone with roadmap ─────────────────────
-
-run("headless query: milestone with roadmap reports planning phase", () => {
-  const dir = createTempProject("planning");
-  try {
-    const mDir = join(dir, ".gsd", "milestones", "M001");
-    mkdirSync(join(mDir, "slices", "S01"), { recursive: true });
-    writeFileSync(join(mDir, "M001-CONTEXT.md"), "# M001\n\nContext.");
-    writeFileSync(
-      join(mDir, "M001-ROADMAP.md"),
-      buildMinimalRoadmap([{ id: "S01", title: "First Slice", done: false }]),
-    );
-
-    recover(dir);
-    const result = gsd(["headless", "query"], dir);
-    assert(result.code === 0, `expected exit 0, got ${result.code}`);
-
-    const json = JSON.parse(result.stdout);
-    assert(
-      (json.state?.phase ?? json.phase) === "planning",
-      `expected planning, got: ${json.state?.phase ?? json.phase}`,
-    );
-    assert(
-      (json.state?.activeMilestone ?? json.activeMilestone) === "M001" ||
-        (json.state?.activeMilestone ?? json.activeMilestone)?.id === "M001",
-      `expected active milestone M001`,
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-// ─── Test: state derivation — all tasks done ─────────────────────────────
-
-run("headless query: all tasks done reports summarizing phase", () => {
-  const dir = createTempProject("summarizing");
-  try {
-    const mDir = join(dir, ".gsd", "milestones", "M001");
-    const sDir = join(mDir, "slices", "S01");
-    mkdirSync(sDir, { recursive: true });
-    writeFileSync(join(mDir, "M001-CONTEXT.md"), "# M001\n\nContext.");
-    writeFileSync(
-      join(mDir, "M001-ROADMAP.md"),
-      buildMinimalRoadmap([{ id: "S01", title: "First Slice", done: false }]),
-    );
-    writeFileSync(
-      join(sDir, "S01-PLAN.md"),
-      buildMinimalPlan([{ id: "T01", title: "Task One", done: true }]),
-    );
-    // This fixture deliberately uses the legacy nested layout
-    // (milestones/M001/slices/S01), matching src/tests/headless-recover.test.ts.
-    // "summarizing" is derived purely from the checked plan task: all planned
-    // tasks done, no milestone summary yet. We intentionally do NOT add a task
-    // summary here and do NOT exercise the flat <phase>/S01-T01-SUMMARY.md path:
-    // in the legacy layout targetTaskFile() writes slices/S01/tasks/T01-SUMMARY.md,
-    // and pairing that with the checked plan checkbox makes the summary and the
-    // checkbox conflicting claims on M001/S01/T01, which the importer rejects with
-    // a 'conflicting-legacy-import-target' blocker. This fixture covers the recover
-    // two-step gate and legacy import; flat task-summary import is out of scope.
-
-    recover(dir);
-    const result = gsd(["headless", "query"], dir);
-    assert(result.code === 0, `expected exit 0, got ${result.code}`);
-
-    const json = JSON.parse(result.stdout);
-    assert(
-      (json.state?.phase ?? json.phase) === "summarizing",
-      `expected summarizing, got: ${json.state?.phase ?? json.phase}`,
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-// ─── Test: state derivation — complete milestone ─────────────────────────
+// ─── Test: markdown-only fixtures never become canonical state ───────────
 //
-// Previously this accepted {complete, idle, pre-planning} — three-way
-// accept meant it could not distinguish "rolled forward correctly" from
-// "broken."  Now: the roadmap has its only slice checked and a SUMMARY
-// file exists, so the milestone must roll forward to "complete" (M001
-// reported as done), "idle" (M001 archived, no successor), or
-// "validating-milestone" (import leaves M001 active with every slice done
-// and no VALIDATION.md, so state derivation routes it to validation first).
-// "pre-planning" indicates we forgot the completed milestone — a bug.
+// These three fixtures — a planned milestone, a fully-checked plan, and a
+// summarized milestone — used to be imported into the DB by `gsd headless
+// recover` and then asserted to derive "planning" / "summarizing" /
+// "complete". That markdown→DB import path has been removed: the database is
+// the sole authority and nothing at runtime adopts on-disk markdown.
+//
+// The fixtures still earn their keep as the live proof of that invariant.
+// Whatever the markdown claims, `headless query` must report an unplanned
+// project and must not manufacture an active milestone. A regression that
+// reintroduced implicit import would show up here as "planning",
+// "summarizing" or "complete".
 
-run("headless query: milestone with summary reports complete or idle", () => {
-  const dir = createTempProject("complete");
-  try {
-    const mDir = join(dir, ".gsd", "milestones", "M001");
-    mkdirSync(mDir, { recursive: true });
-    writeFileSync(
-      join(mDir, "M001-ROADMAP.md"),
-      buildMinimalRoadmap([{ id: "S01", title: "Done", done: true }]),
-    );
-    writeFileSync(join(mDir, "M001-SUMMARY.md"), "# M001 Summary\n\nComplete.");
+const MARKDOWN_ONLY_FIXTURES: Array<{
+  name: string;
+  claim: string;
+  seed: (dir: string) => void;
+}> = [
+  {
+    name: "planning",
+    claim: "a roadmap with one open slice",
+    seed: (dir) => {
+      const pDir = fixturePhaseDir(dir);
+      mkdirSync(pDir, { recursive: true });
+      writeFileSync(join(pDir, fixturePhaseFile("CONTEXT")), "# M001\n\nContext.");
+      writeFileSync(
+        join(pDir, fixturePhaseFile("ROADMAP")),
+        buildMinimalRoadmap([{ id: "S01", title: "First Slice", done: false }]),
+      );
+    },
+  },
+  {
+    name: "summarizing",
+    claim: "a plan whose every task is checked",
+    seed: (dir) => {
+      const pDir = fixturePhaseDir(dir);
+      mkdirSync(pDir, { recursive: true });
+      writeFileSync(join(pDir, fixturePhaseFile("CONTEXT")), "# M001\n\nContext.");
+      writeFileSync(
+        join(pDir, fixturePhaseFile("ROADMAP")),
+        buildMinimalRoadmap([{ id: "S01", title: "First Slice", done: false }]),
+      );
+      writeFileSync(
+        join(pDir, fixturePlanFile("S01")),
+        buildMinimalPlan([{ id: "T01", title: "Task One", done: true }]),
+      );
+    },
+  },
+  {
+    name: "complete",
+    claim: "a checked roadmap plus a milestone summary",
+    seed: (dir) => {
+      const pDir = fixturePhaseDir(dir);
+      mkdirSync(pDir, { recursive: true });
+      writeFileSync(
+        join(pDir, fixturePhaseFile("ROADMAP")),
+        buildMinimalRoadmap([{ id: "S01", title: "Done", done: true }]),
+      );
+      writeFileSync(join(pDir, fixturePhaseFile("SUMMARY")), "# M001 Summary\n\nComplete.");
+    },
+  },
+];
 
-    recover(dir);
-    const result = gsd(["headless", "query"], dir);
-    assert(result.code === 0, `expected exit 0, got ${result.code}`);
+for (const fixture of MARKDOWN_ONLY_FIXTURES) {
+  run(
+    `headless query: markdown claiming ${fixture.claim} is not adopted into DB authority`,
+    () => {
+      const dir = createTempProject(fixture.name);
+      try {
+        fixture.seed(dir);
 
-    const json = JSON.parse(result.stdout);
-    const phase = json.state?.phase ?? json.phase;
-    assert(
-      phase === "complete" || phase === "idle" || phase === "validating-milestone",
-      `expected complete, idle, or validating-milestone (not pre-planning — completed milestone must not be forgotten), got: ${phase}`,
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
+        const result = gsd(["headless", "query"], dir);
+        assert(result.code === 0, `expected exit 0, got ${result.code}: ${result.stderr}`);
+
+        const json = JSON.parse(result.stdout);
+        const phase = json.state?.phase ?? json.phase;
+        assert(
+          phase === "pre-planning" || phase === "idle",
+          `markdown-only fixture must stay unadopted (pre-planning/idle), got: ${phase}`,
+        );
+
+        const activeMilestone = json.state?.activeMilestone ?? json.activeMilestone;
+        const activeId =
+          typeof activeMilestone === "string" ? activeMilestone : activeMilestone?.id;
+        assert(
+          activeId === undefined || activeId === null,
+          `markdown-only fixture must not produce an active milestone, got: ${activeId}`,
+        );
+
+        // `headless query` emits { state, next, cost } — the milestone rows
+        // live on state.registry, so assert against that and not a top-level
+        // `milestones` key the payload has never carried.
+        const registry = json.state?.registry;
+        assert(
+          Array.isArray(registry) && registry.length === 0,
+          `markdown-only fixture must not produce canonical milestone rows, got: ${JSON.stringify(registry)}`,
+        );
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+}
 
 // ─── Test: lock file lifecycle — captured real PID ───────────────────────
 //
@@ -575,20 +569,23 @@ run("version skew is detected and named in stderr", () => {
 // spurious code 11 ("cancelled") — indistinguishable from a real SIGINT.
 // Regression coverage: each quick command must exit 0 on a seeded project.
 
+// The markdown artifacts below are scaffolding, not canonical state: there is
+// no markdown→DB import path, so the DB stays empty. That is fine for these
+// tests — the regression under test is the exit code of a quick command on a
+// real project directory, not the contents of the dashboard.
 function seedProjectWithMilestone(name: string): string {
   const dir = createTempProject(name);
-  const mDir = join(dir, ".gsd", "milestones", "M001");
-  mkdirSync(join(mDir, "slices", "S01"), { recursive: true });
-  writeFileSync(join(mDir, "M001-CONTEXT.md"), "# M001\n\nContext.");
+  const pDir = fixturePhaseDir(dir);
+  mkdirSync(pDir, { recursive: true });
+  writeFileSync(join(pDir, fixturePhaseFile("CONTEXT")), "# M001\n\nContext.");
   writeFileSync(
-    join(mDir, "M001-ROADMAP.md"),
+    join(pDir, fixturePhaseFile("ROADMAP")),
     buildMinimalRoadmap([{ id: "S01", title: "First Slice", done: false }]),
   );
   writeFileSync(
-    join(mDir, "slices", "S01", "S01-PLAN.md"),
+    join(pDir, fixturePlanFile("S01")),
     buildMinimalPlan([{ id: "T01", title: "Task One", done: false }]),
   );
-  recover(dir);
   return dir;
 }
 
@@ -600,10 +597,12 @@ run("headless status exits 0 (not spurious cancelled) on seeded project", () => 
       result.code === 0,
       `expected exit 0, got ${result.code}: ${result.stderr.slice(0, 300)}`,
     );
-    // The dashboard text is rendered to stderr in text mode.
+    // The dashboard text is rendered to stderr in text mode. The DB is empty
+    // (markdown is not canonical), so assert the dashboard rendered at all
+    // rather than that it names a milestone.
     assert(
-      /M001/i.test(result.stderr),
-      `status should reference M001, got: ${result.stderr.slice(0, 300)}`,
+      result.stderr.trim().length > 0,
+      "status should render dashboard text to stderr",
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });

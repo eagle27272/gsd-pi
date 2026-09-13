@@ -20,6 +20,8 @@ import {
 } from "../gsd-db.ts";
 import { invalidateAllCaches } from "../cache.ts";
 import type { GSDState } from "../types.ts";
+import { resolveMilestonePath } from "../paths.ts";
+import { basename } from "node:path";
 
 const PARALLEL_RESEARCH_RULE = "planning (multiple slices need research) → parallel-research-slices";
 const SINGLE_RESEARCH_RULE = "planning (no research) → research-slice";
@@ -29,9 +31,17 @@ const VALIDATE_RULE = "validating-milestone → validate-milestone";
 
 function makeBase(): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-pipeline-variant-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S02", "tasks"), { recursive: true });
+  mkdirSync(join(phaseDir(base), "tasks"), { recursive: true });
   return base;
+}
+
+/**
+ * The phase directory M001 currently resolves to. Seeding a milestone title
+ * renames `01-m001` to the canonical title slug, so fixtures must resolve the
+ * directory rather than hard-code it.
+ */
+function phaseDir(base: string): string {
+  return resolveMilestonePath(base, "M001") ?? join(base, ".gsd", "phases", "01-m001");
 }
 
 function cleanup(base: string): void {
@@ -193,7 +203,7 @@ test("#4781 phase 2: parallel-research-slices rule skips dispatch for trivial va
   // analysis. Write a minimal one.
   const { writeFileSync } = await import("node:fs");
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"),
+    join(phaseDir(base), "01-ROADMAP.md"),
     [
       "# M001",
       "## Slices",
@@ -217,11 +227,11 @@ test("#4781 phase 2: validate-milestone rule writes pass-through VALIDATION for 
   // findMissingSummaries checks slice SUMMARY files — write empty ones so
   // the safety guard doesn't stop first.
   const { writeFileSync } = await import("node:fs");
-  writeFileSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-SUMMARY.md"), "# S01\n");
-  writeFileSync(join(base, ".gsd", "milestones", "M001", "slices", "S02", "S02-SUMMARY.md"), "# S02\n");
+  writeFileSync(join(phaseDir(base), "01-01-SUMMARY.md"), "# S01\n");
+  writeFileSync(join(phaseDir(base), "01-02-SUMMARY.md"), "# S02\n");
   // Write a roadmap so findMissingSummaries can enumerate slice IDs.
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"),
+    join(phaseDir(base), "01-ROADMAP.md"),
     [
       "# M001",
       "## Slices",
@@ -236,7 +246,7 @@ test("#4781 phase 2: validate-milestone rule writes pass-through VALIDATION for 
   assert.ok(result, "rule must return a result, not null");
   assert.strictEqual(result!.action, "skip", "trivial variant must return skip action");
 
-  const validationPath = join(base, ".gsd", "milestones", "M001", "M001-VALIDATION.md");
+  const validationPath = join(phaseDir(base), "01-VALIDATION.md");
   assert.ok(existsSync(validationPath), "pass-through VALIDATION.md must be written");
 
   const { readFileSync } = await import("node:fs");
@@ -258,7 +268,7 @@ test("validate-milestone skip writes to project root when active worktree lacks 
 
   const { writeFileSync, readFileSync } = await import("node:fs");
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"),
+    join(phaseDir(base), "01-ROADMAP.md"),
     [
       "# M001",
       "## Slices",
@@ -283,11 +293,11 @@ test("validate-milestone skip writes to project root when active worktree lacks 
   assert.ok(result, "rule must return a result, not null");
   assert.strictEqual(result!.action, "skip", "trivial variant must still skip validation");
 
-  const validationPath = join(base, ".gsd", "milestones", "M001", "M001-VALIDATION.md");
+  const validationPath = join(phaseDir(base), "01-VALIDATION.md");
   assert.ok(existsSync(validationPath), "pass-through VALIDATION.md must be written to the project root");
   assert.match(readFileSync(validationPath, "utf-8"), /skip_validation: true/);
 
-  const worktreeValidationPath = join(worktree, ".gsd", "milestones", "M001", "M001-VALIDATION.md");
+  const worktreeValidationPath = join(worktree, ".gsd", "phases", basename(phaseDir(base)), "01-VALIDATION.md");
   assert.equal(existsSync(worktreeValidationPath), false, "missing worktree milestone projection must not receive a phantom validation");
 });
 
@@ -320,7 +330,7 @@ test("#4781 phase 2: validate-milestone skip path does not persist gates without
 
   const { writeFileSync, readFileSync } = await import("node:fs");
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"),
+    join(phaseDir(base), "01-ROADMAP.md"),
     [
       "# M001",
       "## Slices",
@@ -335,7 +345,7 @@ test("#4781 phase 2: validate-milestone skip path does not persist gates without
   assert.ok(result, "rule must return a result, not null");
   assert.strictEqual(result!.action, "skip", "trivial variant must still skip without slices");
 
-  const validationPath = join(base, ".gsd", "milestones", "M001", "M001-VALIDATION.md");
+  const validationPath = join(phaseDir(base), "01-VALIDATION.md");
   const content = readFileSync(validationPath, "utf-8");
   assert.match(content, /skip_validation: true/);
 
@@ -353,10 +363,10 @@ test("#4781 phase 2: validate-milestone rule dispatches normally for standard va
 
   seedMilestone(base, "M001", STANDARD_INPUT);
   const { writeFileSync } = await import("node:fs");
-  writeFileSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-SUMMARY.md"), "# S01\n");
-  writeFileSync(join(base, ".gsd", "milestones", "M001", "slices", "S02", "S02-SUMMARY.md"), "# S02\n");
+  writeFileSync(join(phaseDir(base), "01-01-SUMMARY.md"), "# S01\n");
+  writeFileSync(join(phaseDir(base), "01-02-SUMMARY.md"), "# S02\n");
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"),
+    join(phaseDir(base), "01-ROADMAP.md"),
     [
       "# M001",
       "## Slices",

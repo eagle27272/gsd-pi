@@ -128,20 +128,34 @@ function scaffoldProject(runDir) {
 	return dir;
 }
 
-// Mirrors tests/e2e/headless-auto-pause-blocked.e2e.test.ts writeRecoveredMilestone.
-function writeRecoveredMilestone(dir) {
-	const milestoneDir = join(dir, ".gsd", "milestones", "M001");
-	const sliceDir = join(milestoneDir, "slices", "S01");
-	mkdirSync(join(sliceDir, "tasks"), { recursive: true });
+// Mirrors tests/e2e/headless-auto-pause-blocked.e2e.test.ts writeRecoveredMilestone:
+// both seed the flat-phase layout the resolvers read. The pre-flat-phase
+// milestones/<MID>/ shape is rejected outright by the legacy-layout guard, and
+// nothing converts it any more. Naming comes from the layout policy itself so
+// the fixture cannot drift from the resolvers.
+//
+// Flat-phase has no slices/<SID>/tasks/ dir, so there is no per-task plan
+// artifact to write: artifact-verification only demands one when a tasks/ dir
+// exists outside `.gsd/phases`.
+async function writeRecoveredMilestone(dir) {
+	const { canonicalPhaseDirName, LAYOUT_SEGMENTS, milestoneIdToPhaseNum, slicePlanFileName } = await import(
+		pathToFileURL(join(REPO_ROOT, "dist", "resources", "extensions", "gsd", "layout-policy.js")).href
+	);
+	const milestoneId = "M001";
+	const title = "Acceptance Bed Fixture";
+	const phaseNum = milestoneIdToPhaseNum(milestoneId);
+	const phasePrefix = String(phaseNum).padStart(2, "0");
+	const phaseDir = join(dir, ".gsd", LAYOUT_SEGMENTS.level1, canonicalPhaseDirName(milestoneId, title));
+	mkdirSync(phaseDir, { recursive: true });
 
 	writeFileSync(
-		join(milestoneDir, "M001-CONTEXT.md"),
-		["# M001: Acceptance Bed Fixture", "", "## Purpose", "Prove auto mode can finish a tiny planned milestone.", ""].join("\n"),
+		join(phaseDir, `${phasePrefix}-CONTEXT.md`),
+		[`# ${milestoneId}: ${title}`, "", "## Purpose", "Prove auto mode can finish a tiny planned milestone.", ""].join("\n"),
 	);
 	writeFileSync(
-		join(milestoneDir, "M001-ROADMAP.md"),
+		join(phaseDir, `${phasePrefix}-ROADMAP.md`),
 		[
-			"# M001: Acceptance Bed Fixture",
+			`# ${milestoneId}: ${title}`,
 			"",
 			"## Slices",
 			"",
@@ -151,7 +165,7 @@ function writeRecoveredMilestone(dir) {
 		].join("\n"),
 	);
 	writeFileSync(
-		join(sliceDir, "S01-PLAN.md"),
+		join(phaseDir, slicePlanFileName(phaseNum, "S01", "PLAN")),
 		[
 			"# S01: Update answer",
 			"",
@@ -182,57 +196,55 @@ function writeRecoveredMilestone(dir) {
 			"",
 		].join("\n"),
 	);
-	// Recovery artifact verification requires a per-task plan artifact when the
-	// tasks/ dir exists (artifact-verification.ts: "task artifact missing").
-	writeFileSync(
-		join(sliceDir, "tasks", "T01-PLAN.md"),
-		[
-			"---",
-			"estimated_steps: 1",
-			"estimated_files: 1",
-			"---",
-			"",
-			"# T01: Update answer implementation",
-			"",
-			"**Slice:** S01 — Update answer",
-			"**Milestone:** M001",
-			"",
-			"## Description",
-			"",
-			"Change `src/answer.js` so `answer()` returns `ready`, then run the verification command.",
-			"",
-			"## Steps",
-			"",
-			"1. Edit `src/answer.js` so the exported function returns \"ready\".",
-			"2. Run `node --test test/answer.test.js` and confirm it exits 0.",
-			"",
-			"## Must-Haves",
-			"",
-			"- [ ] `answer()` returns \"ready\".",
-			"",
-			"## Verification",
-			"",
-			"- Verify: `node --test test/answer.test.js` exits 0.",
-			"",
-			"## Expected Output",
-			"",
-			"- `src/answer.js` — returns \"ready\".",
-			"",
-		].join("\n"),
-	);
 }
 
-function recoverWithApproval(dir) {
-	const preview = gsd(["headless", "recover"], { cwd: dir, timeoutMs: 60_000 });
-	const previewHash = /re-run with --preview=(sha256:[0-9a-f]{64})/u.exec(preview.stderrClean)?.[1];
-	if (!previewHash) {
-		throw new Error(`no recovery preview hash. stderr:\n${preview.stderrClean.slice(0, 2000)}`);
+/**
+ * Load the bed's on-disk markdown milestone into the project database.
+ *
+ * This used to shell out to the two-step `gsd headless recover`, the
+ * operator-facing markdown→DB import. That command and the kernel behind it
+ * are gone: the database is the sole authority and no production path adopts
+ * markdown. What survives for exactly this purpose is md-importer's
+ * `migrateFromMarkdown`, the explicitly test-only scaffolding importer.
+ *
+ * `minimum` is the floor this fixture is expected to produce. Mirrors
+ * tests/e2e/headless-auto-pause-blocked.e2e.test.ts's seedDatabaseFromMarkdown,
+ * whose fixture shape (milestones/slices present, zero tasks) hits the same
+ * parseProjectionPlan checkbox/heading-id collision as this bed's fixture.
+ *
+ * Runs in a child process so the bed never holds a SQLite handle on the
+ * project `headless auto` is about to run against.
+ */
+function seedDatabaseFromMarkdown(dir, minimum) {
+	const moduleUrl = (name) =>
+		JSON.stringify(pathToFileURL(join(REPO_ROOT, "dist", "resources", "extensions", "gsd", name)).href);
+	const script = [
+		`const { migrateFromMarkdown } = await import(${moduleUrl("md-importer.js")});`,
+		`const { closeDatabase } = await import(${moduleUrl("gsd-db.js")});`,
+		"const counts = migrateFromMarkdown(process.argv[1]);",
+		"closeDatabase();",
+		"process.stdout.write(JSON.stringify(counts));",
+	].join("\n");
+
+	let raw;
+	try {
+		raw = execFileSync(process.execPath, ["--input-type=module", "-e", script, dir], {
+			cwd: dir,
+			encoding: "utf8",
+			timeout: 60_000,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+	} catch (err) {
+		throw new Error(`DB seeding failed:\n${String(err?.stderr ?? err).slice(0, 2000)}`);
 	}
-	const approved = gsd(["headless", "recover", `--preview=${previewHash}`], { cwd: dir, timeoutMs: 60_000 });
-	if (approved.code !== 0) {
-		throw new Error(`recover approval exit ${approved.code}. stderr:\n${approved.stderrClean.slice(0, 2000)}`);
+
+	const counts = JSON.parse(raw);
+	for (const kind of ["milestones", "slices", "tasks"]) {
+		if (counts.hierarchy[kind] < minimum[kind]) {
+			throw new Error(`DB seeding imported ${counts.hierarchy[kind]} ${kind}, expected at least ${minimum[kind]}: ${raw}`);
+		}
 	}
-	return { preview, approved };
+	return counts;
 }
 
 async function computeTestedSourceRevision(dir) {
@@ -434,12 +446,18 @@ async function main() {
 	const runDir = nextRunDir();
 	console.error(`[bed] run dir: ${runDir}`);
 	const projectDir = scaffoldProject(runDir);
-	writeRecoveredMilestone(projectDir);
+	await writeRecoveredMilestone(projectDir);
 
-	const { preview, approved } = recoverWithApproval(projectDir);
-	writeFileSync(join(runDir, "recover-preview.stderr.log"), preview.stderr);
-	writeFileSync(join(runDir, "recover-approved.stderr.log"), approved.stderr);
-	console.error("[bed] recover approved (exit 0)");
+	// tasks: 0 is the real import result, not an oversight. parseProjectionPlan
+	// drops a checkbox task whose id is repeated by a `### T01: ...` detail
+	// heading (the heading branch sees a known id and clears the pending
+	// entry), and this fixture's slice PLAN has both. The bed's transcript
+	// still dispatches and completes T01 through the real engine regardless.
+	const seedCounts = seedDatabaseFromMarkdown(projectDir, { milestones: 1, slices: 1, tasks: 0 });
+	writeFileSync(join(runDir, "db-seed-counts.json"), JSON.stringify(seedCounts, null, 2) + "\n");
+	console.error(
+		`[bed] DB seeded (${seedCounts.hierarchy.milestones}M/${seedCounts.hierarchy.slices}S/${seedCounts.hierarchy.tasks}T)`,
+	);
 
 	const testedSourceRevision = await computeTestedSourceRevision(projectDir);
 	const turns = buildTranscript(testedSourceRevision, projectDir);

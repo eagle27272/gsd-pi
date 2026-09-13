@@ -16,10 +16,12 @@ import {
   insertSlice,
   insertTask,
 } from "../gsd-db.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
+import { clearPathCache } from "../paths.ts";
 
 function makeBase(): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-completeslice-composer-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+  mkdirSync(join(base, ".gsd"), { recursive: true });
   return base;
 }
 
@@ -67,18 +69,20 @@ function seed(base: string, mid: string): void {
 }
 
 function writeArtifacts(base: string): void {
+  mkdirSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Composer Test")), { recursive: true });
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"),
+    join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Composer Test"), "01-ROADMAP.md"),
     "# M001 Roadmap\n## Slices\n- [x] **S01: First** `risk:low` `depends:[]`\n",
   );
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md"),
+    join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Composer Test"), "01-01-PLAN.md"),
     "# S01 Plan\n\nSlice plan body.\n",
   );
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T01-SUMMARY.md"),
+    join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Composer Test"), "S01-T01-SUMMARY.md"),
     "---\nid: T01\n---\n# T01 Summary\n\nTask one did the thing.\n",
   );
+  clearPathCache();
 }
 
 test("#4782 phase 3: buildCompleteSlicePrompt composes roadmap → plan → task summaries → templates in declared order", async (t) => {
@@ -124,13 +128,14 @@ test("#4782 phase 3: buildCompleteSlicePrompt handles missing task summaries gra
   invalidateAllCaches();
 
   seed(base, "M001");
+  mkdirSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Composer Test")), { recursive: true });
   // Write roadmap + plan but no task summaries
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"),
+    join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Composer Test"), "01-ROADMAP.md"),
     "# M001 Roadmap\n## Slices\n- [x] **S01: First** `risk:low` `depends:[]`\n",
   );
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md"),
+    join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Composer Test"), "01-01-PLAN.md"),
     "# S01 Plan\n",
   );
 
@@ -157,14 +162,15 @@ test("#4925 review: KNOWLEDGE splices BEFORE templates when no task summaries ex
   invalidateAllCaches();
 
   seed(base, "M001");
+  mkdirSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Composer Test")), { recursive: true });
   // Roadmap + plan only — no T*-SUMMARY.md, so taskIdx must be -1 and the
   // splice falls through to the templates anchor.
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"),
+    join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Composer Test"), "01-ROADMAP.md"),
     "# M001 Roadmap\n## Slices\n- [x] **S01: First** `risk:low` `depends:[]`\n",
   );
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md"),
+    join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Composer Test"), "01-01-PLAN.md"),
     "# S01 Plan\n",
   );
   // KNOWLEDGE.md with an H3 section whose header matches the slice title

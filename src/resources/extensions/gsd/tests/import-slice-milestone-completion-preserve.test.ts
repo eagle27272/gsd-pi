@@ -63,7 +63,7 @@ const REAL_M001 = '2026-07-05T21:00:00.000Z';
 describe('migrateHierarchyToDb: re-import preserves existing completion timestamps (#1291)', () => {
   test('a re-import does not rewrite already-complete slice completed_at', () => {
     const base = createFixtureBase();
-    writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_ALL_DONE);
+    writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_ALL_DONE);
 
     openDatabase(join(base, '.gsd', 'gsd.db'));
     migrateHierarchyToDb(base);
@@ -84,7 +84,7 @@ describe('migrateHierarchyToDb: re-import preserves existing completion timestam
 
   test('a re-import does not rewrite an already-complete milestone completed_at', () => {
     const base = createFixtureBase();
-    writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_ALL_DONE);
+    writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_ALL_DONE);
 
     openDatabase(join(base, '.gsd', 'gsd.db'));
     migrateHierarchyToDb(base);
@@ -101,7 +101,7 @@ describe('migrateHierarchyToDb: re-import preserves existing completion timestam
     // The guard preserves an existing timestamp but must not suppress the
     // legitimate first-time backfill for a slice imported as complete.
     const base = createFixtureBase();
-    writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_ALL_DONE);
+    writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_ALL_DONE);
 
     openDatabase(join(base, '.gsd', 'gsd.db'));
     migrateHierarchyToDb(base);

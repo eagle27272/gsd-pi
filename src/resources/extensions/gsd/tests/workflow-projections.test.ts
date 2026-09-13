@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { regenerateIfMissing, renderPlanContent, renderPlanProjection, renderStateProjection, renderSummaryProjection } from '../workflow-projections.ts';
+import { regenerateIfMissing, renderPlanContent, renderStateProjection, renderSummaryProjection } from '../workflow-projections.ts';
 import type { SliceRow, TaskRow } from '../gsd-db.ts';
 import { closeDatabase, getArtifactsByPathPrefix, insertMilestone, insertSlice, insertTask, openDatabase } from '../gsd-db.ts';
 import { clearPathCache, _clearGsdRootCache, normalizeRealPath, resolveMilestoneFile, resolveTaskFile } from '../paths.ts';
@@ -186,33 +186,13 @@ test('workflow-projections: multiple tasks rendered in order', () => {
   assert.ok(idxT1 < idxT2, 'T01 should appear before T02');
 });
 
-test('workflow-projections: renderPlanProjection preserves an unowned obsolete plan', () => {
-  const base = mkdtempSync(join(tmpdir(), 'gsd-projections-'));
-  const dbPath = join(base, '.gsd', 'gsd.db');
-  const planPath = join(base, '.gsd', 'milestones', 'M001', 'slices', 'S01', 'S01-PLAN.md');
-  mkdirSync(join(base, '.gsd', 'milestones', 'M001', 'slices', 'S01'), { recursive: true });
-  openDatabase(dbPath);
-
-  try {
-    const manualContent = '# Manual plan\n\nThis file is not a database projection.\n';
-    writeFileSync(planPath, manualContent, 'utf8');
-
-    renderPlanProjection(base, 'M001', 'S01');
-
-    assert.equal(readFileSync(planPath, 'utf8'), manualContent);
-  } finally {
-    closeDatabase();
-    rmSync(base, { recursive: true, force: true });
-  }
-});
-
 // Regression for #6146: a deleted slice PLAN must be regenerated from the DB
 // with its per-task plan files. The simplified projection path only rewrote the
 // slice PLAN and silently dropped task plans.
 test('workflow-projections: regenerateIfMissing PLAN restores slice plan and task plan files', async () => {
   const base = mkdtempSync(join(tmpdir(), 'gsd-projections-'));
   const dbPath = join(base, '.gsd', 'gsd.db');
-  mkdirSync(join(base, '.gsd', 'milestones', 'M001', 'slices', 'S01', 'tasks'), { recursive: true });
+  mkdirSync(join(base, '.gsd', 'phases', '01-m001', 'tasks'), { recursive: true });
   openDatabase(dbPath);
   clearParseCache();
   clearPathCache();
@@ -248,7 +228,7 @@ test('workflow-projections: regenerateIfMissing PLAN restores slice plan and tas
 
     // Legacy layout: renderer writes milestones/M001/slices/S01/S01-PLAN.md
     // (relSliceFile detects milestones/ prefix → uses legacy S01-PLAN.md filename).
-    const slicePlanPath = join(base, '.gsd', 'milestones', 'M001', 'slices', 'S01', 'S01-PLAN.md');
+    const slicePlanPath = join(base, '.gsd', 'phases', '01-m001', '01-01-PLAN.md');
 
     assert.ok(!existsSync(slicePlanPath), 'precondition: slice plan absent');
 
@@ -322,7 +302,7 @@ test('workflow-projections: regenerateIfMissing ROADMAP regenerates missing flat
     });
 
     const roadmapPath = join(phaseDir, '01-ROADMAP.md');
-    const legacyRoadmapPath = join(base, '.gsd', 'milestones', 'M001', 'M001-ROADMAP.md');
+    const legacyRoadmapPath = join(base, '.gsd', 'phases', '01-m001', '01-ROADMAP.md');
     assert.ok(!existsSync(roadmapPath), 'precondition: flat-phase ROADMAP is absent');
 
     const regenerated = await regenerateIfMissing(base, 'M001', 'S01', 'ROADMAP');

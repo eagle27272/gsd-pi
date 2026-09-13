@@ -373,49 +373,6 @@ export async function showProjectInit(
   return { completed: true, bootstrapped: true, gitEnabled };
 }
 
-// ─── V1 Migration Offer ─────────────────────────────────────────────────────────
-
-/**
- * Show migration offer when .planning/ is detected.
- * Returns 'migrate', 'fresh', or 'cancel'.
- */
-export async function offerMigration(
-  ctx: ExtensionCommandContext,
-  v1: NonNullable<ProjectDetection["v1"]>,
-): Promise<"migrate" | "fresh" | "cancel"> {
-  const summary = [
-    "Found .planning/ directory (GSD v1 format)",
-  ];
-  if (v1.phaseCount > 0) {
-    summary.push(`${v1.phaseCount} phase${v1.phaseCount > 1 ? "s" : ""} detected`);
-  }
-  if (v1.hasRoadmap) {
-    summary.push("Has ROADMAP.md");
-  }
-
-  const choice = await showNextAction(ctx, {
-    title: "GSD — Legacy Project Detected",
-    summary,
-    actions: [
-      {
-        id: "migrate",
-        label: "Migrate to GSD v2",
-        description: "Convert .planning/ to .gsd/ format",
-        recommended: true,
-      },
-      {
-        id: "fresh",
-        label: "Start fresh",
-        description: "Ignore .planning/ and create new .gsd/",
-      },
-    ],
-    notYetMessage: "Run /gsd init when ready.",
-  });
-
-  if (choice === "not_yet") return "cancel";
-  return choice as "migrate" | "fresh";
-}
-
 // ─── Re-init Handler ────────────────────────────────────────────────────────────
 
 /**

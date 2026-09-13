@@ -15,6 +15,7 @@ import {
   isDbAvailable,
   openDatabase,
 } from "../gsd-db.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 function git(cwd: string, args: string[]): string {
   return execFileSync("git", args, {
@@ -28,8 +29,8 @@ function git(cwd: string, args: string[]): string {
 function makeRepo(files: Record<string, string>): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-right-size-"));
   git(base, ["init", "-b", "main"]);
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
-  writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md"), "# Context\n\nTest milestone.");
+  mkdirSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Polish static page")), { recursive: true });
+  writeFileSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Polish static page"), "01-CONTEXT.md"), "# Context\n\nTest milestone.");
   for (const [path, content] of Object.entries(files)) {
     const abs = join(base, path);
     mkdirSync(join(abs, ".."), { recursive: true });
@@ -41,11 +42,11 @@ function makeRepo(files: Record<string, string>): string {
 }
 
 function writeCompleteMilestoneFiles(base: string, validation: string): void {
-  const dir = join(base, ".gsd", "milestones", "M001");
-  mkdirSync(join(dir, "slices", "S01"), { recursive: true });
-  writeFileSync(join(dir, "M001-ROADMAP.md"), "# M001\n\n## Slices\n- [x] **S01: One** `risk:low` `depends:[]`\n  > Done\n");
-  writeFileSync(join(dir, "M001-VALIDATION.md"), validation);
-  writeFileSync(join(dir, "slices", "S01", "S01-SUMMARY.md"), "# S01 Summary\n\n**Verification:** passed\n");
+  const dir = join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Polish static page"));
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "01-ROADMAP.md"), "# M001\n\n## Slices\n- [x] **S01: One** `risk:low` `depends:[]`\n  > Done\n");
+  writeFileSync(join(dir, "01-VALIDATION.md"), validation);
+  writeFileSync(join(dir, "01-01-SUMMARY.md"), "# S01 Summary\n\n**Verification:** passed\n");
   // Post-cutover the closer prompt enumerates the milestone's slices from the
   // DB, and the set of current artifacts the validation receipt must cover is
   // derived from that list. Without the row, S01's SUMMARY is not a "current
@@ -70,9 +71,9 @@ function validationMetadata(): string {
   return [
     "validation_metadata:",
     "  covered_artifacts:",
-    "    - `.gsd/milestones/M001/M001-VALIDATION.md`",
-    "    - `.gsd/milestones/M001/M001-ROADMAP.md`",
-    "    - `.gsd/milestones/M001/slices/S01/S01-SUMMARY.md`",
+    "    - `.gsd/phases/01-polish-static-page/01-VALIDATION.md`",
+    "    - `.gsd/phases/01-polish-static-page/01-ROADMAP.md`",
+    "    - `.gsd/phases/01-polish-static-page/01-01-SUMMARY.md`",
   ].join("\n");
 }
 
@@ -175,7 +176,7 @@ test("plan-milestone resolves Project artifacts from a canonical milestone workt
   rmSync(join(worktree, ".gsd"), { recursive: true, force: true });
 
   try {
-    const projectRoadmap = "../../.gsd/milestones/M001/M001-ROADMAP.md";
+    const projectRoadmap = "../../.gsd/phases/01-polish-static-page/01-ROADMAP.md";
 
     for (const level of ["standard", "full"] as const) {
       const prompt = await buildPlanMilestonePrompt("M001", "Update app", worktree, scopeMilestone(createWorkspace(worktree), "M001"), level);
@@ -184,7 +185,7 @@ test("plan-milestone resolves Project artifacts from a canonical milestone workt
       assert.match(prompt, /`\.\.\/\.\.\/\.gsd\/PROJECT\.md`/);
       assert.match(prompt, /`\.\.\/\.\.\/\.gsd\/REQUIREMENTS\.md`/);
       assert.match(prompt, /`\.\.\/\.\.\/\.gsd\/DECISIONS\.md`/);
-      assert.match(prompt, /Source: `\.\.\/\.\.\/\.gsd\/milestones\/M001\/M001-CONTEXT\.md`/);
+      assert.match(prompt, /Source: `\.\.\/\.\.\/\.gsd\/phases\/01-polish-static-page\/01-CONTEXT\.md`/);
       assert.ok(prompt.includes(projectRoadmap), "roadmap output should target Project state through a worktree-relative path");
       assert.doesNotMatch(prompt, /`\.gsd\/(?:PROJECT|REQUIREMENTS|DECISIONS)\.md`/);
       assert.ok(!prompt.includes(join(worktree, ".gsd")), "prompt must not reference a worktree-local .gsd directory");
@@ -266,8 +267,8 @@ test("complete-milestone prompt does not trust pass validation missing current s
       "# Validation",
       "validation_metadata:",
       "  covered_artifacts:",
-      "    - `.gsd/milestones/M001/M001-VALIDATION.md`",
-      "    - `.gsd/milestones/M001/M001-ROADMAP.md`",
+      "    - `.gsd/phases/01-polish-static-page/01-VALIDATION.md`",
+      "    - `.gsd/phases/01-polish-static-page/01-ROADMAP.md`",
       "",
       "All checks passed.",
     ].join("\n"));

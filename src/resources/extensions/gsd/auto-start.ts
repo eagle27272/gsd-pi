@@ -29,6 +29,7 @@ import {
   getIsolationMode,
 } from "./preferences.js";
 import { isInheritedRepo, validateProjectId } from "./repo-identity.js";
+import { assertNoLegacyLayout } from "./legacy-layout-guard.js";
 import { ensureExternalState } from "./external-state-bootstrap.js";
 import { collectSecretsFromManifest } from "../get-secrets-from-user.js";
 import { gsdRoot, resolveMilestoneFile } from "./paths.js";
@@ -1207,6 +1208,10 @@ export async function bootstrapAutoSession(
       nativeInit(base, mainBranch);
     }
 
+    // Fail closed on a pre-flat-phase on-disk layout before anything relocates
+    // or rewrites it: every resolver below assumes flat-phase projections, and
+    // nothing converts the old layout any more.
+    assertNoLegacyLayout(base);
     // Migrate legacy in-project .gsd/ to external state directory.
     // Migration MUST run before ensureGitignore to avoid adding ".gsd" to
     // .gitignore when .gsd/ is git-tracked (data-loss bug #1364).
@@ -1218,12 +1223,14 @@ export async function bootstrapAutoSession(
       );
     }
 
-    // Acquisition starts before migration so bootstrap is serialized. Once
-    // .gsd points at external state, hand ownership to that physical target
-    // before any later process can observe or contend on the new path.
-    const migratedLockResult = acquireSessionLock(base);
-    if (!migratedLockResult.acquired) {
-      ctx.ui.notify(migratedLockResult.reason, "error");
+    // The first acquisition above serialized bootstrap against the path as it
+    // stood before ensureGsdSymlink ran. Re-acquire against whatever `.gsd`
+    // now resolves to — an external-state symlink target, or a real in-repo
+    // directory for a git-tracked project — before any later process can
+    // observe or contend on it.
+    const externalStateLockResult = acquireSessionLock(base);
+    if (!externalStateLockResult.acquired) {
+      ctx.ui.notify(externalStateLockResult.reason, "error");
       return releaseLockAndReturn();
     }
 

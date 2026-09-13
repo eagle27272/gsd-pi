@@ -347,7 +347,9 @@ test('buildLoopRemediationSteps: plan-slice returns concrete steps', () => {
     const result = buildLoopRemediationSteps("plan-slice", "M001/S01", base);
     assert.ok(result !== null, "should return remediation steps for plan-slice");
     assert.ok(result!.includes("S01-PLAN.md"), "steps mention the slice plan file");
-    assert.ok(result!.includes("gsd recover"), "steps include gsd recover command");
+    // Trailing backtick pins the whole argument: /gsd dispatch takes a phase and
+    // a MILESTONE id, so a slice-shaped `M001/S01` must not creep back in.
+    assert.ok(result!.includes("gsd dispatch plan M001`"), "steps re-dispatch the plan phase against the milestone");
   } finally {
     rmSync(base, { recursive: true, force: true });
   }
@@ -360,7 +362,7 @@ test('buildLoopRemediationSteps: research-slice returns concrete steps', () => {
     const result = buildLoopRemediationSteps("research-slice", "M001/S01", base);
     assert.ok(result !== null, "should return remediation steps for research-slice");
     assert.ok(result!.includes("S01-RESEARCH.md"), "steps mention the slice research file");
-    assert.ok(result!.includes("gsd recover"), "steps include gsd recover command");
+    assert.ok(result!.includes("gsd dispatch research M001`"), "steps re-dispatch the research phase against the milestone");
   } finally {
     rmSync(base, { recursive: true, force: true });
   }

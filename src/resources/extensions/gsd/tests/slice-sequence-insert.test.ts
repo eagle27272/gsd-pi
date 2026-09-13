@@ -44,7 +44,7 @@ afterEach(() => {
 
 function makeBase(name: string): string {
   tempBase = mkdtempSync(join(tmpdir(), name));
-  mkdirSync(join(tempBase, ".gsd", "milestones"), { recursive: true });
+  mkdirSync(join(tempBase, ".gsd", "phases"), { recursive: true });
   openDatabase(join(tempBase, ".gsd", "gsd.db"));
   return tempBase;
 }
@@ -112,7 +112,7 @@ describe("slice sequence on insert (#3697)", () => {
 
   test("markdown importer preserves roadmap order in sequence values", () => {
     const base = makeBase("gsd-sequence-import-");
-    const milestoneDir = join(base, ".gsd", "milestones", "M001");
+    const milestoneDir = join(base, ".gsd", "phases", "01-m001");
     mkdirSync(milestoneDir, { recursive: true });
     writeFileSync(
       join(milestoneDir, "M001-ROADMAP.md"),

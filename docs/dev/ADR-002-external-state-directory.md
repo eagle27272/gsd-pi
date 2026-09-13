@@ -26,3 +26,14 @@ The worktree-level concerns this ADR would have touched were addressed by:
 ## Amendment (2026-06-09, see ADR-031)
 
 The closure statement above did not survive contact with the codebase: an external state directory **was** subsequently shipped. `repo-identity.ts` manages the `<project>/.gsd → ~/.gsd/projects/<hash>/` symlink and `migrate-external.ts` migrates in-tree `.gsd/` state into it. The DB-authoritative model holds (markdown stays projection-only), but the physical `.gsd` directory may live externally behind the symlink. ADR-031 documents the shipped layout, its environment contracts (`GSD_PROJECT_ROOT`, `GSD_STATE_DIR`), and moves worktree placement out from under the symlink to the canonical `<projectRoot>/.gsd-worktrees/` sibling.
+
+## Amendment (2026-09-11)
+
+`migrate-external.ts` no longer exists. The obsolete-migration removal deleted
+`migrateToExternalState` and the relocation it performed: runtime never moves an
+in-tree `.gsd/` into `~/.gsd/projects/<hash>/`. What survives in
+`repo-identity.ts` is `ensureGsdSymlink`, which creates the symlink when nothing
+is there and otherwise leaves whatever it finds — including a real in-repo `.gsd`
+directory, which is a supported layout for git-tracked planning artifacts. Both
+layouts are therefore live; the external one is merely the default for a fresh
+project.

@@ -18,21 +18,22 @@ import {
 } from "../gsd-db.ts";
 import { clearReservedMilestoneIds, findMilestoneIds } from "../milestone-ids.ts";
 import { invalidateAllCaches } from "../cache.ts";
+import { canonicalPhaseDirName, milestoneIdToPhaseNum } from "../layout-policy.ts";
 
 function makeBase(prefix = "gsd-gap-4996-"): string {
   const base = mkdtempSync(join(tmpdir(), prefix));
-  mkdirSync(join(base, ".gsd", "milestones"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases"), { recursive: true });
   return base;
 }
 
 function stubDir(base: string, mid: string): void {
   // Create an empty stub — the phantom pattern
-  mkdirSync(join(base, ".gsd", "milestones", mid, "slices"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", canonicalPhaseDirName(mid)), { recursive: true });
 }
 
 function populateDir(base: string, mid: string): void {
-  mkdirSync(join(base, ".gsd", "milestones", mid), { recursive: true });
-  writeFileSync(join(base, ".gsd", "milestones", mid, `${mid}-CONTEXT.md`), `# ${mid} Context\n`);
+  mkdirSync(join(base, ".gsd", "phases", canonicalPhaseDirName(mid)), { recursive: true });
+  writeFileSync(join(base, ".gsd", "phases", canonicalPhaseDirName(mid), `${String(milestoneIdToPhaseNum(mid)).padStart(2, "0")}-CONTEXT.md`), `# ${mid} Context\n`);
 }
 
 describe("isReusableGhostMilestone (#4996)", () => {

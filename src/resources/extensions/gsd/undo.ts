@@ -12,7 +12,7 @@ import { atomicWriteSync, removeProjectionFileSync } from "./atomic-write.js";
 import { parseUnitId } from "./unit-id.js";
 import { deriveState } from "./state.js";
 import { invalidateAllCaches } from "./cache.js";
-import { gsdRoot, resolveTasksDir, resolveSlicePath, resolveTaskFile, buildTaskFileName } from "./paths.js";
+import { gsdRoot, resolveTasksDir, resolveSliceFile, resolveSlicePath, resolveTaskFile, buildTaskFileName } from "./paths.js";
 import { sendDesktopNotification } from "./notifications.js";
 import { getDb, getTask, getSlice, getSliceTasks } from "./gsd-db.js";
 import { renderPlanCheckboxes } from "./markdown-renderer.js";
@@ -535,14 +535,15 @@ export function parseActivityLogFilename(
 }
 
 export function uncheckTaskInPlan(basePath: string, mid: string, sid: string, tid: string): boolean {
-  const slicePath = resolveSlicePath(basePath, mid, sid);
-  if (!slicePath) return false;
+  // Flat-phase plans are NN-MM-PLAN.md in the phase dir; the prefix scan below
+  // only finds the <SID>-prefixed name used inside a slices/<SID>/ subdir.
+  const planFile = resolveSliceFile(basePath, mid, sid, "PLAN")
+    ?? (() => {
+      const slicePath = resolveSlicePath(basePath, mid, sid);
+      return slicePath ? findFileWithPrefix(slicePath, sid, "PLAN")[0] : undefined;
+    })();
+  if (!planFile) return false;
 
-  // Find the PLAN file
-  const planCandidates = findFileWithPrefix(slicePath, sid, "PLAN");
-  if (planCandidates.length === 0) return false;
-
-  const planFile = planCandidates[0];
   let content = readFileSync(planFile, "utf-8");
 
   // Match checked task line: - [x] **T01** or - [x] T01:

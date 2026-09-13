@@ -11,6 +11,13 @@
 > If any in-scope file changed since this plan was written, compare the
 > "Current state" excerpts against the live code before proceeding; on a
 > mismatch, treat it as a STOP condition.
+>
+> **Historical note (2026-09-11)**: this plan is DONE. Several paths it names
+> no longer exist — `src/resources/extensions/gsd/flat-phase-migration.ts`,
+> `src/resources/extensions/gsd/migrate/execution.ts`, and the
+> `flat-phase-migration` test file were deleted by the obsolete-migration
+> removal. The text below is preserved as the execution record; do not treat
+> its file list or test commands as runnable today.
 
 ## Status
 

@@ -20,6 +20,7 @@ import { _parseDiscussArgsForTest } from "../commands/handlers/workflow.ts";
 import { openDatabase, closeDatabase, isDbAvailable, insertMilestone } from "../gsd-db.ts";
 import { invalidateStateCache } from "../state.ts";
 import { clearGuidedUnitContext, getGuidedUnitContext } from "../guided-unit-context.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 afterEach(() => {
   if (isDbAvailable()) closeDatabase();
@@ -89,7 +90,7 @@ async function runDiscussTargetFixture(
   const notifications: Array<{ message: string; level?: string }> = [];
   const harness = makeDiscussPi();
   try {
-    mkdirSync(join(base, ".gsd", "milestones"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases"), { recursive: true });
     writeArtifacts?.(base);
     const dbPath = join(base, ".gsd", "gsd.db");
     assert.equal(openDatabase(dbPath), true);
@@ -193,9 +194,9 @@ describe("showDiscuss targeted milestone guardrails (#1320)", () => {
       "M006/S01",
       [{ id: "M006-abc123", title: "Unique milestone", status: "active" }],
       (base) => {
-        mkdirSync(join(base, ".gsd", "milestones", "M006-abc123"), { recursive: true });
+        mkdirSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M006-abc123")), { recursive: true });
         writeFileSync(
-          join(base, ".gsd", "milestones", "M006-abc123", "M006-abc123-ROADMAP.md"),
+          join(base, ".gsd", "phases", canonicalPhaseDirName("M006-abc123"), "06-ROADMAP.md"),
           `# M006-abc123 Roadmap
 
 ## Slices
@@ -217,7 +218,7 @@ describe("loadDiscussNormSlices roadmap fallback (#2892)", () => {
   test("falls back to ROADMAP when DB has no slice rows", async () => {
     const base = mkdtempSync(join(tmpdir(), "gsd-discuss-slices-"));
     try {
-      mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+      mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
       const dbPath = join(base, ".gsd", "gsd.db");
       assert.equal(openDatabase(dbPath), true);
       insertMilestone({ id: "M001", title: "Test", status: "active" });
@@ -228,7 +229,7 @@ describe("loadDiscussNormSlices roadmap fallback (#2892)", () => {
 - [ ] **S01: Core setup** \`risk:low\` \`depends:[]\`
   > After this: basic scaffolding works
 `;
-      writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), roadmap, "utf-8");
+      writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md"), roadmap, "utf-8");
 
       const slices = await _loadDiscussNormSlicesForTest(base, "M001");
       assert.equal(slices.length, 1);
@@ -248,7 +249,7 @@ describe("showDiscuss pre-planning routing", () => {
     const notifications: Array<{ message: string; level?: string }> = [];
     const harness = makeDiscussPi();
     try {
-      mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+      mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
       const dbPath = join(base, ".gsd", "gsd.db");
       assert.equal(openDatabase(dbPath), true);
       insertMilestone({ id: "M001", title: "Pre-plan milestone", status: "active" });
@@ -274,7 +275,7 @@ describe("showDiscuss targeted slice roadmap fallback", () => {
     const notifications: Array<{ message: string; level?: string }> = [];
     const harness = makeDiscussPi();
     try {
-      mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+      mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
       const dbPath = join(base, ".gsd", "gsd.db");
       assert.equal(openDatabase(dbPath), true);
       insertMilestone({ id: "M001", title: "Target slice milestone", status: "active" });
@@ -285,7 +286,7 @@ describe("showDiscuss targeted slice roadmap fallback", () => {
 - [ ] **S01: Auth module** \`risk:medium\` \`depends:[]\`
   > After this: users can log in
 `;
-      writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), roadmap, "utf-8");
+      writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md"), roadmap, "utf-8");
 
       await showDiscuss(
         makeDiscussCtx(notifications) as any,
@@ -311,7 +312,7 @@ describe("showDiscuss targeted slice roadmap fallback", () => {
     const notifications: Array<{ message: string; level?: string }> = [];
     const harness = makeDiscussPi();
     try {
-      mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+      mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
       const dbPath = join(base, ".gsd", "gsd.db");
       assert.equal(openDatabase(dbPath), true);
       insertMilestone({ id: "M001", title: "Target slice milestone", status: "active" });
@@ -322,10 +323,10 @@ describe("showDiscuss targeted slice roadmap fallback", () => {
 - [ ] **S01: Auth module** \`risk:medium\` \`depends:[]\`
   > ROOT-ROADMAP-CONTENT
 `;
-      writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), rootRoadmap, "utf-8");
+      writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md"), rootRoadmap, "utf-8");
 
       const worktreeBase = join(base, ".gsd", "worktrees", "M001");
-      mkdirSync(join(worktreeBase, ".gsd", "milestones", "M001"), { recursive: true });
+      mkdirSync(join(worktreeBase, ".gsd", "phases", "01-m001"), { recursive: true });
       writeFileSync(join(worktreeBase, ".git"), "gitdir: /tmp/gsd-discuss-target-worktree.git\n", "utf-8");
       const worktreeRoadmap = `# M001 Roadmap
 
@@ -334,7 +335,7 @@ describe("showDiscuss targeted slice roadmap fallback", () => {
   > WORKTREE-ROADMAP-CONTENT
 `;
       writeFileSync(
-        join(worktreeBase, ".gsd", "milestones", "M001", "M001-ROADMAP.md"),
+        join(worktreeBase, ".gsd", "phases", "01-m001", "01-ROADMAP.md"),
         worktreeRoadmap,
         "utf-8",
       );

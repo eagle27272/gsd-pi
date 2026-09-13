@@ -16,6 +16,7 @@ import { join } from "node:path";
 import test, { type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { hashValue, type Sha256 } from "../canonical-json.ts";
 import { readCompatMarker, writeCompatMarker } from "../compat/compat-marker.ts";
 import {
   _getAdapter,
@@ -25,16 +26,34 @@ import {
   insertSlice,
   openDatabase,
 } from "../gsd-db.ts";
-import { captureCurrentLegacyImportBaseSnapshot } from "../legacy-import-preview-base.ts";
 import { renderAllFromDb } from "../markdown-renderer.ts";
 
 const PLANNING_FIXTURE = fileURLToPath(
   new URL("./__fixtures__/round-trip/planning-flat-phases/.planning", import.meta.url),
 );
+const CANONICAL_TABLES = [
+  "project_authority",
+  "milestones",
+  "slices",
+  "tasks",
+  "slice_dependencies",
+  "requirements",
+  "decisions",
+  "memories",
+  "artifacts",
+  "assessments",
+  "workflow_item_lifecycles",
+] as const;
 
 interface CanonicalSnapshot {
-  base: ReturnType<typeof captureCurrentLegacyImportBaseSnapshot>;
+  base: Sha256;
   lineage: Record<string, unknown>;
+}
+
+function db(): NonNullable<ReturnType<typeof _getAdapter>> {
+  const adapter = _getAdapter();
+  assert.ok(adapter);
+  return adapter;
 }
 
 function makeWorkspace(t: TestContext): string {
@@ -48,10 +67,20 @@ function makeWorkspace(t: TestContext): string {
   return base;
 }
 
+/**
+ * Digest of every canonical authority table. Replaces the deleted legacy-import
+ * base snapshot: same row coverage, hashed with the shared canonical-JSON
+ * primitives so the proof carries no kernel dependency.
+ */
+function canonicalBaseDigest(): Sha256 {
+  return hashValue(CANONICAL_TABLES.map((table) => [
+    table,
+    db().prepare(`SELECT * FROM ${table} ORDER BY rowid`).all(),
+  ]));
+}
+
 function canonicalSnapshot(): CanonicalSnapshot {
-  const database = _getAdapter();
-  assert.ok(database);
-  const lineage = database.prepare(`
+  const lineage = db().prepare(`
     SELECT
       (SELECT count(*) FROM workflow_operations) AS operations,
       (SELECT count(*) FROM workflow_import_applications) AS applications,
@@ -61,7 +90,7 @@ function canonicalSnapshot(): CanonicalSnapshot {
       total_changes() AS total_changes
   `).get() as Record<string, unknown>;
   return {
-    base: captureCurrentLegacyImportBaseSnapshot(),
+    base: canonicalBaseDigest(),
     lineage,
   };
 }

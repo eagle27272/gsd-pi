@@ -2,11 +2,17 @@
 
 import { describe, test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, renameSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, renameSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { gsdRoot, clearPathCache, _clearGsdRootCache } from '../paths.ts';
+import {
+  gsdRoot,
+  clearPathCache,
+  _clearGsdRootCache,
+  resolveSlicePath,
+  resolveTaskFiles,
+} from '../paths.ts';
 
 describe('gsdRootCache key normalization', () => {
   let projectDir: string;
@@ -166,5 +172,80 @@ describe('clearPathCache() does NOT invalidate gsdRootCache (process-lifetime se
     _clearGsdRootCache();
     const reprobe = gsdRoot(projectDir);
     assert.equal(reprobe, join(projectDir, '.gsd'), 're-probe after restore returns .gsd');
+  });
+});
+
+describe('clearPathCache() DOES invalidate the volatile directory-listing caches', () => {
+  // Every assertion below is written so it fails if clearPathCache() becomes a
+  // no-op: each one names an on-disk shape that only a cleared cache can see.
+  let base: string;
+
+  beforeEach(() => {
+    base = realpathSync(mkdtempSync(join(tmpdir(), 'gsd-dir-cache-')));
+    clearPathCache();
+  });
+
+  afterEach(() => {
+    clearPathCache();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  test('resolveTaskFiles sees an artifact added after the listing was warmed', () => {
+    const phaseDir = join(base, '.gsd', 'phases', '01-m001');
+    mkdirSync(phaseDir, { recursive: true });
+    writeFileSync(join(phaseDir, 'S01-T01-SUMMARY.md'), '# T01\n');
+
+    assert.deepEqual(
+      resolveTaskFiles(phaseDir, 'SUMMARY'),
+      ['S01-T01-SUMMARY.md'],
+      'first call warms the directory-entry cache',
+    );
+
+    writeFileSync(join(phaseDir, 'S01-T02-SUMMARY.md'), '# T02\n');
+
+    assert.deepEqual(
+      resolveTaskFiles(phaseDir, 'SUMMARY'),
+      ['S01-T01-SUMMARY.md'],
+      'the warmed cache still serves the pre-write listing — the condition clearPathCache exists to end',
+    );
+
+    clearPathCache();
+
+    assert.deepEqual(
+      resolveTaskFiles(phaseDir, 'SUMMARY'),
+      ['S01-T01-SUMMARY.md', 'S01-T02-SUMMARY.md'],
+      'after clearPathCache the resolver must list the new on-disk shape',
+    );
+  });
+
+  test('resolveSlicePath stops returning a vanished slices/<SID> dir after clearPathCache()', () => {
+    // The hazard this pins: a warmed dirEntryCache lets a resolver keep handing
+    // back a nested slices/<SID> path after the tree has been flattened, which
+    // is exactly how a path the flat-phase layout eliminated would resurface.
+    const phaseDir = join(base, '.gsd', 'phases', '01-m001');
+    const sliceDir = join(phaseDir, 'slices', 'S01');
+    mkdirSync(sliceDir, { recursive: true });
+
+    assert.equal(
+      resolveSlicePath(base, 'M001', 'S01'),
+      sliceDir,
+      'first call resolves the nested slice dir and warms the cache',
+    );
+
+    rmSync(sliceDir, { recursive: true, force: true });
+
+    assert.equal(
+      resolveSlicePath(base, 'M001', 'S01'),
+      sliceDir,
+      'the warmed cache still hands back the now-deleted nested dir',
+    );
+
+    clearPathCache();
+
+    assert.equal(
+      resolveSlicePath(base, 'M001', 'S01'),
+      phaseDir,
+      'after clearPathCache the resolver must fall through to the flat phase dir',
+    );
   });
 });

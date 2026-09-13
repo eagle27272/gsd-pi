@@ -26,7 +26,6 @@ const managedDirectories = new Set([
   "captures",
   "milestone",
   "milestones",
-  "milestones.migrating",
   "notes",
   "phases",
   "plans",

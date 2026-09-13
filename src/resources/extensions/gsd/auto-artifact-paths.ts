@@ -12,6 +12,7 @@ import {
   resolveFile,
   resolveMilestonePath,
   resolveMilestoneFile,
+  resolvePhaseDirIn,
   resolveSliceFile,
   relMilestoneFile,
   relSliceFile,
@@ -19,69 +20,56 @@ import {
   buildTaskFileName,
   resolveSlicePath,
   resolveTasksDir,
-  dirIsMetaOnlyLegacyMilestone,
   normalizeRealPath,
 } from "./paths.js";
-import { milestoneIdToPhaseNum } from "./layout-policy.js";
+import { milestoneIdToPhaseNum, slicePlanFileName } from "./layout-policy.js";
 import { parseUnitId } from "./unit-id.js";
 import { basename, dirname, join, relative } from "node:path";
 import { existsSync } from "node:fs";
+
+/**
+ * The phase directory for `mid` under the CANONICAL project `.gsd`.
+ *
+ * `resolveMilestonePath` anchors on gsdProjectionRoot (the worktree `.gsd`
+ * when the base is inside one). A worktree that has not yet received its
+ * projection must still resolve the artifacts dispatch rendered at the project
+ * root (#852, #870), so this second lookup anchors on gsdRoot instead.
+ */
+function resolveProjectPhaseDir(base: string, mid: string): string | null {
+  return resolvePhaseDirIn(gsdRoot(base), mid);
+}
+
+function resolveProjectMilestoneFile(base: string, mid: string, suffix: string): string | null {
+  const dir = resolveProjectPhaseDir(base, mid);
+  if (!dir) return null;
+  const file = join(dir, `${String(milestoneIdToPhaseNum(mid)).padStart(2, "0")}-${suffix}.md`);
+  return existsSync(file) ? file : null;
+}
+
+function resolveProjectSliceFile(base: string, mid: string, sid: string, suffix: string): string | null {
+  const dir = resolveProjectPhaseDir(base, mid);
+  if (!dir) return null;
+  const file = join(dir, slicePlanFileName(milestoneIdToPhaseNum(mid), sid, suffix));
+  return existsSync(file) ? file : null;
+}
 
 function resolveMilestoneArtifactPath(
   base: string,
   mid: string,
   suffix: string,
 ): string | null {
-  const existing = resolveProjectedMilestoneFile(base, mid, suffix) ?? resolveProjectMilestoneFile(base, mid, suffix);
+  const existing = resolveProjectedMilestoneFile(base, mid, suffix)
+    ?? resolveProjectMilestoneFile(base, mid, suffix);
   if (existing) return existing;
-  // Try projected (worktree) path, then project-root path. Both can return
-  // either a legacy (milestones/<MID>/) or flat-phase (phases/NN-slug/) dir.
-  const dir = resolveProjectedMilestonePath(base, mid) ?? resolveProjectMilestonePath(base, mid) ?? resolveMilestonePath(base, mid);
+  const dir = resolveMilestonePath(base, mid) ?? resolveProjectPhaseDir(base, mid);
   if (dir) {
-    // The filename depends on the LAYOUT of the resolved directory, not on
-    // which resolver found it. A flat-phase dir (phases/NN-slug/) uses the
-    // phase-number prefix (15-CONTEXT.md); a legacy dir (milestones/<MID>/)
-    // uses the milestone-id prefix (M015-CONTEXT.md). Building the wrong
-    // filename for the resolved dir produces existsSync-false paths that trap
-    // the unit in a finalize-retry loop (#852).
-    //
-    // Layout is determined structurally from the resolved directory's parent
-    // segment name, NOT by comparing against a root-anchored legacyMilestonesDir
-    // base path. On a canonical worktree (<project>/.gsd-worktrees/M001/),
-    // legacyMilestonesDir uses gsdProjectionRoot (the worktree .gsd) while
-    // resolveProjectMilestonePath uses gsdRoot (the project .gsd) — two
-    // different roots. A dir returned by resolveProjectMilestonePath would
-    // fail the startsWith check against the worktree root and incorrectly
-    // produce a flat-phase filename for a legacy directory (#bugbot c5ee8eba).
-    const parentDir = dirname(dir);
-    const isLegacy = parentDir.endsWith("/milestones") || parentDir.endsWith("\\milestones");
+    // Flat-phase artifacts use the phase-number prefix (15-CONTEXT.md).
+    // Building the wrong filename for the resolved dir produces
+    // existsSync-false paths that trap the unit in a finalize-retry loop (#852).
     const phaseNum = milestoneIdToPhaseNum(mid);
-    const filename = isLegacy
-      ? `${mid}-${suffix}.md`
-      : `${String(phaseNum).padStart(2, "0")}-${suffix}.md`;
-    return join(dir, filename);
+    return join(dir, `${String(phaseNum).padStart(2, "0")}-${suffix}.md`);
   }
   return null;
-}
-
-/**
- * Build the layout-aware filename for a milestone artifact suffix.
- * Exported so other callers (e.g. verification diagnostics) use the same
- * naming policy: flat-phase dirs use the phase-number prefix (15-CONTEXT.md),
- * legacy dirs use the milestone-id prefix (M015-CONTEXT.md).
- *
- * Layout is determined structurally: dirs whose immediate parent is named
- * "milestones" are legacy; all others are flat-phase. This avoids the
- * root-path ambiguity between gsdProjectionRoot (worktree .gsd) and gsdRoot
- * (project .gsd) that caused wrong filenames on canonical worktrees.
- */
-export function buildMilestoneArtifactFilename(mid: string, suffix: string, dir: string): string {
-  const parentDir = dirname(dir);
-  const isLegacy = parentDir.endsWith("/milestones") || parentDir.endsWith("\\milestones");
-  const phaseNum = milestoneIdToPhaseNum(mid);
-  return isLegacy
-    ? `${mid}-${suffix}.md`
-    : `${String(phaseNum).padStart(2, "0")}-${suffix}.md`;
 }
 
 function resolveSliceArtifactPath(
@@ -90,7 +78,8 @@ function resolveSliceArtifactPath(
   sid: string,
   suffix: string,
 ): string | null {
-  const existing = resolveProjectedSliceFile(base, mid, sid, suffix) ?? resolveProjectSliceFile(base, mid, sid, suffix);
+  const existing = resolveProjectedSliceFile(base, mid, sid, suffix)
+    ?? resolveProjectSliceFile(base, mid, sid, suffix);
   if (existing) return existing;
   // Flat-phase: plan files live at phases/NN-slug/NN-MM-SUFFIX.md — resolveSliceFile handles both layouts.
   const flatPhase = resolveSliceFile(base, mid, sid, suffix);
@@ -98,49 +87,6 @@ function resolveSliceArtifactPath(
   // File doesn't exist yet — use relSliceFile for the layout-aware canonical path.
   // buildSliceFileName(sid) only has sliceId → MM-SUFFIX.md, wrong for both layouts.
   return join(base, relSliceFile(base, mid, sid, suffix));
-}
-
-function resolveProjectMilestonePath(base: string, mid: string): string | null {
-  const milestonesDir = join(gsdRoot(base), "milestones");
-  const dir = resolveDir(milestonesDir, mid);
-  if (!dir) return null;
-  // Historically git-service.ts wrote integration-branch metadata into
-  // milestones/<MID>/<MID>-META.json, which could create that dir in flat-phase
-  // projects and poison layout detection. As of ADR-045 that META lives flat at
-  // .gsd/<MID>-META.json and no longer poisons detection. A dir that holds ONLY
-  // *-META.json files (a pre-migration on-disk tree) must still not be treated
-  // as a real legacy milestone dir — otherwise this early-return resolves
-  // CONTEXT/ROADMAP/SUMMARY to the legacy path (milestones/<MID>/<MID>-<SUFFIX>.md)
-  // before the flat-phase fallback can run, trapping the unit in a
-  // finalize-retry loop (#852 follow-up).
-  //
-  // We use dirIsMetaOnlyLegacyMilestone rather than !dirIsContentBearingLegacyMilestone
-  // so that an EMPTY dir (a new milestone before any content is written) is NOT
-  // blocked — it is a valid legacy target that write-paths should resolve to.
-  if (dirIsMetaOnlyLegacyMilestone(join(milestonesDir, dir))) return null;
-  return join(milestonesDir, dir);
-}
-
-function resolveProjectMilestoneFile(base: string, mid: string, suffix: string): string | null {
-  const dir = resolveProjectMilestonePath(base, mid);
-  if (!dir) return null;
-  const file = resolveFile(dir, mid, suffix);
-  return file ? join(dir, file) : null;
-}
-
-function resolveProjectSlicePath(base: string, mid: string, sid: string): string | null {
-  const milestoneDir = resolveProjectMilestonePath(base, mid);
-  if (!milestoneDir) return null;
-  const slicesDir = join(milestoneDir, "slices");
-  const dir = resolveDir(slicesDir, sid);
-  return dir ? join(slicesDir, dir) : null;
-}
-
-function resolveProjectSliceFile(base: string, mid: string, sid: string, suffix: string): string | null {
-  const dir = resolveProjectSlicePath(base, mid, sid);
-  if (!dir) return null;
-  const file = resolveFile(dir, sid, suffix);
-  return file ? join(dir, file) : null;
 }
 
 function resolveProjectedMilestonePath(base: string, mid: string): string | null {
@@ -225,20 +171,19 @@ export function resolveExpectedArtifactPath(
     }
     case "execute-task": {
       const slicePath = resolveProjectedSlicePath(base, mid, sid!)
-        ?? resolveProjectSlicePath(base, mid, sid!)
         ?? resolveSlicePath(base, mid, sid!);
       if (!slicePath || !tid) return null;
-      // Legacy layout: slice dirs live under slices/<SID>/ and task summaries
-      // live in a tasks/ subdir. Flat-phase layout: slicePath IS the phase dir
-      // and task summaries live beside the plan files at the phase root. A
-      // tasks/ subdir may still exist in flat-phase for auxiliary task-scoped
-      // artifacts (e.g. T01-VERIFY.json gate outputs) — its mere existence must
-      // NOT redirect summary resolution into tasks/ (#1208).
-      const isLegacySlice = basename(dirname(slicePath)) === "slices";
-      const summaryDir = isLegacySlice
+      // A slices/<SID>/ slice dir keeps task summaries in a tasks/ subdir.
+      // Flat-phase: slicePath IS the phase dir and task summaries live beside
+      // the plan files at the phase root. A tasks/ subdir may still exist in
+      // flat-phase for auxiliary task-scoped artifacts (e.g. T01-VERIFY.json
+      // gate outputs) — its mere existence must NOT redirect summary resolution
+      // into tasks/ (#1208).
+      const isSlicesSubdir = basename(dirname(slicePath)) === "slices";
+      const summaryDir = isSlicesSubdir
         ? (resolveTasksDir(base, mid, sid!) ?? slicePath)
         : slicePath;
-      const fileName = isLegacySlice
+      const fileName = isSlicesSubdir
         ? buildTaskFileName(tid, "SUMMARY")
         : buildFlatTaskFileName(sid!, tid, "SUMMARY");
       return join(summaryDir, fileName);

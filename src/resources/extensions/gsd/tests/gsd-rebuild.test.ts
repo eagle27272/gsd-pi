@@ -37,7 +37,7 @@ type Note = { message: string; kind: string };
 
 function makeBase(): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-rebuild-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), {
+  mkdirSync(join(base, ".gsd", "phases", "01-m001", "tasks"), {
     recursive: true,
   });
   return base;
@@ -107,12 +107,9 @@ test("handleRebuild quarantines stale completion projections without mutating DB
     const summaryPath = join(
       base,
       ".gsd",
-      "milestones",
-      "M001",
-      "slices",
-      "S01",
-      "tasks",
-      "T01-SUMMARY.md",
+      "phases",
+      "01-m001",
+      "S01-T01-SUMMARY.md",
     );
     writeFileSync(summaryPath, "# T01 Summary\n\nDisk-only completion.\n", "utf-8");
 
@@ -154,12 +151,9 @@ test("handleRebuild re-renders missing task summary projections from DB", async 
     const summaryPath = join(
       base,
       ".gsd",
-      "milestones",
-      "M001",
-      "slices",
-      "S01",
-      "tasks",
-      "T01-SUMMARY.md",
+      "phases",
+      "01-m001",
+      "S01-T01-SUMMARY.md",
     );
     rmSync(summaryPath, { force: true });
 
@@ -202,12 +196,9 @@ test("handleRebuild preserves an edited completed summary before restoring the D
   const summaryPath = join(
     base,
     ".gsd",
-    "milestones",
-    "M001",
-    "slices",
-    "S01",
-    "tasks",
-    "T01-SUMMARY.md",
+    "phases",
+    "01-m001",
+    "S01-T01-SUMMARY.md",
   );
   const { ctx } = makeCtx();
   await handleRebuild(ctx, base, "markdown");
@@ -252,7 +243,7 @@ test("handleRebuild preserves every unbaselined renderer-owned edit", async (t) 
     fullSummaryMd: "# Canonical task summary\n",
   });
   insertArtifact({
-    path: "milestones/M001/M001-CONTEXT.md",
+    path: "phases/01-m001/01-CONTEXT.md",
     artifact_type: "CONTEXT",
     milestone_id: "M001",
     slice_id: null,
@@ -270,15 +261,15 @@ test("handleRebuild preserves every unbaselined renderer-owned edit", async (t) 
   await handleRebuild(ctx, base, "markdown");
   const editedFiles = new Map<string, string>([
     [
-      join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T01-SUMMARY.md"),
+      join(base, ".gsd", "phases", "01-m001", "S01-T01-SUMMARY.md"),
       "# External task summary\n",
     ],
     [
-      join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-UAT.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-01-UAT.md"),
       "# External slice UAT\n",
     ],
     [
-      join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md"),
+      join(base, ".gsd", "phases", "01-m001", "01-CONTEXT.md"),
       "# External stored context\n",
     ],
     [join(base, ".gsd", "DECISIONS.md"), "# External decisions\n"],
@@ -303,7 +294,7 @@ test("trusted marker baselines do not misclassify pending DB renders", async (t)
   seedOpenTask();
   const { ctx } = makeCtx();
   await handleRebuild(ctx, base, "markdown");
-  const roadmapPath = join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md");
+  const roadmapPath = join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md");
   const renderedBytes = readFileSync(roadmapPath);
   insertSlice({
     id: "S01",
@@ -328,7 +319,7 @@ test("projection writer preserves edited bytes at the mutation boundary", async 
   seedOpenTask();
   const { ctx } = makeCtx();
   await handleRebuild(ctx, base, "markdown");
-  const roadmapPath = join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md");
+  const roadmapPath = join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md");
   const editedBytes = Buffer.from("# External roadmap evidence\n");
   writeFileSync(roadmapPath, editedBytes);
 
@@ -347,13 +338,13 @@ test("projection baselines retain the exact rendered intent", async (t) => {
   seedOpenTask();
   const { ctx } = makeCtx();
   await handleRebuild(ctx, base, "markdown");
-  const roadmapPath = join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md");
+  const roadmapPath = join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md");
   const rendered = await renderRoadmapFromDb(base, "M001");
   assert.ok("content" in rendered);
   const edited = "# Edit after the atomic render\n";
   writeFileSync(roadmapPath, edited);
 
-  const projectionPath = "milestones/M001/M001-ROADMAP.md";
+  const projectionPath = "phases/01-m001/01-ROADMAP.md";
   const baseline = readCompatMarker(base).projections[projectionPath]?.sha;
 
   assert.equal(baseline, computeProjectionSha(rendered.content));
@@ -365,7 +356,7 @@ test("unbaselined roadmap removal preserves existing bytes", async (t) => {
   t.after(() => cleanup(base));
   openDatabase(join(base, ".gsd", "gsd.db"));
   insertMilestone({ id: "M001", title: "", status: "queued" });
-  const roadmapPath = join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md");
+  const roadmapPath = join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md");
   const editedBytes = Buffer.from("# External unplanned roadmap\n");
   writeFileSync(roadmapPath, editedBytes);
 
@@ -386,10 +377,8 @@ test("unbaselined legacy task plan writes preserve existing bytes", async (t) =>
   const planPath = join(
     base,
     ".gsd",
-    "milestones",
-    "M001",
-    "slices",
-    "S01",
+    "phases",
+    "01-m001",
     "tasks",
     "T01-PLAN.md",
   );
@@ -441,12 +430,9 @@ test("handleRebuild database target is reserved and does not import markdown", a
     const summaryPath = join(
       base,
       ".gsd",
-      "milestones",
-      "M001",
-      "slices",
-      "S01",
-      "tasks",
-      "T01-SUMMARY.md",
+      "phases",
+      "01-m001",
+      "S01-T01-SUMMARY.md",
     );
     writeFileSync(summaryPath, "# T01 Summary\n\nShould not import.\n", "utf-8");
 
@@ -458,7 +444,7 @@ test("handleRebuild database target is reserved and does not import markdown", a
     assert.equal(task?.status, "pending", "reserved DB rebuild must not mutate task status");
     assert.equal(task?.full_summary_md, "", "reserved DB rebuild must not import markdown");
     assert.match(notes.at(-1)?.message ?? "", /reserved/);
-    assert.match(notes.at(-1)?.message ?? "", /\/gsd recover/);
+    assert.match(notes.at(-1)?.message ?? "", /\/gsd db restore-backup/);
     assert.equal(notes.at(-1)?.kind, "warning");
   } finally {
     cleanup(base);

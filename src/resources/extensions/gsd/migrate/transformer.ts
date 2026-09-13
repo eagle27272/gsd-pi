@@ -1,5 +1,12 @@
 // Migration transformer — converts parsed PlanningProject into GSDProject.
 // Pure function: no I/O, no side effects, no imports outside migrate/.
+//
+// NOT PRODUCTION CODE — DO NOT DELETE AS DEAD. No production path reaches this
+// module since /gsd migrate was removed; every importer is a test. The
+// load-bearing one is tests/migrate-safety-audit.test.ts, the only coverage of
+// the native engine's fault-injection seams that live code — atomic-write.ts,
+// managed-projection-history.ts, db/engine.ts, database-maintenance-fence.ts,
+// projection-cleanup.ts — depends on. Deleting this deletes that coverage.
 
 import type {
   PlanningProject,

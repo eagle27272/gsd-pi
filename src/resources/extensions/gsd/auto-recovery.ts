@@ -256,7 +256,7 @@ export function refreshRecoveryDbForArtifact(
         ok: false,
         fatal: true,
         reason: "execute-task-recovery-aborted",
-        message: `Stuck recovery found execute-task ${unitId} artifacts, but its canonical Task Attempt recovery already aborted (recoveryActionId: ${terminalAbort.recoveryActionId}); re-dispatching would break immediately with task-recovery-abort. Resume it with \`/gsd recover ${terminalAbort.recoveryActionId}\`, or reconcile the projection drift with \`gsd rebuild markdown\` then the database-import form of \`gsd recover\`.`,
+        message: `Stuck recovery found execute-task ${unitId} artifacts, but its canonical Task Attempt recovery already aborted (recoveryActionId: ${terminalAbort.recoveryActionId}); re-dispatching would break immediately with task-recovery-abort. Resume it with \`/gsd recover ${terminalAbort.recoveryActionId}\`, or reconcile the projection drift with \`gsd rebuild markdown\`.`,
       };
     }
     // #1622: unlike the plan-slice/complete-milestone branches below, nothing
@@ -586,7 +586,7 @@ export function buildLoopRemediationSteps(
       return [
         `   1. Run \`gsd undo-task ${mid}/${sid}/${tid}\` to reset the task state`,
         `   2. Resume auto-mode — it will re-execute the task`,
-        `   3. If the task keeps failing and markdown should repopulate the DB, run \`gsd recover\` and approve its exact Preview hash`,
+        `   3. If the task keeps failing, inspect it with \`gsd status\` and \`gsd forensics\`, then \`gsd doctor\``,
       ].join("\n");
     }
     case "plan-slice":
@@ -596,9 +596,10 @@ export function buildLoopRemediationSteps(
         unitType === "plan-slice"
           ? relSliceFile(base, mid, sid, "PLAN")
           : relSliceFile(base, mid, sid, "RESEARCH");
+      const phase = unitType === "plan-slice" ? "plan" : "research";
       return [
-        `   1. Write ${artifactRel} manually (or with the LLM in interactive mode)`,
-        `   2. Run \`gsd recover\` and approve its exact Preview hash to import the markdown into the DB`,
+        `   1. Review the failure and the current ${artifactRel} projection for what the unit could not produce`,
+        `   2. Re-run the phase against the authoritative DB with \`gsd dispatch ${phase} ${mid}\``,
         `   3. Resume auto-mode`,
       ].join("\n");
     }
@@ -607,15 +608,15 @@ export function buildLoopRemediationSteps(
       return [
         `   1. Run \`gsd reset-slice ${mid}/${sid}\` to reset the slice and all its tasks`,
         `   2. Resume auto-mode — it will re-execute incomplete tasks and re-complete the slice`,
-        `   3. If the slice keeps failing and markdown should repopulate the DB, run \`gsd recover\` and approve its exact Preview hash`,
+        `   3. If the slice keeps failing, inspect it with \`gsd status\` and \`gsd forensics\`, then \`gsd doctor\``,
       ].join("\n");
     }
     case "validate-milestone": {
       if (!mid) break;
       const artifactRel = relMilestoneFile(base, mid, "VALIDATION");
       return [
-        `   1. Write ${artifactRel} with verdict: pass`,
-        `   2. Run \`gsd recover\` and approve its exact Preview hash to import the markdown into the DB`,
+        `   1. Review the failure and the current ${artifactRel} projection for the unmet criteria`,
+        `   2. Re-run validation against the authoritative DB with \`gsd dispatch validate ${mid}\`, or record an explicit verdict with \`gsd verdict\``,
         `   3. Resume auto-mode`,
       ].join("\n");
     }

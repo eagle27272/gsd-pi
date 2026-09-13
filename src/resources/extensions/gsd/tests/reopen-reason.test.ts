@@ -24,7 +24,7 @@ import {
 
 function makeTmpBase(): string {
   const base = mkdtempSync(join(tmpdir(), 'gsd-reopen-reason-'));
-  mkdirSync(join(base, '.gsd', 'milestones', 'M001', 'slices', 'S01', 'tasks'), { recursive: true });
+  mkdirSync(join(base, '.gsd', 'phases', '01-m001', 'tasks'), { recursive: true });
   return base;
 }
 

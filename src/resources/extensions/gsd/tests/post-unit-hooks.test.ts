@@ -24,12 +24,13 @@ import {
   triggerHookManually,
 } from "../post-unit-hooks.ts";
 import { invalidateAllCaches } from "../cache.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 // ─── Fixture Helpers ───────────────────────────────────────────────────────
 
 function createFixtureBase(): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-hook-test-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001")), { recursive: true });
   return base;
 }
 
@@ -48,28 +49,26 @@ function writeHookPreferences(base: string, hookYaml: string): void {
 describe('post-unit-hooks', () => {
 test('resolveHookArtifactPath', () => {
   const base = "/project";
+  const phaseDir = join(base, ".gsd", "phases", canonicalPhaseDirName("M001"));
 
   // Task-level
-  const taskPath = resolveHookArtifactPath(base, "M001/S01/T01", "REVIEW-PASS.md");
   assert.deepStrictEqual(
-    taskPath,
-    join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks", "T01-REVIEW-PASS.md"),
+    resolveHookArtifactPath(base, "M001/S01/T01", "REVIEW-PASS.md"),
+    join(phaseDir, "S01-T01-REVIEW-PASS.md"),
     "task-level artifact path",
   );
 
   // Slice-level
-  const slicePath = resolveHookArtifactPath(base, "M001/S01", "REVIEW-PASS.md");
   assert.deepStrictEqual(
-    slicePath,
-    join(base, ".gsd", "milestones", "M001", "slices", "S01", "REVIEW-PASS.md"),
+    resolveHookArtifactPath(base, "M001/S01", "REVIEW-PASS.md"),
+    join(phaseDir, "01-01-REVIEW-PASS.md"),
     "slice-level artifact path",
   );
 
   // Milestone-level
-  const milestonePath = resolveHookArtifactPath(base, "M001", "REVIEW-PASS.md");
   assert.deepStrictEqual(
-    milestonePath,
-    join(base, ".gsd", "milestones", "M001", "REVIEW-PASS.md"),
+    resolveHookArtifactPath(base, "M001", "REVIEW-PASS.md"),
+    join(phaseDir, "01-REVIEW-PASS.md"),
     "milestone-level artifact path",
   );
 });
@@ -428,7 +427,7 @@ test('Blocking hook lost dispatch does not steal a real-run cycle at max_cycles=
     // lost dispatch must not consume the hook's real-run budget, max_cycles=2
     // still permits two genuine runs before the gate blocks — spending the
     // refund early did not rob a later real cycle.
-    mkdirSync(join(base, ".gsd", "milestones", "M002", "slices", "S01"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M002")), { recursive: true });
     writeFileSync(
       resolveHookArtifactPath(base, "M002/S01", "PLAN-REVIEW.md"),
       "---\nverdict: failed\n---\n\nRejected.\n",
@@ -498,24 +497,23 @@ test('Blocking hook needs-rework verdict requests trigger unit retry', () => {
 // ─── Variable substitution in prompts ──────────────────────────────────────
 test('Variable substitution', () => {
   const base = "/project";
+  const phaseSegment = join("phases", canonicalPhaseDirName("M002"));
 
   // 3-part ID
   const path3 = resolveHookArtifactPath(base, "M002/S03/T05", "result.md");
-  assert.ok(path3.includes("M002"), "3-part ID extracts milestoneId");
+  assert.ok(path3.includes(phaseSegment), "3-part ID resolves under the M002 phase dir");
   assert.ok(path3.includes("S03"), "3-part ID extracts sliceId");
   assert.ok(path3.includes("T05"), "3-part ID extracts taskId");
-  assert.ok(path3.includes("milestones"), "3-part ID includes milestones/ segment");
 
   // 2-part ID
   const path2 = resolveHookArtifactPath(base, "M002/S03", "result.md");
-  assert.ok(path2.includes("M002"), "2-part ID extracts milestoneId");
-  assert.ok(path2.includes("S03"), "2-part ID extracts sliceId");
-  assert.ok(path2.includes("milestones"), "2-part ID includes milestones/ segment");
+  assert.ok(path2.includes(phaseSegment), "2-part ID resolves under the M002 phase dir");
+  assert.ok(path2.includes("02-03-"), "2-part ID extracts the slice plan segment");
 
   // 1-part ID
   const path1 = resolveHookArtifactPath(base, "M002", "result.md");
-  assert.ok(path1.includes("M002"), "1-part ID extracts milestoneId");
-  assert.ok(path1.includes("milestones"), "1-part ID includes milestones/ segment");
+  assert.ok(path1.includes(phaseSegment), "1-part ID resolves under the M002 phase dir");
+  assert.ok(path1.endsWith("02-result.md"), "1-part ID uses the milestone-level name");
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

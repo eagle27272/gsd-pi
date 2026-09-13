@@ -55,7 +55,7 @@ function buildState(overrides: Partial<GSDState> = {}): GSDState {
 
 function makeBasePath(prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), `gsd-req-slice-${prefix}-`));
-  mkdirSync(join(dir, ".gsd", "milestones", "M001", "slices", "S01"), { recursive: true });
+  mkdirSync(join(dir, ".gsd", "phases", "01-m001"), { recursive: true });
   return dir;
 }
 
@@ -100,13 +100,13 @@ describe("require_slice_discussion dispatch rule (#3454)", () => {
     const dbPath = join(dbDir, "test.db");
     try {
       openDatabase(dbPath);
-      mkdirSync(join(basePath, ".gsd", "milestones", "M001", "slices", "S02"), { recursive: true });
+      mkdirSync(join(basePath, ".gsd", "phases", "01-m001"), { recursive: true });
 
       insertMilestone({ id: "M001", title: "Test milestone" });
       insertSlice({ id: "S01", milestoneId: "M001", title: "Completed slice", status: "complete", sequence: 1 });
       insertSlice({ id: "S02", milestoneId: "M001", title: "Next slice", status: "pending", sequence: 2 });
 
-      const assessmentPath = ".gsd/milestones/M001/slices/S01/S01-ASSESSMENT.md";
+      const assessmentPath = ".gsd/phases/01-m001/01-01-ASSESSMENT.md";
       const assessmentBody = [
         "---",
         "verdict: fail",
@@ -195,8 +195,8 @@ describe("require_slice_discussion dispatch rule (#3454)", () => {
     const basePath = makeBasePath("ctx-present");
     try {
       // Seed the CONTEXT file that /gsd discuss would have written.
-      const sliceDir = join(basePath, ".gsd", "milestones", "M001", "slices", "S01");
-      writeFileSync(join(sliceDir, "S01-CONTEXT.md"), "# Discussion notes\n", "utf-8");
+      const sliceDir = join(basePath, ".gsd", "phases", "01-m001");
+      writeFileSync(join(sliceDir, "01-01-CONTEXT.md"), "# Discussion notes\n", "utf-8");
 
       const prefs = { phases: { require_slice_discussion: true } } as unknown as GSDPreferences;
       const action = await findRule().match(buildCtx(basePath, prefs));

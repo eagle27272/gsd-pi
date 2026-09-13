@@ -15,32 +15,32 @@ describe('queue-draft-detection', () => {
 
     try {
       // M001: has only CONTEXT-DRAFT.md (draft milestone)
-      mkdirSync(join(gsd, "milestones", "M001"), { recursive: true });
+      mkdirSync(join(gsd, "phases", "01-m001"), { recursive: true });
       writeFileSync(
-        join(gsd, "milestones", "M001", "M001-CONTEXT-DRAFT.md"),
+        join(gsd, "phases", "01-m001", "01-CONTEXT-DRAFT.md"),
         "# M001: Draft Milestone\n\nSeed material from prior discussion.\n",
       );
 
       // M002: has full CONTEXT.md (ready milestone)
-      mkdirSync(join(gsd, "milestones", "M002"), { recursive: true });
+      mkdirSync(join(gsd, "phases", "02-m002"), { recursive: true });
       writeFileSync(
-        join(gsd, "milestones", "M002", "M002-CONTEXT.md"),
+        join(gsd, "phases", "02-m002", "02-CONTEXT.md"),
         "# M002: Ready Milestone\n\nFull context from deep discussion.\n",
       );
 
       // M003: has both CONTEXT.md and CONTEXT-DRAFT.md (CONTEXT wins)
-      mkdirSync(join(gsd, "milestones", "M003"), { recursive: true });
+      mkdirSync(join(gsd, "phases", "03-m003"), { recursive: true });
       writeFileSync(
-        join(gsd, "milestones", "M003", "M003-CONTEXT.md"),
+        join(gsd, "phases", "03-m003", "03-CONTEXT.md"),
         "# M003: Full Context\n\nThis is the real context.\n",
       );
       writeFileSync(
-        join(gsd, "milestones", "M003", "M003-CONTEXT-DRAFT.md"),
+        join(gsd, "phases", "03-m003", "03-CONTEXT-DRAFT.md"),
         "# M003: Draft\n\nThis should be ignored.\n",
       );
 
       // M004: has neither (empty milestone dir)
-      mkdirSync(join(gsd, "milestones", "M004"), { recursive: true });
+      mkdirSync(join(gsd, "phases", "04-m004"), { recursive: true });
 
       // Build context
       const state = await deriveState(tmpBase);

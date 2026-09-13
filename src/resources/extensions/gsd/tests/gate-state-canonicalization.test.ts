@@ -103,9 +103,9 @@ describe("gate-state canonicalization (#4950)", () => {
 
   test("closeQualityGatesFromEvidence repairs pending gate from durable section", () => {
     insertGateRow({ milestoneId: "M001", sliceId: "S01", gateId: "Q3", scope: "slice" });
-    mkdirSync(join(tmpDir, ".gsd", "milestones", "M001", "slices", "S01"), { recursive: true });
+    mkdirSync(join(tmpDir, ".gsd", "phases", "01-m001"), { recursive: true });
     writeFileSync(
-      join(tmpDir, ".gsd", "milestones", "M001", "slices", "S01", "S01-PLAN.md"),
+      join(tmpDir, ".gsd", "phases", "01-m001", "01-01-PLAN.md"),
       [
         "# S01",
         "",

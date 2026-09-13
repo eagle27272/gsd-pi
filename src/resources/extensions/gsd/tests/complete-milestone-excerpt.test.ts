@@ -20,13 +20,13 @@ import {
   openDatabase,
   saveGateResult,
 } from "../gsd-db.ts";
+import { canonicalPhaseDirName, milestoneIdToPhaseNum, slicePlanFileName } from "../layout-policy.ts";
 
 // ─── Fixture helpers ──────────────────────────────────────────────────────
 
 function createBase(): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-cm-excerpt-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks"), { recursive: true });
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S02", "tasks"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test Milestone")), { recursive: true });
   return base;
 }
 
@@ -51,19 +51,19 @@ function seedRoadmapSlices(base: string): void {
 }
 
 function writeRoadmap(base: string, content: string): void {
-  writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), content);
+  writeFileSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test Milestone"), "01-ROADMAP.md"), content);
 }
 
 function writeSummary(base: string, sid: string, content: string): void {
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "slices", sid, `${sid}-SUMMARY.md`),
+    join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test Milestone"), slicePlanFileName(milestoneIdToPhaseNum("M001"), sid, "SUMMARY")),
     content,
   );
 }
 
 function writeAssessment(base: string, sid: string, content: string): void {
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "slices", sid, `${sid}-ASSESSMENT.md`),
+    join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test Milestone"), slicePlanFileName(milestoneIdToPhaseNum("M001"), sid, "ASSESSMENT")),
     content,
   );
 }
@@ -134,15 +134,15 @@ test("#4780 excerpt: emits compact block with frontmatter fields + section heads
   t.after(() => cleanup(base));
   invalidateAllCaches();
 
-  const absPath = join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-SUMMARY.md");
-  const relPath = ".gsd/milestones/M001/slices/S01/S01-SUMMARY.md";
+  const absPath = join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test Milestone"), "01-01-SUMMARY.md");
+  const relPath = ".gsd/phases/01-m001/01-01-SUMMARY.md";
   writeSummary(base, "S01", makeFatSummary("S01"));
 
   const out = await buildSliceSummaryExcerpt(absPath, relPath, "S01");
 
   // Compact header with source path for on-demand Read
   assert.match(out, /### S01 Summary \(excerpt\)/);
-  assert.match(out, /Source: `\.gsd\/milestones\/M001\/slices\/S01\/S01-SUMMARY\.md`/);
+  assert.match(out, /Source: `\.gsd\/phases\/01-m001\/01-01-SUMMARY\.md`/);
 
   // Frontmatter fields surfaced
   assert.match(out, /\*\*Title:\*\* S01: Slice summary/);
@@ -188,7 +188,7 @@ test("#4780 excerpt: blocker_discovered=true surfaces prominent marker", async (
     "## What Happened",
     "content",
   ].join("\n");
-  const absPath = join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-SUMMARY.md");
+  const absPath = join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test Milestone"), "01-01-SUMMARY.md");
   writeSummary(base, "S01", content);
 
   const out = await buildSliceSummaryExcerpt(absPath, "rel", "S01");
@@ -202,7 +202,7 @@ test("#4780 excerpt: fall back to full inline when frontmatter is unrecognizable
 
   // No frontmatter, no id — parser returns empty id, triggering fallback
   const garbage = "# S99\n\nJust a wall of text with no frontmatter at all.\n";
-  const absPath = join(base, ".gsd", "milestones", "M001", "slices", "S01", "S99-SUMMARY.md");
+  const absPath = join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test Milestone"), "01-99-SUMMARY.md");
   writeFileSync(absPath, garbage);
 
   const out = await buildSliceSummaryExcerpt(absPath, "rel/path.md", "S99");
@@ -240,7 +240,7 @@ test("#4780 excerpt: section bodies are capped", async (t) => {
     "## Follow-ups",
     longFollowUps,
   ].join("\n");
-  const absPath = join(base, ".gsd", "milestones", "M001", "slices", "S01", "S01-SUMMARY.md");
+  const absPath = join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test Milestone"), "01-01-SUMMARY.md");
   writeSummary(base, "S01", content);
 
   const out = await buildSliceSummaryExcerpt(absPath, "rel/path.md", "S01");
@@ -264,7 +264,7 @@ test("#4780 closer prompt: uses excerpts + lists on-demand slice SUMMARY paths",
   writeSummary(base, "S01", makeFatSummary("S01"));
   writeSummary(base, "S02", makeFatSummary("S02"));
   writeFileSync(join(base, ".gsd", "PROJECT.md"), "# Project\n\nBroad product context should stay on-demand.");
-  writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md"), "# Context\n\nMilestone context should stay on-demand.");
+  writeFileSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test Milestone"), "01-CONTEXT.md"), "# Context\n\nMilestone context should stay on-demand.");
 
   const prompt = await buildCompleteMilestonePrompt("M001", "Test Milestone", base);
 
@@ -274,8 +274,8 @@ test("#4780 closer prompt: uses excerpts + lists on-demand slice SUMMARY paths",
 
   // On-demand path section exists with both slice paths
   assert.match(prompt, /### On-demand Slice Summaries/);
-  assert.match(prompt, /S01-SUMMARY\.md/);
-  assert.match(prompt, /S02-SUMMARY\.md/);
+  assert.match(prompt, /01-01-SUMMARY\.md/);
+  assert.match(prompt, /01-02-SUMMARY\.md/);
   assert.match(prompt, /### On-demand Project Context/);
   assert.match(prompt, /### On-demand Milestone Context/);
   assert.ok(
@@ -316,7 +316,7 @@ test("complete-milestone prompt caps repeated inlined context around 20k chars",
   writeSummary(base, "S01", makeFatSummary("S01"));
   writeSummary(base, "S02", makeFatSummary("S02"));
   writeFileSync(
-    join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md"),
+    join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test Milestone"), "01-CONTEXT.md"),
     "# M001 Context\n\n" + "Large milestone context body. ".repeat(1200),
   );
   writeFileSync(
@@ -347,7 +347,7 @@ test("validate-milestone prompt uses slice excerpts and on-demand paths instead 
   writeSummary(base, "S01", makeFatSummary("S01"));
   writeSummary(base, "S02", makeFatSummary("S02"));
   writeFileSync(join(base, ".gsd", "PROJECT.md"), "# Project\n\nBroad validation product context should stay on-demand.");
-  writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md"), "# Context\n\nValidation milestone context should stay on-demand.");
+  writeFileSync(join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test Milestone"), "01-CONTEXT.md"), "# Context\n\nValidation milestone context should stay on-demand.");
   writeAssessment(
     base,
     "S01",
@@ -372,8 +372,8 @@ test("validate-milestone prompt uses slice excerpts and on-demand paths instead 
   assert.match(prompt, /### On-demand Validation Artifacts/);
   assert.match(prompt, /### On-demand Project Context/);
   assert.match(prompt, /### On-demand Milestone Context/);
-  assert.match(prompt, /S01-SUMMARY\.md/);
-  assert.match(prompt, /S01-ASSESSMENT\.md/);
+  assert.match(prompt, /01-01-SUMMARY\.md/);
+  assert.match(prompt, /01-01-ASSESSMENT\.md/);
   assert.ok(
     !prompt.includes("Broad validation product context should stay on-demand."),
     "standard validate-milestone prompt should not inline project narrative",

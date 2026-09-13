@@ -21,6 +21,7 @@ import {
   classifyProject,
   scanProjectFiles,
 } from "../detection.ts";
+import { canonicalPhaseDirName, LAYOUT_SEGMENTS } from "../layout-policy.ts";
 
 function makeTempDir(prefix: string): string {
   const dir = join(
@@ -189,22 +190,40 @@ test("classifyProject: generated framework/cache dirs do not count as content", 
   assert.equal(classification.kind, "greenfield");
 });
 
-test("detectProjectState: directory with .gsd/milestones/M001 returns v2-gsd", (t) => {
+test("detectProjectState: directory with one .gsd/phases/ dir returns v2-gsd", (t) => {
   const dir = makeTempDir("v2-gsd");
   t.after(() => cleanup(dir));
 
-  mkdirSync(join(dir, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(dir, ".gsd", LAYOUT_SEGMENTS.level1, canonicalPhaseDirName("M001", "First")), { recursive: true });
   const result = detectProjectState(dir);
   assert.equal(result.state, "v2-gsd");
   assert.ok(result.v2);
   assert.equal(result.v2!.milestoneCount, 1);
 });
 
-test("detectProjectState: directory with empty .gsd/milestones returns v2-gsd-empty", (t) => {
+test("detectProjectState: milestoneCount equals the number of flat-phase dirs", (t) => {
+  const dir = makeTempDir("v2-gsd-many");
+  t.after(() => cleanup(dir));
+
+  const ids: Array<[string, string]> = [
+    ["M001", "First"],
+    ["M002", "Second"],
+    ["M003", "Third"],
+  ];
+  for (const [id, title] of ids) {
+    mkdirSync(join(dir, ".gsd", LAYOUT_SEGMENTS.level1, canonicalPhaseDirName(id, title)), { recursive: true });
+  }
+
+  const result = detectProjectState(dir);
+  assert.equal(result.v2!.milestoneCount, ids.length);
+  assert.equal(result.state, "v2-gsd", "a project with phase dirs is not 'empty'");
+});
+
+test("detectProjectState: directory with empty .gsd/phases returns v2-gsd-empty", (t) => {
   const dir = makeTempDir("v2-empty");
   t.after(() => cleanup(dir));
 
-  mkdirSync(join(dir, ".gsd", "milestones"), { recursive: true });
+  mkdirSync(join(dir, ".gsd", LAYOUT_SEGMENTS.level1), { recursive: true });
   const result = detectProjectState(dir);
   assert.equal(result.state, "v2-gsd-empty");
   assert.ok(result.v2);
@@ -229,7 +248,7 @@ test("detectProjectState: v2 takes priority over v1 when both exist", (t) => {
   const dir = makeTempDir("both");
   t.after(() => cleanup(dir));
 
-  mkdirSync(join(dir, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(dir, ".gsd", LAYOUT_SEGMENTS.level1, canonicalPhaseDirName("M001", "First")), { recursive: true });
   mkdirSync(join(dir, ".planning"), { recursive: true });
   const result = detectProjectState(dir);
   assert.equal(result.state, "v2-gsd");
@@ -239,7 +258,7 @@ test("detectProjectState: detects preferences in .gsd/", (t) => {
   const dir = makeTempDir("prefs");
   t.after(() => cleanup(dir));
 
-  mkdirSync(join(dir, ".gsd", "milestones"), { recursive: true });
+  mkdirSync(join(dir, ".gsd", LAYOUT_SEGMENTS.level1), { recursive: true });
   writeFileSync(join(dir, ".gsd", "PREFERENCES.md"), "---\nversion: 1\n---\n", "utf-8");
   const result = detectProjectState(dir);
   assert.ok(result.v2);

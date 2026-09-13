@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 
 import { validatePlanBoundary, validateCompleteBoundary } from "../observability-validator.ts";
 import { clearPathCache, _clearGsdRootCache } from "../paths.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
 //
@@ -54,7 +55,7 @@ function makeProject(): { root: string; cleanup: () => void } {
  * has an explicit tasks/ directory that resolveTasksDir returns.
  */
 function makeLegacyTasksDir(root: string, mid: string, sid: string): string {
-  const dir = join(root, ".gsd", "milestones", mid, "slices", sid, "tasks");
+  const dir = join(root, ".gsd", "phases", canonicalPhaseDirName(mid), "tasks");
   mkdirSync(dir, { recursive: true });
   return dir;
 }

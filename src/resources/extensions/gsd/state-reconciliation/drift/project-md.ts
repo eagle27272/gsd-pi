@@ -69,10 +69,8 @@ export function detectUnregisteredMilestoneDrift(
  * The recovery hint deliberately leads with the *targeted*, non-destructive
  * options. The common cause of this drift is a directory left under an old ID
  * after a `unique_milestone_ids` rename, where the right fix is to rename (move)
- * the directory — not a broad legacy import. `/gsd recover` with exact Preview approval applies
- * modeled Preview targets and preserves absent DB rows, but is still offered
- * only as a last resort because it is not a targeted rename repair (see issue
- * #826).
+ * the directory. There is no markdown-to-database import path, so the last
+ * resort is a backup restore rather than an import (see issue #826).
  */
 function unregisteredMilestoneGuidance(
   record: UnregisteredMilestoneDrift,
@@ -86,7 +84,7 @@ function unregisteredMilestoneGuidance(
     "Runtime reconciliation will not import markdown into the DB. Choose one:\n" +
     `  • Rename: if this directory is the same milestone under an old ID (e.g. a unique_milestone_ids rename), move \`${dirHint}\` to the current ID's directory and re-run.\n` +
     `  • Discard: if this milestone is no longer relevant, delete \`${dirHint}\` and re-run.\n` +
-    "  • Last resort: use `/gsd recover` and approve its exact Preview hash only if markdown is the source you intentionally want to import. It applies modeled preview targets and preserves DB rows absent from markdown, but it does NOT perform a targeted rename."
+    "  • Last resort: if the database genuinely lost this milestone, restore a verified backup with `/gsd db restore-backup` (destructive) — runtime cannot import these markdown files back into the DB."
   );
 }
 

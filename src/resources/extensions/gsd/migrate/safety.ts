@@ -1,5 +1,12 @@
 // gsd-pi - /gsd migrate safety helpers.
 // File Purpose: Path resolution, target guards, and backup support for v1 migration.
+//
+// NOT PRODUCTION CODE — DO NOT DELETE AS DEAD. No production path reaches this
+// module since /gsd migrate was removed. It survives only as a fixture for
+// tests/migrate-safety-audit.test.ts, which is the only coverage of the native
+// engine's fault-injection seams that live code — atomic-write.ts,
+// managed-projection-history.ts, db/engine.ts, database-maintenance-fence.ts,
+// projection-cleanup.ts — depends on. Deleting this deletes that coverage.
 
 import { existsSync, readdirSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";

@@ -84,7 +84,7 @@ describe("discardOrphanMilestoneReservations", () => {
   test("refuses disk projections, worktrees, and milestone branches", () => {
     base = makeBase();
     insertMilestone({ id: "M001", status: "queued" });
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
     mkdirSync(join(base, ".gsd-worktrees", "M001"), { recursive: true });
     execFileSync("git", ["branch", "milestone/M001"], { cwd: base, stdio: "ignore" });
 

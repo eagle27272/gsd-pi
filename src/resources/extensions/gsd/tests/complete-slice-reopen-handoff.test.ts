@@ -29,7 +29,7 @@ function makePostUnitContext(base: string, s: AutoSession, notifications: string
 test("complete-slice with gsd_task_reopen handoff continues instead of artifact-retrying", async () => {
   const base = makeTempRepo("gsd-complete-slice-reopen-");
   try {
-    mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
 
     const s = new AutoSession();
     s.active = true;
@@ -74,7 +74,7 @@ test("complete-slice with gsd_task_reopen handoff continues instead of artifact-
 test("complete-slice text mentioning gsd_task_reopen does not count as a handoff", async () => {
   const base = makeTempRepo("gsd-complete-slice-reopen-text-");
   try {
-    mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
 
     const s = new AutoSession();
     s.active = true;
@@ -114,9 +114,9 @@ test("complete-slice text mentioning gsd_task_reopen does not count as a handoff
 test("complete-slice with gsd_replan_slice tool result continues instead of artifact-retrying", async () => {
   const base = makeTempRepo("gsd-complete-slice-replan-");
   try {
-    const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+    const sliceDir = join(base, ".gsd", "phases", "01-m001");
     mkdirSync(sliceDir, { recursive: true });
-    writeFileSync(join(sliceDir, "S01-REPLAN.md"), "# Replan\n");
+    writeFileSync(join(sliceDir, "01-01-REPLAN.md"), "# Replan\n");
 
     const s = new AutoSession();
     s.active = true;
@@ -158,9 +158,9 @@ test("complete-slice with gsd_replan_slice tool result continues instead of arti
 test("complete-slice text mentioning gsd_replan_slice does not count as a valid replan outcome", async () => {
   const base = makeTempRepo("gsd-complete-slice-replan-text-");
   try {
-    const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+    const sliceDir = join(base, ".gsd", "phases", "01-m001");
     mkdirSync(sliceDir, { recursive: true });
-    writeFileSync(join(sliceDir, "S01-REPLAN.md"), "# Replan\n");
+    writeFileSync(join(sliceDir, "01-01-REPLAN.md"), "# Replan\n");
 
     const s = new AutoSession();
     s.active = true;
@@ -200,7 +200,7 @@ test("complete-slice text mentioning gsd_replan_slice does not count as a valid 
 test("complete-slice with gsd_replan_slice but no REPLAN artifact retries", async () => {
   const base = makeTempRepo("gsd-complete-slice-replan-missing-artifact-");
   try {
-    mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
 
     const s = new AutoSession();
     s.active = true;
@@ -235,7 +235,7 @@ test("complete-slice with gsd_replan_slice but no REPLAN artifact retries", asyn
 test("artifact retry context stays stable across attempts while notifications show attempt count", async () => {
   const base = makeTempRepo("gsd-artifact-retry-stable-context-");
   try {
-    mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
 
     const s = new AutoSession();
     s.active = true;

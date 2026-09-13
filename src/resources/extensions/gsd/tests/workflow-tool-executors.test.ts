@@ -54,6 +54,7 @@ import {
 } from "../managed-projection-history.ts";
 import { removeProjectionFileSync } from "../atomic-write.ts";
 import { discardProjectionEvidence } from "./projection-evidence-helpers.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 function executePlanMilestone(
   params: Parameters<typeof executePlanMilestoneWithInvocation>[0],
@@ -240,7 +241,7 @@ function seedCompletedTaskAuthority(input: {
 }
 
 function writeRoadmap(base: string, milestoneId: string, sliceIds: string[]): void {
-  const milestoneDir = join(base, ".gsd", "milestones", milestoneId);
+  const milestoneDir = join(base, ".gsd", "phases", canonicalPhaseDirName(milestoneId));
   mkdirSync(milestoneDir, { recursive: true });
   const lines = [
     `# ${milestoneId}: Workflow MCP planning`,
@@ -414,9 +415,9 @@ test("executeTaskComplete coerces string verificationEvidence entries", async ()
   const base = makeTmpBase();
   try {
     openTestDb(base);
-    const planDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+    const planDir = join(base, ".gsd", "phases", "01-m001");
     mkdirSync(planDir, { recursive: true });
-    writeFileSync(join(planDir, "S01-PLAN.md"), "# S01\n\n- [ ] **T01: Demo** `est:5m`\n");
+    writeFileSync(join(planDir, "01-01-PLAN.md"), "# S01\n\n- [ ] **T01: Demo** `est:5m`\n");
 
     const result = await inProjectDir(base, () => executeTaskComplete({
       milestoneId: "M001",
@@ -454,9 +455,9 @@ test("executeTaskComplete derives missing verification from evidence", async () 
   const base = makeTmpBase();
   try {
     openTestDb(base);
-    const planDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+    const planDir = join(base, ".gsd", "phases", "01-m001");
     mkdirSync(planDir, { recursive: true });
-    writeFileSync(join(planDir, "S01-PLAN.md"), "# S01\n\n- [ ] **T01: Demo** `est:5m`\n");
+    writeFileSync(join(planDir, "01-01-PLAN.md"), "# S01\n\n- [ ] **T01: Demo** `est:5m`\n");
 
     const result = await inProjectDir(base, () => executeTaskComplete({
       milestoneId: "M001",
@@ -488,9 +489,9 @@ test("executeTaskComplete treats a malformed duplicate for an already-complete t
   const base = makeTmpBase();
   try {
     openTestDb(base);
-    const planDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+    const planDir = join(base, ".gsd", "phases", "01-m001");
     mkdirSync(planDir, { recursive: true });
-    writeFileSync(join(planDir, "S01-PLAN.md"), "# S01\n\n- [ ] **T01: Demo** `est:5m`\n");
+    writeFileSync(join(planDir, "01-01-PLAN.md"), "# S01\n\n- [ ] **T01: Demo** `est:5m`\n");
 
     const first = await inProjectDir(base, () => executeTaskComplete({
       milestoneId: "M001",
@@ -522,7 +523,7 @@ test("executeTaskComplete treats a malformed duplicate for an already-complete t
   }
 });
 
-test("executeTaskComplete creates the legacy escalation directory and surfaces its metadata", async () => {
+test("executeTaskComplete writes the escalation artifact in the phase dir and surfaces its metadata", async () => {
   const base = makeTmpBase();
   try {
     openTestDb(base);
@@ -533,9 +534,9 @@ test("executeTaskComplete creates the legacy escalation directory and surfaces i
       "  mid_execution_escalation: true",
       "---",
     ].join("\n"));
-    const planDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+    const planDir = join(base, ".gsd", "phases", "01-m001");
     mkdirSync(planDir, { recursive: true });
-    writeFileSync(join(planDir, "S01-PLAN.md"), "# S01\n\n- [ ] **T01: Demo** `est:5m`\n");
+    writeFileSync(join(planDir, "01-01-PLAN.md"), "# S01\n\n- [ ] **T01: Demo** `est:5m`\n");
 
     const result = await inProjectDir(base, () => executeTaskComplete({
       milestoneId: "M001",
@@ -571,7 +572,7 @@ test("executeTaskComplete creates the legacy escalation directory and surfaces i
     ).get("M001", "S01", "T01") as Record<string, unknown> | undefined;
     assert.equal(row?.escalation_pending, 0);
     assert.equal(row?.escalation_awaiting_review, 1);
-    const expectedArtifactPath = join(normalizeRealPath(planDir), "tasks", "T01-ESCALATION.json");
+    const expectedArtifactPath = join(normalizeRealPath(planDir), "T01-ESCALATION.json");
     assert.equal(row?.escalation_artifact_path, expectedArtifactPath);
     assert.equal(existsSync(expectedArtifactPath), true);
   } finally {
@@ -595,7 +596,7 @@ test("executeTaskComplete surfaces stale readable status and duplicate repair me
     "  mid_execution_escalation: true",
     "---",
   ].join("\n"));
-  const planDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+  const planDir = join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Foundation"));
   mkdirSync(planDir, { recursive: true });
   writeFileSync(
     join(planDir, "S01-PLAN.md"),
@@ -2401,7 +2402,7 @@ test("executeCompleteMilestone sanitizes raw params and writes milestone summary
       "INSERT OR REPLACE INTO tasks (milestone_id, slice_id, id, title, status) VALUES (?, ?, ?, ?, ?)",
     ).run("M003", "S03", "T03", "Task T03", "complete");
     insertAssessment({
-      path: join(".gsd", "milestones", "M003", "M003-VALIDATION.md"),
+      path: join(".gsd", "phases", "03-m003", "03-VALIDATION.md"),
       milestoneId: "M003",
       status: "pass",
       scope: "milestone-validation",
@@ -2437,7 +2438,7 @@ test("executeCompleteMilestone returns success for already-complete milestones w
     seedMilestone("M003", "Milestone Three", "complete");
     seedSlice("M003", "S03", "complete");
     writeRoadmap(base, "M003", ["S03"]);
-    const milestoneDir = join(base, ".gsd", "milestones", "M003");
+    const milestoneDir = join(base, ".gsd", "phases", "03-m003");
     mkdirSync(milestoneDir, { recursive: true });
     const summaryPath = join(milestoneDir, "M003-SUMMARY.md");
     writeFileSync(summaryPath, "# Existing Summary\n");
@@ -2475,7 +2476,7 @@ test("executeCompleteMilestone recovers a managed summary projection failure", a
     "INSERT OR REPLACE INTO tasks (milestone_id, slice_id, id, title, status) VALUES (?, ?, ?, ?, ?)",
   ).run("M003", "S03", "T03", "Task T03", "complete");
   insertAssessment({
-    path: join(".gsd", "milestones", "M003", "M003-VALIDATION.md"),
+    path: join(".gsd", "phases", "03-m003", "03-VALIDATION.md"),
     milestoneId: "M003",
     status: "pass",
     scope: "milestone-validation",
@@ -2519,7 +2520,7 @@ test("executeCompleteMilestone surfaces stale readable status while a managed su
     "INSERT OR REPLACE INTO tasks (milestone_id, slice_id, id, title, status) VALUES (?, ?, ?, ?, ?)",
   ).run("M003", "S03", "T03", "Task T03", "complete");
   insertAssessment({
-    path: join(".gsd", "milestones", "M003", "M003-VALIDATION.md"),
+    path: join(".gsd", "phases", "03-m003", "03-VALIDATION.md"),
     milestoneId: "M003",
     status: "pass",
     scope: "milestone-validation",
@@ -3047,9 +3048,9 @@ test("executeSummarySave removes sibling CONTEXT-DRAFT when writing milestone CO
     openTestDb(base);
     markDepthVerified("M001", base);
 
-    const milestoneDir = join(base, ".gsd", "milestones", "M001");
+    const milestoneDir = join(base, ".gsd", "phases", "01-m001");
     mkdirSync(milestoneDir, { recursive: true });
-    const draftPath = join(milestoneDir, "M001-CONTEXT-DRAFT.md");
+    const draftPath = join(milestoneDir, "01-CONTEXT-DRAFT.md");
     writeFileSync(draftPath, "# Draft\n\nincremental notes");
     assert.ok(existsSync(draftPath), "precondition: draft exists");
 
@@ -3062,7 +3063,7 @@ test("executeSummarySave removes sibling CONTEXT-DRAFT when writing milestone CO
     assert.equal(result.details.operation, "save_summary");
     assert.equal(result.details.artifact_type, "CONTEXT");
 
-    const contextPath = join(milestoneDir, "M001-CONTEXT.md");
+    const contextPath = join(milestoneDir, "01-CONTEXT.md");
     assert.ok(existsSync(contextPath), "CONTEXT.md should be written");
     assert.equal(
       existsSync(draftPath),
@@ -3503,9 +3504,9 @@ test("executeSummarySave removes sibling CONTEXT-DRAFT when writing slice CONTEX
   try {
     openTestDb(base);
 
-    const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+    const sliceDir = join(base, ".gsd", "phases", "01-m001");
     mkdirSync(sliceDir, { recursive: true });
-    const draftPath = join(sliceDir, "S01-CONTEXT-DRAFT.md");
+    const draftPath = join(sliceDir, "01-01-CONTEXT-DRAFT.md");
     writeFileSync(draftPath, "# Slice Draft\n\nincremental slice notes");
     assert.ok(existsSync(draftPath), "precondition: slice draft exists");
 
@@ -3519,7 +3520,7 @@ test("executeSummarySave removes sibling CONTEXT-DRAFT when writing slice CONTEX
     assert.equal(result.details.operation, "save_summary");
     assert.equal(result.details.artifact_type, "CONTEXT");
 
-    const contextPath = join(sliceDir, "S01-CONTEXT.md");
+    const contextPath = join(sliceDir, "01-01-CONTEXT.md");
     assert.ok(existsSync(contextPath), "slice CONTEXT.md should be written");
     assert.equal(
       existsSync(draftPath),
@@ -3537,7 +3538,7 @@ test("executeSummarySave leaves sibling CONTEXT-DRAFT intact for non-CONTEXT art
   try {
     openTestDb(base);
 
-    const milestoneDir = join(base, ".gsd", "milestones", "M001");
+    const milestoneDir = join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Foundation"));
     mkdirSync(milestoneDir, { recursive: true });
     const draftPath = join(milestoneDir, "M001-CONTEXT-DRAFT.md");
     writeFileSync(draftPath, "# Draft\n\nstill in progress");

@@ -27,6 +27,7 @@ import {
   buildExecuteTaskPrompt,
   buildCompleteSlicePrompt,
 } from "../auto-prompts.ts";
+import { canonicalPhaseDirName, milestoneIdToPhaseNum } from "../layout-policy.ts";
 
 const MID = "M001";
 const SID = "S01";
@@ -40,12 +41,12 @@ describe("guided-flow → auto-prompts consolidation (#5183)", () => {
 
   beforeEach(() => {
     base = mkdtempSync(join(tmpdir(), "gsd-prompt-consolidation-"));
-    const sliceDir = join(base, ".gsd", "milestones", MID, "slices", SID);
+    const sliceDir = join(base, ".gsd", "phases", canonicalPhaseDirName(MID));
     const tasksDir = join(sliceDir, "tasks");
     mkdirSync(tasksDir, { recursive: true });
 
     writeFileSync(
-      join(base, ".gsd", "milestones", MID, `${MID}-ROADMAP.md`),
+      join(base, ".gsd", "phases", canonicalPhaseDirName(MID), `${String(milestoneIdToPhaseNum(MID)).padStart(2, "0")}-ROADMAP.md`),
       "# Roadmap\n- [ ] **S01: Test slice**\n",
     );
     writeFileSync(

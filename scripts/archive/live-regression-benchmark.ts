@@ -28,8 +28,11 @@
  */
 import { execFileSync, spawnSync } from "child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
-import { join } from "path";
+import { dirname, join, resolve } from "path";
 import { tmpdir } from "os";
+import { fileURLToPath, pathToFileURL } from "url";
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const binary = process.env.GSD_SMOKE_BINARY;
 if (!binary) {
@@ -90,6 +93,48 @@ function buildMinimalPlan(tasks: Array<{ id: string; title: string; done: boolea
   return lines.join("\n");
 }
 
+/**
+ * Load the seeded markdown into the project database.
+ *
+ * This used to shell out to `gsd headless recover`, the operator-facing
+ * markdown→DB import. That command and the kernel behind it are gone: the
+ * database is the sole authority and no production path adopts markdown. What
+ * survives for exactly this purpose is md-importer's `migrateFromMarkdown`,
+ * the explicitly test-only scaffolding importer.
+ *
+ * Runs in a child process so the benchmark never holds a SQLite handle on the
+ * project the measured `gsd headless` run is about to open.
+ */
+function seedDatabaseFromMarkdown(dir: string): void {
+  const moduleUrl = (name: string) =>
+    JSON.stringify(pathToFileURL(join(REPO_ROOT, "dist", "resources", "extensions", "gsd", name)).href);
+  const script = [
+    `const { migrateFromMarkdown } = await import(${moduleUrl("md-importer.js")});`,
+    `const { closeDatabase } = await import(${moduleUrl("gsd-db.js")});`,
+    "const counts = migrateFromMarkdown(process.argv[1]);",
+    "closeDatabase();",
+    "process.stdout.write(JSON.stringify(counts));",
+  ].join("\n");
+
+  let raw: string;
+  try {
+    raw = execFileSync(process.execPath, ["--input-type=module", "-e", script, dir], {
+      cwd: dir,
+      encoding: "utf-8",
+      timeout: 60_000,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (err) {
+    const detail = (err as { stderr?: string })?.stderr ?? String(err);
+    throw new Error(`benchmark seed import failed:\n${detail.slice(0, 400)}`);
+  }
+
+  const counts = JSON.parse(raw) as { hierarchy: { milestones: number; slices: number; tasks: number } };
+  if (counts.hierarchy.milestones < 1 || counts.hierarchy.slices < 1 || counts.hierarchy.tasks < 1) {
+    throw new Error(`benchmark seed imported an empty hierarchy: ${raw}`);
+  }
+}
+
 function seedProject(name: string): string {
   const dir = mkdtempSync(join(tmpdir(), `gsd-bench-${name}-`));
   gitInit(dir);
@@ -104,10 +149,11 @@ function seedProject(name: string): string {
     join(mDir, "slices", "S01", "S01-PLAN.md"),
     buildMinimalPlan([{ id: "T01", title: "Task One", done: false }]),
   );
-  const recover = gsd(["headless", "recover"], dir);
-  if (recover.code !== 0) {
+  try {
+    seedDatabaseFromMarkdown(dir);
+  } catch (err) {
     rmSync(dir, { recursive: true, force: true });
-    throw new Error(`benchmark seed recover failed (exit ${recover.code}): ${recover.stderr.slice(0, 200)}`);
+    throw err;
   }
   return dir;
 }

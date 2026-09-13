@@ -21,6 +21,7 @@ import {
   checkAutoStartAfterDiscuss,
 } from "../guided-flow.ts";
 import { closeDatabase, openDatabase } from "../gsd-db.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 function pendingInput(basePath: string, milestoneId: string) {
   return {
@@ -115,9 +116,9 @@ test("checkAutoStartAfterDiscuss ignores missing manifest for single-milestone d
   try {
     openDatabase(":memory:");
     const gsdDir = join(base, ".gsd");
-    const milestoneDir = join(gsdDir, "milestones", "M001");
+    const milestoneDir = join(gsdDir, "phases", "01-m001");
     mkdirSync(milestoneDir, { recursive: true });
-    mkdirSync(join(gsdDir, "milestones", "M002"), { recursive: true });
+    mkdirSync(join(gsdDir, "phases", "02-m002"), { recursive: true });
     writeFileSync(
       join(gsdDir, "PROJECT.md"),
       `# Project\n\n| M001 | First milestone | active |\n| M002 | Second milestone | queued |\n`,
@@ -148,7 +149,7 @@ test("checkAutoStartAfterDiscuss(basePath) selects the matching pending entry wh
 
   function writeReadyArtifacts(base: string, milestoneId: string): void {
     const gsdDir = join(base, ".gsd");
-    const milestoneDir = join(gsdDir, "milestones", milestoneId);
+    const milestoneDir = join(gsdDir, "phases", canonicalPhaseDirName(milestoneId));
     mkdirSync(milestoneDir, { recursive: true });
     writeFileSync(join(gsdDir, "PROJECT.md"), `# Project\n\n| ${milestoneId} | Milestone | active |\n`);
     writeFileSync(join(gsdDir, "STATE.md"), "# State\n");
@@ -192,7 +193,7 @@ test("checkAutoStartAfterDiscuss can accept context handoff without scheduling a
   try {
     openDatabase(":memory:");
     const gsdDir = join(base, ".gsd");
-    const milestoneDir = join(gsdDir, "milestones", "M001");
+    const milestoneDir = join(gsdDir, "phases", "01-m001");
     mkdirSync(milestoneDir, { recursive: true });
     writeFileSync(join(gsdDir, "PROJECT.md"), "# Project\n\n| M001 | First milestone | active |\n");
     writeFileSync(join(gsdDir, "STATE.md"), "# State\n");

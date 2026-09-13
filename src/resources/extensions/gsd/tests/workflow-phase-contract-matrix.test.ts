@@ -232,6 +232,35 @@ for (const [unitType, descriptor] of unitTypesWithContracts()) {
   }
 }
 
+// Regression coverage: a tool absent from a unit's allowedGsdTools AND
+// forbiddenGsdTools must stay unblocked. SCOPED_GSD_LIFECYCLE_TOOLS gates
+// membership before shouldBlockAutoUnitToolCall consults the unit's tools
+// policy, so over-widening that Set hard-blocks the tool across every unit
+// type, not just the one under test here.
+const UNBLOCKED_WHEN_ABSENT_FROM_CONTRACT: ReadonlyArray<{ unitType: string; toolName: string }> = [
+  { unitType: "plan-slice", toolName: "gsd_memory_query" },
+  { unitType: "plan-slice", toolName: "gsd_project_snapshot" },
+  { unitType: "execute-task", toolName: "gsd_checkpoint_db" },
+];
+
+for (const { unitType, toolName } of UNBLOCKED_WHEN_ABSENT_FROM_CONTRACT) {
+  test(`${unitType}: ${toolName} stays unblocked when absent from both allowed and forbidden lists`, () => {
+    const contract = UNIT_TOOL_CONTRACTS[unitType];
+    assert.ok(contract, `${unitType} must have a tool contract`);
+    assert.ok(
+      !contract.allowedGsdTools.map(String).includes(toolName),
+      `${unitType}: ${toolName} must not be in allowedGsdTools for this regression check to be meaningful`,
+    );
+    assert.ok(
+      !(contract.forbiddenGsdTools && toolName in contract.forbiddenGsdTools),
+      `${unitType}: ${toolName} must not be forbidden for this regression check to be meaningful`,
+    );
+
+    const block = shouldBlockAutoUnitToolCall(unitType, toolName);
+    assert.equal(block.block, false, `${unitType} must not block ${toolName}: ${block.reason ?? ""}`);
+  });
+}
+
 // ─── Workflow tool contract × transports ───────────────────────────────────
 
 test("every canonical workflow contract tool is on the compiled MCP surface list", () => {

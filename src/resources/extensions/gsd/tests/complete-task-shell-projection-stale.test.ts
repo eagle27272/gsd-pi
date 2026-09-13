@@ -35,7 +35,7 @@ const PARAMS = {
 
 test("complete-task reports shell projection staleness and same-task repair clears it", async (t) => {
   const basePath = join(tmpdir(), `gsd-complete-task-shell-stale-${process.pid}-${Date.now()}`);
-  const sliceDir = join(basePath, ".gsd", "milestones", "M001", "slices", "S01");
+  const sliceDir = join(basePath, ".gsd", "phases", "01-m001");
   const roadmapPath = join(basePath, ".gsd", "ROADMAP.md");
 
   t.after(() => {

@@ -26,6 +26,7 @@ import {
   handleCompleteMilestone,
   type CompleteMilestoneParams,
 } from '../tools/complete-milestone.ts';
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 const { assertEq, assertTrue, assertMatch, report } = createTestContext();
 
@@ -78,7 +79,7 @@ function countCompleteMilestoneEvents(basePath: string): number {
 /** Temp project with the M001 milestone directory present for projections. */
 function createTempProject(): { basePath: string; milestoneDir: string } {
   const basePath = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-milestone-handler-'));
-  const milestoneDir = path.join(basePath, '.gsd', 'milestones', 'M001');
+  const milestoneDir = path.join(basePath, '.gsd', 'phases', canonicalPhaseDirName("M001", "Test Milestone"));
   fs.mkdirSync(path.join(milestoneDir, 'slices', 'S01', 'tasks'), { recursive: true });
   return { basePath, milestoneDir };
 }
@@ -109,7 +110,7 @@ function seedCompletedMilestone(opts: {
 
   if (opts.validationVerdict !== null && opts.validationVerdict !== undefined) {
     insertAssessment({
-      path: path.join(opts.basePath, '.gsd', 'milestones', 'M001', 'M001-VALIDATION.md'),
+      path: path.join(opts.basePath, '.gsd', 'phases', canonicalPhaseDirName("M001", "Test Milestone"), '01-VALIDATION.md'),
       milestoneId: 'M001',
       sliceId: null,
       taskId: null,
@@ -155,7 +156,7 @@ console.log('\n=== complete-milestone: handler happy path ===');
   assertTrue(!('error' in result), 'handler should succeed on a fully-complete, validated milestone');
   if (!('error' in result)) {
     assertEq(result.milestoneId, 'M001', 'result milestoneId');
-    assertTrue(result.summaryPath.endsWith('M001-SUMMARY.md'), 'summaryPath should end with M001-SUMMARY.md');
+    assertTrue(result.summaryPath.endsWith('01-SUMMARY.md'), 'summaryPath should end with M001-SUMMARY.md');
     assertTrue(result.alreadyComplete !== true, 'first completion should not be flagged alreadyComplete');
 
     // (a) DB status flipped to complete with completed_at set.
@@ -402,7 +403,7 @@ console.log('\n=== complete-milestone: existing SUMMARY.md preserved (#4598) ===
   seedCompletedMilestone({ basePath, validationVerdict: 'pass' });
 
   // Pre-write a richer SUMMARY.md as if a prior completion run produced it.
-  const summaryPath = path.join(milestoneDir, 'M001-SUMMARY.md');
+  const summaryPath = path.join(milestoneDir, '01-SUMMARY.md');
   const sentinel = '# M001: Pre-existing richer summary\n\nDO NOT OVERWRITE ME\n';
   fs.writeFileSync(summaryPath, sentinel, 'utf-8');
 

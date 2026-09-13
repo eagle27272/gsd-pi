@@ -458,15 +458,6 @@ async function runHeadlessOnce(options: HeadlessOptions, restartCount: number): 
     process.exit(result.exitCode)
   }
 
-  // Recover: apply a verified legacy import and assess or execute its recovery
-  // action, with no RPC child needed. This is the one mutating headless
-  // subcommand, for CI and automation without an interactive TTY-bound runtime.
-  if (options.command === 'recover') {
-    const { handleRecover } = await import('./headless-recover.js')
-    const result = await handleRecover(process.cwd(), options.commandArgs)
-    process.exit(result.exitCode)
-  }
-
   // Doctor: read-only health check, no RPC child needed (#4904 live-regression).
   // The interactive `/gsd doctor` command lives in the GSD extension; this CLI
   // path lets non-interactive callers (CI, recovery scripts, the live-regression
