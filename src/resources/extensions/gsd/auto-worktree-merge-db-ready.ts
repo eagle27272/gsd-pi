@@ -24,7 +24,7 @@ import {
 } from "./milestone-closeout-proof.js";
 import { resolveGsdPathContract } from "./paths.js";
 import { _shouldReconcileWorktreeDb } from "./auto-worktree-cleanup.js";
-import { logError } from "./workflow-logger.js";
+import { logError, logWarning } from "./workflow-logger.js";
 
 export interface MilestoneDbReadyRequest {
   milestoneId: string;
@@ -38,6 +38,7 @@ interface MergeDbReadyDeps {
   getWorkflowDatabasePath: typeof getWorkflowDatabasePath;
   isDbAvailable: typeof isDbAvailable;
   logError: typeof logError;
+  logWarning: typeof logWarning;
   openWorkflowDatabasePath: typeof openWorkflowDatabasePath;
   proveMilestoneCloseout: typeof proveMilestoneCloseout;
   readMilestoneMergeObservation: typeof readMilestoneMergeObservation;
@@ -52,6 +53,7 @@ const defaultDeps: MergeDbReadyDeps = {
   getWorkflowDatabasePath,
   isDbAvailable,
   logError,
+  logWarning,
   openWorkflowDatabasePath,
   proveMilestoneCloseout,
   readMilestoneMergeObservation,
@@ -91,7 +93,14 @@ function reconcileWorktreeDatabase(request: MilestoneDbReadyRequest): void {
       }
     }
     if (deps.shouldReconcileWorktreeDb(worktreeDbPath, mainDbPath)) {
-      deps.reconcileWorktreeDb(mainDbPath, worktreeDbPath);
+      const { conflicts } = deps.reconcileWorktreeDb(mainDbPath, worktreeDbPath);
+      if (conflicts.length > 0) {
+        deps.logWarning(
+          "worktree",
+          `Milestone ${milestoneId} DB reconciliation resolved ${conflicts.length} ` +
+            `conflict(s) with the worktree-wins policy: ${conflicts.join("; ")}`,
+        );
+      }
     }
   } catch (err) {
     const message = `DB reconciliation failed before milestone ${milestoneId} merge: ${err instanceof Error ? err.message : String(err)}`;
