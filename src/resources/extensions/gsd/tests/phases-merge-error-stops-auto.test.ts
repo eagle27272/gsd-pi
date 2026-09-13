@@ -35,7 +35,7 @@ const ic = {
     resourceVersionOnStart: "test",
     currentMilestoneId: "M001",
     currentUnit: null,
-    milestoneMergedInPhases: false,
+    milestoneMergedInPhasesFor: null,
   },
   prefs: undefined,
   iteration: 1,
