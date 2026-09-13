@@ -5,7 +5,6 @@ import { isDbAvailable, getMilestoneSlices, getSliceTasks } from "./gsd-db.js";
 import {
   resolveMilestoneFile,
   resolveSliceFile,
-  resolveSlicePath,
   resolveTaskFile,
   resolveTasksDir,
 } from "./paths.js";

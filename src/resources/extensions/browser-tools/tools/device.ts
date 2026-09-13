@@ -53,8 +53,6 @@ export function registerDeviceTools(pi: ExtensionAPI, deps: ToolDeps): void {
 						// Pick the shortest match (most specific)
 						containsMatches.sort((a, b) => a.length - b.length);
 						exactMatch = containsMatches[0];
-						const suggestions = containsMatches.slice(0, 5).join(", ");
-						// Continue with best match but mention alternatives
 					} else {
 						// No match at all — suggest closest
 						const suggestions = allDeviceNames

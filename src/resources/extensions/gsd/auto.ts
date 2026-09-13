@@ -47,7 +47,6 @@ import {
   gsdRoot,
   resolveMilestoneFile,
   resolveSliceFile,
-  resolveSlicePath,
   resolveMilestonePath,
   resolveTasksDir,
   resolveTaskFile,

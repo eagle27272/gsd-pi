@@ -42,7 +42,6 @@ import {
   resolveMilestoneFile,
   resolveMilestonePath,
   resolveSliceFile,
-  resolveSlicePath,
   resolveTaskFile,
   relTaskFile,
   relSliceFile,
