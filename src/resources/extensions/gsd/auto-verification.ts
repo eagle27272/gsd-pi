@@ -16,7 +16,7 @@
 import type { ExtensionContext, ExtensionAPI } from "@gsd/pi-coding-agent";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { gsdProjectionRoot, resolveMilestonePath, resolveSliceFile } from "./paths.js";
-import { milestoneIdToPhaseNum } from "./layout-policy.js";
+import { hasRoadmapReassessmentArtifact } from "./auto-artifact-paths.js";
 import { resolveMilestoneValidationVerdict } from "./milestone-validation-verdict.js";
 import { isMilestoneLifecycleAdopted } from "./db/milestone-closeout-readiness.js";
 import { hasPendingMilestoneSubjectiveUat } from "./milestone-subjective-uat-domain-operation.js";
@@ -498,27 +498,6 @@ function unitActivityMentionsTool(basePath: string, unitType: string, unitId: st
     return false;
   }
   return false;
-}
-
-/**
- * True when any slice in the milestone's phase carries an ASSESSMENT artifact.
- *
- * Flat-phase names slice assessments `NN-MM-ASSESSMENT.md` inside
- * `phases/NN-slug/`. The phase-level `NN-ASSESSMENT.md` is a different artifact
- * and is deliberately not counted as reassessment evidence.
- */
-function hasRoadmapReassessmentArtifact(basePath: string, milestoneId: string): boolean {
-  const phaseDir = resolveMilestonePath(basePath, milestoneId);
-  if (!phaseDir) return false;
-
-  const phaseNum = String(milestoneIdToPhaseNum(milestoneId)).padStart(2, "0");
-  const sliceAssessment = new RegExp(`^${phaseNum}-.+-ASSESSMENT\\.md$`, "i");
-  try {
-    return readdirSync(phaseDir, { withFileTypes: true })
-      .some((entry) => entry.isFile() && sliceAssessment.test(entry.name));
-  } catch {
-    return false;
-  }
 }
 
 export const _hasRoadmapReassessmentArtifactForTest = hasRoadmapReassessmentArtifact;
