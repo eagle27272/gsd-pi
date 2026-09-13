@@ -1,5 +1,5 @@
 merge_queue:
-  max_parallel_checks: 2
+  max_parallel_checks: 4
 merge_protections_settings:
   auto_merge_conditions: true
 queue_rules:
