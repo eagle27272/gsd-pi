@@ -11,7 +11,6 @@ import {
 	type ImageDimensions,
 	imageFallback,
 	Spacer,
-	style,
 	Text,
 	type TUI,
 	truncateToWidth,
