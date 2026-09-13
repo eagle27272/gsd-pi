@@ -23,7 +23,7 @@ test("blocked remediation warning uses /gsd dispatch reassess and hides internal
       resourceVersionOnStart: "test",
       currentMilestoneId: null,
       currentUnit: null,
-      milestoneMergedInPhases: false,
+      milestoneMergedInPhasesFor: null,
     },
     prefs: undefined,
     iteration: 1,
