@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { join, basename } from "node:path";
 import { existsSync, cpSync, readFileSync } from "node:fs";
-import type { AutoSession } from "./session.js";
+import { hasMergedMilestoneInPhases, type AutoSession } from "./session.js";
 import type { LoopDeps } from "./loop-deps.js";
 import type { GSDState } from "../types.js";
 import type { IterationContext } from "./types.js";
@@ -123,12 +123,12 @@ export async function _runMilestoneMergeWithStashRestore(
   );
 
   if (mergeResult.ok) {
-    await markMilestoneMergedAndRebuild(s, projectRoot, ignoredProjectionSnapshot);
+    await markMilestoneMergedAndRebuild(s, milestoneId, projectRoot, ignoredProjectionSnapshot);
     return null;
   }
 
   if (mergeResult.reason === "postflight-stash-restore-failed") {
-    await markMilestoneMergedAndRebuild(s, projectRoot, ignoredProjectionSnapshot);
+    await markMilestoneMergedAndRebuild(s, milestoneId, projectRoot, ignoredProjectionSnapshot);
   }
 
   if (mergeResult.reason === "preflight-dirty-overlap" || mergeResult.reason === "preflight-unmerged-conflicts") {
@@ -151,7 +151,7 @@ export async function _runMilestoneMergeWithStashRestore(
       // A merge conflict is a recoverable human checkpoint, not an
       // infrastructure failure — the user resolves the conflict and runs
       // `/gsd auto` to resume. Pause (don't stop): stopAuto tears down the
-      // session and, because `milestoneMergedInPhases` stays false here,
+      // session and, because `milestoneMergedInPhasesFor` stays unset here,
       // re-runs the already-failed worktree merge in its cleanup step
       // (#2645), then drops the user out of the interactive TUI onto a
       // "stopped" surface.
@@ -194,10 +194,11 @@ type GsdMarkdownSnapshot = Map<string, string>;
 
 async function markMilestoneMergedAndRebuild(
   s: AutoSession,
+  milestoneId: string,
   rebuildBasePath: string,
   ignoredProjectionSnapshot: GsdMarkdownSnapshot | null,
 ): Promise<void> {
-  s.milestoneMergedInPhases = true;
+  s.milestoneMergedInPhasesFor = milestoneId;
   if (hasDirtyGsdMarkdownProjections(rebuildBasePath, ignoredProjectionSnapshot)) {
     logWarning(
       "engine",
@@ -306,7 +307,7 @@ export async function _runMilestoneMergeOnceWithStashRestore(
   milestoneId: string,
   options: { preserveCloseoutTranscript?: boolean } = {},
 ): Promise<{ action: "break"; reason: string } | null> {
-  if (ic.s.milestoneMergedInPhases) {
+  if (hasMergedMilestoneInPhases(ic.s, milestoneId)) {
     debugLog("autoLoop", {
       phase: "milestone-merge-skip",
       reason: "already-merged-in-phases",

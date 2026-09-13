@@ -14,7 +14,7 @@ import type { ExtensionAPI, ExtensionContext } from "@gsd/pi-coding-agent";
 
 import type { AutoAdvanceResult, AutoOrchestrationModule, AutoSessionContext, AutoStatus, AutoTerminalOutcome, UnitRef, WedgeRecheckResult, WedgeRecheckTarget } from "./contracts.js";
 import { UNIT_ALREADY_ACTIVE_SKIP_CODE, UNIT_ALREADY_ACTIVE_SKIP_REASON } from "./contracts.js";
-import type { AutoSession, PendingOrchestrationDispatch } from "./session.js";
+import { hasMergedMilestoneInPhases, type AutoSession, type PendingOrchestrationDispatch } from "./session.js";
 import type { GSDState, Phase } from "../types.js";
 import type { MinimalModelRegistry } from "../context-budget.js";
 
@@ -706,12 +706,13 @@ export class AutoOrchestrator implements AutoOrchestrationModule {
   }
 
   private evaluateNoRemainingUnitsSettlement(stateSnapshot: GSDState): BlockedAdvanceResult | null {
+    const milestoneId = this.s.currentMilestoneId ?? stateSnapshot.activeMilestone?.id;
     const settlement = evaluateAllCompleteSettlement({
-      milestoneId: this.s.currentMilestoneId ?? stateSnapshot.activeMilestone?.id,
+      milestoneId,
       statePhase: stateSnapshot.phase,
       basePath: this.s.basePath || this.getLiveDispatchBasePath(),
       originalBasePath: this.s.originalBasePath || this.runtimeBasePath,
-      milestoneMerged: this.s.milestoneMergedInPhases,
+      milestoneMerged: hasMergedMilestoneInPhases(this.s, milestoneId),
     });
     this.s.milestoneSettlement = settlement;
     if (settlement.ok) return null;
@@ -746,7 +747,7 @@ export class AutoOrchestrator implements AutoOrchestrationModule {
       };
     }
 
-    this.s.milestoneMergedInPhases = true;
+    this.s.milestoneMergedInPhasesFor = milestoneId;
     this.s.milestoneSettlement = { ok: true, reason: "settled" };
     try {
       const projectRoot = this.s.originalBasePath || this.s.canonicalProjectRoot || this.runtimeBasePath;
