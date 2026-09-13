@@ -3,7 +3,6 @@
 // Verifies that identical consecutive tool calls are detected and blocked
 // after exceeding the threshold, and that the guard resets properly.
 
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   checkToolCallLoop,

@@ -6,7 +6,6 @@
 // had zero callers in production code — wiring it through
 // reconcileBeforeDispatch closes that gap.
 
-import { join } from "node:path";
 
 import {
   detectStaleRenders,

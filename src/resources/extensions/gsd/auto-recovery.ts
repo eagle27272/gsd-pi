@@ -10,7 +10,6 @@
  */
 
 import { parseUnitId } from "./unit-id.js";
-import { MILESTONE_ID_RE } from "./milestone-ids.js";
 import { clearParseCache } from "./files.js";
 import {
   isDbAvailable,
@@ -24,7 +23,6 @@ import { refreshWorkflowDatabaseFromDisk } from "./db-workspace.js";
 import { invalidateStateCache } from "./state.js";
 import { getErrorMessage } from "./error-utils.js";
 import { logWarning } from "./workflow-logger.js";
-import { readIntegrationBranch } from "./git-service.js";
 import { isClosedStatus } from "./status-guards.js";
 import {
   resolveSlicePath,
@@ -37,23 +35,13 @@ import {
   existsSync,
   mkdirSync,
 } from "node:fs";
-import { execFileSync } from "node:child_process";
 
-import { LAYOUT_SEGMENTS } from "./layout-policy.js";
 import { dirname, relative } from "node:path";
 import {
   resolveExpectedArtifactPath,
   diagnoseExpectedArtifact,
 } from "./auto-artifact-paths.js";
-import { classifyMilestoneSummaryContent } from "./milestone-summary-classifier.js";
-import { hasVerdict } from "./verdict-parser.js";
-import { validateArtifact } from "./schemas/validate.js";
-import { getProjectResearchStatus } from "./project-research-policy.js";
-import { isGsdWorktreePath } from "./worktree-root.js";
 import { atomicWriteSync } from "./atomic-write.js";
-import { resolveCanonicalMilestoneRoot } from "./worktree-manager.js";
-import { resolveWorktreeProjectRoot } from "./worktree-root.js";
-import { hasImplementationArtifacts } from "./milestone-implementation-evidence.js";
 import {
   readExecuteTaskArtifactReadiness,
   readTerminalTaskRecoveryAbort,

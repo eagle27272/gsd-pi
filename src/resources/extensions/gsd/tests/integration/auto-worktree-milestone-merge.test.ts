@@ -26,7 +26,6 @@ import {
 } from "../../auto-worktree-merge.ts";
 import { getAutoWorktreeOriginalBase } from "../../auto-worktree-session-registry.ts";
 import { getSliceBranchName } from "../../worktree.ts";
-import { nativeMergeSquash } from "../../native-git-bridge.ts";
 import { drainLogs, setStderrLoggingEnabled } from "../../workflow-logger.ts";
 import {
   closeDatabase,

@@ -19,7 +19,6 @@ import {
   formatCompletePhaseNextAction,
 } from "../requirements-backlog.js";
 import { isDbAvailable, getMilestoneSlices } from "../gsd-db.js";
-import { getIsolationMode } from "../preferences.js";
 import { gsdRoot } from "../paths.js";
 import { atomicWriteSync } from "../atomic-write.js";
 import { logWarning } from "../workflow-logger.js";

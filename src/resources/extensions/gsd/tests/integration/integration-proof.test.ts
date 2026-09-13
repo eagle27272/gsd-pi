@@ -57,7 +57,6 @@ import { internalExecutionInvocation } from "../../execution-invocation.ts";
 import {
   detectStaleRenders,
 } from "../../markdown-renderer.ts";
-import { repairStaleRenders } from "../../state-reconciliation/drift/stale-render.ts";
 
 // ── State derivation ──────────────────────────────────────────────────────
 import {

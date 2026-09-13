@@ -10,7 +10,6 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { parse } from "yaml";
 
 import { CustomWorkflowEngine } from "../custom-workflow-engine.ts";
 import { CustomExecutionPolicy } from "../custom-execution-policy.ts";

@@ -25,7 +25,6 @@ import { isDbAvailable, getMilestoneSlices, getSliceTasks } from "./gsd-db.js";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { truncateToWidth, visibleWidth } from "@gsd/pi-tui";
-import { makeUI } from "../shared/tui.js";
 import { padRightVisible, renderPlainOutcome, wrapVisibleText } from "./tui/render-kit.js";
 import { computeProgressScore } from "./progress-score.js";
 import {
@@ -38,7 +37,6 @@ import {
   type RtkSessionSavings,
 } from "../shared/rtk-session-stats.js";
 import { logWarning } from "./workflow-logger.js";
-import { formattedShortcutPair } from "./shortcut-defs.js";
 import { readUnitRuntimeRecord, type AutoUnitRuntimeRecord } from "./unit-runtime.js";
 import { describeMilestoneReadinessPhase } from "./milestone-readiness.js";
 import type { ToolSurfaceSnapshot } from "./tool-surface-snapshot.js";

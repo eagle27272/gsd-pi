@@ -25,7 +25,6 @@ beforeEach(() => {
   _resetEmpiricalCacheForTest();
 });
 
-import type { TokenProvider } from "../token-counter.js";
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 

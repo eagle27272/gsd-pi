@@ -21,10 +21,8 @@ import {
 } from "../auto-recovery.js";
 import { writeUnitRuntimeRecord } from "../unit-runtime.js";
 import { isDbAvailable, getTask } from "../gsd-db.js";
-import { getLatestForUnit } from "../db/unit-dispatches.js";
 import { markWorkerStopping } from "../db/auto-workers.js";
 import { releaseMilestoneLease } from "../db/milestone-leases.js";
-import type { MinimalModelRegistry } from "../context-budget.js";
 import { parseUnitId } from "../unit-id.js";
 import { createCheckpoint, cleanupCheckpoint, rollbackToCheckpoint } from "../safety/git-checkpoint.js";
 import { resolveSafetyHarnessConfig } from "../safety/safety-harness.js";

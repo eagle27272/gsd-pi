@@ -14,7 +14,6 @@ import { execSync } from "node:child_process";
 
 import { createAutoWorktree } from "../../auto-worktree-creation.ts";
 import { mergeMilestoneToMain } from "../../auto-worktree-merge.ts";
-import { nativeMergeSquash } from "../../native-git-bridge.ts";
 import { seedMergeReadyMilestone } from "../merge-ready-fixture.ts";
 
 function run(cmd: string, cwd: string): string {

@@ -19,7 +19,6 @@ import { isDbAvailable, getMilestone } from "../gsd-db.js";
 import { refreshWorkflowDatabaseFromDisk } from "../db-workspace.js";
 import { isClosedStatus } from "../status-guards.js";
 import { PLANNING_ARTIFACT_SUFFIXES } from "../paths.js";
-import { atomicWriteSync } from "../atomic-write.js";
 import { logWarning, logError } from "../workflow-logger.js";
 import { debugLog } from "../debug-logger.js";
 import { _resolveReportBasePath } from "./phase-helpers.js";

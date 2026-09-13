@@ -101,7 +101,6 @@ import { isClosedStatus } from "../../status-guards.ts";
 import { readEvents } from "../../workflow-events.ts";
 
 // ── Cache invalidation ───────────────────────────────────────────────────
-import { invalidateAllCaches } from "../../cache.ts";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Fixture Helpers

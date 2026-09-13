@@ -4,7 +4,6 @@
 // reconciliation, integration-branch merge, stash/shelter recovery, publication,
 // and safe teardown.
 
-import { atomicWriteSync } from "./atomic-write.js";
 import { debugLog } from "./debug-logger.js";
 import { GSDError, GSD_GIT_ERROR } from "./errors.js";
 import { autoResolveSafeConflictPaths } from "./git-conflict-resolve.js";

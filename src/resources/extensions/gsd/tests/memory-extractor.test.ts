@@ -7,7 +7,6 @@ import {
   applyMemoryActions,
   getActiveMemoriesRanked,
 } from '../memory-store.ts';
-import type { MemoryAction } from '../memory-store.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 

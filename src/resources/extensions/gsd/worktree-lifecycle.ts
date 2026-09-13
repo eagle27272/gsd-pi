@@ -38,7 +38,6 @@ import {
   releaseMilestoneLease,
 } from "./db/milestone-leases.js";
 import { MergeConflictError } from "./git-service.js";
-import type { GitPreferences } from "./git-service.js";
 import {
   getCollapseCadence,
   getMilestoneResquash,

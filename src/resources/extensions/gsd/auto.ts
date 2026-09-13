@@ -101,7 +101,6 @@ import {
   updateToolInvocationError,
 } from "./auto-tool-tracking.js";
 import { closeoutUnit } from "./auto-unit-closeout.js";
-import { recoverTimedOutUnit } from "./auto-timeout-recovery.js";
 import { selectAndApplyModel, resolveModelId, clearToolBaseline, isModelUnavailable, applyThinkingLevelForModel } from "./auto-model-selection.js";
 import { resolveModelWithFallbacksForUnit } from "./preferences-models.js";
 import { resetRoutingHistory, recordOutcome } from "./routing-history.js";
@@ -151,7 +150,6 @@ import {
   setActiveMilestoneId,
 } from "./worktree.js";
 import { GitServiceImpl } from "./git-service.js";
-import { nativeCheckoutBranch } from "./native-git-bridge.js";
 import { getPriorSliceCompletionBlocker } from "./dispatch-guard.js";
 import { autoWorktreeBranch } from "./auto-worktree-branch-lifecycle.js";
 import { createAutoWorktree } from "./auto-worktree-creation.js";
@@ -160,8 +158,6 @@ import { getAutoWorktreePath } from "./auto-worktree-path-resolution.js";
 import { checkResourcesStale } from "./auto-worktree-resource-version.js";
 import { escapeStaleWorktree } from "./auto-worktree-runtime-cleanup.js";
 import { teardownWarmedBrowserDaemons } from "./browser-daemon-auto-prep.js";
-import { getAutoWorktreeOriginalBase } from "./auto-worktree-session-registry.js";
-import { syncWorktreeStateBack } from "./auto-worktree-sync.js";
 import { teardownAutoWorktree } from "./auto-worktree-teardown.js";
 import { pruneQueueOrder } from "./queue-order.js";
 import { createDefaultMilestoneMergeTransaction } from "./milestone-merge-transaction.js";
@@ -247,8 +243,6 @@ import {
   resolvePausedAutoWorktreePath,
 } from "./auto-worktree-repair.js";
 // Slice-level parallelism (#2340)
-import { getEligibleSlices } from "./slice-parallel-eligibility.js";
-import { startSliceParallel } from "./slice-parallel-orchestrator.js";
 import {
   WorktreeLifecycle,
   type WorktreeLifecycleDeps,

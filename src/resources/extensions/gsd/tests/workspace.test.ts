@@ -13,7 +13,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createWorkspace, scopeMilestone } from "../workspace.ts";
-import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

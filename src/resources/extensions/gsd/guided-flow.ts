@@ -59,7 +59,6 @@ import { resolveUokFlags } from "./uok/flags.js";
 import { ensurePlanV2Graph, isMissingFinalizedContextResult } from "./uok/plan-v2.js";
 import { detectProjectState, hasGsdBootstrapArtifacts } from "./detection.js";
 import { assertNoLegacyLayout } from "./legacy-layout-guard.js";
-import { isFutureMilestoneStatus } from "./status-guards.js";
 import { showProjectInit } from "./init-wizard.js";
 import { validateDirectory } from "./validate-directory.js";
 import { showConfirm } from "../shared/tui.js";

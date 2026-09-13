@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 import { handleGSDCommand } from "../commands/dispatcher.ts";
 import { handleDebug } from "../commands-debug.ts";

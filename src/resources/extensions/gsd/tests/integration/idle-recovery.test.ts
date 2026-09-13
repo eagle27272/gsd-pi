@@ -1,7 +1,6 @@
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { execSync } from "node:child_process";
 import {
   resolveExpectedArtifactPath,
   writeBlockerPlaceholder,

@@ -75,7 +75,6 @@ import {
 } from "../../verdict-parser.ts";
 
 // ── Path helpers ─────────────────────────────────────────────────────────
-import { clearPathCache } from "../../paths.ts";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Fixture Helpers

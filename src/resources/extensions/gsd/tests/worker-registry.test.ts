@@ -5,7 +5,6 @@
  * and the hasActiveWorkers() status check.
  */
 
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   registerWorker,

@@ -116,7 +116,6 @@ import {
   isTaskAttemptAwaitingVerification,
   readLatestTaskAttempt,
 } from "./task-execution-domain-operation.js";
-import { recordFailureAndSelectRecovery } from "./task-recovery-domain-operation.js";
 import { isTaskExecutionReadyForHostVerification } from "./auto/task-execution-cutover.js";
 import { recaptureVerifiedSourceAfterDeferredCloseout } from "./auto/verified-source-recapture.js";
 import {

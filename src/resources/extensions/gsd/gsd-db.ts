@@ -22,8 +22,6 @@ import type { Decision, Requirement, GateId, GateScope, GateStatus, GateVerdict 
 import { GSDError, GSD_IO_ERROR, GSD_STALE_STATE } from "./errors.js";
 import { getGateIdsForTurn, type OwnerTurn } from "./gate-registry.js";
 import { logWarning } from "./workflow-logger.js";
-import { type DbAdapter } from "./db-adapter.js";
-import { rowToGate } from "./db-gate-rows.js";
 import { rowToArtifact, type ArtifactRow, type HorizontalChecklistItem } from "./db-milestone-artifact-rows.js";
 import { isClosedStatus, toStatus } from "./status-guards.js";
 

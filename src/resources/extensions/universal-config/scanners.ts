@@ -10,7 +10,6 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, basename } from "node:path";
-import { homedir } from "node:os";
 import type {
   ConfigSource,
   ConfigLevel,

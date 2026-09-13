@@ -1,4 +1,3 @@
-import { join } from "node:path";
 
 import { loadFile } from "./files.js";
 import { isDbAvailable, getMilestoneSlices, getSliceTasks } from "./gsd-db.js";

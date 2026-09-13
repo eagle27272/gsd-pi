@@ -13,7 +13,6 @@ import {
 } from "../unit-runtime.ts";
 import { closeDatabase, insertMilestone, insertSlice, insertTask, openDatabase } from "../gsd-db.ts";
 import { clearPathCache } from '../paths.ts';
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 const base = mkdtempSync(join(tmpdir(), "gsd-unit-runtime-test-"));
