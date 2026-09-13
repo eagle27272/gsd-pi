@@ -28,6 +28,9 @@ function makeRepoWithConflict(): string {
   runGit(["init", "-b", "main"], base);
   runGit(["config", "user.name", "Test User"], base);
   runGit(["config", "user.email", "test@example.com"], base);
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add .` stage nothing and the commits below fail.
+  runGit(["config", "core.excludesFile", "/dev/null"], base);
 
   mkdirSync(join(base, ".gsd"), { recursive: true });
   mkdirSync(join(base, "src"), { recursive: true });
@@ -80,6 +83,9 @@ test("doctor clears conflicts entirely when all unmerged paths are safe", async 
   runGit(["init", "-b", "main"], base);
   runGit(["config", "user.name", "Test User"], base);
   runGit(["config", "user.email", "test@example.com"], base);
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add .` stage nothing and the commits below fail.
+  runGit(["config", "core.excludesFile", "/dev/null"], base);
   mkdirSync(join(base, ".gsd"), { recursive: true });
   writeFileSync(join(base, ".gsd", "STATE.md"), "base\n", "utf-8");
   runGit(["add", "."], base);
@@ -116,6 +122,9 @@ test("doctor --dry-run does not mutate git state when safe conflicts are present
   runGit(["init", "-b", "main"], base);
   runGit(["config", "user.name", "Test User"], base);
   runGit(["config", "user.email", "test@example.com"], base);
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add .` stage nothing and the commits below fail.
+  runGit(["config", "core.excludesFile", "/dev/null"], base);
   mkdirSync(join(base, ".gsd"), { recursive: true });
   writeFileSync(join(base, ".gsd", "STATE.md"), "base\n", "utf-8");
   runGit(["add", "."], base);

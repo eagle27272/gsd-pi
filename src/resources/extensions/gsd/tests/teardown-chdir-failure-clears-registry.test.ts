@@ -55,6 +55,9 @@ function createTempRepo(): string {
   git(["init"], dir);
   git(["config", "user.email", "test@gsd.test"], dir);
   git(["config", "user.name", "Test"], dir);
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add .` stage nothing and the commit below fail.
+  git(["config", "core.excludesFile", "/dev/null"], dir);
   mkdirSync(join(dir, ".gsd"), { recursive: true });
   writeFileSync(join(dir, "README.md"), "# test\n");
   git(["add", "."], dir);

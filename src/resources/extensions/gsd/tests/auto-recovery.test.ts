@@ -178,6 +178,9 @@ function makeCompleteMilestoneRecoveryProject(): string {
   runGit(base, ["init", "-b", "main"]);
   runGit(base, ["config", "user.email", "test@example.com"]);
   runGit(base, ["config", "user.name", "Test User"]);
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add` of .gsd fixtures stage nothing and the commits below fail.
+  runGit(base, ["config", "core.excludesFile", "/dev/null"]);
   writeFileSync(join(base, "README.md"), "# base\n");
   runGit(base, ["add", "README.md"]);
   runGit(base, ["commit", "-m", "init"]);
@@ -729,6 +732,9 @@ test("refreshRecoveryDbForArtifact closes complete-milestone DB row when artifac
   runGit(base, ["init", "-b", "main"]);
   runGit(base, ["config", "user.email", "test@example.com"]);
   runGit(base, ["config", "user.name", "Test User"]);
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add` of .gsd fixtures stage nothing and the commits below fail.
+  runGit(base, ["config", "core.excludesFile", "/dev/null"]);
   runGit(base, ["checkout", "-b", "milestone/M001"]);
   writeFileSync(join(base, "feature.ts"), "export const shipped = true;\n");
   runGit(base, ["add", "feature.ts"]);
@@ -958,6 +964,9 @@ test("refreshRecoveryDbForArtifact fails closed for complete-milestone without i
   runGit(base, ["init", "-b", "main"]);
   runGit(base, ["config", "user.email", "test@example.com"]);
   runGit(base, ["config", "user.name", "Test User"]);
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add` of .gsd fixtures stage nothing and the commits below fail.
+  runGit(base, ["config", "core.excludesFile", "/dev/null"]);
   runGit(base, ["add", ".gsd"]);
   runGit(base, ["commit", "-m", "chore: gsd artifacts only"]);
 
@@ -1477,6 +1486,9 @@ function makeGitBase(): string {
   execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: base, stdio: "ignore" });
   execFileSync("git", ["config", "user.name", "Test"], { cwd: base, stdio: "ignore" });
   execFileSync("git", ["config", "gc.auto", "0"], { cwd: base, stdio: "ignore" });
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add` of .gsd fixtures stage nothing and the commits below fail.
+  execFileSync("git", ["config", "core.excludesFile", "/dev/null"], { cwd: base, stdio: "ignore" });
   // Create initial commit so HEAD exists
   writeFileSync(join(base, ".gitkeep"), "");
   execFileSync("git", ["add", "."], { cwd: base, stdio: "ignore" });

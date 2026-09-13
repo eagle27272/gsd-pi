@@ -45,6 +45,9 @@ function initTempRepo(): string {
   gitRun(["init", "-b", "main"], dir);
   gitRun(["config", "user.name", "Test"], dir);
   gitRun(["config", "user.email", "test@test.com"], dir);
+  // Likewise, a global ignore file listing .gsd would silently make `git add`
+  // of .gsd fixtures stage nothing and the commits below fail.
+  gitRun(["config", "core.excludesFile", "/dev/null"], dir);
   // Disable commit/tag signing so the test is hermetic in environments where
   // the user's global git config enables GPG/SSH signing (e.g. Claude Code
   // sandboxes that proxy signing through an external service).
