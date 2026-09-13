@@ -13,13 +13,12 @@
 
 
 
-import { describe, test, beforeEach, afterEach } from "node:test";
+import { describe, test, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import {
   mkdtempSync,
   mkdirSync,
   writeFileSync,
-  readFileSync,
   rmSync,
   existsSync,
 } from "node:fs";
@@ -42,7 +41,6 @@ import {
   getSliceTasks,
   getMilestoneSlices,
   updateTaskStatus,
-  updateSliceStatus,
   updateMilestoneStatus,
 } from "../../gsd-db.ts";
 

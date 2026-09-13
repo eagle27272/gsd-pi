@@ -10,7 +10,6 @@ import assert from 'node:assert/strict';
 import {
   mkdtempSync,
   mkdirSync,
-  readFileSync,
   writeFileSync,
   existsSync,
   rmSync,

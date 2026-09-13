@@ -10,13 +10,10 @@
  * - Config manifest format: canonical identity preserved
  */
 
-import { describe, it, beforeEach, mock } from 'node:test';
+import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import {
-	PluginImporter,
-	type DiscoveryResult,
-	type ValidationResult,
-	type ImportManifest,
+  PluginImporter,
 } from '../plugin-importer.js';
 import type { NamespacedComponent } from '../namespaced-registry.js';
 import type {

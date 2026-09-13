@@ -25,7 +25,7 @@ import {
   registerCopilotModelsInOverlay,
   resolveGsdModelsCatalogPath,
 } from "../../copilot-overlay-writer.js";
-import { lookupModelCost, resolveModelEconomics, type RuntimeModelEconomics } from "../../model-cost-table.js";
+import { resolveModelEconomics, type RuntimeModelEconomics } from "../../model-cost-table.js";
 import {
   canonicalizeModelId,
   compareCapabilityDominance,

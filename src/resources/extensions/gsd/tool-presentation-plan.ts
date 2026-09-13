@@ -7,7 +7,7 @@ import {
   RUN_UAT_TOOL_PRESENTATION_PLAN_ID,
   RUN_UAT_WORKFLOW_TOOL_NAMES,
 } from "./unit-tool-contracts.js";
-import { parseMcpToolName, toMcpToolName } from "./mcp-tool-name.js";
+import { toMcpToolName } from "./mcp-tool-name.js";
 import { createToolSurfaceSnapshot, type ToolSurfaceSnapshot } from "./tool-surface-snapshot.js";
 import { uatTypeIncludesBrowser } from "./uat-policy.js";
 import { canonicalWorkflowToolName } from "./engine-hook-contract.js";

@@ -46,7 +46,6 @@ import {
   relTaskFile,
   relSliceFile,
   relMilestoneFile,
-  buildMilestoneFileName,
   buildTaskFileName,
   gsdProjectionRoot,
 } from "./paths.js";
@@ -54,7 +53,7 @@ import { validateArtifact } from "./schemas/validate.js";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { atomicWriteSync, removeProjectionFileSync } from "./atomic-write.js";
 import { logWarning, logError } from "./workflow-logger.js";
-import { dirname, join, sep } from "node:path";
+import { join, sep } from "node:path";
 import { hasImplementationArtifacts } from "./milestone-implementation-evidence.js";
 import { composeToolAffordanceReminder } from "./unit-context-composer.js";
 import {

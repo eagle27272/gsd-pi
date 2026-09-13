@@ -2,7 +2,7 @@ import test, { describe } from "node:test";
 import assert from "node:assert/strict";
 
 import { classifyUnitComplexity, tierLabel, tierOrdinal, extractTaskMetadata } from "../complexity-classifier.js";
-import type { ComplexityTier, TaskMetadata } from "../complexity-classifier.js";
+import type { TaskMetadata } from "../complexity-classifier.js";
 
 // ─── tierLabel ───────────────────────────────────────────────────────────────
 

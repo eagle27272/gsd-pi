@@ -48,7 +48,7 @@ import {
   cleanupConflictState,
   removeMergeStateFiles,
 } from "./worktree-git-recovery.js";
-import { logError, logWarning } from "./workflow-logger.js";
+import { logWarning } from "./workflow-logger.js";
 
 export { _setRestoreEntryFnForTests } from "./auto-worktree-milestone-shelter.js";
 

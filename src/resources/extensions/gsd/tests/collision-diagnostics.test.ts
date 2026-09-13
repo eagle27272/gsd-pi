@@ -11,10 +11,8 @@ import assert from 'node:assert';
 import { NamespacedRegistry } from '../namespaced-registry.js';
 import { NamespacedResolver } from '../namespaced-resolver.js';
 import {
-	analyzeCollisions,
-	doctorReport,
-	type ClassifiedDiagnostic,
-	type DoctorReport,
+  analyzeCollisions,
+  doctorReport,
 } from '../collision-diagnostics.js';
 
 describe('collision-diagnostics', () => {

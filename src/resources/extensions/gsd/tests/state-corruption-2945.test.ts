@@ -10,7 +10,7 @@
 
 import { describe, test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync, realpathSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
@@ -21,8 +21,6 @@ import {
   insertSlice,
   insertTask,
   getMilestoneSlices,
-  getSliceTasks,
-  getGateResults,
 } from "../gsd-db.ts";
 import { renderRoadmapContent } from "../workflow-projections.ts";
 import type { MilestoneRow, SliceRow } from "../gsd-db.ts";

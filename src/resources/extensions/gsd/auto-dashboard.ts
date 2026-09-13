@@ -21,17 +21,12 @@ import { getActiveHook } from "./post-unit-hooks.js";
 import { filterUnitsForMilestone, getLedger, getProjectTotals } from "./metrics.js";
 import { getErrorMessage } from "./error-utils.js";
 import { nativeIsRepo } from "./native-git-bridge.js";
-import {
-  resolveMilestoneFile,
-  resolveSliceFile,
-} from "./paths.js";
 import { isDbAvailable, getMilestoneSlices, getSliceTasks } from "./gsd-db.js";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { truncateToWidth, visibleWidth } from "@gsd/pi-tui";
 import { makeUI } from "../shared/tui.js";
-import { GLYPH, INDENT } from "../shared/mod.js";
-import { padRightVisible, renderPlainOutcome, renderProgressBar, rightAlign, wrapVisibleText } from "./tui/render-kit.js";
+import { padRightVisible, renderPlainOutcome, wrapVisibleText } from "./tui/render-kit.js";
 import { computeProgressScore } from "./progress-score.js";
 import {
   getGlobalGSDPreferencesPath,

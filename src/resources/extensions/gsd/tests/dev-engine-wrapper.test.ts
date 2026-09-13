@@ -6,7 +6,7 @@
  * auto.ts engine ID accessors.
  */
 
-import test, { describe, before, after } from "node:test";
+import test, { describe, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";

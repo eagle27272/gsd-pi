@@ -22,7 +22,6 @@ import { verifyExpectedArtifact, _setRoadmapParserFnForTests } from "../auto-rec
 import { closeDatabase, openDatabase, insertMilestone, insertSlice, _getAdapter } from "../gsd-db.ts";
 import {
   drainLogs,
-  peekLogs,
   setStderrLoggingEnabled,
   _resetLogs,
   type LogEntry,

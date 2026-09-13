@@ -20,8 +20,6 @@ import {
   getArtifact,
   getAllMilestones,
   getMilestoneSlices,
-  getSliceTasks,
-  updateSliceStatus,
   insertGateRow,
   saveGateResult,
   transaction,
@@ -49,13 +47,12 @@ import {
 } from '../schemas/parsers.ts';
 import {
   parseSummary,
-  parseTaskPlanFile,
   clearParseCache,
   extractSection,
 } from '../files.ts';
 import { clearPathCache, _clearGsdRootCache } from '../paths.ts';
 import { invalidateStateCache } from '../state.ts';
-import { describe, test, beforeEach, afterEach } from 'node:test';
+import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 // Safety net: close the DB after every test so a failure doesn't leak the

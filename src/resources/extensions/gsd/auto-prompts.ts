@@ -9,7 +9,7 @@
  * utility.
  */
 
-import { loadFile, parseContinue, parseSummary, loadActiveOverrides, formatOverridesSection, parseTaskPlanFile } from "./files.js";
+import { loadFile, parseContinue, parseSummary, loadActiveOverrides, formatOverridesSection } from "./files.js";
 import type { Override } from "./files.js";
 import { extractVerdict } from "./verdict-parser.js";
 import { loadPrompt, inlineTemplate } from "./prompt-loader.js";
@@ -34,14 +34,12 @@ import {
   getBlockingReworkFindingsForTask,
   getGateResults,
   getMilestoneSlices,
-  getPendingGates,
   getPendingGatesForTurn,
   getSlice,
   getTask,
   isDbAvailable,
 } from "./gsd-db.js";
 import {
-  GATE_REGISTRY,
   assertGateCoverage,
   getGatesForTurn,
   type GateDefinition,

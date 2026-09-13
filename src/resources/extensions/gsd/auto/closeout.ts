@@ -6,7 +6,7 @@ import { importExtensionModule, type ExtensionAPI, type ExtensionContext } from 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { join, basename } from "node:path";
-import { existsSync, cpSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import type { AutoSession } from "./session.js";
 import type { LoopDeps } from "./loop-deps.js";
 import type { GSDState } from "../types.js";
@@ -18,7 +18,7 @@ import { getIsolationMode } from "../preferences.js";
 import { isDbAvailable, getMilestone } from "../gsd-db.js";
 import { refreshWorkflowDatabaseFromDisk } from "../db-workspace.js";
 import { isClosedStatus } from "../status-guards.js";
-import { gsdRoot, PLANNING_ARTIFACT_SUFFIXES } from "../paths.js";
+import { PLANNING_ARTIFACT_SUFFIXES } from "../paths.js";
 import { atomicWriteSync } from "../atomic-write.js";
 import { logWarning, logError } from "../workflow-logger.js";
 import { debugLog } from "../debug-logger.js";

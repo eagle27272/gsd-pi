@@ -9,17 +9,13 @@
 
 import { readFile, readdir, stat } from "node:fs/promises";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, basename, resolve } from "node:path";
+import { join, basename } from "node:path";
 import { homedir } from "node:os";
 import type {
   ConfigSource,
   ConfigLevel,
   DiscoveredItem,
   DiscoveredMCPServer,
-  DiscoveredRule,
-  DiscoveredContextFile,
-  DiscoveredSettings,
-  ToolDiscoveryResult,
   ToolId,
   ToolInfo,
 } from "./types.js";

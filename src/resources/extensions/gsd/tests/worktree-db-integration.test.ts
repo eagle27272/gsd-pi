@@ -20,7 +20,6 @@ import { execSync } from "node:child_process";
 import { createAutoWorktree } from "../auto-worktree-creation.ts";
 import { worktreePath } from "../worktree-manager.ts";
 import {
-  copyWorktreeDb,
   reconcileWorktreeDb,
   openDatabase,
   closeDatabase,
@@ -29,7 +28,7 @@ import {
   isDbAvailable,
 } from "../gsd-db.ts";
 
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 

@@ -892,7 +892,6 @@ const LIFECYCLE_ONLY_UNITS = new Set([
 ]);
 import {
   updateProgressWidget as _updateProgressWidget,
-  updateSliceProgressCache,
   unitVerb,
   describeNextUnit,
   setAutoOutcomeWidget,

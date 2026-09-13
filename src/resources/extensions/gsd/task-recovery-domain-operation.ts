@@ -5,7 +5,6 @@ import {
   canonicalDomainJson,
   executeDomainOperation,
   type DomainJsonValue,
-  type DomainOperationContext,
   type DomainOperationMutation,
   type DomainOperationRequest,
   type DomainOperationResult,

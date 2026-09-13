@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -13,7 +13,7 @@ import {
   loadDebugSession,
   updateDebugSession,
 } from "../debug-session-store.ts";
-import { cleanup, makeTempRepo } from "./test-utils.ts";
+import { makeTempRepo } from "./test-utils.ts";
 
 interface DispatchCall {
   payload: any;

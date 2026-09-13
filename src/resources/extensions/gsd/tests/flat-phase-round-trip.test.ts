@@ -3,7 +3,7 @@
 // import → render → import must produce stable milestone/slice/task hierarchy.
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { cpSync, mkdtempSync, rmSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";

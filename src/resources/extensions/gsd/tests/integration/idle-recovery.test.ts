@@ -22,7 +22,7 @@ import { deriveState, invalidateStateCache } from "../../state.ts";
 import { recoverTimedOutUnit } from "../../auto-timeout-recovery.ts";
 import { readUnitRuntimeRecord, writeUnitRuntimeRecord } from "../../unit-runtime.ts";
 import { drainLogs, setStderrLoggingEnabled, _resetLogs } from "../../workflow-logger.ts";
-import { describe, test, beforeEach, afterEach } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 function createFixtureBase(): string {

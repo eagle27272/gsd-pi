@@ -23,7 +23,7 @@ import {
   runWithTurnGeneration,
 } from "./turn-epoch.js";
 import { debugLog } from "../debug-logger.js";
-import { logWarning, logError } from "../workflow-logger.js";
+import { logWarning } from "../workflow-logger.js";
 import { resolveAutoSupervisorConfig } from "../preferences.js";
 import { readUnitRuntimeRecord, type AutoUnitRuntimeRecord } from "../unit-runtime.js";
 import { clearAutoWakeup, consumeAutoWakeup } from "./schedule-wakeup.js";

@@ -18,7 +18,7 @@ import { resolveDispatch } from "../auto-dispatch.ts";
 import type { DispatchContext } from "../auto-dispatch.ts";
 import type { AutoSession } from "../auto/session.ts";
 import type { GSDState } from "../types.ts";
-import { enableDebug, disableDebug, getDebugLogPath } from "../debug-logger.ts";
+import { enableDebug, disableDebug } from "../debug-logger.ts";
 import {
   closeDatabase,
   insertMilestone,

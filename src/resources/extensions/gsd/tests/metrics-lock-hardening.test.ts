@@ -28,7 +28,6 @@ import { spawnSync } from "node:child_process";
 import {
   initMetrics,
   resetMetrics,
-  getLedger,
   snapshotUnitMetrics,
   STALE_LOCK_THRESHOLD_MS,
   type MetricsLedger,

@@ -12,7 +12,6 @@ import {
   rmSync,
   mkdirSync,
   writeFileSync,
-  existsSync,
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";

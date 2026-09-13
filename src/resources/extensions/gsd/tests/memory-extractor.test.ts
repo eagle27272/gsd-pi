@@ -4,12 +4,11 @@ import {
   closeDatabase,
 } from '../gsd-db.ts';
 import {
-  getActiveMemories,
   applyMemoryActions,
   getActiveMemoriesRanked,
 } from '../memory-store.ts';
 import type { MemoryAction } from '../memory-store.ts';
-import { describe, test, beforeEach, afterEach, mock } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 // ═══════════════════════════════════════════════════════════════════════════

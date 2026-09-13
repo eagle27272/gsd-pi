@@ -14,7 +14,6 @@ import type {
 import type { SidecarItem } from "./auto/session.js";
 import {
   getOrCreateRegistry,
-  resolveHookArtifactPath,
   type RetryTrigger,
 } from "./rule-registry.js";
 

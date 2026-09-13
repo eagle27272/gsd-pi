@@ -21,9 +21,9 @@ import {
   formatDecisionsForPrompt,
   formatRequirementsForPrompt,
 } from '../../context-store.ts';
-import { saveDecisionToDb, generateDecisionsMd } from '../../db-writer.ts';
+import { saveDecisionToDb } from '../../db-writer.ts';
 import { backfillDecisionsToMemories } from '../../memory-backfill.ts';
-import { describe, test, beforeEach, afterEach } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 // ─── Fixture Generators (duplicated from token-savings.test.ts — file-scoped) ──

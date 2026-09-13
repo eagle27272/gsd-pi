@@ -14,7 +14,6 @@ import {
   insertSlice,
   insertTask,
   getMilestoneSlices,
-  getSliceTasks,
   _getAdapter,
 } from '../gsd-db.ts';
 import {

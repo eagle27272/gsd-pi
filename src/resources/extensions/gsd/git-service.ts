@@ -32,7 +32,6 @@ import {
   nativeBranchExists,
   nativeHasChanges,
   nativeAddAllWithExclusions,
-  nativeResetPaths,
   nativeHasStagedChanges,
   nativeCommit,
   nativeRmCached,

@@ -24,7 +24,6 @@ import {
 } from "../db/writers/lifecycle-commands.ts";
 import { clearParseCache } from "../files.ts";
 import { invalidateAllCaches } from "../cache.ts";
-import { deriveState, invalidateStateCache } from "../state.ts";
 import { writeIntegrationBranch } from "../git-service.ts";
 import { loadSyncMapping } from "../../github-sync/mapping.ts";
 import {

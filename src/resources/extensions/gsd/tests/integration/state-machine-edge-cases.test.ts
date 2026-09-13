@@ -17,7 +17,7 @@
 
 // GSD State Machine Edge Case Tests
 
-import { describe, test, beforeEach, afterEach } from "node:test";
+import { describe, test, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import {
   mkdtempSync,
@@ -38,19 +38,10 @@ import {
   insertMilestone,
   insertSlice,
   insertTask,
-  getTask,
-  getSlice,
-  getMilestone,
-  getSliceTasks,
-  getMilestoneSlices,
   updateTaskStatus,
-  updateSliceStatus,
   updateMilestoneStatus,
   insertAssessment,
   insertReplanHistory,
-  getReplanHistory,
-  insertGateRow,
-  getPendingGates,
 } from "../../gsd-db.ts";
 
 // ── State derivation ──────────────────────────────────────────────────────
@@ -74,7 +65,7 @@ import {
   DISPATCH_RULES,
   getDispatchRuleNames,
 } from "../../auto-dispatch.ts";
-import type { DispatchContext, DispatchAction } from "../../auto-dispatch.ts";
+import type { DispatchContext } from "../../auto-dispatch.ts";
 
 // ── Verdict parser ──────────────────────────────────────────────────────
 import {

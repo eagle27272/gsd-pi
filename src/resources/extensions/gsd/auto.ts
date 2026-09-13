@@ -46,12 +46,8 @@ import { collectSecretsFromManifest } from "../get-secrets-from-user.js";
 import {
   gsdRoot,
   resolveMilestoneFile,
-  resolveSliceFile,
   resolveMilestonePath,
-  resolveTasksDir,
-  resolveTaskFile,
   milestonesDir,
-  buildTaskFileName,
   canonicalPhaseDirName,
 } from "./paths.js";
 import { invalidateAllCaches } from "./cache.js";
@@ -89,11 +85,9 @@ import {
 import { playNotificationBell, sendDesktopNotification } from "./notifications.js";
 import type { GSDPreferences } from "./preferences.js";
 import {
-  type BudgetAlertLevel,
   getBudgetAlertLevel,
   getNewBudgetAlertLevel,
   getBudgetEnforcementAction,
-  getContextPauseAction,
   HARD_CONTEXT_REROOT_THRESHOLD_PERCENT,
   resolveCompactionThresholdPercent,
   shouldRerootStepSessionForContext,
@@ -103,9 +97,6 @@ import {
   markToolStart as _markToolStart,
   markToolEnd as _markToolEnd,
   getOldestInFlightToolAgeMs as _getOldestInFlightToolAgeMs,
-  getInFlightToolCount,
-  getOldestInFlightToolStart,
-  hasInteractiveToolInFlight,
   clearInFlightTools,
   updateToolInvocationError,
 } from "./auto-tool-tracking.js";
@@ -115,13 +106,8 @@ import { selectAndApplyModel, resolveModelId, clearToolBaseline, isModelUnavaila
 import { resolveModelWithFallbacksForUnit } from "./preferences-models.js";
 import { resetRoutingHistory, recordOutcome } from "./routing-history.js";
 import {
-  checkPostUnitHooks,
-  getActiveHook,
   resetHookState,
-  isRetryPending,
-  consumeRetryTrigger,
   runPreDispatchHooks,
-  persistHookState,
   restoreHookState,
   reconcileRestoredHookDispatch,
   clearPersistedHookState,
@@ -129,12 +115,8 @@ import {
 import { runGSDDoctor, rebuildState } from "./doctor.js";
 import {
   preDispatchHealthGate,
-  recordHealthSnapshot,
-  checkHealEscalation,
   resetProactiveHealing,
   setLevelChangeCallback,
-  formatHealthSummary,
-  getConsecutiveErrorUnits,
 } from "./doctor-proactive.js";
 import { clearSkillSnapshot } from "./skill-discovery.js";
 import {
@@ -155,31 +137,27 @@ import {
   formatCost,
   formatTokenCount,
 } from "./metrics.js";
-import { setLogBasePath, logWarning, logError } from "./workflow-logger.js";
+import { setLogBasePath, logWarning } from "./workflow-logger.js";
 import { preflightCleanRoot, postflightPopStash } from "./clean-root-preflight.js";
 import { isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { readFileSync, existsSync, mkdirSync, writeFileSync, unlinkSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { atomicWriteSync } from "./atomic-write.js";
 import {
-  autoCommitCurrentBranch,
   captureIntegrationBranch,
   detectWorktreeName,
   getCurrentBranch,
   getMainBranch,
-  MergeConflictError,
-  parseSliceBranch,
   setActiveMilestoneId,
-  resolveProjectRoot,
 } from "./worktree.js";
 import { GitServiceImpl } from "./git-service.js";
 import { nativeCheckoutBranch } from "./native-git-bridge.js";
 import { getPriorSliceCompletionBlocker } from "./dispatch-guard.js";
-import { autoWorktreeBranch, enterBranchModeForMilestone } from "./auto-worktree-branch-lifecycle.js";
+import { autoWorktreeBranch } from "./auto-worktree-branch-lifecycle.js";
 import { createAutoWorktree } from "./auto-worktree-creation.js";
-import { enterAutoWorktree, isInAutoWorktree } from "./auto-worktree-entry.js";
+import { isInAutoWorktree } from "./auto-worktree-entry.js";
 import { getAutoWorktreePath } from "./auto-worktree-path-resolution.js";
-import { checkResourcesStale, readResourceVersion } from "./auto-worktree-resource-version.js";
+import { checkResourcesStale } from "./auto-worktree-resource-version.js";
 import { escapeStaleWorktree } from "./auto-worktree-runtime-cleanup.js";
 import { teardownWarmedBrowserDaemons } from "./browser-daemon-auto-prep.js";
 import { getAutoWorktreeOriginalBase } from "./auto-worktree-session-registry.js";
@@ -190,7 +168,6 @@ import { createDefaultMilestoneMergeTransaction } from "./milestone-merge-transa
 
 import { debugLog, isDebugEnabled, writeDebugSummary } from "./debug-logger.js";
 import {
-  buildLoopRemediationSteps,
   reconcileMergeState,
   verifyExpectedArtifact,
 } from "./auto-recovery.js";
@@ -212,20 +189,16 @@ import {
   describeNextUnit as _describeNextUnit,
   unitVerb,
   formatAutoElapsed as _formatAutoElapsed,
-  formatWidgetTokens,
   type WidgetStateAccessors,
 } from "./auto-dashboard.js";
 import {
   registerSigtermHandler as _registerSigtermHandler,
   deregisterSigtermHandler as _deregisterSigtermHandler,
-  detectWorkingTreeActivity,
 } from "./auto-supervisor.js";
 import {
   isDbAvailable,
   getMilestone,
   getMilestoneSlices,
-  getSlice,
-  getTask,
 } from "./gsd-db.js";
 import {
   checkpointWorkflowDatabase,
@@ -269,9 +242,8 @@ import { resolveUokFlags } from "./uok/flags.js";
 import { validateDirectory } from "./validate-directory.js";
 import { assertNoLegacyLayout } from "./legacy-layout-guard.js";
 import { createAutoOrchestrator } from "./auto/orchestrator.js";
-import type { AutoAdvanceResult, AutoOrchestrationModule } from "./auto/contracts.js";
+import type { AutoAdvanceResult } from "./auto/contracts.js";
 import {
-  repairAutoWorktreeSafetyFailure,
   resolvePausedAutoWorktreePath,
 } from "./auto-worktree-repair.js";
 // Slice-level parallelism (#2340)
@@ -300,14 +272,7 @@ void initTokenCounter().catch((err) => {
 
 // ─── Session State ─────────────────────────────────────────────────────────
 
-import {
-  STUB_RECOVERY_THRESHOLD,
-  NEW_SESSION_TIMEOUT_MS,
-} from "./auto/session.js";
 import type {
-  CurrentUnit,
-  UnitRouting,
-  StartModel,
   AutoSession,
 } from "./auto/session.js";
 export {

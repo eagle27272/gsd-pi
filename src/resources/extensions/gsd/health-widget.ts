@@ -9,9 +9,7 @@ import { runEnvironmentChecks, runEnvironmentChecksAsync } from "./doctor-enviro
 import { loadEffectiveGSDPreferences } from "./preferences.js";
 import { GIT_NO_PROMPT_ENV } from "./git-constants.js";
 import { loadLedgerFromDisk, getProjectTotals } from "./metrics.js";
-import { describeNextUnit, estimateTimeRemaining, updateSliceProgressCache } from "./auto-dashboard.js";
 import { projectRoot } from "./commands/context.js";
-import { deriveState, invalidateStateCache } from "./state.js";
 import {
   buildHealthLines,
   detectHealthWidgetProjectState,

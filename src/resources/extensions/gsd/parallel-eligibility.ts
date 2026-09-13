@@ -6,7 +6,6 @@
  */
 
 import { deriveState } from "./state.js";
-import { resolveMilestoneFile, resolveSliceFile } from "./paths.js";
 import { findMilestoneIds } from "./guided-flow.js";
 import { isDbAvailable, getMilestoneSlices, getTasksBySliceIds } from "./gsd-db.js";
 import { openExistingWorkflowDatabase } from "./db-workspace.js";

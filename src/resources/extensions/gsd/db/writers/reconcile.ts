@@ -5,7 +5,7 @@
 // detection. Reads the shared engine handle via getDbOrNull(); opens the
 // project-root DB via the engine's openDatabase().
 import { existsSync, mkdirSync, realpathSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { GSDError, GSD_STALE_STATE } from "../../errors.js";
 import { logError, logWarning } from "../../workflow-logger.js";

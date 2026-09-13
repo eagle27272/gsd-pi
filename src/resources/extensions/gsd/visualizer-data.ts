@@ -17,7 +17,6 @@ import {
   aggregateByTier,
   formatTierSavings,
   loadLedgerFromDisk,
-  classifyUnitPhase,
   filterUnitsForMilestone,
 } from './metrics.js';
 import { loadAllCaptures, countPendingCaptures } from './captures.js';

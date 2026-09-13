@@ -31,11 +31,10 @@ import {
   getDbOrNull,
   isDbAvailable,
 } from "./gsd-db.js";
-import type { MilestoneRow, ArtifactRow } from "./db-milestone-artifact-rows.js";
+import type { MilestoneRow } from "./db-milestone-artifact-rows.js";
 import type { SliceRow, TaskRow } from "./db-task-slice-rows.js";
 import type { GateRow } from "./types.js";
 import {
-  resolveFile,
   resolveSliceFile,
   resolveSlicePath,
   resolveTaskFile,
@@ -46,7 +45,6 @@ import {
   gsdProjectionRoot,
   gsdRoot,
   buildTaskFileName,
-  buildSliceFileName,
 } from "./paths.js";
 import { saveFile, clearParseCache, registerCacheClearCallback } from "./files.js";
 import { parseProjectionRoadmap } from "./schemas/parsers.js";
@@ -55,10 +53,6 @@ import { invalidateStateCache } from "./state.js";
 import { clearPathCache, milestonesDir, resolveMilestonePath, relSliceFile, canonicalPhaseDirName } from "./paths.js";
 import { readCompatMarker, writeCompatMarker, computeProjectionSha, deriveCompatProjectionKey } from "./compat/compat-marker.js";
 import type { RiskLevel } from "./types.js";
-import {
-  phaseDirName,
-  derivePhaseSlug,
-} from "./layout-policy.js";
 import {
   readMilestoneCompletionProjection,
   renderMilestoneSummaryMarkdown,

@@ -3,7 +3,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 
 import { GIT_NO_PROMPT_ENV } from "./git-constants.js";
 import { runTurnGitAction, type TurnGitActionMode, type TurnGitActionResult } from "./git-service.js";

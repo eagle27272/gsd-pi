@@ -4,7 +4,7 @@
  * Formats DiscoveryResult into human-readable and LLM-readable output.
  */
 
-import type { DiscoveryResult, DiscoveredItem, ToolDiscoveryResult } from "./types.js";
+import type { DiscoveryResult, DiscoveredItem } from "./types.js";
 
 /**
  * Format discovery result as a compact text report for the LLM tool response.

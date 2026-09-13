@@ -5,7 +5,6 @@ import * as os from 'node:os';
 import {
   openDatabase,
   closeDatabase,
-  transaction,
   _getAdapter,
   insertMilestone,
   insertSlice,

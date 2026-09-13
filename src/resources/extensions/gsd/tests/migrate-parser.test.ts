@@ -8,9 +8,7 @@ import { tmpdir } from 'node:os';
 
 import { parsePlanningDirectory } from '../migrate/parser.ts';
 import { validatePlanningDirectory } from '../migrate/validator.ts';
-
-import type { PlanningProject, ValidationResult } from '../migrate/types.ts';
-import { describe, test, beforeEach, afterEach } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 // ─── Fixture Helpers ───────────────────────────────────────────────────────

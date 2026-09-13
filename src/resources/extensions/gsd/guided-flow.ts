@@ -16,7 +16,7 @@ import {
   isInteractiveCommandContext,
 } from "./command-feedback.js";
 import { loadFile, saveFile } from "./files.js";
-import { isDbAvailable, getMilestone, getMilestoneSlices, insertMilestone } from "./gsd-db.js";
+import { isDbAvailable, getMilestone, getMilestoneSlices } from "./gsd-db.js";
 import { parseRoadmapSlices } from "./roadmap-slices.js";
 import { loadPrompt, inlineTemplate } from "./prompt-loader.js";
 import {
@@ -110,9 +110,7 @@ import { createWorkspace, scopeMilestone, type MilestoneScope } from "./workspac
 import { clearPendingGate, extractDepthVerificationMilestoneId, getPendingGate } from "./bootstrap/write-gate.js";
 import {
   _getPendingAutoStart,
-  clearPendingAutoStart,
   deletePendingAutoStart,
-  getDiscussionMilestoneId,
   hasPendingAutoStart,
   setPendingAutoStart,
 } from "./pending-auto-start.js";

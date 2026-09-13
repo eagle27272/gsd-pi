@@ -7,14 +7,12 @@
  * Pure functions, zero UI dependencies (except for runPreparation orchestrator).
  */
 
-import { readdirSync, readFileSync, statSync, openSync, readSync, closeSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readdirSync, openSync, readSync, closeSync } from "node:fs";
+import { join } from "node:path";
 import { readdirSync as readdirSyncNode } from "node:fs";
 import {
   detectProjectSignals,
   scanProjectFiles,
-  PROJECT_FILES,
-  type ProjectSignals,
 } from "./detection.js";
 import { loadFile } from "./files.js";
 

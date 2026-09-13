@@ -39,15 +39,9 @@ import { join } from "node:path";
 import {
   openDatabase,
   closeDatabase,
-  insertMilestone,
-  insertSlice,
-  insertTask,
   getTask,
-  getSliceTasks,
   getSlice,
   updateTaskStatus,
-  updateSliceStatus,
-  transaction,
   isDbAvailable,
   _getAdapter,
 } from "../../gsd-db.ts";
@@ -61,9 +55,6 @@ import { internalExecutionInvocation } from "../../execution-invocation.ts";
 
 // ── Markdown renderer ─────────────────────────────────────────────────────
 import {
-  renderPlanCheckboxes,
-  renderRoadmapCheckboxes,
-  renderAllFromDb,
   detectStaleRenders,
 } from "../../markdown-renderer.ts";
 import { repairStaleRenders } from "../../state-reconciliation/drift/stale-render.ts";

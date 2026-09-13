@@ -18,9 +18,6 @@ import { join } from "node:path";
 import { logWarning, _resetLogs } from "../workflow-logger.js";
 import {
   verifyExpectedArtifact,
-  diagnoseExpectedArtifact,
-  buildLoopRemediationSteps,
-  refreshRecoveryDbForArtifact,
 } from "../auto-recovery.js";
 import { writeUnitRuntimeRecord } from "../unit-runtime.js";
 import { isDbAvailable, getTask } from "../gsd-db.js";
@@ -39,7 +36,7 @@ import {
 } from "../auto-model-selection.js";
 import { isSuspiciousGhostCompletion } from "../auto-unit-closeout.js";
 import { classifyError, isTransient } from "../error-classifier.js";
-import { setCurrentPhase, clearCurrentPhase } from "../../shared/gsd-phase-state.js";
+import { setCurrentPhase } from "../../shared/gsd-phase-state.js";
 import { setAutoActiveStatus } from "../auto-dashboard.js";
 import { runUnit } from "./run-unit.js";
 import { verificationRetryKey } from "./verification-retry-policy.js";

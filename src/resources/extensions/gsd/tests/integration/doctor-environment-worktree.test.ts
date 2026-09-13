@@ -12,13 +12,12 @@ import assert from 'node:assert/strict';
  * and check its node_modules instead.
  */
 
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 
 import {
   runEnvironmentChecks,
-  environmentResultsToDoctorIssues,
   checkEnvironmentHealth,
 } from "../../doctor-environment.ts";
 /** Create a directory tree with files. */

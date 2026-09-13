@@ -26,22 +26,20 @@ import { formatTokenCount } from "../shared/mod.js";
 import { getCurrentPhase } from "../shared/gsd-phase-state.js";
 import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.js";
 import {
-	type IsolationEnvironment,
-	type IsolationMode,
-	type MergeResult,
-	createIsolation,
-	mergeDeltaPatches,
-	readIsolationMode,
+  type IsolationEnvironment,
+  type MergeResult,
+  createIsolation,
+  mergeDeltaPatches,
+  readIsolationMode,
 } from "./isolation.js";
 import { registerWorker, updateWorker } from "./worker-registry.js";
 import { emitJournalEvent } from "../gsd/journal.js";
 import {
-	buildSubagentProcessArgs,
-	createSubagentLaunchPlan,
-	isSubagentChildProcess,
-	resolveSubagentProjectRoot,
-	type SubagentContextMode,
-	type SubagentSessionArgs,
+  createSubagentLaunchPlan,
+  isSubagentChildProcess,
+  resolveSubagentProjectRoot,
+  type SubagentContextMode,
+  type SubagentSessionArgs,
 } from "./launch.js";
 import { resolveSubagentWorktreeCwd } from "./worktree-cwd.js";
 import {

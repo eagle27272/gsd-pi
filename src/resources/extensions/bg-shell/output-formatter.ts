@@ -9,19 +9,13 @@ import {
 } from "@gsd/pi-coding-agent";
 import type { BgProcess, OutputDigest, OutputLine, GetOutputOptions } from "./types.js";
 import {
-	ERROR_PATTERNS,
-	ERROR_PATTERN_UNION,
-	WARNING_PATTERN_UNION,
-	READINESS_PATTERN_UNION,
-	BUILD_COMPLETE_PATTERN_UNION,
-	TEST_RESULT_PATTERN_UNION,
-	WARNING_PATTERNS,
-	URL_PATTERN,
-	PORT_PATTERN,
-	PORT_PATTERN_SOURCE,
-	READINESS_PATTERNS,
-	BUILD_COMPLETE_PATTERNS,
-	TEST_RESULT_PATTERNS,
+  ERROR_PATTERN_UNION,
+  WARNING_PATTERN_UNION,
+  READINESS_PATTERN_UNION,
+  BUILD_COMPLETE_PATTERN_UNION,
+  TEST_RESULT_PATTERN_UNION,
+  URL_PATTERN,
+  PORT_PATTERN_SOURCE,
 } from "./types.js";
 import { addEvent, pushAlert } from "./process-manager.js";
 import { transitionToReady } from "./readiness-detector.js";

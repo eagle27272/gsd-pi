@@ -36,7 +36,6 @@ import { runWorktreePostCreateHook } from "./worktree-post-create-hook.js";
 import { createWorkspace, scopeMilestone } from "./workspace.js";
 import {
   writeSessionStatus,
-  removeSessionStatus,
 } from "./session-status-io.js";
 import { hasFileConflict } from "./slice-parallel-conflict.js";
 import { getErrorMessage } from "./error-utils.js";
