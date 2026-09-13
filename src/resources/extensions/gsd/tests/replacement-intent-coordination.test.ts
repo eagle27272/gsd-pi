@@ -50,6 +50,7 @@ import {
   openDatabase,
   reconcileWorktreeDb,
   vacuumDatabase,
+  WorktreeReconciliationError,
 } from "../gsd-db.ts";
 import {
   getAutoWorker,
@@ -1002,25 +1003,17 @@ test("active replacement intent prevents worktree reconciliation from mutating m
 
   openDatabase(main.databasePath);
   createReplacementIntent(main.databasePath);
-  const result = reconcileWorktreeDb(main.databasePath, worktree.databasePath);
-
-  assert.deepEqual(result, {
-    decisions: 0,
-    requirements: 0,
-    artifacts: 0,
-    milestones: 0,
-    slices: 0,
-    tasks: 0,
-    memories: 0,
-    replan_history: 0,
-    assessments: 0,
-    quality_gates: 0,
-    slice_dependencies: 0,
-    verification_evidence: 0,
-    gate_runs: 0,
-    milestone_commit_attributions: 0,
-    conflicts: [],
-  });
+  // The fence aborts the merge, so the caller must see a failure rather than a
+  // zero-count result it would mistake for "nothing to merge" (#6).
+  assert.throws(
+    () => reconcileWorktreeDb(main.databasePath, worktree.databasePath),
+    (err: unknown) => {
+      assert.ok(err instanceof WorktreeReconciliationError);
+      assert.match(err.message, /fenced while replacement intent exists/u);
+      assert.deepEqual(err.conflicts, []);
+      return true;
+    },
+  );
   assert.equal(getDecisionById("D002"), null);
   assert.deepEqual(
     _getAdapter()!.prepare("PRAGMA database_list").all().map((row) => row["name"]),
