@@ -257,9 +257,13 @@ export class AutoSession {
   rootWriteBaseline: RootDirtySnapshot | null = null;
 
   // ── Merge guard ──────────────────────────────────────────────────────
-  /** Set to true after phases.ts successfully calls mergeAndExit, so that
-   *  stopAuto does not attempt the same merge a second time (#2645). */
-  milestoneMergedInPhases = false;
+  /** Milestone whose branch phases.ts already merged via mergeAndExit, so that
+   *  stopAuto does not attempt the same merge a second time (#2645). Scoped by
+   *  milestone id rather than a session-wide boolean: an auto run advances
+   *  through many milestones, and an identity-less flag suppressed the merge of
+   *  every milestone after the first (#7). Read through
+   *  {@link hasMergedMilestoneInPhases}. */
+  milestoneMergedInPhasesFor: string | null = null;
   /** Last milestone settlement result observed by Auto Orchestration. */
   milestoneSettlement: MilestoneSettlementOutcome | null = null;
 
@@ -443,7 +447,7 @@ export class AutoSession {
     this.isolationDegraded = false;
     this.strandedRecoveryIsolationMode = null;
     this.rootWriteBaseline = null;
-    this.milestoneMergedInPhases = false;
+    this.milestoneMergedInPhasesFor = null;
     this.milestoneSettlement = null;
     this.milestoneStartShas = new Map();
     this.checkpointSha = null;
@@ -482,4 +486,17 @@ export class AutoSession {
       unitDispatchCount: Object.fromEntries(this.unitDispatchCount),
     };
   }
+}
+
+/**
+ * Whether this session's in-loop closeout already merged `milestoneId`.
+ *
+ * An absent `milestoneId` never counts as merged — a bare `===` would let
+ * `null === null` read as "already merged" and suppress a real merge (#7).
+ */
+export function hasMergedMilestoneInPhases(
+  s: Pick<AutoSession, "milestoneMergedInPhasesFor">,
+  milestoneId: string | null | undefined,
+): boolean {
+  return Boolean(milestoneId) && s.milestoneMergedInPhasesFor === milestoneId;
 }
