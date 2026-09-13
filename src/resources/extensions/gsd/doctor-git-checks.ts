@@ -12,7 +12,8 @@ import { isClosedStatus } from "./status-guards.js";
 import { allWorktreesDirs, createWorktree, listWorktrees, resolveGitDir } from "./worktree-manager.js";
 import { abortAndReset } from "./git-self-heal.js";
 import { RUNTIME_EXCLUSION_PATHS, resolveMilestoneIntegrationBranch, writeIntegrationBranch } from "./git-service.js";
-import { nativeIsRepo, nativeWorktreeList, nativeWorktreeRemove, nativeBranchList, nativeBranchDelete, nativeLsFiles, nativeRmCached, nativeHasChanges, nativeLastCommitEpoch, nativeGetCurrentBranch, nativeAddTracked, nativeCommit, nativeIsCurrentUnbornBranch } from "./native-git-bridge.js";
+import { nativeIsRepo, nativeWorktreeList, nativeWorktreeRemove, nativeBranchList, nativeBranchListMerged, nativeBranchDelete, nativeDetectMainBranch, nativeLsFiles, nativeRmCached, nativeHasChanges, nativeLastCommitEpoch, nativeGetCurrentBranch, nativeAddTracked, nativeCommit, nativeIsCurrentUnbornBranch } from "./native-git-bridge.js";
+import { SLICE_BRANCH_RE } from "./branch-patterns.js";
 import { getAllWorktreeHealth } from "./worktree-health.js";
 import { loadEffectiveGSDPreferences } from "./preferences.js";
 import { listUnmergedGitPaths, probeGitConflictState, reconcileGitConflictsOnSignal } from "./git-conflict-state.js";
@@ -431,22 +432,35 @@ export async function checkGitHealth(
   }
 
   // ── Legacy slice branches ──────────────────────────────────────────────
+  // Only `gsd/[worktree/]M001/S01` is a legacy slice branch. The `gsd/*/*`
+  // glob also matches live branches this check must never delete:
+  // `gsd/quick/*` task branches, `gsd/<template>/<slug>` workflow-template
+  // branches, and `gsd/submodule-rescue/*` — the sole copy of rescued
+  // uncommitted submodule work (#11).
   try {
     const branchList = nativeBranchList(basePath, "gsd/*/*")
-      .filter((branch) => !branch.startsWith("gsd/quick/"));
+      .filter((branch) => SLICE_BRANCH_RE.test(branch));
     if (branchList.length > 0) {
+      // An unmerged legacy branch is the only reference to its commits, so it
+      // is reported but never deleted (#11).
+      const mergedBranches = new Set(
+        nativeBranchListMerged(basePath, nativeDetectMainBranch(basePath)),
+      );
+      const deletable = branchList.filter((branch) => mergedBranches.has(branch));
+      const unmergedCount = branchList.length - deletable.length;
+
       issues.push({
         severity: "info",
         code: "legacy_slice_branches",
         scope: "project",
         unitId: "project",
-        message: `${branchList.length} legacy slice branch(es) found: ${branchList.slice(0, 3).join(", ")}${branchList.length > 3 ? "..." : ""}. These are no longer used (branchless architecture).`,
-        fixable: true,
+        message: `${branchList.length} legacy slice branch(es) found: ${branchList.slice(0, 3).join(", ")}${branchList.length > 3 ? "..." : ""}. These are no longer used (branchless architecture).${unmergedCount > 0 ? ` ${unmergedCount} are unmerged and will be kept.` : ""}`,
+        fixable: deletable.length > 0,
       });
 
       if (shouldFix("legacy_slice_branches")) {
         let deleted = 0;
-        for (const branch of branchList) {
+        for (const branch of deletable) {
           try {
             nativeBranchDelete(basePath, branch, true);
             deleted++;
