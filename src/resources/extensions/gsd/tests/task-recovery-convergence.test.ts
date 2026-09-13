@@ -591,7 +591,7 @@ test("reopen and cancel survive projection obstruction while stale artifacts and
     ".gsd",
     "phases",
     "01-recovery",
-    "01-01-T01-SUMMARY.md",
+    "S01-T01-SUMMARY.md",
   );
   mkdirSync(obstructedSummary);
   const reopened = await handleReopenTask({

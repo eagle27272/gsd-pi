@@ -25,7 +25,7 @@ import assert from 'node:assert/strict';
 
 function createFixtureBase(): string {
   const base = mkdtempSync(join(tmpdir(), 'gsd-import-done-'));
-  mkdirSync(join(base, '.gsd', 'milestones'), { recursive: true });
+  mkdirSync(join(base, '.gsd', 'phases'), { recursive: true });
   return base;
 }
 
@@ -77,7 +77,7 @@ describe('migrateHierarchyToDb: all-done milestones import as complete (#4902)',
   test('milestone with all [x] slices and no SUMMARY imports as complete', () => {
     const base = createFixtureBase();
     try {
-      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_ALL_DONE);
+      writeFile(base, 'phases/01-m001/01-ROADMAP.md', ROADMAP_ALL_DONE);
       // No SUMMARY.md — the all-done roadmap check is the authoritative signal.
 
       openDatabase(':memory:');
@@ -100,7 +100,7 @@ describe('migrateHierarchyToDb: all-done milestones import as complete (#4902)',
   test('milestone with one pending slice imports as active (negative case)', () => {
     const base = createFixtureBase();
     try {
-      writeFile(base, 'milestones/M002/M002-ROADMAP.md', ROADMAP_PARTIAL);
+      writeFile(base, 'phases/02-m002/02-ROADMAP.md', ROADMAP_PARTIAL);
 
       openDatabase(':memory:');
       migrateHierarchyToDb(base);
@@ -124,7 +124,7 @@ describe('migrateHierarchyToDb: all-done milestones import as complete (#4902)',
     // must not be misread as "everything is done" (vacuous truth bug).
     const base = createFixtureBase();
     try {
-      writeFile(base, 'milestones/M003/M003-ROADMAP.md', ROADMAP_EMPTY);
+      writeFile(base, 'phases/03-m003/03-ROADMAP.md', ROADMAP_EMPTY);
 
       openDatabase(':memory:');
       migrateHierarchyToDb(base);

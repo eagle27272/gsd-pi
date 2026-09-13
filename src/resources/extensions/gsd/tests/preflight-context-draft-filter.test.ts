@@ -24,6 +24,7 @@ import {
   getMilestone,
 } from "../gsd-db.ts";
 import { resolveMilestoneFile } from "../paths.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 describe("pre-flight CONTEXT-DRAFT filter (#2473)", () => {
   let tmpBase: string;
@@ -35,7 +36,7 @@ describe("pre-flight CONTEXT-DRAFT filter (#2473)", () => {
 
     // Create milestone directories with CONTEXT-DRAFT files
     for (const id of ["M001", "M002", "M003"]) {
-      const msDir = join(gsd, "milestones", id);
+      const msDir = join(gsd, "phases", canonicalPhaseDirName(id));
       mkdirSync(msDir, { recursive: true });
       writeFileSync(join(msDir, `${id}-CONTEXT-DRAFT.md`), `# ${id}: Draft\n`);
     }

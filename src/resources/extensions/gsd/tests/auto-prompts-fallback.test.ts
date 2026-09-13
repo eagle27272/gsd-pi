@@ -65,9 +65,9 @@ test("inlineDependencySummaries sources depends from DB rows and inlines the dep
   insertSlice({ milestoneId: "M001", id: "S01", title: "Foundation", status: "complete", sequence: 1 });
   insertSlice({ milestoneId: "M001", id: "S02", title: "Build", status: "pending", depends: ["S01"], sequence: 2 });
 
-  const summaryDir = join(tmp, ".gsd", "milestones", "M001", "slices", "S01");
+  const summaryDir = join(tmp, ".gsd", "phases", "01-m001");
   mkdirSync(summaryDir, { recursive: true });
-  writeFileSync(join(summaryDir, "S01-SUMMARY.md"), "# S01 Summary\n\nDid things.\n");
+  writeFileSync(join(summaryDir, "01-01-SUMMARY.md"), "# S01 Summary\n\nDid things.\n");
 
   const rel = relSliceFile(tmp, "M001", "S01", "SUMMARY");
   const result = await inlineDependencySummaries("M001", "S02", tmp);
@@ -157,9 +157,9 @@ test("checkNeedsReassessment treats a legacy done slice as the last completed sl
   insertSlice({ milestoneId: "M001", id: "S01", title: "One", status: "done", sequence: 1 });
   insertSlice({ milestoneId: "M001", id: "S02", title: "Two", status: "pending", sequence: 2 });
 
-  const summaryDir = join(tmp, ".gsd", "milestones", "M001", "slices", "S01");
+  const summaryDir = join(tmp, ".gsd", "phases", "01-m001");
   mkdirSync(summaryDir, { recursive: true });
-  writeFileSync(join(summaryDir, "S01-SUMMARY.md"), "# S01 Summary\n\nDid things.\n");
+  writeFileSync(join(summaryDir, "01-01-SUMMARY.md"), "# S01 Summary\n\nDid things.\n");
 
   const result = await checkNeedsReassessment(tmp, "M001", {} as never);
   assert.deepEqual(result, { sliceId: "S01" });
@@ -176,9 +176,9 @@ test("checkNeedsReassessment returns null when every slice is closed, including 
   insertSlice({ milestoneId: "M001", id: "S01", title: "One", status: "done", sequence: 1 });
   insertSlice({ milestoneId: "M001", id: "S02", title: "Two", status: "skipped", sequence: 2 });
 
-  const summaryDir = join(tmp, ".gsd", "milestones", "M001", "slices", "S01");
+  const summaryDir = join(tmp, ".gsd", "phases", "01-m001");
   mkdirSync(summaryDir, { recursive: true });
-  writeFileSync(join(summaryDir, "S01-SUMMARY.md"), "# S01 Summary\n\nDid things.\n");
+  writeFileSync(join(summaryDir, "01-01-SUMMARY.md"), "# S01 Summary\n\nDid things.\n");
 
   const result = await checkNeedsReassessment(tmp, "M001", {} as never);
   assert.equal(result, null);
@@ -188,10 +188,10 @@ test("loadRoadmapCompletedSliceCandidates ignores roadmap markdown when no DB is
   const tmp = mkdtempSync(join(tmpdir(), "gsd-prompts-no-db-uat-"));
   t.after(() => rmSync(tmp, { recursive: true, force: true }));
   closeDatabase();
-  const msDir = join(tmp, ".gsd", "milestones", "M001");
+  const msDir = join(tmp, ".gsd", "phases", "01-m001");
   mkdirSync(msDir, { recursive: true });
   writeFileSync(
-    join(msDir, "M001-ROADMAP.md"),
+    join(msDir, "01-ROADMAP.md"),
     "# M001: UAT\n\n## Slices\n- [x] **S01: One** `risk:low` `depends:[]`\n",
   );
 

@@ -1,5 +1,5 @@
 // Project/App: gsd-pi
-// File Purpose: Registers DB-backed GSD workflow tools and compatibility aliases.
+// File Purpose: Registers DB-backed GSD workflow tools.
 import { StringEnum, Type } from "@gsd/pi-ai";
 import type { ExtensionAPI } from "@gsd/pi-coding-agent";
 import { Text } from "@gsd/pi-tui";
@@ -7,7 +7,6 @@ import { SUMMARY_SAVE_CONTENT_MAX_LENGTH } from "@opengsd/contracts";
 import { existsSync } from "node:fs";
 import { getErrorMessage } from "../error-utils.js";
 import { piExecutionInvocation } from "../execution-invocation.js";
-import { incrementLegacyTelemetry } from "../legacy-telemetry.js";
 import { piPlanningInvocation } from "../planning-invocation.js";
 import { loadEffectiveGSDPreferences } from "../preferences.js";
 import type { DbAdapter } from "../db-adapter.js";
@@ -18,7 +17,6 @@ import {
 import { prepareSaveGateResultArguments } from "../tools/save-gate-result-args.js";
 import { logError } from "../workflow-logger.js";
 import { importWorkflowExecutorsModule } from "../workflow-mcp.js";
-import { aliasesForWorkflowTool } from "../workflow-tool-surface.js";
 import {
 	ensureDbOpen,
 	resolveCtxCwd,
@@ -49,45 +47,9 @@ function formatWorkflowToolLoadError(err: unknown): {
 	};
 }
 
-/**
- * Register an alias tool that shares the same execute function as its canonical counterpart.
- * The alias description and promptGuidelines direct the LLM to prefer the canonical name.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- toolDef shape matches ToolDefinition but typing it fully requires generics
-function registerAlias(
-	pi: ExtensionAPI,
-	toolDef: any,
-	aliasName: string,
-	canonicalName: string,
-): void {
-	const execute =
-		typeof toolDef.execute === "function"
-			? async (...args: any[]) => {
-					incrementLegacyTelemetry("legacy.mcpAliasUsed");
-					return toolDef.execute(...args);
-				}
-			: toolDef.execute;
-
-	pi.registerTool({
-		...toolDef,
-		name: aliasName,
-		description:
-			toolDef.description +
-			` (alias for ${canonicalName} — prefer the canonical name)`,
-		promptGuidelines: [
-			`Alias for ${canonicalName} — prefer the canonical name.`,
-		],
-		execute,
-	});
-}
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- toolDef shape matches ToolDefinition but varies by schema
 function registerWorkflowTool(pi: ExtensionAPI, toolDef: any): void {
 	pi.registerTool(toolDef);
-	if (process.env.GSD_ADVERTISE_TOOL_ALIASES !== "1") return; // canonical-only model surface (see plan 035)
-	for (const alias of aliasesForWorkflowTool(toolDef.name)) {
-		registerAlias(pi, toolDef, alias, toolDef.name);
-	}
 }
 
 function requirementRootWriteGuard(

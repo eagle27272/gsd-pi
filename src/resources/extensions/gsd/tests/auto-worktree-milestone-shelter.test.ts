@@ -14,10 +14,10 @@ import {
 function createWorkspace(t: { after: (fn: () => void) => void }): string {
   const root = mkdtempSync(join(tmpdir(), "gsd-shelter-test-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  mkdirSync(join(root, ".gsd", "milestones", "M001"), { recursive: true });
-  mkdirSync(join(root, ".gsd", "milestones", "M002"), { recursive: true });
-  writeFileSync(join(root, ".gsd", "milestones", "M001", "CONTEXT.md"), "# target\n");
-  writeFileSync(join(root, ".gsd", "milestones", "M002", "CONTEXT.md"), "# queued\n");
+  mkdirSync(join(root, ".gsd", "phases", "01-m001"), { recursive: true });
+  mkdirSync(join(root, ".gsd", "phases", "02-m002"), { recursive: true });
+  writeFileSync(join(root, ".gsd", "phases", "01-m001", "01-CONTEXT.md"), "# target\n");
+  writeFileSync(join(root, ".gsd", "phases", "02-m002", "02-CONTEXT.md"), "# queued\n");
   return root;
 }
 
@@ -26,14 +26,14 @@ test("milestone directory shelter restores queued milestone dirs and cleans the 
 
   const shelter = createMilestoneDirectoryShelter(root, "M001", "Target milestone");
 
-  assert.ok(existsSync(join(root, ".gsd", "milestones", "M001", "CONTEXT.md")), "target milestone is not sheltered");
-  assert.ok(!existsSync(join(root, ".gsd", "milestones", "M002")), "queued milestone is moved out before stash");
-  assert.ok(existsSync(join(root, ".gsd", ".milestone-shelter", "M002", "CONTEXT.md")), "queued milestone is recoverable from shelter");
+  assert.ok(existsSync(join(root, ".gsd", "phases", "01-m001", "01-CONTEXT.md")), "target milestone is not sheltered");
+  assert.ok(!existsSync(join(root, ".gsd", "phases", "02-m002")), "queued milestone is moved out before stash");
+  assert.ok(existsSync(join(root, ".gsd", ".milestone-shelter", "02-m002", "02-CONTEXT.md")), "queued milestone is recoverable from shelter");
 
   shelter.restore();
   shelter.restore();
 
-  assert.equal(readFileSync(join(root, ".gsd", "milestones", "M002", "CONTEXT.md"), "utf8"), "# queued\n");
+  assert.equal(readFileSync(join(root, ".gsd", "phases", "02-m002", "02-CONTEXT.md"), "utf8"), "# queued\n");
   assert.ok(!existsSync(join(root, ".gsd", ".milestone-shelter")), "shelter is removed after successful restore");
 });
 
@@ -47,6 +47,6 @@ test("milestone directory shelter retains recoverable copy when restore entry fa
   const shelter = createMilestoneDirectoryShelter(root, "M001", "Target milestone");
   shelter.restore();
 
-  assert.ok(!existsSync(join(root, ".gsd", "milestones", "M002", "CONTEXT.md")), "failed restore does not pretend queued files were restored");
-  assert.equal(readFileSync(join(root, ".gsd", ".milestone-shelter", "M002", "CONTEXT.md"), "utf8"), "# queued\n");
+  assert.ok(!existsSync(join(root, ".gsd", "phases", "02-m002", "02-CONTEXT.md")), "failed restore does not pretend queued files were restored");
+  assert.equal(readFileSync(join(root, ".gsd", ".milestone-shelter", "02-m002", "02-CONTEXT.md"), "utf8"), "# queued\n");
 });

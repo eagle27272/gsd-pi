@@ -1,6 +1,6 @@
 // gsd-pi — Integration-branch META lives OUTSIDE milestones/<MID>/ (ADR-045).
 // Verifies the relocation from milestones/<MID>/<MID>-META.json to the flat
-// .gsd/<MID>-META.json so it can never poison isLegacyMilestonesLayout.
+// .gsd/<MID>-META.json so it never creates a pre-flat-phase milestones/ tree.
 
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { readIntegrationBranch, writeIntegrationBranch } from "../git-service.js";
-import { gsdRoot, isLegacyMilestonesLayout } from "../paths.js";
+import { gsdRoot } from "../paths.js";
 
 let repo: string;
 
@@ -51,12 +51,11 @@ test("read falls back to the legacy milestones/<MID>/ location", () => {
   assert.equal(readIntegrationBranch(repo, "M001"), "develop");
 });
 
-test("writing META does not create milestones/<MID>/ or flip layout detection", () => {
-  assert.equal(isLegacyMilestonesLayout(repo), false, "clean tree is not legacy layout");
+test("writing META does not create a milestones/ tree", () => {
+  assert.ok(!existsSync(join(gsdRoot(repo), "milestones")), "clean tree has no milestones/");
   writeIntegrationBranch(repo, "M001", "main");
-  assert.equal(
-    isLegacyMilestonesLayout(repo),
-    false,
-    "writing integration-branch META must not poison layout detection",
+  assert.ok(
+    !existsSync(join(gsdRoot(repo), "milestones")),
+    "writing integration-branch META must not create the pre-flat-phase milestones/ tree",
   );
 });

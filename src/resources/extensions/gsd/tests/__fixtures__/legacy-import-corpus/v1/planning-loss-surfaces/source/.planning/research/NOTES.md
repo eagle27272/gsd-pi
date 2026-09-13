@@ -1,3 +1,0 @@
-# Notes
-
-Retain this research.

@@ -358,7 +358,7 @@ export function externalProjectsRoot(): string {
 /**
  * Check whether this project already has authoritative external state.
  *
- * Used by legacy `.gsd/` migration to avoid re-copying a re-materialized local
+ * Used by `.gsd/` externalization to avoid re-copying a re-materialized local
  * directory over newer state when an already-migrated symlink was replaced.
  */
 export function externalStateAlreadyExistsForProject(basePath: string): boolean {
@@ -712,10 +712,10 @@ function ensureGsdSymlinkCore(projectPath: string): { path: string; identity: st
     }
 
     if (stat.isDirectory()) {
-      // Real directory in the main repo — migration will handle this later.
-      // In worktrees, keep the directory in place and let syncGsdStateToWorktree
-      // refresh its contents. Replacing a git-tracked .gsd directory with a
-      // symlink makes git think tracked planning files were deleted.
+      // Real directory — left in place, which is a supported layout. Replacing
+      // a git-tracked .gsd directory with a symlink makes git think tracked
+      // planning files were deleted, and in worktrees syncGsdStateToWorktree
+      // refreshes the directory's contents. Runtime no longer relocates it.
       return { path: localGsd, identity: resolved.identity };
     }
   } catch {

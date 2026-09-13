@@ -62,7 +62,7 @@ test("DB authority: PROJECT.md projection does not create runtime milestones fro
   const base = makeBase();
   t.after(() => cleanup(base));
 
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
   writeFileSync(
     join(base, ".gsd", "PROJECT.md"),
     [
@@ -168,7 +168,7 @@ test("explicit markdown import remains opt-in and is not run by startup mismatch
   const base = makeBase();
   t.after(() => cleanup(base));
 
-  const milestoneDir = join(base, ".gsd", "milestones", "M001");
+  const milestoneDir = join(base, ".gsd", "phases", "01-m001");
   const sliceDir = join(milestoneDir, "slices", "S01");
   const tasksDir = join(sliceDir, "tasks");
   mkdirSync(tasksDir, { recursive: true });
@@ -211,13 +211,13 @@ test("explicit markdown import remains opt-in and is not run by startup mismatch
 // #1286: migrateHierarchyToDb skips a `[sketch]` slice's stub PLAN tasks, so
 // scanMarkdownHierarchy must skip counting them too. Otherwise the markdown
 // scan claims task rows the DB authoritatively omits, and the startup drift
-// check perpetually reports recovery-required / recommends
-// `/gsd recover` — which re-skips the stub tasks and never converges.
+// check perpetually reports recovery-required against a DB that is in fact
+// correct, and never converges.
 test("sketch slice stub tasks are not treated as markdown/DB drift", async (t) => {
   const base = makeBase();
   t.after(() => cleanup(base));
 
-  const milestoneDir = join(base, ".gsd", "milestones", "M001");
+  const milestoneDir = join(base, ".gsd", "phases", "01-m001");
   const sketchSliceDir = join(milestoneDir, "slices", "S01");
   const realSliceDir = join(milestoneDir, "slices", "S02");
   mkdirSync(sketchSliceDir, { recursive: true });

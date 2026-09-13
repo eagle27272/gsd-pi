@@ -14,12 +14,22 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+
+import { externalGsdRoot } from "../repo-identity.ts";
+import {
+  LAYOUT_SEGMENTS,
+  canonicalPhaseDirName,
+  milestoneIdToPhaseNum,
+  slicePlanFileName,
+} from "../layout-policy.ts";
 
 /**
  * Shell-free git helper — uses execFileSync to bypass shell entirely.
@@ -68,6 +78,33 @@ export function makeTempDir(prefix: string = "gsd-test-"): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
 
+let sharedExternalStateRoot: string | null = null;
+
+/**
+ * Give a fixture repo the layout auto-start produces for a fresh project:
+ * `<base>/.gsd` as a symlink into the external state root. Link before the
+ * fixture writes any state — everything written to `<base>/.gsd/...`
+ * afterwards lands in the external directory, exactly as in production.
+ *
+ * Redirects GSD_STATE_DIR into a temp root so no fixture reaches the real
+ * ~/.gsd. Test files run one per process, so the override is process-local.
+ *
+ * @param base - Project root; must already be a git repo
+ * @returns absolute path to the external state directory
+ */
+export function linkExternalGsdState(base: string): string {
+  if (!sharedExternalStateRoot) {
+    sharedExternalStateRoot = realpathSync(mkdtempSync(join(tmpdir(), "gsd-external-state-")));
+    process.env.GSD_STATE_DIR = sharedExternalStateRoot;
+  }
+  const localGsd = join(base, ".gsd");
+  const externalPath = externalGsdRoot(base);
+  mkdirSync(externalPath, { recursive: true });
+  rmSync(localGsd, { recursive: true, force: true });
+  symlinkSync(externalPath, localGsd, "junction");
+  return externalPath;
+}
+
 /**
  * Safely clean up a temporary directory.
  * Non-fatal — Windows may hold file descriptors briefly.
@@ -110,7 +147,22 @@ export function safeReadFile(filePath: string): string | null {
 }
 
 /**
- * Create a minimal GSD milestone structure in a temp directory.
+ * Absolute path to the flat-phase directory a milestone id projects to.
+ * `.gsd/phases/NN-slug/` — the only on-disk milestone layout.
+ */
+export function phaseDirFor(base: string, mid: string, title?: string): string {
+  return join(base, ".gsd", LAYOUT_SEGMENTS.level1, canonicalPhaseDirName(mid, title));
+}
+
+/** Flat-phase milestone-level artifact file name: `NN-SUFFIX.md`. */
+export function phaseFileName(mid: string, suffix: string): string {
+  return `${String(milestoneIdToPhaseNum(mid)).padStart(2, "0")}-${suffix}.md`;
+}
+
+/**
+ * Create a minimal GSD milestone structure in a temp directory, using the
+ * flat-phase layout (`.gsd/phases/NN-slug/NN-SUFFIX.md`, plans at
+ * `NN-MM-SUFFIX.md`).
  *
  * @param base - Base directory (should have .gsd/ or be a temp repo)
  * @param mid - Milestone ID (e.g., "M001")
@@ -120,6 +172,7 @@ export function writeMilestoneFixture(
   base: string,
   mid: string,
   options: {
+    title?: string;
     roadmap?: string;
     context?: string;
     summary?: string;
@@ -132,34 +185,25 @@ export function writeMilestoneFixture(
     }>;
   } = {},
 ): void {
-  const milestoneDir = join(base, ".gsd", "milestones", mid);
-  mkdirSync(milestoneDir, { recursive: true });
+  const phaseDir = phaseDirFor(base, mid, options.title);
+  const phaseNum = milestoneIdToPhaseNum(mid);
+  mkdirSync(phaseDir, { recursive: true });
 
-  if (options.roadmap) {
-    writeFileSync(join(milestoneDir, `${mid}-ROADMAP.md`), options.roadmap);
-  }
-  if (options.context) {
-    writeFileSync(join(milestoneDir, `${mid}-CONTEXT.md`), options.context);
-  }
-  if (options.summary) {
-    writeFileSync(join(milestoneDir, `${mid}-SUMMARY.md`), options.summary);
-  }
-  if (options.validation) {
-    writeFileSync(join(milestoneDir, `${mid}-VALIDATION.md`), options.validation);
-  }
-  if (options.slices) {
-    for (const slice of options.slices) {
-      const sliceDir = join(milestoneDir, "slices", slice.id);
-      mkdirSync(sliceDir, { recursive: true });
-      if (slice.plan) {
-        writeFileSync(join(sliceDir, `${slice.id}-PLAN.md`), slice.plan);
-      }
-      if (slice.summary) {
-        writeFileSync(join(sliceDir, `${slice.id}-SUMMARY.md`), slice.summary);
-      }
-      if (slice.uat) {
-        writeFileSync(join(sliceDir, `${slice.id}-UAT.md`), slice.uat);
-      }
-    }
+  const writeMilestoneArtifact = (suffix: string, content: string): void => {
+    writeFileSync(join(phaseDir, phaseFileName(mid, suffix)), content);
+  };
+
+  if (options.roadmap) writeMilestoneArtifact("ROADMAP", options.roadmap);
+  if (options.context) writeMilestoneArtifact("CONTEXT", options.context);
+  if (options.summary) writeMilestoneArtifact("SUMMARY", options.summary);
+  if (options.validation) writeMilestoneArtifact("VALIDATION", options.validation);
+
+  for (const slice of options.slices ?? []) {
+    const writeSliceArtifact = (suffix: string, content: string): void => {
+      writeFileSync(join(phaseDir, slicePlanFileName(phaseNum, slice.id, suffix)), content);
+    };
+    if (slice.plan) writeSliceArtifact("PLAN", slice.plan);
+    if (slice.summary) writeSliceArtifact("SUMMARY", slice.summary);
+    if (slice.uat) writeSliceArtifact("UAT", slice.uat);
   }
 }

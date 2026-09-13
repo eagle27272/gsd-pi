@@ -26,7 +26,7 @@ describe("checkSliceEvalReview", () => {
 
   beforeEach(() => {
     basePath = join(tmpdir(), `gsd-ship-eval-${randomUUID()}`);
-    sliceDir = join(basePath, ".gsd", "milestones", "M001", "slices", "S07");
+    sliceDir = join(basePath, ".gsd", "phases", "01-m001");
     mkdirSync(sliceDir, { recursive: true });
   });
 
@@ -73,7 +73,7 @@ describe("checkSliceEvalReview", () => {
   });
 
   it("returns ok with verdict and overall_score when frontmatter is valid (PRODUCTION_READY path)", async () => {
-    writeEvalReview("S07-EVAL-REVIEW.md", happyFrontmatter());
+    writeEvalReview("01-07-EVAL-REVIEW.md", happyFrontmatter());
     const result = await checkSliceEvalReview(basePath, "M001", "S07");
     assert.equal(result.kind, "ok");
     if (result.kind === "ok") {
@@ -84,7 +84,7 @@ describe("checkSliceEvalReview", () => {
 
   it("returns ok with NOT_IMPLEMENTED verdict (warning path)", async () => {
     writeEvalReview(
-      "S07-EVAL-REVIEW.md",
+      "01-07-EVAL-REVIEW.md",
       happyFrontmatter({
         verdict: "NOT_IMPLEMENTED",
         coverage_score: "10",
@@ -101,7 +101,7 @@ describe("checkSliceEvalReview", () => {
   });
 
   it("returns malformed with a JSON-Pointer when verdict is invalid (regression: malformed verdicts must not parse silently)", async () => {
-    writeEvalReview("S07-EVAL-REVIEW.md", happyFrontmatter({ verdict: "MOSTLY_OK" }));
+    writeEvalReview("01-07-EVAL-REVIEW.md", happyFrontmatter({ verdict: "MOSTLY_OK" }));
     const result = await checkSliceEvalReview(basePath, "M001", "S07");
     assert.equal(result.kind, "malformed");
     if (result.kind === "malformed") {
@@ -110,19 +110,19 @@ describe("checkSliceEvalReview", () => {
   });
 
   it("returns malformed when the file has no frontmatter delimiters at all", async () => {
-    writeEvalReview("S07-EVAL-REVIEW.md", "# Just a body, no frontmatter");
+    writeEvalReview("01-07-EVAL-REVIEW.md", "# Just a body, no frontmatter");
     const result = await checkSliceEvalReview(basePath, "M001", "S07");
     assert.equal(result.kind, "malformed");
   });
 
   it("returns malformed when the YAML is syntactically broken inside the frontmatter block", async () => {
-    writeEvalReview("S07-EVAL-REVIEW.md", "---\nfoo: : bar\n---\n");
+    writeEvalReview("01-07-EVAL-REVIEW.md", "---\nfoo: : bar\n---\n");
     const result = await checkSliceEvalReview(basePath, "M001", "S07");
     assert.equal(result.kind, "malformed");
   });
 
   it("treats a TOCTOU race (file deleted after resolution but before read) as absent without throwing (regression: TOCTOU race must surface as absent, not throw)", async () => {
-    const path = writeEvalReview("S07-EVAL-REVIEW.md", happyFrontmatter());
+    const path = writeEvalReview("01-07-EVAL-REVIEW.md", happyFrontmatter());
     // Warm the directory-listing cache used inside resolveSliceFile so the
     // resolver still sees the file by name on the next call. Then delete the
     // file. The subsequent checkSliceEvalReview call resolves a path that
@@ -149,7 +149,7 @@ describe("checkSliceEvalReview", () => {
       "",
       "Some prose paragraph describing the audit.",
     ].join("\n");
-    writeEvalReview("S07-EVAL-REVIEW.md", happyFrontmatter() + body);
+    writeEvalReview("01-07-EVAL-REVIEW.md", happyFrontmatter() + body);
     const result = await checkSliceEvalReview(basePath, "M001", "S07");
     assert.equal(result.kind, "ok");
   });

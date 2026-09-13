@@ -65,3 +65,15 @@ Documented here because they were previously undocumented load-bearing behavior:
 - A new layout (if ever needed) is taught in two seam files — `worktree-placement.ts` (forward) and `findWorktreeSegment` (reverse) — plus the two comment-pinned boundary copies that cannot import the seam: `bg-shell/utilities.ts` (reverse) and `packages/mcp-server`'s `worktreeContainers` (forward).
 - The HOME-detection guard in `worktree-root.ts` and the stale-worktree escape heuristic remain for legacy paths; they are dead weight for canonical paths and can be retired with the legacy layout.
 - `.gitignore` in existing projects gains the `.gsd-worktrees/` entry via the idempotent `ensureGitignore` bootstrap; the doctor flags it when missing.
+
+## Amendment (2026-09-11)
+
+The Context section above cites `migrate-external.ts` as the module that
+migrates in-tree `.gsd/` directories into the external layout. That module was
+deleted by the obsolete-migration removal, along with `migrateToExternalState`
+and the relocation it performed. The rest of this ADR is unaffected: the
+external state directory still exists and ships, `repo-identity.ts` still
+computes the identity hash and manages the `<project>/.gsd → external` symlink
+for fresh projects, and the worktree placement decision recorded here stands. A
+project that already holds a real in-repo `.gsd` directory simply keeps it —
+`ensureGsdSymlink` no longer relocates it.

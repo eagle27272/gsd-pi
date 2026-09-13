@@ -23,6 +23,7 @@ import {
   isDbAvailable,
   openDatabase,
 } from "../gsd-db.js";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -66,7 +67,7 @@ function setupDependencyFixture(
   deps: string[],
   summaries: Record<string, string>,
 ): void {
-  const msDir = join(base, ".gsd", "milestones", mid);
+  const msDir = join(base, ".gsd", "phases", canonicalPhaseDirName(mid));
   mkdirSync(msDir, { recursive: true });
 
   // Build roadmap content — sid depends on deps
@@ -200,10 +201,10 @@ describe("prompt-budget: inlineDependencySummaries truncation", () => {
   });
 
   it("returns no-dependencies marker when slice has no deps", async () => {
-    const msDir = join(base, ".gsd", "milestones", "M001");
+    const msDir = join(base, ".gsd", "phases", "01-m001");
     mkdirSync(msDir, { recursive: true });
     const roadmap = "# Roadmap\n\n## Slices\n\n- [ ] **S01: Solo** `risk:low` `depends:[]`\n";
-    writeFileSync(join(msDir, "M001-ROADMAP.md"), roadmap);
+    writeFileSync(join(msDir, "01-ROADMAP.md"), roadmap);
     // Seed the slice row with an empty `depends` so this exercises the real
     // zero-dependency branch rather than the "no DB row" path.
     seedSliceRows("M001", "S01", []);
@@ -423,11 +424,11 @@ describe("prompt-budget: execute-task template", () => {
   it("rendered execute-task prompt includes verification budget", async () => {
     const base = createFixtureBase();
     try {
-      const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+      const sliceDir = join(base, ".gsd", "phases", "01-m001");
       const taskDir = join(sliceDir, "tasks");
       mkdirSync(taskDir, { recursive: true });
-      writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), "# Roadmap\n");
-      writeFileSync(join(sliceDir, "S01-PLAN.md"), "# Slice Plan\n");
+      writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md"), "# Roadmap\n");
+      writeFileSync(join(sliceDir, "01-01-PLAN.md"), "# Slice Plan\n");
       writeFileSync(join(taskDir, "T01-PLAN.md"), "# Task Plan\n");
 
       const prompt = await buildExecuteTaskPrompt("M001", "S01", "Slice", "T01", "Task", base, {
@@ -444,11 +445,11 @@ describe("prompt-budget: execute-task template", () => {
   it("standard execute-task prompt keeps decisions template on demand", async () => {
     const base = createFixtureBase();
     try {
-      const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+      const sliceDir = join(base, ".gsd", "phases", "01-m001");
       const taskDir = join(sliceDir, "tasks");
       mkdirSync(taskDir, { recursive: true });
-      writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), "# Roadmap\n");
-      writeFileSync(join(sliceDir, "S01-PLAN.md"), "# Slice Plan\n");
+      writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md"), "# Roadmap\n");
+      writeFileSync(join(sliceDir, "01-01-PLAN.md"), "# Slice Plan\n");
       writeFileSync(join(taskDir, "T01-PLAN.md"), "# Task Plan\n");
 
       const prompt = await buildExecuteTaskPrompt("M001", "S01", "Slice", "T01", "Task", base, {
@@ -664,11 +665,11 @@ describe("prompt-budget: reactive-execute builder", () => {
   it("caps dependency carry-forward per ready subagent", async () => {
     const base = createFixtureBase();
     try {
-      const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+      const sliceDir = join(base, ".gsd", "phases", "01-m001");
       const taskDir = join(sliceDir, "tasks");
       mkdirSync(taskDir, { recursive: true });
       writeFileSync(
-        join(sliceDir, "S01-PLAN.md"),
+        join(sliceDir, "01-01-PLAN.md"),
         [
           "# S01: Slice",
           "",
@@ -706,8 +707,9 @@ describe("prompt-budget: reactive-execute builder", () => {
         "## Diagnostics",
         "Large diagnostic ".repeat(3000),
       ].join("\n");
-      writeFileSync(join(taskDir, "T01-SUMMARY.md"), hugeSummary);
-      writeFileSync(join(taskDir, "T02-SUMMARY.md"), hugeSummary);
+      // Flat-phase: task summaries sit at the phase root, not in tasks/.
+      writeFileSync(join(sliceDir, "S01-T01-SUMMARY.md"), hugeSummary);
+      writeFileSync(join(sliceDir, "S01-T02-SUMMARY.md"), hugeSummary);
 
       const prompt = await buildReactiveExecutePrompt("M001", "Milestone", "S01", "Slice", ["T03"], base, undefined, {
         sessionContextWindow: 32_000,
@@ -748,11 +750,11 @@ describe("prompt-budget: modelRegistry + sessionContextWindow behavior", () => {
   it("buildExecuteTaskPrompt output changes when sessionContextWindow changes", async () => {
     const base = createFixtureBase();
     try {
-      const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+      const sliceDir = join(base, ".gsd", "phases", "01-m001");
       const taskDir = join(sliceDir, "tasks");
       mkdirSync(taskDir, { recursive: true });
-      writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), "# Roadmap\n");
-      writeFileSync(join(sliceDir, "S01-PLAN.md"), "# Slice Plan\n");
+      writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md"), "# Roadmap\n");
+      writeFileSync(join(sliceDir, "01-01-PLAN.md"), "# Slice Plan\n");
       writeFileSync(join(taskDir, "T01-PLAN.md"), "# Task Plan\n");
 
       const small = await buildExecuteTaskPrompt("M001", "S01", "Slice", "T01", "Task", base, {
@@ -779,11 +781,11 @@ describe("prompt-budget: execute-task inline cap (039)", () => {
   it("keeps the authoritative task plan whole but drops trailing templates when the plan alone exceeds the inline budget", async () => {
     const base = createFixtureBase();
     try {
-      const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+      const sliceDir = join(base, ".gsd", "phases", "01-m001");
       const taskDir = join(sliceDir, "tasks");
       mkdirSync(taskDir, { recursive: true });
-      writeFileSync(join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), "# Roadmap\n");
-      writeFileSync(join(sliceDir, "S01-PLAN.md"), "# Slice Plan\n");
+      writeFileSync(join(base, ".gsd", "phases", "01-m001", "01-ROADMAP.md"), "# Roadmap\n");
+      writeFileSync(join(sliceDir, "01-01-PLAN.md"), "# Slice Plan\n");
       // Oversized task plan (~60K) — well past the 20K inline ceiling.
       const bigPlan = "# Task Plan\n\nMARKER_TASKPLAN_HEAD\n\n" + Array.from({ length: 30 }, (_, i) =>
         `### Step ${i}\n\n${"Implementation detail. ".repeat(90)}`
@@ -831,7 +833,7 @@ describe("prompt-budget: discuss-slice inline cap (039)", () => {
 
     try {
       writeFileSync(join(gsdHome, "PREFERENCES.md"), "---\nversion: 1\nlanguage: 中文\n---\n", "utf-8");
-      mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01"), { recursive: true });
+      mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
 
       const prompt = await buildDiscussSlicePrompt("M001", "S01", "Current", base);
 
@@ -847,10 +849,10 @@ describe("prompt-budget: discuss-slice inline cap (039)", () => {
   it("caps the inlined block — roadmap survives first, the trailing decisions register truncates", async () => {
     const base = createFixtureBase();
     try {
-      const msDir = join(base, ".gsd", "milestones", "M001");
+      const msDir = join(base, ".gsd", "phases", "01-m001");
       mkdirSync(join(msDir, "slices", "S01"), { recursive: true });
-      writeFileSync(join(msDir, "M001-ROADMAP.md"), "# Roadmap\n\nMARKER_ROADMAP\n\n- [ ] **S01: Current** `risk:low`\n");
-      writeFileSync(join(msDir, "M001-CONTEXT.md"), "# Context\n\nMARKER_CONTEXT\n");
+      writeFileSync(join(msDir, "01-ROADMAP.md"), "# Roadmap\n\nMARKER_ROADMAP\n\n- [ ] **S01: Current** `risk:low`\n");
+      writeFileSync(join(msDir, "01-CONTEXT.md"), "# Context\n\nMARKER_CONTEXT\n");
       // Huge decisions register (~60K) — the unbounded-growth surface the cap bounds.
       const bigDecisions = "# Decisions\n\n" + Array.from({ length: 40 }, (_, i) =>
         `### D${String(i).padStart(3, "0")}\n\n${"Decision rationale detail. ".repeat(60)}`

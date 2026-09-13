@@ -49,16 +49,16 @@ test("#2942: .gsd/ with PREFERENCES.md counts as bootstrapped", (t) => {
   assert.equal(hasGsdBootstrapArtifacts(gsd), true);
 });
 
-test("#2942: .gsd/ with milestones/ directory counts as bootstrapped", (t) => {
+test("#2942: .gsd/ with phases/ directory counts as bootstrapped", (t) => {
   const gsd = makeGsdDir(t);
-  mkdirSync(join(gsd, "milestones"));
+  mkdirSync(join(gsd, "phases"));
   assert.equal(hasGsdBootstrapArtifacts(gsd), true);
 });
 
 test("#2942: both artifacts present → bootstrapped", (t) => {
   const gsd = makeGsdDir(t);
   writeFileSync(join(gsd, "PREFERENCES.md"), "# prefs\n");
-  mkdirSync(join(gsd, "milestones"));
+  mkdirSync(join(gsd, "phases"));
   assert.equal(hasGsdBootstrapArtifacts(gsd), true);
 });
 
@@ -74,9 +74,9 @@ test("#2942: injected existsFn — PREFERENCES.md alone is enough", () => {
   assert.equal(hasGsdBootstrapArtifacts("/proj/.gsd", existsFn), true);
 });
 
-test("#2942: injected existsFn — milestones/ alone is enough", () => {
+test("#2942: injected existsFn — phases/ alone is enough", () => {
   const existsFn = (p: string) =>
-    p === "/proj/.gsd" || p === "/proj/.gsd/milestones";
+    p === "/proj/.gsd" || p === "/proj/.gsd/phases";
   assert.equal(hasGsdBootstrapArtifacts("/proj/.gsd", existsFn), true);
 });
 

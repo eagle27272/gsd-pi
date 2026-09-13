@@ -1,5 +1,5 @@
 // Project/App: gsd-pi
-// File Purpose: Verifies model routing decisions and legacy provider-default telemetry.
+// File Purpose: Verifies model routing decisions.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -10,7 +10,6 @@ import ts from "typescript";
 import type { Api, Model } from "@gsd/pi-ai";
 
 import type { ClassificationResult } from "../complexity-classifier.js";
-import { getLegacyTelemetry, resetLegacyTelemetry } from "../legacy-telemetry.js";
 import {
   canonicalizeModelId,
   computeTaskRequirements,
@@ -429,28 +428,16 @@ test("resolveModelForComplexity: wasDowngraded is false when preferred session m
 // ─── resolveModelForTier (provider-agnostic tier resolution) ────────────────
 
 test("resolveModelForTier: returns canonical Anthropic model when no available models", () => {
-  try {
-    resetLegacyTelemetry();
-    assert.equal(resolveModelForTier("heavy", []), "claude-opus-4-6");
-    assert.equal(resolveModelForTier("standard", []), "claude-sonnet-4-6");
-    assert.equal(resolveModelForTier("light", []), "claude-haiku-4-5");
-    assert.equal(getLegacyTelemetry()["legacy.providerDefaultUsed"], 3);
-  } finally {
-    resetLegacyTelemetry();
-  }
+  assert.equal(resolveModelForTier("heavy", []), "claude-opus-4-6");
+  assert.equal(resolveModelForTier("standard", []), "claude-sonnet-4-6");
+  assert.equal(resolveModelForTier("light", []), "claude-haiku-4-5");
 });
 
 test("resolveModelForTier: returns canonical model when it is available", () => {
-  try {
-    resetLegacyTelemetry();
-    assert.equal(
-      resolveModelForTier("heavy", ["claude-opus-4-6", "claude-sonnet-4-6"]),
-      "claude-opus-4-6",
-    );
-    assert.equal(getLegacyTelemetry()["legacy.providerDefaultUsed"], 0);
-  } finally {
-    resetLegacyTelemetry();
-  }
+  assert.equal(
+    resolveModelForTier("heavy", ["claude-opus-4-6", "claude-sonnet-4-6"]),
+    "claude-opus-4-6",
+  );
 });
 
 test("resolveModelForTier: does not prefer canonical over cheaper same-tier model", () => {
@@ -496,20 +483,14 @@ test("resolveModelForTier: preserves selected standard-tier model over cheaper s
 });
 
 test("resolveModelForTier: light tier with no light provider model stays on selected provider model", () => {
-  try {
-    resetLegacyTelemetry();
-    const result = resolveModelForTier(
-      "light",
-      ["zai/glm-4.5-air", "zai/glm-5.1", "zai/glm-5.2"],
-      defaultRoutingConfig(),
-      true,
-      "zai/glm-5.2",
-    );
-    assert.equal(result, "zai/glm-5.2");
-    assert.equal(getLegacyTelemetry()["legacy.providerDefaultUsed"], 0);
-  } finally {
-    resetLegacyTelemetry();
-  }
+  const result = resolveModelForTier(
+    "light",
+    ["zai/glm-4.5-air", "zai/glm-5.1", "zai/glm-5.2"],
+    defaultRoutingConfig(),
+    true,
+    "zai/glm-5.2",
+  );
+  assert.equal(result, "zai/glm-5.2");
 });
 
 test("resolveModelForTier: cross_provider:false ignores non-Anthropic preferred model and returns Claude", () => {
@@ -541,14 +522,8 @@ test("resolveModelForTier: cross_provider:false honors preferred model when it i
 });
 
 test("resolveModelForTier: non-empty provider list without a tier match does not fall back to canonical", () => {
-  try {
-    resetLegacyTelemetry();
-    const result = resolveModelForTier("heavy", ["zai/glm-5.2"]);
-    assert.equal(result, "zai/glm-5.2");
-    assert.equal(getLegacyTelemetry()["legacy.providerDefaultUsed"], 0);
-  } finally {
-    resetLegacyTelemetry();
-  }
+  const result = resolveModelForTier("heavy", ["zai/glm-5.2"]);
+  assert.equal(result, "zai/glm-5.2");
 });
 
 test("resolveModelForTier: handles provider-prefixed available models", () => {

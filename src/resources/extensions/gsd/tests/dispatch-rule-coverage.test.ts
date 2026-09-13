@@ -16,6 +16,7 @@ import { DISPATCH_RULES } from "../auto-dispatch.ts";
 import type { DispatchContext, DispatchAction } from "../auto-dispatch.ts";
 import type { GSDState } from "../types.ts";
 import { createWorkspace, scopeMilestone } from "../workspace.ts";
+import { canonicalPhaseDirName, milestoneIdToPhaseNum, slicePlanFileName } from "../layout-policy.ts";
 
 // ─── State helpers ────────────────────────────────────────────────────────
 
@@ -46,9 +47,9 @@ function makeCtx(basePath: string, state: GSDState, mid = "M001"): DispatchConte
 // ─── Disk scaffold helpers ────────────────────────────────────────────────
 
 function writeMilestoneFile(basePath: string, mid: string, suffix: string, content = "stub\n"): void {
-  const dir = join(basePath, ".gsd", "milestones", mid);
+  const dir = join(basePath, ".gsd", "phases", canonicalPhaseDirName(mid));
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${mid}-${suffix}.md`), content);
+  writeFileSync(join(dir, `${String(milestoneIdToPhaseNum(mid)).padStart(2, "0")}-${suffix}.md`), content);
 }
 
 function writeSliceFile(
@@ -58,13 +59,13 @@ function writeSliceFile(
   suffix: string,
   content = "stub\n",
 ): void {
-  const dir = join(basePath, ".gsd", "milestones", mid, "slices", sid);
+  const dir = join(basePath, ".gsd", "phases", canonicalPhaseDirName(mid));
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${sid}-${suffix}.md`), content);
+  writeFileSync(join(dir, slicePlanFileName(milestoneIdToPhaseNum(mid), sid, suffix)), content);
 }
 
 function writeTaskPlan(basePath: string, mid: string, sid: string, tid: string): void {
-  const dir = join(basePath, ".gsd", "milestones", mid, "slices", sid, "tasks");
+  const dir = join(basePath, ".gsd", "phases", canonicalPhaseDirName(mid), "tasks");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${tid}-PLAN.md`), `# ${tid}\n\n## Steps\n- [ ] Step\n`);
 }
@@ -132,7 +133,7 @@ test("dispatch-rule-coverage: pre-planning, no CONTEXT → discuss-milestone", a
   t.after(() => rmSync(tmp, { recursive: true, force: true }));
 
   // Bare milestone dir, no CONTEXT/RESEARCH/ROADMAP files.
-  mkdirSync(join(tmp, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(tmp, ".gsd", "phases", "01-m001"), { recursive: true });
 
   const ctx = makeCtx(tmp, makeState({ phase: "pre-planning" }));
   const match = await findFirstMatch(ctx);
@@ -156,9 +157,9 @@ test("dispatch-rule-coverage: pre-planning worktree sees project-root CONTEXT", 
   writeFileSync(join(projectPhaseDir, "01-CONTEXT.md"), "# Context\n");
 
   const worktree = join(tmp, ".gsd", "worktrees", "M001");
-  mkdirSync(join(worktree, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(worktree, ".gsd", "phases", "01-m001"), { recursive: true });
   writeFileSync(
-    join(worktree, ".gsd", "milestones", "M001", "M001-META.json"),
+    join(worktree, ".gsd", "phases", "01-m001", "01-META.json"),
     '{"branch":"milestone/M001"}',
   );
 
@@ -264,8 +265,8 @@ test("dispatch-rule-coverage: plan-milestone refreshes stale session scope", asy
   assert.ok(result?.action === "dispatch");
   assert.match(result.prompt, /Current Milestone Context/);
   assert.doesNotMatch(result.prompt, /Prior Milestone Context/);
-  assert.match(result.prompt, /\.gsd\/milestones\/M002\/M002-CONTEXT\.md/);
-  assert.doesNotMatch(result.prompt, /\.gsd\/milestones\/M001\/M001-CONTEXT\.md/);
+  assert.match(result.prompt, /\.gsd\/phases\/02-m002\/02-CONTEXT\.md/);
+  assert.doesNotMatch(result.prompt, /\.gsd\/phases\/01-m001\/01-CONTEXT\.md/);
 });
 
 test("dispatch-rule-coverage: planning with active slice and skip_research → plan-slice", async (t) => {

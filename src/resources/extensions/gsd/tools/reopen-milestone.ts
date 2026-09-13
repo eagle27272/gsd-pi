@@ -32,13 +32,11 @@ import {
   buildFlatTaskFileName,
   buildSliceFileName,
   buildTaskFileName,
-  legacyMilestonesDir,
   resolveMilestoneFile,
   resolveMilestonePath,
   resolveSliceFile,
   resolveSlicePath,
   resolveTaskFile,
-  resolveTasksDir,
   clearPathCache,
   targetMilestoneFile,
   targetSliceFile,
@@ -149,10 +147,6 @@ export async function handleReopenMilestone(
       const slices = getMilestoneSlices(params.milestoneId);
       const milestoneTitle = getMilestone(params.milestoneId)?.title;
       const milestoneDir = resolveMilestonePath(basePath, params.milestoneId);
-      const legacyBase = legacyMilestonesDir(basePath);
-      const isLegacy = !!milestoneDir && (
-        milestoneDir.startsWith(legacyBase + "/") || milestoneDir.startsWith(legacyBase + "\\")
-      );
       const remove = (artifactPath: string): boolean => {
         cleanupInterleaveForTest?.({ artifactPath, operationId });
         return removeProjectionIfCurrent({ artifactPath, operationId, isCurrent });
@@ -193,20 +187,14 @@ export async function handleReopenMilestone(
           }
         }
 
-        const tasksDir = resolveTasksDir(basePath, params.milestoneId, slice.id);
         const tasks = getSliceTasks(params.milestoneId, slice.id);
         for (const task of tasks) {
-          let taskSummaries: string[] = [];
-          if (isLegacy) {
-            if (tasksDir) {
-              taskSummaries = [join(tasksDir, buildTaskFileName(task.id, "SUMMARY"))];
-            }
-          } else if (milestoneDir) {
-            taskSummaries = [
+          const taskSummaries: string[] = milestoneDir
+            ? [
               join(milestoneDir, buildFlatTaskFileName(slice.id, task.id, "SUMMARY")),
               join(milestoneDir, buildTaskFileName(task.id, "SUMMARY")),
-            ];
-          }
+            ]
+            : [];
           const taskArtifacts = new Set([
             resolveTaskFile(basePath, params.milestoneId, slice.id, task.id, "SUMMARY"),
             targetTaskFile(basePath, params.milestoneId, slice.id, task.id, "SUMMARY", milestoneTitle),

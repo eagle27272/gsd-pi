@@ -116,9 +116,8 @@ test("detect treats missing marker as drift on every tracked projection file", a
   // No writeCompatMarker call → marker missing → EMPTY_MARKER
 
   // Without a marker we have no projections to compare, so detect should be a
-  // no-op (the reconcile pipeline's other handlers cover the "import everything"
-  // case via the existing /gsd recover flow). This is by design: this handler
-  // only fires when we HAVE a baseline to compare.
+  // no-op (the reconcile pipeline's other handlers cover a cold start). This is
+  // by design: this handler only fires when we HAVE a baseline to compare.
   const drift = await externalMarkdownEditHandler.detect(stubState, ctx(base));
   assert.equal(drift.length, 0);
 });
@@ -161,7 +160,8 @@ test("modeled drift blocks with an explicit route and cannot run repair", async 
   const blocker = await externalMarkdownEditHandler.blocker?.(drift1[0], ctx(base));
   assert.match(blocker ?? "", /database is authoritative/i);
   assert.match(blocker ?? "", /\/gsd rebuild markdown/);
-  assert.match(blocker ?? "", /\/gsd recover/);
+  assert.match(blocker ?? "", /cannot import the edited markdown into the DB/);
+  assert.doesNotMatch(blocker ?? "", /\/gsd recover/);
   assert.throws(
     () => externalMarkdownEditHandler.repair(drift1[0], ctx(base)),
     /modeled projection repair must remain blocked/,

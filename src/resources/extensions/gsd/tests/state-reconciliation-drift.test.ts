@@ -1262,9 +1262,11 @@ test("ADR-017 (#5704/#1281): unregistered-milestone drift pauses with a hint ins
   // Hint leads with targeted, non-destructive actions (rename/discard)...
   assert.match(blocker!, /Rename/);
   assert.match(blocker!, /Discard/);
-  // ...and reframes recover as a destructive last resort, not the fix (#826).
-  assert.match(blocker!, /\/gsd recover/);
+  // ...and reframes a backup restore as a destructive last resort, not the fix (#826).
+  assert.match(blocker!, /\/gsd db restore-backup/);
   assert.match(blocker!, /last resort/i);
+  // There is no markdown → DB import path to advertise.
+  assert.doesNotMatch(blocker!, /\/gsd recover/);
   // Runtime never imports markdown into the DB.
   assert.equal(getMilestone("M042"), null, "post: DB still has no row for M042");
 });

@@ -35,6 +35,7 @@ import { openWorkflowDatabase } from "../db-workspace.ts";
 import { handleCompleteMilestone } from "../tools/complete-milestone.ts";
 import { handleValidateMilestone } from "../tools/validate-milestone.ts";
 import { deriveStateFromDb } from "../state.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 const tempDirs = new Set<string>();
 
@@ -83,12 +84,11 @@ function executeAtFence(
 function makeFixture(): string {
   const basePath = mkdtempSync(join(tmpdir(), "gsd-adopted-validation-waiver-"));
   tempDirs.add(basePath);
-  const milestoneDir = join(basePath, ".gsd", "milestones", "M001");
-  const sliceDir = join(milestoneDir, "slices", "S01");
-  mkdirSync(sliceDir, { recursive: true });
+  const milestoneDir = join(basePath, ".gsd", "phases", canonicalPhaseDirName("M001", "Waived validation"));
+  mkdirSync(milestoneDir, { recursive: true });
   writeFileSync(join(basePath, ".gitignore"), ".gsd/\n");
   writeFileSync(join(basePath, "source.ts"), "export const source = 'waiver';\n");
-  writeFileSync(join(sliceDir, "S01-SUMMARY.md"), "# Summary\n");
+  writeFileSync(join(milestoneDir, "01-01-SUMMARY.md"), "# Summary\n");
   execFileSync("git", ["init"], { cwd: basePath, stdio: "ignore" });
   execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: basePath });
   execFileSync("git", ["config", "user.name", "Test"], { cwd: basePath });
@@ -189,7 +189,7 @@ test("adopted validation skip records a canonical waiver without fabricating PAS
   assert.equal(row(`SELECT COUNT(*) AS count FROM workflow_waivers`).count, 1);
   assert.equal(row(`SELECT COUNT(*) AS count FROM workflow_operations WHERE operation_type = 'milestone.validation.waive'`).count, 1);
   assert.equal(row(`SELECT COUNT(*) AS count FROM workflow_domain_events WHERE event_type = 'milestone.validation.waived'`).count, 1);
-  const validationPath = join(basePath, ".gsd", "milestones", "M001", "M001-VALIDATION.md");
+  const validationPath = join(basePath, ".gsd", "phases", canonicalPhaseDirName("M001", "Waived validation"), "01-VALIDATION.md");
   assert.equal(existsSync(validationPath), true);
   assert.doesNotMatch(readFileSync(validationPath, "utf-8"), /verdict:\s*pass/i);
   const projection = String(row(`
@@ -219,8 +219,8 @@ test("adopted waiver replay is exact and projection loss cannot block closeout",
   assert.equal((await rule.match(context))?.action, "dispatch");
   assert.equal(row(`SELECT COUNT(*) AS count FROM workflow_waivers`).count, 1);
   assert.equal(row(`SELECT COUNT(*) AS count FROM workflow_operations WHERE operation_type = 'milestone.validation.waive'`).count, 1);
-  const validationPath = join(basePath, ".gsd", "milestones", "M001", "M001-VALIDATION.md");
-  const summaryPath = join(basePath, ".gsd", "milestones", "M001", "slices", "S01", "S01-SUMMARY.md");
+  const validationPath = join(basePath, ".gsd", "phases", canonicalPhaseDirName("M001", "Waived validation"), "01-VALIDATION.md");
+  const summaryPath = join(basePath, ".gsd", "phases", canonicalPhaseDirName("M001", "Waived validation"), "01-01-SUMMARY.md");
   unlinkSync(validationPath);
   unlinkSync(summaryPath);
 
@@ -252,7 +252,7 @@ test("waiver persistence is atomic when the Domain Operation faults", async () =
   assert.equal(row(`SELECT COUNT(*) AS count FROM workflow_waivers`).count, 0);
   assert.equal(row(`SELECT COUNT(*) AS count FROM workflow_operations WHERE operation_type = 'milestone.validation.waive'`).count, 0);
   assert.equal(row(`SELECT COUNT(*) AS count FROM workflow_domain_events WHERE event_type = 'milestone.validation.waived'`).count, 0);
-  assert.equal(existsSync(join(basePath, ".gsd", "milestones", "M001", "M001-VALIDATION.md")), false);
+  assert.equal(existsSync(join(basePath, ".gsd", "phases", canonicalPhaseDirName("M001", "Waived validation"), "01-VALIDATION.md")), false);
 });
 
 test("descendant work after a waiver makes the canonical authorization stale", async () => {
@@ -364,7 +364,7 @@ test("a newer failing canonical validation blocks instead of resurrecting an old
 test("forged legacy PASS cannot authorize adopted closeout recovery", () => {
   const basePath = makeFixture();
   insertAssessment({
-    path: join(basePath, ".gsd", "milestones", "M001", "M001-VALIDATION.md"),
+    path: join(basePath, ".gsd", "phases", canonicalPhaseDirName("M001", "Waived validation"), "01-VALIDATION.md"),
     milestoneId: "M001",
     status: "pass",
     scope: "milestone-validation",
@@ -484,7 +484,7 @@ test("canonical waiver closes validation-owned gates only with milestone complet
 
 test("canonical passing validation cannot settle a pending task gate from Markdown projections", async () => {
   const basePath = makeFixture();
-  const taskDir = join(basePath, ".gsd", "milestones", "M001", "slices", "S01", "tasks");
+  const taskDir = join(basePath, ".gsd", "phases", canonicalPhaseDirName("M001", "Waived validation"), "tasks");
   mkdirSync(taskDir, { recursive: true });
   writeFileSync(
     join(taskDir, "T01-SUMMARY.md"),

@@ -138,7 +138,6 @@ The task-bearing planning payloads use camel-case `requiredWorkflowTools` on `gs
 | `rethink` | milestones, slices, artifacts | Slice cancellation through `gsd_skip_slice`; milestone sequence updates are repaired from QUEUE-ORDER.json during state derivation | QUEUE-ORDER.json, PARKED.md |
 | `rewrite-docs` | decisions, requirements, artifacts | decisions, requirements, artifacts | DECISIONS.md, REQUIREMENTS.md, slice plans with embedded task planning |
 | `doctor-heal` | slices, tasks, artifacts | artifacts (repair CONTEXT/SUMMARY/UAT) | repairs existing artifacts |
-| `review-migration` | milestones, slices, tasks, artifacts, decisions, requirements | — (read-only audit) | — |
 | `scan` | — | — | STACK.md, INTEGRATIONS.md, ARCHITECTURE.md |
 | `debug-diagnose` | memories | memories (INSERT pattern/gotcha), memories (hit_count++) | — |
 | `forensics` | audit_events, gate_runs, turn_git_transactions | — (read-only) | — |

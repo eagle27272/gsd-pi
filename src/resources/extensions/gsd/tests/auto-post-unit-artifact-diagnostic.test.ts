@@ -12,7 +12,7 @@ import { _clearGsdRootCache, clearPathCache } from "../paths.ts";
 
 test("missing execute-task artifact includes completion contract and completion-tool hint", () => {
   const base = mkdtempSync(join(tmpdir(), "gsd-artifact-diag-"));
-  const taskDir = join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks");
+  const taskDir = join(base, ".gsd", "phases", "01-m001", "tasks");
   mkdirSync(taskDir, { recursive: true });
 
   const msg = _describeArtifactVerificationFailureForTest("execute-task", "M001/S01/T01", base);
@@ -23,7 +23,7 @@ test("missing execute-task artifact includes completion contract and completion-
 
 test("missing execute-task artifact skips completion-tool hint when completion tool call is present", () => {
   const base = mkdtempSync(join(tmpdir(), "gsd-artifact-diag-"));
-  const taskDir = join(base, ".gsd", "milestones", "M001", "slices", "S01", "tasks");
+  const taskDir = join(base, ".gsd", "phases", "01-m001", "tasks");
   mkdirSync(taskDir, { recursive: true });
 
   const msg = _describeArtifactVerificationFailureForTest(
@@ -38,7 +38,7 @@ test("missing execute-task artifact skips completion-tool hint when completion t
 
 test("missing run-uat artifact names gsd_uat_result_save (#1781 O-4)", () => {
   const base = mkdtempSync(join(tmpdir(), "gsd-artifact-diag-uat-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001", "slices", "S01"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
 
   const msg = _describeArtifactVerificationFailureForTest("run-uat", "M001/S01", base);
   assert.match(msg, /ASSESSMENT\.md was not found on disk after unit execution/);
@@ -47,7 +47,7 @@ test("missing run-uat artifact names gsd_uat_result_save (#1781 O-4)", () => {
 
 test("missing validate-milestone artifact names gsd_validate_milestone (#1781 O-4)", () => {
   const base = mkdtempSync(join(tmpdir(), "gsd-artifact-diag-validate-"));
-  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
 
   const msg = _describeArtifactVerificationFailureForTest("validate-milestone", "M001", base);
   assert.match(msg, /was not found on disk after unit execution/);
@@ -57,7 +57,7 @@ test("missing validate-milestone artifact names gsd_validate_milestone (#1781 O-
 test("parallel research cost spike writes durable PARALLEL-BLOCKER", () => {
   const base = mkdtempSync(join(tmpdir(), "gsd-parallel-cost-blocker-"));
   try {
-    mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+    mkdirSync(join(base, ".gsd", "phases", "01-m001"), { recursive: true });
     const blocker = maybeWriteParallelResearchCostSpikeBlocker(
       "research-slice",
       "M001/parallel-research",
@@ -67,7 +67,7 @@ test("parallel research cost spike writes durable PARALLEL-BLOCKER", () => {
     );
 
     const expected = resolveExpectedArtifactPath("research-slice", "M001/parallel-research", base);
-    assert.match(blocker ?? "", /M001-PARALLEL-BLOCKER\.md/);
+    assert.match(blocker ?? "", /01-PARALLEL-BLOCKER\.md/);
     assert.ok(expected);
     assert.equal(existsSync(expected!), true);
     assert.match(readFileSync(expected!, "utf-8"), /cost spike detected \(3\.73 vs avg 1\.02\)/);
@@ -91,11 +91,11 @@ test("symlinked project root yields a clean .gsd-relative artifact path, not a .
   const linkParent = realpathSync(mkdtempSync(join(tmpdir(), "gsd-symlink-link-")));
   const linkRoot = join(linkParent, "project");
   try {
-    // Content-bearing legacy milestone dir so plan-milestone resolves the
-    // canonical (realpath) ROADMAP path under realRoot/.gsd/milestones/M001/.
-    const milestoneDir = join(realRoot, ".gsd", "milestones", "M001");
+    // Content-bearing phase dir so plan-milestone resolves the canonical
+    // (realpath) ROADMAP path under realRoot/.gsd/phases/01-m001/.
+    const milestoneDir = join(realRoot, ".gsd", "phases", "01-m001");
     mkdirSync(milestoneDir, { recursive: true });
-    writeFileSync(join(milestoneDir, "M001-CONTEXT.md"), "# context\n");
+    writeFileSync(join(milestoneDir, "01-CONTEXT.md"), "# context\n");
     // The ROADMAP intentionally does not exist — this hits the "not found on
     // disk" branch, the exact symptom in #1238.
     symlinkSync(realRoot, linkRoot);
@@ -111,7 +111,7 @@ test("symlinked project root yields a clean .gsd-relative artifact path, not a .
     assert.doesNotMatch(msg, /\.\.[/\\]/, "must not contain a ../ walk out of the symlinked base");
     assert.match(
       msg,
-      /\.gsd[/\\]milestones[/\\]M001[/\\]M001-ROADMAP\.md/,
+      /\.gsd[/\\]phases[/\\]01-m001[/\\]01-ROADMAP\.md/,
       "must show the clean .gsd-relative ROADMAP path",
     );
   } finally {

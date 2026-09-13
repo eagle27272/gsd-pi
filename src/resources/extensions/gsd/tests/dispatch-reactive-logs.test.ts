@@ -59,9 +59,9 @@ function makeExecutingCtx(base: string): DispatchContext {
 test("reactive rule logs a dispatch error when graph derivation throws (auto-dispatch.ts:1494)", async (t) => {
   const base = mkdtempSync(join(tmpdir(), "gsd-reactive-logs-"));
   // Minimal slice projection so the rule's earlier filesystem guards resolve.
-  const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
+  const sliceDir = join(base, ".gsd", "phases", "01-m001");
   mkdirSync(sliceDir, { recursive: true });
-  writeFileSync(join(sliceDir, "S01-PLAN.md"), "# S01\n\n## Tasks\n\n- [ ] **T01: A**\n", "utf-8");
+  writeFileSync(join(sliceDir, "01-01-PLAN.md"), "# S01\n\n## Tasks\n\n- [ ] **T01: A**\n", "utf-8");
   assert.equal(openDatabase(join(base, ".gsd", "gsd.db")), true);
   insertMilestone({ id: "M001", title: "Milestone", status: "active" });
   insertSlice({ id: "S01", milestoneId: "M001", title: "Slice", status: "active" });

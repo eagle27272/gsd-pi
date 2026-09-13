@@ -4,7 +4,7 @@ Both `@opengsd/gsd-core` and `@opengsd/gsd-pi` use the same `.gsd/` directory, b
 
 ## The shared contract
 
-gsd-core treats `.gsd/*.md` files as the source of truth. gsd-pi treats its SQLite database as canonical and uses those files only as projections. It never imports modeled markdown implicitly during startup or `/gsd sync`; use gsd-pi's planning and reopen tools for ordinary changes, or the verified `/gsd recover` Preview/Application flow when markdown is intentionally replacing missing or damaged database state.
+gsd-core treats `.gsd/*.md` files as the source of truth. gsd-pi treats its SQLite database as canonical and uses those files only as projections. It never imports modeled markdown — not during startup, not during `/gsd sync`, not on demand. Every change has to go through gsd-pi's planning and reopen tools; if the database itself is missing or damaged, restore it with `/gsd db restore-backup` rather than expecting markdown to repopulate it.
 
 ## Recommended workflow: commit before switching
 
@@ -15,7 +15,7 @@ git add .gsd/
 git commit -m "wip: switching to gsd-pi"
 ```
 
-Then open the other tool. The commit preserves reviewable markdown edits, but it does not back up gsd-pi's gitignored database. Do not use `git reset --hard` as database recovery; use the verified backup and recovery action printed by `/gsd recover` when database recovery is required.
+Then open the other tool. The commit preserves reviewable markdown edits, but it does not back up gsd-pi's gitignored database — and committed markdown cannot be imported back into it. Do not use `git reset --hard` as database recovery; use `/gsd db restore-backup` when database recovery is required.
 
 ## What gsd-pi does on startup
 
@@ -62,19 +62,19 @@ gsd-core is unaware of gsd-pi. It sees `.gsd/*.md` as ordinary markdown and edit
 
 ## `.planning/` projects
 
-If your project uses gsd-core's `.planning/` layout (flat `phases/NN-name/` directories, root `ROADMAP.md` / `STATE.md`), import it explicitly with `/gsd migrate`. After migration, gsd-pi can project canonical DB state back to the recorded layout.
+If your project uses gsd-core's `.planning/` layout (flat `phases/NN-name/` directories, root `ROADMAP.md` / `STATE.md`), gsd-pi **observes** it but cannot adopt it. The bulk `.planning/` → database import was removed; there is no command that turns a gsd-core tree into gsd-pi state. To move a `.planning/` project to gsd-pi, re-enter its milestones, slices, and tasks through gsd-pi's planning commands.
 
-- `/gsd migrate` previews and imports the hierarchy through a verified Import Application, then records the layout in `.gsd/.compat.json` only after publication succeeds.
-- On every projection, gsd-pi writes back to `.planning/` using that recorded layout. Cancelled slices and tasks are omitted, and obsolete tracked phase plan files are removed.
-- `/gsd sync` preserves modeled gsd-core `.planning/` edits before restoring the database-backed projection; `/gsd doctor` reports `.planning/` drift separately from `.gsd/` drift.
+- gsd-pi detects `.planning/` edits as drift and reports them. It will not import them, and `/gsd sync` preserves them under `.gsd/quarantine/projections/` rather than adopting them.
+- Once `.gsd/.compat.json` records a layout, gsd-pi projects canonical DB state back to `.planning/` on every projection. Cancelled slices and tasks are omitted, and obsolete tracked phase plan files are removed.
+- `/gsd doctor` reports `.planning/` drift separately from `.gsd/` drift.
 
 **Un-modeled docs** (phase `DISCUSSION-LOG.md`, `PATTERNS.md`, `REVIEWS.md`, `codebase/`, `research/`) are pass-through: gsd-pi detects edits to them but never overwrites them. They are gsd-core-owned.
 
-**v1 limitation:** only the `flat-phases` layout is supported for round-trip projection. `multi-milestone` and `legacy-milestone-dir` layouts will be supported after fixtures validate the reverse-mapping. For those layouts today, run `/gsd migrate` once to move to `.gsd/`.
+**Limitation:** only the `flat-phases` layout is supported for round-trip projection. `multi-milestone` and `legacy-milestone-dir` layouts are not projected back.
 
 ## Conflicts: same entity edited in both
 
-If both tools edit the *same* entity, gsd-pi does not choose a last writer: `/gsd sync` keeps the database authoritative, preserves the edited modeled file under `.gsd/quarantine/projections/`, and restores the database-backed projection. Use the matching gsd-pi planning or reopen tool when the database is correct. If markdown intentionally contains state missing from a damaged database, use the evidence-bound `/gsd recover` flow; use `/gsd migrate` for `.planning/`. Git review remains the final safety net — that's why the "commit before switching" workflow matters.
+If both tools edit the *same* entity, gsd-pi does not choose a last writer: `/gsd sync` keeps the database authoritative, preserves the edited modeled file under `.gsd/quarantine/projections/`, and restores the database-backed projection. Re-apply the change through the matching gsd-pi planning or reopen tool — the preserved copy is there to read from, never a source gsd-pi will import. Git review remains the final safety net — that's why the "commit before switching" workflow matters.
 
 ## Troubleshooting
 

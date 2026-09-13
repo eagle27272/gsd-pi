@@ -11,8 +11,10 @@ With #1657–#1660 fixed it prints `COMPLETED` at HEAD (it printed `WEDGED` on v
 
 1. Scaffolds a scratch git project (tiny `src/answer.js` + `node:test` file — the same
    fixture the e2e suite uses) under the session scratchpad (`bed-run-<n>/project`).
-2. Seeds milestone `M001` / slice `S01` / planned task `T01` as recovery markdown and
-   imports it with `gsd headless recover` + `--preview=sha256:...` approval.
+2. Seeds milestone `M001` / slice `S01` / planned task `T01` as markdown and loads it
+   into the project database with md-importer's test-only `migrateFromMarkdown`
+   (run in a child process against the built `dist/`). There is no production
+   markdown→DB import path; the database is the sole authority.
 3. Runs the **real engine** — `gsd headless --model gsd-fake-model auto` — against a
    scripted fake-LLM transcript (`GSD_FAKE_LLM_TRANSCRIPT`) in which the "agent"
    edits the source, runs the test, and walks the closeout ladder
@@ -21,7 +23,7 @@ With #1657–#1660 fixed it prints `COMPLETED` at HEAD (it printed `WEDGED` on v
    the LLM tokens are scripted.
 4. Prints a JSON verdict and preserves all artifacts in the run dir (never deleted):
    `transcript.jsonl`, `stdout.jsonl`, `stderr.log`, `notifications.log`,
-   `verdict.json`, recover logs, and a `gsd-state/` copy of the project's `.gsd/`.
+   `verdict.json`, `db-seed-counts.json`, and a `gsd-state/` copy of the project's `.gsd/`.
 
 ## Running it
 

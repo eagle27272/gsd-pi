@@ -27,11 +27,11 @@ describe('isGhostMilestone phantom queued detection (#3671)', () => {
     try {
       openDatabase(':memory:');
       insertMilestone({ id: 'M001', title: 'Reserved only', status: 'queued' });
-      mkdirSync(join(base, '.gsd', 'milestones', 'M001'), { recursive: true });
+      mkdirSync(join(base, '.gsd', 'phases', '01-m001'), { recursive: true });
 
       assert.equal(isGhostMilestone(base, 'M001'), true);
 
-      writeFileSync(join(base, '.gsd', 'milestones', 'M001', 'M001-CONTEXT.md'), '# Context\n');
+      writeFileSync(join(base, '.gsd', 'phases', '01-m001', '01-CONTEXT.md'), '# Context\n');
       clearPathCache();
       assert.equal(isGhostMilestone(base, 'M001'), false);
     } finally {

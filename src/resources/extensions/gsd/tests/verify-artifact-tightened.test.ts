@@ -27,6 +27,7 @@ import { tmpdir } from "node:os";
 import { verifyExpectedArtifact } from "../auto-recovery.ts";
 import { closeDatabase, insertMilestone, insertSlice, insertTask, isDbAvailable, openDatabase } from "../gsd-db.ts";
 import { drainLogs, setStderrLoggingEnabled, _resetLogs, type LogEntry } from "../workflow-logger.ts";
+import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 /**
  * Run `verifyExpectedArtifact` with stderr suppressed, returning both the
@@ -49,7 +50,7 @@ function verifyAndCaptureLogs(
   }
 }
 
-/** Scaffold .gsd/milestones/M001/slices/S01/ with tasks/ and a T01-SUMMARY.md. */
+/** Scaffold the M001 phase dir with a slice plan and an S01-T01-SUMMARY.md. */
 function scaffoldProject(t: { after: (fn: () => void) => void }): {
   base: string;
   planPath: string;
@@ -60,11 +61,11 @@ function scaffoldProject(t: { after: (fn: () => void) => void }): {
     rmSync(base, { recursive: true, force: true });
   });
 
-  const sliceDir = join(base, ".gsd", "milestones", "M001", "slices", "S01");
-  mkdirSync(join(sliceDir, "tasks"), { recursive: true });
-  // Summary file must exist so verifyExpectedArtifact reaches the legacy branch
-  writeFileSync(join(sliceDir, "tasks", "T01-SUMMARY.md"), "# T01 summary\n");
-  return { base, planPath: join(sliceDir, "S01-PLAN.md") };
+  const sliceDir = join(base, ".gsd", "phases", "01-m001");
+  mkdirSync(sliceDir, { recursive: true });
+  // Summary file must exist so verifyExpectedArtifact reaches the DB check.
+  writeFileSync(join(sliceDir, "S01-T01-SUMMARY.md"), "# T01 summary\n");
+  return { base, planPath: join(sliceDir, "01-01-PLAN.md") };
 }
 
 test("execute-task with the DB unavailable — checked checkbox [x] fails closed", (t) => {
@@ -263,8 +264,8 @@ test("#852: discuss-milestone falls back to project root when CONTEXT not in wor
     // created. resolveCanonicalMilestoneRoot redirects here.
     const wtRoot = join(projectRoot, ".gsd", "worktrees", "M015");
     const wtGsd = join(wtRoot, ".gsd");
-    mkdirSync(join(wtGsd, "milestones", "M015"), { recursive: true });
-    writeFileSync(join(wtGsd, "milestones", "M015", "M015-META.json"), '{"branch":"milestone/M015"}');
+    mkdirSync(join(wtGsd, "phases", "15-m015"), { recursive: true });
+    writeFileSync(join(wtGsd, "phases", "15-m015", "15-META.json"), '{"branch":"milestone/M015"}');
     writeFileSync(join(wtRoot, ".git"), "gitdir: /fake/path");
 
     // Verification with the worktree as base must fall back to the project root
@@ -314,7 +315,7 @@ test("#852: discuss-milestone fails when CONTEXT is in neither worktree nor proj
   const projectRoot = mkdtempSync(join(tmpdir(), "gsd-wt-absent-"));
   try {
     const wtRoot = join(projectRoot, ".gsd", "worktrees", "M015");
-    mkdirSync(join(wtRoot, ".gsd", "milestones", "M015"), { recursive: true });
+    mkdirSync(join(wtRoot, ".gsd", "phases", "15-m015"), { recursive: true });
     writeFileSync(join(wtRoot, ".git"), "gitdir: /fake/path");
     // No phases/ anywhere, no CONTEXT anywhere.
 
@@ -356,8 +357,8 @@ test("#870: discuss-milestone falls back to project root when base IS the canoni
     // with git (.git file) so resolveCanonicalMilestoneRoot treats it as the
     // canonical milestone root — but it has NO phases/ projection.
     const wtRoot = join(projectRoot, ".gsd-worktrees", "M015");
-    mkdirSync(join(wtRoot, ".gsd", "milestones", "M015"), { recursive: true });
-    writeFileSync(join(wtRoot, ".gsd", "milestones", "M015", "M015-META.json"), '{"branch":"milestone/M015"}');
+    mkdirSync(join(wtRoot, ".gsd", "phases", "15-m015"), { recursive: true });
+    writeFileSync(join(wtRoot, ".gsd", "phases", "15-m015", "15-META.json"), '{"branch":"milestone/M015"}');
     writeFileSync(join(wtRoot, ".git"), "gitdir: /fake/path");
 
     // Real call site: base = worktree path (workspaceRoot).
@@ -381,7 +382,7 @@ test("#870: discuss-milestone also falls back when base is the legacy-layout wor
     writeFileSync(join(phaseDir, "15-CONTEXT.md"), "# M015 context\n");
 
     const wtRoot = join(projectRoot, ".gsd", "worktrees", "M015");
-    mkdirSync(join(wtRoot, ".gsd", "milestones", "M015"), { recursive: true });
+    mkdirSync(join(wtRoot, ".gsd", "phases", "15-m015"), { recursive: true });
     writeFileSync(join(wtRoot, ".git"), "gitdir: /fake/path");
 
     assert.equal(

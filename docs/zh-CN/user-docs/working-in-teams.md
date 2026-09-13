@@ -47,7 +47,6 @@ mode: team
 - `.gsd/REQUIREMENTS.md`：需求契约
 - `.gsd/DECISIONS.md`：架构决策
 - `.gsd/phases/`：flat-phase roadmaps、plans、summaries 和 research
-- `.gsd/milestones/`：尚未迁移项目中的 legacy milestone 产物
 
 **仅保留本地的内容**（gitignore）：
 

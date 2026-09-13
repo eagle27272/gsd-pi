@@ -16,7 +16,6 @@ import {
 } from "./audit-toggle.js";
 import { resolveUokFlags, type UokFlags } from "./flags.js";
 import { createTurnObserver } from "./loop-adapter.js";
-import { incrementLegacyTelemetry } from "../legacy-telemetry.js";
 import { logWarning } from "../workflow-logger.js";
 
 interface RunAutoLoopWithUokArgs {
@@ -183,10 +182,6 @@ export async function runAutoLoopWithUok(args: RunAutoLoopWithUokArgs): Promise<
       autoStartTime: s.autoStartTime,
     });
     auditState.apply(plan.flags.auditUnified);
-
-    if (plan.pathLabel !== "uok-kernel") {
-      incrementLegacyTelemetry("legacy.uokFallbackUsed");
-    }
 
     writeParityEvent(s.basePath, {
       ts: new Date().toISOString(),

@@ -17,20 +17,21 @@ import {
 } from "../gsd-db.ts";
 import { invalidateAllCaches } from "../cache.ts";
 import type { DoctorIssue, DoctorIssueCode } from "../doctor-types.ts";
+import { canonicalPhaseDirName, milestoneIdToPhaseNum } from "../layout-policy.ts";
 
 function makeBase(prefix = "gsd-doctor-orphan-"): string {
   const base = mkdtempSync(join(tmpdir(), prefix));
-  mkdirSync(join(base, ".gsd", "milestones"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases"), { recursive: true });
   return base;
 }
 
 function stubDir(base: string, mid: string): void {
-  mkdirSync(join(base, ".gsd", "milestones", mid, "slices"), { recursive: true });
+  mkdirSync(join(base, ".gsd", "phases", canonicalPhaseDirName(mid)), { recursive: true });
 }
 
 function populateDir(base: string, mid: string): void {
-  mkdirSync(join(base, ".gsd", "milestones", mid), { recursive: true });
-  writeFileSync(join(base, ".gsd", "milestones", mid, `${mid}-CONTEXT.md`), `# ${mid}\n`);
+  mkdirSync(join(base, ".gsd", "phases", canonicalPhaseDirName(mid)), { recursive: true });
+  writeFileSync(join(base, ".gsd", "phases", canonicalPhaseDirName(mid), `${String(milestoneIdToPhaseNum(mid)).padStart(2, "0")}-CONTEXT.md`), `# ${mid}\n`);
 }
 
 describe("gsd_doctor orphan milestone directory check (#4996)", () => {
@@ -70,7 +71,7 @@ describe("gsd_doctor orphan milestone directory check (#4996)", () => {
       true,
       JSON.stringify({ issues, fixes }),
     );
-    assert.equal(existsSync(join(base, ".gsd", "milestones", "M003")), false);
+    assert.equal(existsSync(join(base, ".gsd", "phases", "03-m003")), false);
   });
 
   it("(b) populated milestone dir is NOT reported", async () => {
