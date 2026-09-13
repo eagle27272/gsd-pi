@@ -32,6 +32,8 @@ import { join, relative } from "node:path";
 
 import {
   buildSliceFileName,
+  canonicalPhaseDirName,
+  milestonesDir,
   resolveMilestonePath,
   resolveSliceFile,
   resolveSlicePath,
@@ -202,8 +204,8 @@ export function parseEvalReviewArgs(raw: string): EvalReviewArgs {
  * Synchronously inspect the slice directory and classify the state.
  *
  * Three states with distinct error semantics:
- *   - `no-slice-dir` → likely a typo in the slice ID, milestone exists but
- *      slice does not.
+ *   - `no-slice-dir` → the milestone's phase directory does not exist, so no
+ *      slice under it can either; usually a typo in the milestone or slice ID.
  *   - `no-summary` → slice exists but `SUMMARY.md` is missing; the user
  *      probably skipped `/gsd execute-phase`.
  *   - `ready` → audit can run.
@@ -225,10 +227,11 @@ export function detectEvalReviewState(
   const { sliceId } = args;
   const sliceDir = resolveSlicePath(basePath, milestoneId, sliceId);
   if (!sliceDir || !existsSync(sliceDir)) {
-    const milestoneDir = resolveMilestonePath(basePath, milestoneId);
-    const expectedDir = milestoneDir
-      ? join(milestoneDir, "slices", sliceId)
-      : join(basePath, ".gsd", "milestones", milestoneId, "slices", sliceId);
+    // Flat-phase has no slices/<SID> subdirectory — a slice's artifacts are
+    // files inside the phase dir, so the only thing that can be missing here is
+    // the phase dir itself. Name where it would live.
+    const expectedDir = resolveMilestonePath(basePath, milestoneId)
+      ?? join(milestonesDir(basePath), canonicalPhaseDirName(milestoneId));
     return { kind: "no-slice-dir", sliceId, expectedDir };
   }
 

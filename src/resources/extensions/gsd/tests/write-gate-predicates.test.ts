@@ -163,6 +163,39 @@ test('shouldBlockContextWrite: write to CONTEXT.md after verification → allow'
   assert.strictEqual(r.block, false);
 });
 
+test('shouldBlockContextWrite: flat-phase CONTEXT write without verification → block', (t) => {
+  t.after(() => clearDiscussionFlowState(process.cwd()));
+  const r = shouldBlockContextWrite('write', '.gsd/phases/11-m011/11-CONTEXT.md', 'M011');
+  assert.strictEqual(r.block, true);
+  assert.ok(r.reason?.includes('depth_verification_M011_confirm'));
+});
+
+test('shouldBlockContextWrite: absolute flat-phase CONTEXT write without verification → block', (t) => {
+  t.after(() => clearDiscussionFlowState(process.cwd()));
+  const r = shouldBlockContextWrite('write', '/srv/app/.gsd/phases/12-m012/12-CONTEXT.md', 'M012');
+  assert.strictEqual(r.block, true);
+  assert.ok(r.reason);
+});
+
+test('shouldBlockContextWrite: flat-phase CONTEXT write after verification → allow', (t) => {
+  t.after(() => clearDiscussionFlowState(process.cwd()));
+  markDepthVerified('M013');
+  assert.strictEqual(
+    shouldBlockContextWrite('write', '.gsd/phases/13-m013/13-CONTEXT.md', 'M013').block,
+    false,
+  );
+  assert.strictEqual(
+    shouldBlockContextWrite('write', '/srv/app/.gsd/phases/13-m013/13-CONTEXT.md', 'M013').block,
+    false,
+  );
+});
+
+test('shouldBlockContextWrite: flat-phase slice CONTEXT (NN-MM) → allow', (t) => {
+  t.after(() => clearDiscussionFlowState(process.cwd()));
+  const r = shouldBlockContextWrite('write', '.gsd/phases/14-m014/14-01-CONTEXT.md', 'M014');
+  assert.strictEqual(r.block, false);
+});
+
 // ─── shouldBlockContextArtifactSave ───────────────────────────────────────
 
 test('shouldBlockContextArtifactSave: non-CONTEXT artifact type → allow', (t) => {

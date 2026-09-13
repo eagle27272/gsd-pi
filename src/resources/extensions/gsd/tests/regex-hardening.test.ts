@@ -104,10 +104,31 @@ test("MILESTONE_CONTEXT_RE matches legacy and unique CONTEXT.md names", () => {
   );
 });
 
+test("MILESTONE_CONTEXT_RE matches flat-phase CONTEXT paths", () => {
+  assert.ok(
+    MILESTONE_CONTEXT_RE.test(".gsd/phases/01-m001/01-CONTEXT.md"),
+    "relative flat-phase path",
+  );
+  assert.ok(
+    MILESTONE_CONTEXT_RE.test("/Users/dev/project/.gsd/phases/07-payments-api/07-CONTEXT.md"),
+    "absolute flat-phase path with a title slug",
+  );
+  assert.ok(
+    MILESTONE_CONTEXT_RE.test("C:\\dev\\project\\.gsd\\phases\\01-m001\\01-CONTEXT.md"),
+    "windows separators",
+  );
+});
+
 test("MILESTONE_CONTEXT_RE rejects non-CONTEXT artifact names", () => {
   assert.ok(!MILESTONE_CONTEXT_RE.test("M001-ROADMAP.md"));
   assert.ok(!MILESTONE_CONTEXT_RE.test("M001-SUMMARY.md"));
   assert.ok(!MILESTONE_CONTEXT_RE.test("CONTEXT.md"), "bare name without milestone prefix");
+  assert.ok(!MILESTONE_CONTEXT_RE.test("01-CONTEXT.md"), "phase number alone is not a milestone");
+  assert.ok(
+    !MILESTONE_CONTEXT_RE.test(".gsd/phases/01-m001/01-01-CONTEXT.md"),
+    "slice plan CONTEXT is not milestone-level",
+  );
+  assert.ok(!MILESTONE_CONTEXT_RE.test("docs/2024-CONTEXT.md"), "no phase directory");
 });
 
 // ─── extractMilestoneSeq ──────────────────────────────────────────────────
