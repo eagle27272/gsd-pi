@@ -480,9 +480,9 @@ async function scanCodex(projectRoot: string, home: string, tool: ToolInfo): Pro
 
   // Codex uses TOML for MCP config — we parse only the JSON subset
   // (TOML parsing would require a dependency; skip for now, log warning)
-  for (const { path: tomlPath, level } of [
-    { path: join(home, ".codex/config.toml"), level: "user" as ConfigLevel },
-    { path: join(projectRoot, ".codex/config.toml"), level: "project" as ConfigLevel },
+  for (const tomlPath of [
+    join(home, ".codex/config.toml"),
+    join(projectRoot, ".codex/config.toml"),
   ]) {
     if (await fileExists(tomlPath)) {
       warnings.push(`Found ${tomlPath} (TOML config) — MCP server parsing from TOML not yet supported`);

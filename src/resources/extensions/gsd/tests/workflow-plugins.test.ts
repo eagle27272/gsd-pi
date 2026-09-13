@@ -53,10 +53,6 @@ afterEach(() => {
   tmpDirs.length = 0;
 });
 
-function writeFile(path: string, content: string): void {
-  mkdirSync(join(path, "..").replace(/[^/]+$/, ""), { recursive: true });
-  writeFileSync(path, content, "utf-8");
-}
 
 function writeProjectPlugin(basePath: string, filename: string, content: string): void {
   const dir = join(basePath, ".gsd", "workflows");

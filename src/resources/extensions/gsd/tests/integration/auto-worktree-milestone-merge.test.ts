@@ -251,7 +251,7 @@ describe("auto-worktree-milestone-merge", { timeout: 300_000 }, () => {
 
   test("nothing to commit — safe when no code changes (#1738, #1792)", () => {
     const repo = freshRepo();
-    const wtPath = createAutoWorktree(repo, "M030");
+    createAutoWorktree(repo, "M030");
     const roadmap = makeRoadmap("M030", "Empty milestone", []);
 
     let threw = false;
@@ -464,7 +464,7 @@ describe("auto-worktree-milestone-merge", { timeout: 300_000 }, () => {
 
   test("#1738 bug 2: branch preserved when squash commit empty", () => {
     const repo = freshRepo();
-    const wtPath = createAutoWorktree(repo, "M080");
+    createAutoWorktree(repo, "M080");
     const roadmap = makeRoadmap("M080", "Empty milestone", []);
 
     let threw = false;

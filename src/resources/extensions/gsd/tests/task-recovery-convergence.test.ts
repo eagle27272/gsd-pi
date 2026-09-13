@@ -458,7 +458,7 @@ test("agent recovery exhausts durably, resumes once, then passes host verificati
   assert.match(recoveryPrompt, /Required action:\*\* continue/);
   assert.match(recoveryPrompt, /do not call `gsd_task_recovery_resume`/i);
   assert.doesNotMatch(recoveryPrompt, /Required action:\*\* resume/);
-  const settled4 = await stageTaskCompletion(
+  await stageTaskCompletion(
     completionInput(basePath, taskId, "convergence/settle/4"),
   );
   assert.equal(

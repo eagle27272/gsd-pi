@@ -43,12 +43,6 @@ function getRequiredProps(tool: any): string[] {
   return schema.required ?? [];
 }
 
-function getOptionalProps(tool: any): string[] {
-  const schema = tool.parameters;
-  const allProps = Object.keys(schema.properties ?? {});
-  const required = new Set(schema.required ?? []);
-  return allProps.filter((p: string) => !required.has(p));
-}
 
 function validateSchema(tool: any, value: unknown): string[] {
   const ajv = new Ajv({ strict: false });

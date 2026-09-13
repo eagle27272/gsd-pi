@@ -23,13 +23,6 @@ function createPlanningDir(base: string): string {
   return dir;
 }
 
-function writeFile(dir: string, ...pathParts: string[]): (content: string) => void {
-  return (content: string) => {
-    const filePath = join(dir, ...pathParts);
-    mkdirSync(join(filePath, '..'), { recursive: true });
-    writeFileSync(filePath, content);
-  };
-}
 
 function cleanup(base: string): void {
   rmSync(base, { recursive: true, force: true });

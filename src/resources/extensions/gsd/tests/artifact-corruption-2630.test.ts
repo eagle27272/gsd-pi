@@ -11,7 +11,7 @@ import {
   renderRoadmapContent,
   renderStateContent,
 } from '../workflow-projections.ts';
-import type { SliceRow, TaskRow, MilestoneRow } from '../gsd-db.ts';
+import type { SliceRow, MilestoneRow } from '../gsd-db.ts';
 import type { GSDState } from '../types.ts';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -52,41 +52,6 @@ function makeSliceRow(overrides?: Partial<SliceRow>): SliceRow {
   };
 }
 
-function makeTaskRow(overrides?: Partial<TaskRow>): TaskRow {
-  return {
-    milestone_id: 'M001',
-    slice_id: 'S04',
-    id: 'T01',
-    title: 'Test Task',
-    status: 'done',
-    one_liner: '',
-    narrative: '',
-    verification_result: '',
-    duration: '',
-    completed_at: null,
-    blocker_discovered: false,
-    deviations: '',
-    known_issues: '',
-    key_files: [],
-    key_decisions: [],
-    full_summary_md: '',
-    full_plan_md: '',
-    description: 'Test description',
-    estimate: '30m',
-    files: [],
-    verify: 'npm test',
-    inputs: [],
-    expected_output: [],
-    observability_impact: '',
-    sequence: 0,
-    blocker_source: '',
-    escalation_pending: 0,
-    escalation_awaiting_review: 0,
-    escalation_artifact_path: null,
-    escalation_override_applied_at: null,
-    ...overrides,
-  };
-}
 
 function makeMilestoneRow(overrides?: Partial<MilestoneRow>): MilestoneRow {
   return {

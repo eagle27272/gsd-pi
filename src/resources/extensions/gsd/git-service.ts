@@ -1161,7 +1161,6 @@ export class GitServiceImpl {
     const wtName = detectWorktreeName(this.basePath);
     if (wtName) {
       // Auto-mode worktrees use milestone/<MID> branches (wtName = milestone ID)
-      const milestoneBranch = `milestone/${wtName}`;
       const currentBranch = nativeGetCurrentBranch(this.basePath);
 
       // If we're on a milestone/<MID> branch, use it (auto-mode case)

@@ -165,7 +165,7 @@ export async function ensureBrowser(): Promise<{ browser: Browser; context: Brow
 		return { browser: existingBrowser, context: existingContext, page: getActivePage() };
 	}
 
-	const startedAt = ensureSessionStartedAt();
+	ensureSessionStartedAt();
 	const artifactDir = await ensureSessionArtifactDir();
 	const sessionHarPath = path.join(artifactDir, HAR_FILENAME);
 	setHarState({

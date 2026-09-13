@@ -50,7 +50,6 @@ import {
 import { loadEffectiveGSDPreferences, getIsolationMode } from "./preferences.js";
 import { isolationDegradedFallbackGuidance, worktreeCreationFailedGuidance } from "./guidance.js";
 import { invalidateAllCaches } from "./cache.js";
-import { resolveMilestoneFile } from "./paths.js";
 import { getMilestone, insertMilestone, isDbAvailable, updateMilestoneStatus } from "./gsd-db.js";
 import { isClosedStatus } from "./status-guards.js";
 import type { WorktreeStateProjection } from "./worktree-state-projection.js";
@@ -598,27 +597,7 @@ function lifecycleGetIsolationMode(
     getIsolationMode(basePath);
 }
 
-function lifecycleInvalidateAllCaches(deps: WorktreeLifecycleDeps): void {
-  const override = primitiveOverrides(deps).invalidateAllCaches;
-  if (override) {
-    override();
-    return;
-  }
-  invalidateAllCaches();
-}
 
-function lifecycleResolveMilestoneFile(
-  deps: WorktreeLifecycleDeps,
-  basePath: string,
-  milestoneId: string,
-  fileType: string,
-): string | null {
-  return primitiveOverrides(deps).resolveMilestoneFile?.(
-    basePath,
-    milestoneId,
-    fileType,
-  ) ?? resolveMilestoneFile(basePath, milestoneId, fileType);
-}
 
 function lifecycleLoadPreferences(
   deps: WorktreeLifecycleDeps,

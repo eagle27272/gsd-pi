@@ -21,7 +21,6 @@ import {
   _setProjectionRebuildFnForTests,
   type OrchestratorContext,
 } from "../auto/orchestrator.ts";
-import type { AutoSessionContext } from "../auto/contracts.ts";
 import { RuleRegistry, setRegistry, resetRegistry } from "../rule-registry.ts";
 import type { UnifiedRule } from "../rule-types.ts";
 import {
@@ -46,7 +45,6 @@ import {
   type LogEntry,
 } from "../workflow-logger.ts";
 
-const SESSION_CONTEXT: AutoSessionContext = { basePath: "/tmp/project", trigger: "manual" };
 
 function gitInit(base: string): void {
   execFileSync("git", ["init", "--initial-branch=main"], { cwd: base, stdio: "ignore" });

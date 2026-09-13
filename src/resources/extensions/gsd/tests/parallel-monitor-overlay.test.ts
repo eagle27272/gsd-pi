@@ -177,8 +177,7 @@ describe("parallel-monitor-overlay", () => {
   it("ParallelMonitorOverlay can be instantiated with mock tui", async () => {
     const mod = await import("../parallel-monitor-overlay.js");
 
-    let renderRequested = false;
-    const mockTui = { requestRender: () => { renderRequested = true; } };
+    const mockTui = { requestRender: () => {} };
     const mockTheme = {
       fg: (_color: string, text: string) => text,
       bold: (text: string) => text,

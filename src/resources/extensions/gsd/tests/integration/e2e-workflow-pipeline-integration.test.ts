@@ -172,7 +172,7 @@ function setupProject(overrides?: Record<string, string>): {
 describe("e2e-workflow-pipeline", () => {
   it("drives the full engine pipeline: create → dispatch → verify → complete", async () => {
     // ── 1. Create run with param overrides ────────────────────────────
-    const { basePath, runDir } = setupProject({ target: "my-project" });
+    const { runDir } = setupProject({ target: "my-project" });
 
     // Verify run directory structure
     assert.ok(existsSync(join(runDir, "DEFINITION.yaml")), "DEFINITION.yaml should exist");

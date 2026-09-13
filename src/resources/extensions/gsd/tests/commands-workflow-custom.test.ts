@@ -90,11 +90,6 @@ steps:
     produces: []
 `;
 
-const INVALID_DEF = `
-version: 2
-name: bad-workflow
-steps: []
-`;
 
 // ─── Catalog Registration ────────────────────────────────────────────────
 

@@ -308,7 +308,6 @@ import { abortActiveUnitTurn } from "./auto/unit-turn-abort.js";
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Throttle STATE.md rebuilds — at most once per 30 seconds */
-const STATE_REBUILD_MIN_INTERVAL_MS = 30_000;
 
 export function formatAutoStopNotification(prefix: string, totals: { cost: number; tokens: { total: number } }, unitCount: number): string {
   return [
@@ -656,13 +655,6 @@ export function _resolveEffectiveUnitIsolationModeForTest(
   );
 }
 
-function getEffectiveUnitIsolationMode(basePath: string): AutoIsolationMode {
-  return resolveEffectiveUnitIsolationMode(
-    getIsolationMode(basePath),
-    s.isolationDegraded,
-    s.strandedRecoveryIsolationMode,
-  );
-}
 
 /** Crash recovery prompt — set by startAuto, consumed by the main loop */
 
@@ -3205,8 +3197,6 @@ export async function dispatchHookUnit(
   hookModel: string | undefined,
   targetBasePath: string,
 ): Promise<boolean> {
-  const wasActive = s.active;
-  const previousBasePath = s.basePath;
   const previousCurrentUnit = s.currentUnit ? { ...s.currentUnit } : null;
 
   if (!s.active) {

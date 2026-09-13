@@ -315,7 +315,7 @@ test('migrate-hier: idempotent re-run', () => {
       assert.deepStrictEqual(counts1.tasks, 3, 'idempotent-1: 3 tasks first run');
 
       // Second run — INSERT OR IGNORE means no duplicates
-      const counts2 = migrateHierarchyToDb(base);
+      migrateHierarchyToDb(base);
       // Counts reflect attempts, not actual inserts (INSERT OR IGNORE silently skips)
       // The important thing: DB doesn't have duplicates
       const milestones = getAllMilestones();

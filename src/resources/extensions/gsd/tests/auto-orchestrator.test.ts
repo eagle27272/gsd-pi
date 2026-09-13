@@ -45,7 +45,6 @@ import {
 import { AutoSession } from "../auto/session.js";
 import { markWorkerCrashed, registerAutoWorker } from "../db/auto-workers.js";
 import { claimMilestoneLease, forceReleaseLeasesForWorker, getMilestoneLease, releaseMilestoneLease } from "../db/milestone-leases.js";
-import { recordDispatchClaim } from "../db/unit-dispatches.js";
 import { claimTaskAttempt, settleTaskAttempt } from "../task-execution-domain-operation.js";
 import { recordFailureAndSelectRecovery, resumeTaskRecovery } from "../task-recovery-domain-operation.js";
 import { internalExecutionInvocation } from "../execution-invocation.js";
@@ -232,39 +231,6 @@ function makeFixture(opts: FixtureOptions = {}): Fixture {
  * projection-drift shape that drives stuck recovery down the execute-task
  * (read-only) branch.
  */
-function seedSucceededTaskAttempt(base: string): void {
-  const workerId = registerAutoWorker({ projectRootRealpath: normalizeRealPath(base) });
-  const lease = claimMilestoneLease(workerId, "M001");
-  assert.equal(lease.ok, true);
-  if (!lease.ok) throw new Error("fixture lease claim failed");
-  const claim = recordDispatchClaim({
-    traceId: "read-only-recovery",
-    workerId,
-    milestoneLeaseToken: lease.token,
-    milestoneId: "M001",
-    sliceId: "S01",
-    taskId: "T01",
-    unitType: "execute-task",
-    unitId: "M001/S01/T01",
-  });
-  assert.equal(claim.ok, true);
-  if (!claim.ok) throw new Error("fixture dispatch claim failed");
-  const attempt = claimTaskAttempt({
-    invocation: internalExecutionInvocation("test:orchestrator:read-only-recovery:claim"),
-    task: { milestoneId: "M001", sliceId: "S01", taskId: "T01" },
-    workerId,
-    milestoneLeaseToken: lease.token,
-    coordinationDispatchId: claim.dispatchId,
-  });
-  settleTaskAttempt({
-    invocation: internalExecutionInvocation("test:orchestrator:read-only-recovery:settle"),
-    attemptId: attempt.attemptId,
-    outcome: "succeeded",
-    failureClass: "none",
-    summary: "executor succeeded",
-    output: {},
-  });
-}
 
 function makeState(): GSDState {
   return {

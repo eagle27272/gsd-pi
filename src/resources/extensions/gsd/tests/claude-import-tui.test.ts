@@ -23,8 +23,6 @@ import { getMarketplaceFixtures } from './marketplace-test-fixtures.js';
 
 const fixtureSetup = getMarketplaceFixtures(import.meta.dirname);
 const fixtures = fixtureSetup.fixtures;
-const CLAUDE_SKILLS_PATH = fixtures?.claudeSkillsPath;
-const CLAUDE_PLUGINS_OFFICIAL_PATH = fixtures?.claudePluginsOfficialPath;
 
 function marketplacesAvailable(): boolean {
 	return Boolean(fixtures);
@@ -121,12 +119,10 @@ describe(
 	{ skip: skipReason },
 	() => {
 		let tempDir: string;
-		let prefsPath: string;
 		let prefs: Record<string, unknown>;
 
 		before(() => {
 			tempDir = mkdtempSync(join(tmpdir(), 'gsd-tui-test-'));
-			prefsPath = join(tempDir, 'PREFERENCES.md');
 			prefs = { version: 1 };
 		});
 

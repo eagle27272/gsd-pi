@@ -400,7 +400,6 @@ export function computeCriticalPath(milestones: VisualizerMilestone[]): Critical
     const slDist = new Map<string, number>();
     const slPrev = new Map<string, string | null>();
     for (const s of activeMs.slices) {
-      const w = s.done ? 0 : 1;
       slDist.set(s.id, 0);
       slPrev.set(s.id, null);
     }

@@ -13,8 +13,6 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 
-import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { createAutoWorktree } from "../../auto-worktree-creation.ts";
 import { isInAutoWorktree } from "../../auto-worktree-entry.ts";
@@ -23,7 +21,6 @@ import { getAutoWorktreeOriginalBase } from "../../auto-worktree-session-registr
 import { teardownAutoWorktree } from "../../auto-worktree-teardown.ts";
 import { seedMergeReadyMilestone } from "../merge-ready-fixture.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function run(command: string, cwd: string): string {
   return execSync(command, { cwd, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" }).trim();

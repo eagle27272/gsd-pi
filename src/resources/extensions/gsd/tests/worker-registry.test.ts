@@ -44,9 +44,9 @@ console.log("\n=== Multiple Workers in a Batch ===");
 
 {
   resetWorkerRegistry();
-  const id1 = registerWorker("scout", "Task A", 0, 3, "batch-2");
-  const id2 = registerWorker("researcher", "Task B", 1, 3, "batch-2");
-  const id3 = registerWorker("worker", "Task C", 2, 3, "batch-2");
+  registerWorker("scout", "Task A", 0, 3, "batch-2");
+  registerWorker("researcher", "Task B", 1, 3, "batch-2");
+  registerWorker("worker", "Task C", 2, 3, "batch-2");
 
   const workers = getActiveWorkers();
   assert.deepStrictEqual(workers.length, 3, "three workers registered");

@@ -245,46 +245,11 @@ export function isExtensionEnabled(registry: ExtensionRegistry, id: string): boo
 
 // ─── Mutations ──────────────────────────────────────────────────────────────
 
-function enableExtension(registry: ExtensionRegistry, id: string): void {
-  const entry = registry.entries[id];
-  if (entry) {
-    entry.enabled = true;
-    delete entry.disabledAt;
-    delete entry.disabledReason;
-  } else {
-    registry.entries[id] = { id, enabled: true, source: "bundled" };
-  }
-}
 
 /**
  * Disable an extension. Returns an error string if the extension is core (cannot disable),
  * or null on success.
  */
-function disableExtension(
-  registry: ExtensionRegistry,
-  id: string,
-  manifest: ExtensionManifest | null,
-  reason?: string,
-): string | null {
-  if (manifest?.tier === "core") {
-    return `Cannot disable "${id}" — it is a core extension.`;
-  }
-  const entry = registry.entries[id];
-  if (entry) {
-    entry.enabled = false;
-    entry.disabledAt = new Date().toISOString();
-    entry.disabledReason = reason;
-  } else {
-    registry.entries[id] = {
-      id,
-      enabled: false,
-      source: "bundled",
-      disabledAt: new Date().toISOString(),
-      disabledReason: reason,
-    };
-  }
-  return null;
-}
 
 // ─── Manifest Reading ───────────────────────────────────────────────────────
 
@@ -343,7 +308,7 @@ export function ensureRegistryEntries(extensionsDir: string): void {
   const registry = loadRegistry();
   let changed = false;
 
-  for (const [id, manifest] of manifests) {
+  for (const id of manifests.keys()) {
     if (!registry.entries[id]) {
       registry.entries[id] = {
         id,

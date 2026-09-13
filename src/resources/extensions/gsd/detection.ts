@@ -191,7 +191,6 @@ const SQLITE_EXTENSIONS = [".sqlite", ".sqlite3", ".db"] as const;
 const SQL_EXTENSIONS = [".sql"] as const;
 
 /** File extensions that indicate .NET / C# projects. */
-const DOTNET_EXTENSIONS = [".csproj", ".sln", ".fsproj"] as const;
 
 /** File extensions that indicate Vue.js single-file components. */
 const VUE_EXTENSIONS = [".vue"] as const;

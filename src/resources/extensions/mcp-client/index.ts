@@ -26,12 +26,11 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { buildHttpTransportOpts } from "./auth.js";
 import {
-	buildMcpChildEnv,
-	clearMcpConfigCache,
-	getMcpServerConfig,
-	readMcpServerConfigs,
-	resolveMcpEnv,
-	type ManagedMcpServerConfig,
+  buildMcpChildEnv,
+  clearMcpConfigCache,
+  getMcpServerConfig,
+  readMcpServerConfigs,
+  type ManagedMcpServerConfig,
 } from "./manager.js";
 import { hasPersistedStdioTrust, persistStdioTrust, stdioPersistTrustKey } from "./stdio-trust-store.js";
 
@@ -66,9 +65,6 @@ function stdioTrustKey(config: McpServerConfig): string {
 	return stdioPersistTrustKey(config);
 }
 
-function readConfigs(): McpServerConfig[] {
-	return readMcpServerConfigs();
-}
 
 export function _buildMcpChildEnvForTest(configEnv: Record<string, string> | undefined): Record<string, string> {
 	return buildMcpChildEnv(configEnv);
@@ -267,9 +263,6 @@ export function getServerConfig(name: string): McpServerConfig | undefined {
 }
 
 /** Resolve ${VAR} references in env values against process.env. */
-function resolveEnv(env: Record<string, string>): Record<string, string> {
-	return resolveMcpEnv(env);
-}
 
 async function getOrConnect(name: string, signal?: AbortSignal, ctx?: ExtensionContext): Promise<Client> {
 	const config = getServerConfig(name);

@@ -3,14 +3,7 @@ import assert from "node:assert/strict";
 
 // ─── Mock dispatcher to capture routed commands ─────────────────────────
 
-let lastRouted: string | null = null;
-let lastQuick: string | null = null;
 
-const mockCtx = {
-  ui: {
-    notify: (_msg: string, _level: string) => {},
-  },
-} as any;
 
 // We test the keyword matching logic directly since the handler imports
 // the dispatcher dynamically (which requires the full extension runtime).

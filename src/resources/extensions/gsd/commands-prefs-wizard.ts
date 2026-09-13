@@ -211,13 +211,6 @@ async function editStringListField(
 }
 
 /** Set a nested object key, creating the parent object if needed, and deleting on undefined/empty. */
-function setNested(parent: Record<string, unknown>, parentKey: string, childKey: string, value: unknown): void {
-  let child = parent[parentKey] as Record<string, unknown> | undefined;
-  if (!child || typeof child !== "object") child = {};
-  if (value === undefined) return;
-  (child as Record<string, unknown>)[childKey] = value;
-  parent[parentKey] = child;
-}
 
 export async function handlePrefs(args: string, ctx: ExtensionCommandContext): Promise<void> {
   const trimmed = args.trim();

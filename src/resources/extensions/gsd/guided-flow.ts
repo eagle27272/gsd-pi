@@ -608,7 +608,6 @@ async function dispatchNextDeepProjectSetupStage(entry: PendingDeepProjectSetupE
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type UIContext = ExtensionContext;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -893,40 +892,6 @@ function getStructuredQuestionsAvailability(
  * Resolve a model ID string to a model object from available models.
  * Handles "provider/model" and bare ID formats.
  */
-function resolveAvailableModel<T extends { id: string; provider: string }>(
-  modelId: string,
-  availableModels: T[],
-  currentProvider: string | undefined,
-): T | undefined {
-  const slashIdx = modelId.indexOf("/");
-
-  if (slashIdx !== -1) {
-    const maybeProvider = modelId.substring(0, slashIdx);
-    const id = modelId.substring(slashIdx + 1);
-
-    const knownProviders = new Set(availableModels.map(m => m.provider.toLowerCase()));
-    if (knownProviders.has(maybeProvider.toLowerCase())) {
-      const match = availableModels.find(
-        m => m.provider.toLowerCase() === maybeProvider.toLowerCase()
-          && m.id.toLowerCase() === id.toLowerCase(),
-      );
-      if (match) return match;
-    }
-
-    // Try matching the full string as a model ID (OpenRouter-style)
-    const lower = modelId.toLowerCase();
-    return availableModels.find(
-      m => m.id.toLowerCase() === lower
-        || `${m.provider}/${m.id}`.toLowerCase() === lower,
-    );
-  }
-
-  // Bare ID — prefer current provider, then first available
-  const exactProviderMatch = availableModels.find(
-    m => m.id === modelId && m.provider === currentProvider,
-  );
-  return exactProviderMatch ?? availableModels.find(m => m.id === modelId);
-}
 
 /**
  * Build the discuss-and-plan prompt for a new milestone.

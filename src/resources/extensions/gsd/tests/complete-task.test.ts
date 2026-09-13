@@ -884,7 +884,7 @@ console.log('\n=== complete-task: handler idempotency ===');
   const dbPath = tempDbPath();
   openDatabase(dbPath);
 
-  const { basePath, planPath } = createTempProject();
+  const { basePath } = createTempProject();
 
   // Seed milestone + slice so state machine guards pass
   insertMilestone({ id: 'M001', title: 'Test Milestone' });
@@ -977,7 +977,7 @@ console.log('\n=== complete-task: minimal params (no keyFiles, keyDecisions, ver
   const dbPath = tempDbPath();
   openDatabase(dbPath);
 
-  const { basePath, planPath } = createTempProject();
+  const { basePath } = createTempProject();
 
   insertMilestone({ id: 'M001', title: 'Test Milestone' });
   insertSlice({ id: 'S01', milestoneId: 'M001', title: 'Test Slice' });

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
-import { execSync, execFileSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { dirname, join, resolve as resolvePath, sep, win32 as pathWin32 } from 'node:path'
 import { homedir } from 'node:os'
 import { createRequire } from 'node:module'
@@ -318,7 +318,6 @@ export async function checkForGsdBrowserUpdates(options: UpdateCheckOptions = {}
   })
 }
 
-const PROMPT_TIMEOUT_MS = 30_000
 
 /**
  * Interactive update prompt shown at startup when a newer version is available.
@@ -328,93 +327,3 @@ const PROMPT_TIMEOUT_MS = 30_000
  *
  * Returns true if an update was performed, false otherwise.
  */
-async function checkAndPromptForUpdates(options: UpdateCheckOptions = {}): Promise<boolean> {
-  const currentVersion = options.currentVersion || process.env.GSD_VERSION || '0.0.0'
-  const cachePath = options.cachePath || CACHE_FILE
-  const registryUrl = options.registryUrl || DEFAULT_REGISTRY_URL
-  const checkIntervalMs = options.checkIntervalMs ?? CHECK_INTERVAL_MS
-  const fetchTimeoutMs = options.fetchTimeoutMs ?? FETCH_TIMEOUT_MS
-
-  // Determine latest version (from cache or network)
-  let latestVersion: string | null = null
-
-  const cache = readUpdateCache(cachePath)
-  if (cache && Date.now() - cache.lastCheck < checkIntervalMs) {
-    latestVersion = cache.latestVersion
-  } else {
-    try {
-      latestVersion = await fetchLatestVersionFromRegistry(registryUrl, fetchTimeoutMs)
-      if (latestVersion) {
-        writeUpdateCache({ lastCheck: Date.now(), latestVersion }, cachePath)
-      }
-    } catch {
-      // Network unavailable — silently skip
-    }
-  }
-
-  if (!latestVersion || compareSemver(latestVersion, currentVersion) <= 0) {
-    return false
-  }
-
-  // Update available — show interactive prompt
-  // Measure visible (ANSI-free) width to size the box, then render with chalk.
-  const midContent = `  ${chalk.bold('Update available!')} ${chalk.dim(`v${currentVersion}`)} → ${chalk.bold.green(`v${latestVersion}`)}  `
-  const midVisible = `  Update available! v${currentVersion} → v${latestVersion}  `
-  const innerWidth = midVisible.length
-  const top = '╔' + '═'.repeat(innerWidth) + '╗'
-  const bot = '╚' + '═'.repeat(innerWidth) + '╝'
-
-  process.stderr.write('\n')
-  process.stderr.write(
-    `  ${chalk.yellow(top)}\n` +
-    `  ${chalk.yellow('║')}${midContent}${chalk.yellow('║')}\n` +
-    `  ${chalk.yellow(bot)}\n\n`,
-  )
-
-  // Use readline for a simple two-option prompt that works without @clack/prompts
-  const readline = await import('node:readline')
-  const rl = readline.createInterface({ input: process.stdin, output: process.stderr })
-
-  const choice = await new Promise<string>((resolve) => {
-    process.stderr.write(
-      `  ${chalk.bold('[1]')} Update now   ${chalk.dim(resolveInstallCommand(`${NPM_PACKAGE_NAME}@latest`))}\n` +
-      `  ${chalk.bold('[2]')} Skip\n\n`,
-    )
-
-    // Default to skip if the user doesn't respond within PROMPT_TIMEOUT_MS
-    const timer = setTimeout(() => {
-      process.stderr.write('\n')
-      rl.close()
-      resolve('2')
-    }, PROMPT_TIMEOUT_MS)
-
-    rl.question(`  ${chalk.bold('Choose [1/2]:')} `, (answer) => {
-      clearTimeout(timer)
-      resolve(answer.trim())
-    })
-  })
-
-  rl.close()
-
-  // Clean up stdin state so the TUI can start with a clean slate
-  process.stdin.removeAllListeners('data')
-  process.stdin.removeAllListeners('keypress')
-  if (process.stdin.setRawMode) process.stdin.setRawMode(false)
-  process.stdin.pause()
-
-  if (choice === '1') {
-    const installCmd = resolveInstallCommand(`${NPM_PACKAGE_NAME}@latest`)
-    process.stderr.write(`\n  ${chalk.dim('Running:')} ${installCmd}\n\n`)
-    try {
-      execSync(installCmd, { stdio: 'inherit' })
-      process.stderr.write(`\n  ${chalk.green.bold(`✓ Updated to v${latestVersion}`)}\n\n`)
-      return true
-    } catch {
-      process.stderr.write(`\n  ${chalk.yellow(`Update failed. You can run: ${installCmd}`)}\n\n`)
-    }
-  } else {
-    process.stderr.write(`  ${chalk.dim('Skipped. Run')} gsd upgrade ${chalk.dim('anytime to upgrade.')}\n\n`)
-  }
-
-  return false
-}

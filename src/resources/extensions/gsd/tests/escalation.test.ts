@@ -46,16 +46,6 @@ function cleanup(base: string): void {
   try { rmSync(base, { recursive: true, force: true }); } catch { /* noop */ }
 }
 
-function writePrefs(base: string, enabled: boolean): void {
-  const path = join(base, ".gsd", "PREFERENCES.md");
-  writeFileSync(path, [
-    "---",
-    "version: 1",
-    "phases:",
-    `  mid_execution_escalation: ${enabled}`,
-    "---",
-  ].join("\n"));
-}
 
 function seedCompletedTask(base: string, taskId: string): void {
   openDatabase(join(base, ".gsd", "gsd.db"));

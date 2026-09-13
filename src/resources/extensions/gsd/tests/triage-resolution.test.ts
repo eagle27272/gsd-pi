@@ -71,7 +71,7 @@ test("resolution: executeInject appends a new task to the plan", () => {
   const tmp = makeTempDir("res-inject");
   try {
     const planPath = setupPlanFile(tmp, "M001", "S01", SAMPLE_PLAN);
-    const captureId = appendCapture(tmp, "add retry logic");
+    appendCapture(tmp, "add retry logic");
     const captures = loadAllCaptures(tmp);
     const capture = captures[0];
 
@@ -96,7 +96,7 @@ test("resolution: executeInject appends a new task to the plan", () => {
 test("resolution: executeInject returns null when plan doesn't exist", () => {
   const tmp = makeTempDir("res-inject-noplan");
   try {
-    const captureId = appendCapture(tmp, "some task");
+    appendCapture(tmp, "some task");
     const captures = loadAllCaptures(tmp);
     const result = executeInject(tmp, "M001", "S01", captures[0]);
     assert.strictEqual(result, null);
@@ -111,7 +111,7 @@ test("resolution: executeReplan writes REPLAN-TRIGGER.md", () => {
   const tmp = makeTempDir("res-replan");
   try {
     setupPlanFile(tmp, "M001", "S01", SAMPLE_PLAN);
-    const captureId = appendCapture(tmp, "approach is wrong, need different strategy");
+    appendCapture(tmp, "approach is wrong, need different strategy");
     const captures = loadAllCaptures(tmp);
     const capture = captures[0];
 

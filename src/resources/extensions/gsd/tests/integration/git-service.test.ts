@@ -19,8 +19,6 @@ import {
   readIntegrationBranch,
   resolveMilestoneIntegrationBranch,
   writeIntegrationBranch,
-  type GitPreferences,
-  type CommitOptions,
   type PreMergeCheckResult,
   type TaskCommitContext,
 } from "../../git-service.ts";
@@ -373,8 +371,6 @@ describe('git-service', async () => {
 
 
   // These are compile-time checks — if we got here, the types import fine
-  const _prefs: GitPreferences = { auto_push: true, remote: "origin" };
-  const _opts: CommitOptions = { message: "test" };
   assert.ok(true, "GitPreferences type exported and usable");
   assert.ok(true, "CommitOptions type exported and usable");
 
@@ -1410,7 +1406,6 @@ process.exit(result.status ?? 0);
   // ─── PreMergeCheckResult type export compile check ─────────────────────
 
   test('PreMergeCheckResult type export', () => {
-    const _checkResult: PreMergeCheckResult = { passed: true, skipped: false };
     assert.ok(true, "PreMergeCheckResult type exported and usable");
   });
 

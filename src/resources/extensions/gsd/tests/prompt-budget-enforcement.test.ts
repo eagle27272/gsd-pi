@@ -8,9 +8,8 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { fileURLToPath } from "node:url";
 
 import { buildExecuteTaskPrompt, buildPlanSlicePrompt, buildReactiveExecutePrompt, buildResearchSlicePrompt, inlineDependencySummaries } from "../auto-prompts.js";
 import { buildDiscussSlicePrompt } from "../guided-flow.js";
@@ -25,7 +24,6 @@ import {
 } from "../gsd-db.js";
 import { canonicalPhaseDirName } from "../layout-policy.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ─── Fixture helpers ──────────────────────────────────────────────────────────
 

@@ -261,8 +261,7 @@ describe('doctor-environment', async () => {
       });
       mkdirSync(join(dir, "node_modules"), { recursive: true });
       cleanups.push(dir);
-      const results = runEnvironmentChecks(dir);
-      const pythonCheck = results.find(r => r.name === "python");
+      runEnvironmentChecks(dir);
       // Python is likely installed on CI/dev machines, so just verify the check runs
       // without error — the result depends on the system
       assert.ok(true, "python check runs without error");
@@ -275,7 +274,7 @@ describe('doctor-environment', async () => {
       });
       mkdirSync(join(dir, "node_modules"), { recursive: true });
       cleanups.push(dir);
-      const results = runEnvironmentChecks(dir);
+      runEnvironmentChecks(dir);
       // Just verify it runs without error
       assert.ok(true, "cargo check runs without error");
     });
@@ -358,7 +357,7 @@ describe('doctor-environment', async () => {
     test('env: runFullEnvironmentChecks includes git remote', () => {
       const dir = createProjectDir();
       cleanups.push(dir);
-      const results = runFullEnvironmentChecks(dir);
+      runFullEnvironmentChecks(dir);
       // No git repo → no remote check, but should not throw
       assert.ok(true, "runFullEnvironmentChecks does not throw on non-git dir");
     });
@@ -376,9 +375,8 @@ describe('doctor-environment', async () => {
       });
       mkdirSync(join(dir, "node_modules"), { recursive: true });
       cleanups.push(dir);
-      const results = runEnvironmentChecks(dir);
+      runEnvironmentChecks(dir);
       // Port 3456 is unlikely to be in use, so no conflicts expected
-      const portConflicts = results.filter(r => r.name === "port_conflict");
       // Just verify it ran without error
       assert.ok(true, "port check with script-detected ports runs without error");
     }

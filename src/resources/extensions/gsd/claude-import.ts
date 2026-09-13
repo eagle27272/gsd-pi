@@ -474,7 +474,7 @@ function persistManifestToSettings(
     .filter(e => e.type === 'skill')
     .map(e => e.filePath);
 
-  const agentPaths = manifestEntries
+  manifestEntries
     .filter(e => e.type === 'agent')
     .map(e => e.filePath);
 
@@ -512,7 +512,7 @@ export async function runClaudeImportFlow(
 ): Promise<void> {
   const cwd = process.cwd();
   const settingsManager = SettingsManager.create(cwd, getAgentDir());
-  const { skillRoots, pluginRoots } = getClaudeSearchRoots(cwd);
+  const { pluginRoots } = getClaudeSearchRoots(cwd);
 
   // Categorize plugin roots into marketplaces vs flat paths
   const { marketplaces, flat } = categorizePluginRoots(pluginRoots);

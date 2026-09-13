@@ -85,7 +85,6 @@ function makeMetricUnit(id: string, startedAt: number, finishedAt: number): Unit
   };
 }
 
-type RenderableWidget = { render(width: number): string[]; invalidate(): void; dispose?: () => void };
 
 // ─── unitVerb ─────────────────────────────────────────────────────────────
 

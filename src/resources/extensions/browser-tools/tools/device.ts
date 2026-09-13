@@ -83,7 +83,7 @@ export function registerDeviceTools(pi: ExtensionAPI, deps: ToolDeps): void {
 
 				// Context restart required for full emulation.
 				// Save current URL to navigate back after restart.
-				const { page: currentPage, context: currentCtx } = await deps.ensureBrowser();
+				const { page: currentPage } = await deps.ensureBrowser();
 				const currentUrl = currentPage.url();
 
 				// Close existing browser and relaunch with device profile
@@ -110,7 +110,7 @@ export function registerDeviceTools(pi: ExtensionAPI, deps: ToolDeps): void {
 				// Wire up state
 				const {
 					setBrowser, setContext, pageRegistry, setSessionStartedAt,
-					setSessionArtifactDir, resetAllState,
+					resetAllState,
 				} = await import("../state.js");
 				const { registryAddPage, registrySetActive } = await import("../core.js");
 

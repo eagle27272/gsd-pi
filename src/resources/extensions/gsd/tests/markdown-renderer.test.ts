@@ -88,7 +88,7 @@ function clearAllCaches(): void {
  * Create on-disk directory structure for a milestone/slice/task tree
  * so that path resolvers work correctly.
  */
-function scaffoldDirs(tmpDir: string, mid: string, sliceIds: string[]): void {
+function scaffoldDirs(tmpDir: string, mid: string, _sliceIds: string[]): void {
   // Flat-phase: derive phase dir name from milestone title in DB
   const phaseNum = parseInt(mid.match(/^M0*(\d+)/i)?.[1] || '1', 10);
   const milestone = getMilestone(mid);
@@ -97,9 +97,6 @@ function scaffoldDirs(tmpDir: string, mid: string, sliceIds: string[]): void {
   const msDir = path.join(tmpDir, '.gsd', 'phases', `${String(phaseNum).padStart(2, '0')}-${slug}`);
   fs.mkdirSync(msDir, { recursive: true });
   // Flat-phase: no slices/ or tasks/ subdirs
-  for (const sid of sliceIds) {
-    fs.mkdirSync(msDir, { recursive: true });
-  }
 }
 
 // ─── Fixture: Roadmap Template ────────────────────────────────────────────

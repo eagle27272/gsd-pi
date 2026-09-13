@@ -9,7 +9,7 @@
 // Critical invariant: rendered markdown must round-trip through
 // parseRoadmap(), parsePlan(), parseSummary() in files.ts.
 
-import { readFileSync, existsSync, mkdirSync, statSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { createProjectionDirectorySync, removeProjectionFileSync } from "./atomic-write.js";
 import { logWarning } from "./workflow-logger.js";
 import { isClosedStatus, isHiddenFromRoadmap, toStatus } from "./status-guards.js";
@@ -1301,22 +1301,6 @@ interface CachedProjection { mtimeMs: number; size: number; parsed: unknown }
 const _projectionParseCache = new Map<string, CachedProjection>();
 registerCacheClearCallback(() => _projectionParseCache.clear());
 
-function parseProjectionByIdentity(path: string, parse: (content: string) => unknown): unknown {
-  let st: ReturnType<typeof statSync> | null = null;
-  try { st = statSync(path); } catch { st = null; }
-  if (st) {
-    const hit = _projectionParseCache.get(path);
-    if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) {
-      return hit.parsed;
-    }
-    const parsed = parse(readFileSync(path, "utf-8"));
-    _projectionParseCache.set(path, { mtimeMs: st.mtimeMs, size: st.size, parsed });
-    return parsed;
-  }
-  // stat failed (e.g. file vanished between existsSync and here) — fall back to
-  // the original plain read+parse so error handling is unchanged.
-  return parse(readFileSync(path, "utf-8"));
-}
 
 // ─── Projection Drift (DB-vs-render-intent) ───────────────────────────────
 // Post-cutover staleness is judged DB-vs-render-intent: the on-disk bytes
@@ -1471,93 +1455,6 @@ export function detectStaleRenders(_basePath: string): StaleEntry[] {
   return [];
 }
 
-function detectStaleRendersImpl(basePath: string): StaleEntry[] {
-  // per-call createRequire() for the legacy parsers that used to live here ran
-  // on every dispatch. The static `./schemas/parsers.js` specifier resolves in
-  // both packaged (.js) and source (.ts via the strip-types loader) contexts —
-  // the same form a dozen other modules already use.
-  const stale: StaleEntry[] = [];
-  const milestones = getAllMilestones();
-
-  for (const milestone of milestones) {
-    const slices = getMilestoneSlices(milestone.id);
-
-    // ── Check roadmap checkbox state ──────────────────────────────────
-    // TODO(flat-phase): roadmap checkbox parsing may not match flat-phase
-    // roadmap format, causing false-positive drift loops. Skip during transition.
-    /*
-    const roadmapPath = targetMilestoneFile(basePath, milestone.id, "ROADMAP", milestone.title);
-    if (existsSync(roadmapPath)) {
-      try {
-        const parsed = parseProjectionByIdentity(roadmapPath, parseProjectionRoadmap) as ReturnType<typeof parseProjectionRoadmap>;
-
-        for (const slice of slices) {
-          const isCompleteInDb = isClosedStatus(slice.status);
-          const roadmapSlice = parsed.slices.find((s: { id: string }) => s.id === slice.id);
-          if (!roadmapSlice) continue;
-
-          if (isCompleteInDb && !roadmapSlice!.done) {
-            stale.push({
-              path: roadmapPath,
-              reason: `${slice.id} is closed in DB but unchecked in roadmap`,
-            });
-          } else if (!isCompleteInDb && roadmapSlice!.done) {
-            stale.push({
-              path: roadmapPath,
-              reason: `${slice.id} is not closed in DB but checked in roadmap`,
-            });
-          }
-        }
-      } catch (e) {
-        logWarning("renderer", `roadmap parse failed: ${(e as Error).message}`);
-      }
-    }
-    */
-
-    // ── Check plan checkbox state and summaries for each slice ────────
-    for (const slice of slices) {
-      // Flat-phase keeps task state in plan <tasks> blocks: plan render-intent
-      // drift and Txx-SUMMARY.md presence are not projected, so neither is
-      // checked here.
-
-      // Check missing slice summary/UAT files. Use the same target helper as
-      // renderSliceSummary so detection and repair agree on output locations.
-      const sliceRow = getSlice(milestone.id, slice.id);
-      if (sliceRow && sliceRow.status === "complete") {
-        if (sliceRow.full_summary_md) {
-          const summaryAbsPath = targetSliceFile(basePath, milestone.id, slice.id, "SUMMARY", milestone.title);
-          if (!existsSync(summaryAbsPath)) {
-            stale.push({
-              path: summaryAbsPath,
-              reason: `${slice.id} is complete with summary in DB but SUMMARY.md missing on disk`,
-            });
-          }
-        }
-
-        if (sliceRow.full_uat_md) {
-          const uatAbsPath = targetSliceFile(basePath, milestone.id, slice.id, "UAT", milestone.title);
-          if (!existsSync(uatAbsPath)) {
-            stale.push({
-              path: uatAbsPath,
-              reason: `${slice.id} is complete with UAT in DB but UAT.md missing on disk`,
-            });
-          }
-        }
-      }
-    }
-  }
-
-  if (stale.length > 0) {
-    process.stderr.write(
-      `markdown-renderer: detected ${stale.length} stale render(s):\n`,
-    );
-    for (const entry of stale) {
-      process.stderr.write(`  - ${entry.path}: ${entry.reason}\n`);
-    }
-  }
-
-  return stale;
-}
 
 /**
  * Render-verification helper: does the rendered ROADMAP markdown mark a slice

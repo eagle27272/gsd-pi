@@ -10,9 +10,7 @@
 import type { Theme } from "@gsd/pi-coding-agent";
 import { truncateToWidth, matchesKey, Key } from "@gsd/pi-tui";
 import { deriveState } from "./state.js";
-import { loadFile } from "./files.js";
 import { isDbAvailable, getMilestoneSlices, getSliceTasks } from "./gsd-db.js";
-import { resolveMilestoneFile } from "./paths.js";
 import { getAutoDashboardData } from "./auto.js";
 import type { AutoDashboardData } from "./auto-dashboard.js";
 import { getAutoRuntimeSnapshot } from "./auto-runtime-state.js";
@@ -247,8 +245,6 @@ export class GSDDashboardOverlay {
         },
       };
 
-      const roadmapFile = resolveMilestoneFile(base, mid, "ROADMAP");
-      const roadmapContent = roadmapFile ? await loadFile(roadmapFile) : null;
       // Normalize slices from DB
       type NormSlice = { id: string; done: boolean; title: string; risk: string };
       let normSlices: NormSlice[] = [];
@@ -458,7 +454,6 @@ export class GSDDashboardOverlay {
 
       const batches = getWorkerBatches();
       for (const [batchId, workers] of batches) {
-        const running = workers.filter(w => w.status === "running").length;
         const done = workers.filter(w => w.status === "completed").length;
         const failed = workers.filter(w => w.status === "failed").length;
         const total = workers[0]?.batchSize ?? workers.length;
