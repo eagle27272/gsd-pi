@@ -1,12 +1,11 @@
 name: CI
 on:
   pull_request:
-    types: [synchronize, opened, reopened, edited]
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+    branches:
+      - main
 jobs:
   build-and-test:
+    if: startsWith(github.head_ref, 'mergify/merge-queue/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

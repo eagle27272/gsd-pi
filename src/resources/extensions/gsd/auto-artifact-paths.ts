@@ -25,7 +25,7 @@ import {
 import { milestoneIdToPhaseNum, slicePlanFileName } from "./layout-policy.js";
 import { parseUnitId } from "./unit-id.js";
 import { basename, dirname, join, relative } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 
 /**
  * The phase directory for `mid` under the CANONICAL project `.gsd`.
@@ -323,4 +323,30 @@ export function resolveExistingSliceResearchPath(
   sid: string,
 ): string | null {
   return resolveSliceResearchLocation(basePath, mid, sid).absolutePath;
+}
+
+/**
+ * On-disk evidence that gsd_reassess_roadmap ran for a milestone: any
+ * `NN-<segment>-ASSESSMENT.md` in the phase dir, covering both the
+ * milestone-scoped `NN-ROADMAP-ASSESSMENT.md` and the slice-scoped
+ * `NN-MM-ASSESSMENT.md` files a reassessment adds.
+ *
+ * The `.+` segment is load-bearing: it excludes the phase-level
+ * `NN-ASSESSMENT.md`, which is a different artifact.
+ *
+ * Shared by the auto-mode post-unit gate and the verification gate — keeping
+ * one copy is what keeps both on the flat-phase layout (#53 follow-up).
+ */
+export function hasRoadmapReassessmentArtifact(basePath: string, milestoneId: string): boolean {
+  const phaseDir = resolveMilestonePath(basePath, milestoneId);
+  if (!phaseDir) return false;
+
+  const phaseNum = String(milestoneIdToPhaseNum(milestoneId)).padStart(2, "0");
+  const sliceAssessment = new RegExp(`^${phaseNum}-.+-ASSESSMENT\\.md$`, "i");
+  try {
+    return readdirSync(phaseDir, { withFileTypes: true })
+      .some((entry) => entry.isFile() && sliceAssessment.test(entry.name));
+  } catch {
+    return false;
+  }
 }
