@@ -14,9 +14,9 @@
 //   Test 3 — session_switch ordering: clearDiscussionFlowState clears the mark
 //   Test 4 — interactive sessions (isAutoActive===false) are unaffected
 
-import { describe, test, afterEach, beforeEach } from 'node:test';
+import { describe, test, after, afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, existsSync, unlinkSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync, existsSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -32,10 +32,20 @@ import {
 import { DISPATCH_RULES, type DispatchContext } from '../auto-dispatch.ts';
 import { _setAutoActiveForTest } from '../auto.ts';
 
+// The write-gate snapshot lives at <basePath>/.gsd/runtime/. Test files run as
+// separate processes but share one cwd (the repo root), so a cwd-based basePath
+// would put every file on the SAME snapshot — this file's markDepthVerified
+// ('M001') would then leak into peers' "blocked before verification" cases and
+// vice versa. Own the basePath instead. realpathSync normalizes the macOS
+// /var → /private/var symlink so the key matches the resolved snapshot root.
+const BASE = realpathSync(mkdtempSync(join(tmpdir(), 'gsd-4973-')));
+
+after(() => rmSync(BASE, { recursive: true, force: true }));
+
 // Reset all relevant state before and after each test.
 function resetState(): void {
   _setAutoActiveForTest(false);
-  clearDiscussionFlowState(process.cwd());
+  clearDiscussionFlowState(BASE);
 }
 
 describe('auto-discuss-milestone-deadlock-4973', () => {
@@ -51,7 +61,7 @@ describe('auto-discuss-milestone-deadlock-4973', () => {
     _setAutoActiveForTest(true);
 
     // Before mark: blocked
-    const snapshotBefore = loadWriteGateSnapshot(process.cwd());
+    const snapshotBefore = loadWriteGateSnapshot(BASE);
     const beforeResult = shouldBlockContextArtifactSaveInSnapshot(
       snapshotBefore,
       'CONTEXT',
@@ -61,10 +71,10 @@ describe('auto-discuss-milestone-deadlock-4973', () => {
     assert.strictEqual(beforeResult.block, true, 'should block before markDepthVerified');
 
     // Simulate what the dispatch rule now does in auto-mode
-    markDepthVerified('M001', process.cwd());
+    markDepthVerified('M001', BASE);
 
     // After mark: unblocked
-    const snapshotAfter = loadWriteGateSnapshot(process.cwd());
+    const snapshotAfter = loadWriteGateSnapshot(BASE);
     const afterResult = shouldBlockContextArtifactSaveInSnapshot(
       snapshotAfter,
       'CONTEXT',
@@ -83,14 +93,14 @@ describe('auto-discuss-milestone-deadlock-4973', () => {
     const contextPath = '.gsd/milestones/M001/M001-CONTEXT.md';
 
     // Before mark: blocked
-    const beforeResult = shouldBlockContextWrite('write', contextPath, 'M001');
+    const beforeResult = shouldBlockContextWrite('write', contextPath, 'M001', undefined, BASE);
     assert.strictEqual(beforeResult.block, true, 'write should be blocked before markDepthVerified');
 
     // Simulate dispatch rule auto-mark
-    markDepthVerified('M001', process.cwd());
+    markDepthVerified('M001', BASE);
 
     // After mark: unblocked
-    const afterResult = shouldBlockContextWrite('write', contextPath, 'M001');
+    const afterResult = shouldBlockContextWrite('write', contextPath, 'M001', undefined, BASE);
     assert.strictEqual(afterResult.block, false, 'write should not be blocked after markDepthVerified');
   });
 
@@ -109,8 +119,8 @@ describe('auto-discuss-milestone-deadlock-4973', () => {
   // the dispatch-site call site is safe regardless of prior session state.
   test('Test 3: session_switch ordering — clearDiscussionFlowState clears mark; dispatch-site call re-establishes it', () => {
     // Simulate a mark from a prior session
-    markDepthVerified('M001', process.cwd());
-    let snapshot = loadWriteGateSnapshot(process.cwd());
+    markDepthVerified('M001', BASE);
+    let snapshot = loadWriteGateSnapshot(BASE);
     assert.strictEqual(
       isMilestoneDepthVerifiedInSnapshot(snapshot, 'M001'),
       true,
@@ -119,8 +129,8 @@ describe('auto-discuss-milestone-deadlock-4973', () => {
 
     // session_switch fires clearDiscussionFlowState() — this is exactly what
     // register-hooks.ts:106 does
-    clearDiscussionFlowState(process.cwd());
-    snapshot = loadWriteGateSnapshot(process.cwd());
+    clearDiscussionFlowState(BASE);
+    snapshot = loadWriteGateSnapshot(BASE);
     assert.strictEqual(
       isMilestoneDepthVerifiedInSnapshot(snapshot, 'M001'),
       false,
@@ -130,9 +140,9 @@ describe('auto-discuss-milestone-deadlock-4973', () => {
     // Now the dispatch rule fires (after session_switch cleared state)
     // and re-establishes the mark for the new session
     _setAutoActiveForTest(true);
-    markDepthVerified('M001', process.cwd()); // this is what the dispatch rule does
+    markDepthVerified('M001', BASE); // this is what the dispatch rule does
 
-    snapshot = loadWriteGateSnapshot(process.cwd());
+    snapshot = loadWriteGateSnapshot(BASE);
     assert.strictEqual(
       isMilestoneDepthVerifiedInSnapshot(snapshot, 'M001'),
       true,
@@ -158,7 +168,7 @@ describe('auto-discuss-milestone-deadlock-4973', () => {
 
     // CONTEXT artifact save is still blocked
     const snapshotResult = shouldBlockContextArtifactSaveInSnapshot(
-      loadWriteGateSnapshot(process.cwd()),
+      loadWriteGateSnapshot(BASE),
       'CONTEXT',
       'M002',
       null,
@@ -174,6 +184,8 @@ describe('auto-discuss-milestone-deadlock-4973', () => {
       'write',
       '.gsd/milestones/M002/M002-CONTEXT.md',
       'M002',
+      undefined,
+      BASE,
     );
     assert.strictEqual(
       writeResult.block,
@@ -202,7 +214,7 @@ describe('auto-discuss-milestone-deadlock-4973', () => {
     // readable by the same loadWriteGateSnapshot(basePath) the test reads
     // from. The rule passes basePath through to markDepthVerified (since
     // commit 73bb7e085) — without this, the rule writes the snapshot under
-    // basePath but the test would read process.cwd() and never see it.
+    // basePath but the test would read a different root and never see it.
     const tempBase = mkdtempSync(join(tmpdir(), '4973-rule-test-'));
     const snapshotFile = join(tempBase, '.gsd', 'runtime', 'write-gate-state.json');
     try {
@@ -238,7 +250,7 @@ describe('auto-discuss-milestone-deadlock-4973', () => {
       );
 
       // ── Deep auto-mode case: the user-facing approval gate must stay closed ──
-      clearDiscussionFlowState(process.cwd());
+      clearDiscussionFlowState(BASE);
       if (existsSync(snapshotFile)) unlinkSync(snapshotFile);
       _setAutoActiveForTest(true);
       const deepCtx = {
@@ -262,9 +274,9 @@ describe('auto-discuss-milestone-deadlock-4973', () => {
       );
 
       // ── Interactive case: the rule must NOT call markDepthVerified ──
-      // clearDiscussionFlowState() only deletes the snapshot at process.cwd(),
-      // so we must explicitly remove the snapshot under our tempBase too.
-      clearDiscussionFlowState(process.cwd());
+      // clearDiscussionFlowState() only deletes the snapshot at the basePath it
+      // is given, so we must explicitly remove the one under tempBase too.
+      clearDiscussionFlowState(BASE);
       if (existsSync(snapshotFile)) unlinkSync(snapshotFile);
       _setAutoActiveForTest(false);
       snap = loadWriteGateSnapshot(tempBase);
