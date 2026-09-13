@@ -237,16 +237,19 @@ export async function checkGitHealth(
         : false;
 
       if (!isComplete && !hasProjectContentOnDisk(wt.path) && hasProjectContentOnDisk(basePath)) {
+        const holdsGsdState = hasWorktreeGsdState(wt.path);
         issues.push({
           severity: "error",
           code: "worktree_empty_with_project_content",
           scope: "milestone",
           unitId: milestoneId,
-          message: `Worktree ${wt.path} has no project content, but project root ${basePath} does. Run doctor --fix to recreate the worktree.`,
-          fixable: true,
+          message: holdsGsdState
+            ? `Worktree ${wt.path} has no project content, but project root ${basePath} does. It holds uncommitted .gsd/ state, so doctor --fix will not recreate it — move that state out first.`
+            : `Worktree ${wt.path} has no project content, but project root ${basePath} does. Run doctor --fix to recreate the worktree.`,
+          fixable: !holdsGsdState,
         });
 
-        if (shouldFix("worktree_empty_with_project_content") && hasWorktreeGsdState(wt.path)) {
+        if (shouldFix("worktree_empty_with_project_content") && holdsGsdState) {
           fixesApplied.push(
             `skipped recreating empty worktree ${wt.path} — it holds uncommitted .gsd/ state`,
           );
