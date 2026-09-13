@@ -4,7 +4,7 @@ merge_protections_settings:
   auto_merge_conditions: true
 queue_rules:
   - name: Auto Merge
-    branch_protection_injection_mode: none
+    branch_protection_injection_mode: queue
     queue_conditions:
       - base = main
     merge_conditions:
