@@ -41,6 +41,16 @@ upstream **v1.18.0**. Later changes are tracked in this repository's git history
 
 ### Fixed
 
+- Three task-scoped artifacts no longer collide between sibling slices that reuse a task
+  id. In the flat-phase layout every slice in a milestone resolves to the same phase
+  directory, so a listing of it mixes all of their files together. The reactive-execute
+  verification gate counted any `T##-SUMMARY.md` in that directory and passed a slice on
+  another slice's evidence; escalation and reopen-reason artifacts were written as bare
+  `T##-ESCALATION.json` / `T##-REOPEN.json` and overwrote each other, so dispatch could
+  inject the wrong diagnosis. The gate now filters the listing by slice, and both JSON
+  artifacts are written slice-qualified (`S##-T##-…`). An artifact already on disk under
+  the bare name keeps it, so nothing in flight is orphaned
+  ([#5](https://github.com/eagle27272/gsd-pi/issues/5)).
 - Renaming a milestone no longer splits its artifacts between two `phases/NN-slug/`
   directories. The on-disk rename used a project path reconstructed from the database path,
   which is wrong whenever `.gsd` is a symlink into the external state directory, so the

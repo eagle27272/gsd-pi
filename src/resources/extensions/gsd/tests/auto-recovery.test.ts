@@ -2541,6 +2541,37 @@ test("#1343: writeReactiveExecuteBlocker uses slice-qualified summaries in flat-
   }
 });
 
+test("#5: reactive-execute verification ignores a sibling slice's summary in flat-phase", () => {
+  const base = join(tmpdir(), `gsd-test-${randomUUID()}`);
+  try {
+    // Flat-phase: S01 and S02 share the phase dir and reuse task id T03.
+    // Only S01 wrote a summary.
+    const phaseDir = join(base, ".gsd", "phases", "01-m001");
+    mkdirSync(phaseDir, { recursive: true });
+    writeFileSync(join(phaseDir, "01-01-PLAN.md"), "# S01: First\n", "utf-8");
+    writeFileSync(join(phaseDir, "01-02-PLAN.md"), "# S02: Second\n", "utf-8");
+    writeFileSync(join(phaseDir, "S01-T03-SUMMARY.md"), "# S01 T03 Summary\n", "utf-8");
+
+    assert.equal(
+      verifyExpectedArtifact("reactive-execute", "M001/S01/reactive", base),
+      true,
+      "S01 wrote S01-T03-SUMMARY.md, so its own batch has evidence",
+    );
+    assert.equal(
+      verifyExpectedArtifact("reactive-execute", "M001/S02/reactive", base),
+      false,
+      "the sibling S01-T03-SUMMARY.md is not S02's evidence",
+    );
+    assert.equal(
+      verifyExpectedArtifact("reactive-execute", "M001/S99/reactive", base),
+      false,
+      "a slice that produced nothing never verifies off another slice's files",
+    );
+  } finally {
+    cleanup(base);
+  }
+});
+
 // ─── T05: fail-closed adopted-history guard ──────────────────────────────────
 
 function adoptCanonicalHistory(
