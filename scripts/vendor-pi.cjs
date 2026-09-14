@@ -123,6 +123,10 @@ function main() {
     copyPackage(upstreamPath, targetPath, gsdName, opts.dryRun)
   }
 
+  if (!opts.dryRun) {
+    run('node', ['scripts/restore-pi-tsconfig.cjs'], REPO_ROOT)
+  }
+
   process.stderr.write('Done. Run npm run build and fix errors in @gsd/agent-core and @gsd/agent-modes only.\n')
 }
 
