@@ -6,6 +6,7 @@ import chalk from "chalk";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { CONFIG_DIR_NAME, getAgentDir, getBinDir } from "./config.js";
+import { getDefaultSessionDir } from "./core/session-manager-list.js";
 
 const MIGRATION_GUIDE_URL =
 	"https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/CHANGELOG.md#extensions-migration";
@@ -105,15 +106,7 @@ function migrateSessionsFromAgentRoot(): void {
 			if (header.type !== "session" || !header.cwd) continue;
 
 			const cwd: string = header.cwd;
-
-			// Compute the correct session directory (same encoding as session-manager.ts)
-			const safePath = `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
-			const correctDir = join(agentDir, "sessions", safePath);
-
-			// Create directory if needed
-			if (!existsSync(correctDir)) {
-				mkdirSync(correctDir, { recursive: true });
-			}
+			const correctDir = getDefaultSessionDir(cwd, agentDir);
 
 			// Move the file
 			const fileName = file.split("/").pop() || file.split("\\").pop();

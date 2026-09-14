@@ -259,24 +259,76 @@ async function handleExportCommand(text: string, ctx: SlashCommandContext): Prom
 	}
 }
 
+export interface CapturedProcessResult {
+	stdout: string;
+	stderr: string;
+	code: number | null;
+	/** Set when the process could not be spawned or run at all (e.g. ENOENT). */
+	error?: Error;
+}
+
+/**
+ * Run a command and capture its output.
+ *
+ * Both `error` and `close` are handled: an unhandled `error` event on a
+ * ChildProcess is rethrown by the EventEmitter and would take the TUI down.
+ */
+export function spawnCapture(
+	command: string,
+	args: string[],
+	options: { shell?: boolean } = {},
+	onSpawn?: (proc: ReturnType<typeof spawn>) => void,
+): Promise<CapturedProcessResult> {
+	return new Promise((resolve) => {
+		const proc = spawn(command, args, options);
+		onSpawn?.(proc);
+
+		let stdout = "";
+		let stderr = "";
+		proc.stdout?.on("data", (data) => {
+			stdout += data.toString();
+		});
+		proc.stderr?.on("data", (data) => {
+			stderr += data.toString();
+		});
+		proc.on("error", (error) => resolve({ stdout, stderr, code: null, error }));
+		proc.on("close", (code) => resolve({ stdout, stderr, code }));
+	});
+}
+
+const GH_MISSING_MESSAGE = "GitHub CLI (gh) is not installed. Install it from https://cli.github.com/";
+
 async function handleShareCommand(ctx: SlashCommandContext): Promise<void> {
 	// Check if gh is available and logged in
 	try {
 		const authResult = spawnSync("gh", ["auth", "status"], { encoding: "utf-8" });
+		if (authResult.error) {
+			ctx.showError(GH_MISSING_MESSAGE);
+			return;
+		}
 		if (authResult.status !== 0) {
 			ctx.showError("GitHub CLI is not logged in. Run 'gh auth login' first.");
 			return;
 		}
 	} catch {
-		ctx.showError("GitHub CLI (gh) is not installed. Install it from https://cli.github.com/");
+		ctx.showError(GH_MISSING_MESSAGE);
 		return;
 	}
 
-	// Export to a temp file
-	const tmpFile = path.join(os.tmpdir(), "session.html");
+	// Export to a private temp directory so concurrent shares cannot collide and
+	// the export cannot be redirected through a pre-planted symlink.
+	let tmpDir: string;
+	try {
+		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "gsd-share-"));
+	} catch (error: unknown) {
+		ctx.showError(`Failed to export session: ${error instanceof Error ? error.message : "Unknown error"}`);
+		return;
+	}
+	const tmpFile = path.join(tmpDir, "session.html");
 	try {
 		await ctx.session.exportToHtml(tmpFile);
 	} catch (error: unknown) {
+		fs.rmSync(tmpDir, { recursive: true, force: true });
 		ctx.showError(`Failed to export session: ${error instanceof Error ? error.message : "Unknown error"}`);
 		return;
 	}
@@ -294,7 +346,7 @@ async function handleShareCommand(ctx: SlashCommandContext): Promise<void> {
 		ctx.editorContainer.addChild(ctx.editor);
 		ctx.ui.setFocus(ctx.editor);
 		try {
-			fs.unlinkSync(tmpFile);
+			fs.rmSync(tmpDir, { recursive: true, force: true });
 		} catch {
 			// Ignore cleanup errors
 		}
@@ -309,25 +361,24 @@ async function handleShareCommand(ctx: SlashCommandContext): Promise<void> {
 		ctx.showStatus("Share cancelled");
 	};
 
-		try {
-			const result = await new Promise<{ stdout: string; stderr: string; code: number | null }>((resolve) => {
-				proc = spawn("gh", ["gist", "create", "--public=false", tmpFile], {
-					shell: process.platform === "win32",
-				});
-				let stdout = "";
-				let stderr = "";
-			proc.stdout?.on("data", (data) => {
-				stdout += data.toString();
-			});
-			proc.stderr?.on("data", (data) => {
-				stderr += data.toString();
-			});
-			proc.on("close", (code) => resolve({ stdout, stderr, code }));
-		});
+	try {
+		const result = await spawnCapture(
+			"gh",
+			["gist", "create", "--public=false", tmpFile],
+			{ shell: process.platform === "win32" },
+			(spawned) => {
+				proc = spawned;
+			},
+		);
 
 		if (loader.signal.aborted) return;
 
 		restoreEditor();
+
+		if (result.error) {
+			ctx.showError(`Failed to create gist: ${result.error.message}`);
+			return;
+		}
 
 		if (result.code !== 0) {
 			const errorMsg = result.stderr?.trim() || "Unknown error";
