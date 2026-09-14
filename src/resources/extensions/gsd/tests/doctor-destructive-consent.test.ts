@@ -121,7 +121,9 @@ test("doctor --fix quarantines rather than deletes a dirty worktree for a cancel
   assert.ok(branchExists(base, "milestone/M001"), "the branch must be preserved");
 });
 
-test("doctor --fix does not delete worktree directories when git worktree list comes back empty", async (t) => {
+test("doctor --fix does not delete worktree directories when git worktree list comes back empty", {
+  skip: process.platform === "win32" ? "uses a POSIX shell shim for git" : false,
+}, async (t) => {
   const base = makeRepo("gsd-doctor-worktree-dirs-");
   t.after(() => rmSync(base, { recursive: true, force: true }));
 
