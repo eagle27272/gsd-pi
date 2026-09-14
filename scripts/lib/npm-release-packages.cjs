@@ -194,8 +194,8 @@ module.exports = {
 if (require.main === module) {
   // `node scripts/lib/npm-release-packages.cjs [--workspace-dirs]`
   // --workspace-dirs emits "<name>:<workspace-dir>" lines in dependency order
-  // (consumed by scripts/publish-workspace-packages.sh, which publishes each
-  // package from its own directory). Default emits the full required name list.
+  // in dependency order, for publishing each package from its own directory.
+  // Default emits the full required name list.
   // Guard: only write when non-empty so `mapfile -t` in bash doesn't receive a
   // lone '\n' that loads one blank element and bypasses the empty-list exit.
   const arg = process.argv[2];

@@ -89,8 +89,9 @@ test("collectDirectoryMetrics returns empty data for missing directories", async
 
 test("collectBaseline returns the phase-zero report shape", async () => {
   const root = await makeFixtureRoot();
-  await writeFile(join(root, "CONTRIBUTING.md"), "# Contributing\n");
-  await writeFile(join(root, "VISION.md"), "# Vision\n");
+  await mkdir(join(root, "docs/dev"), { recursive: true });
+  await writeFile(join(root, "docs/dev/development.md"), "# Development\n");
+  await writeFile(join(root, "README.md"), "# Readme\n");
   await writeFile(join(root, "src/resources/extensions/gsd/prompts/system.md"), "System prompt\n");
   await writeContractsSurfaceFixtures(root);
   await writeProcessMetricFixtures(root);

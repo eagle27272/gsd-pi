@@ -81,7 +81,7 @@ describe("my feature", () => {
 ## Anti-patterns to avoid
 
 - ❌ Reading source files and grepping with regex — see "No source-grep
-  tests" in [CONTRIBUTING.md](../../CONTRIBUTING.md). E2e is the wrong layer
+  tests" in [Development](../../docs/dev/development.md). E2e is the wrong layer
   for that anyway.
 - ❌ Spawning `gsd` directly with `child_process.spawn` — bypasses the
   env-stripping and TMPDIR fix. Always go through `gsdSync` / `gsdAsync`.
