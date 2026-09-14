@@ -4,6 +4,14 @@
 
 import { spawn } from "node:child_process";
 import { waitForChildProcess } from "../utils/child-process.js";
+import { trackDetachedChildPid, untrackDetachedChildPid } from "../utils/shell.js";
+
+/**
+ * Per-stream ceiling on buffered output. `execCommand` holds stdout and stderr
+ * entirely in memory, so a runaway command (a `find /`, a looping build) would
+ * otherwise grow the heap until the host dies.
+ */
+export const MAX_EXEC_OUTPUT_BYTES = 32 * 1024 * 1024;
 
 /**
  * Options for executing shell commands.
@@ -15,6 +23,8 @@ export interface ExecOptions {
 	timeout?: number;
 	/** Working directory */
 	cwd?: string;
+	/** Per-stream buffered output ceiling. Defaults to {@link MAX_EXEC_OUTPUT_BYTES}. */
+	maxOutputBytes?: number;
 }
 
 /**
@@ -24,7 +34,41 @@ export interface ExecResult {
 	stdout: string;
 	stderr: string;
 	code: number;
+	/**
+	 * True when the child died from a signal, whether we sent it (timeout, abort)
+	 * or something outside the process did (OOM killer, `kill -9`, a supervisor).
+	 */
 	killed: boolean;
+	/** Terminating signal, or null when the child exited normally. */
+	signal: NodeJS.Signals | null;
+}
+
+/** Bounded string accumulator: keeps the first `limit` bytes and records the overflow. */
+function createOutputBuffer(limit: number) {
+	const chunks: string[] = [];
+	let bytes = 0;
+	let dropped = 0;
+	return {
+		append(data: Buffer): void {
+			if (bytes >= limit) {
+				dropped += data.length;
+				return;
+			}
+			const room = limit - bytes;
+			if (data.length <= room) {
+				chunks.push(data.toString());
+				bytes += data.length;
+				return;
+			}
+			chunks.push(data.subarray(0, room).toString());
+			bytes = limit;
+			dropped += data.length - room;
+		},
+		toString(): string {
+			const text = chunks.join("");
+			return dropped > 0 ? `${text}\n[output truncated at ${limit} bytes; ${dropped} more dropped]` : text;
+		},
+	};
 }
 
 /**
@@ -43,9 +87,14 @@ export async function execCommand(
 			shell: false,
 			stdio: ["ignore", "pipe", "pipe"],
 		});
+		// Register for shutdown reaping so a child cannot outlive the host holding a
+		// lock (a stranded `git` keeps .git/index.lock and wedges every later write).
+		if (proc.pid) trackDetachedChildPid(proc.pid);
 
-		let stdout = "";
-		let stderr = "";
+		const limit = options?.maxOutputBytes ?? MAX_EXEC_OUTPUT_BYTES;
+		const stdout = createOutputBuffer(limit);
+		const stderr = createOutputBuffer(limit);
+		let spawnError: string | undefined;
 		let killed = false;
 		let timeoutId: NodeJS.Timeout | undefined;
 		let escalationId: NodeJS.Timeout | undefined;
@@ -84,32 +133,42 @@ export async function execCommand(
 			}, options.timeout);
 		}
 
-		proc.stdout?.on("data", (data) => {
-			stdout += data.toString();
+		proc.stdout?.on("data", (data: Buffer) => {
+			stdout.append(data);
 		});
 
-		proc.stderr?.on("data", (data) => {
-			stderr += data.toString();
+		proc.stderr?.on("data", (data: Buffer) => {
+			stderr.append(data);
 		});
+
+		const cleanup = () => {
+			if (proc.pid) untrackDetachedChildPid(proc.pid);
+			if (timeoutId) clearTimeout(timeoutId);
+			if (escalationId) clearTimeout(escalationId);
+			if (options?.signal) {
+				options.signal.removeEventListener("abort", killProcess);
+			}
+		};
+
+		const finish = (code: number, signal: NodeJS.Signals | null) => {
+			cleanup();
+			const stderrText = [stderr.toString(), spawnError].filter(Boolean).join("\n");
+			resolve({ stdout: stdout.toString(), stderr: stderrText, code, killed: killed || signal !== null, signal });
+		};
 
 		// Wait for process termination without hanging on inherited stdio handles
 		// held open by detached descendants.
 		waitForChildProcess(proc)
-			.then((code) => {
-				if (timeoutId) clearTimeout(timeoutId);
-				if (escalationId) clearTimeout(escalationId);
-				if (options?.signal) {
-					options.signal.removeEventListener("abort", killProcess);
-				}
-				resolve({ stdout, stderr, code: code ?? (killed ? 1 : 0), killed });
+			.then(({ code, signal }) => {
+				// A signal-terminated child has no exit code. Reporting 0 here would
+				// make an OOM-killed command look like it succeeded.
+				finish(code ?? 1, signal);
 			})
-			.catch((_err) => {
-				if (timeoutId) clearTimeout(timeoutId);
-				if (escalationId) clearTimeout(escalationId);
-				if (options?.signal) {
-					options.signal.removeEventListener("abort", killProcess);
-				}
-				resolve({ stdout, stderr, code: 1, killed });
+			.catch((err: unknown) => {
+				// Spawn failures (ENOENT, EACCES) arrive here. Keeping the message is what
+				// distinguishes "git is not installed" from "git exited 1".
+				spawnError = err instanceof Error ? err.message : String(err);
+				finish(1, null);
 			});
 	});
 }
