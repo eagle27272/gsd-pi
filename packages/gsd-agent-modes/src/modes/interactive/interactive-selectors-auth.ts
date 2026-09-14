@@ -1,6 +1,5 @@
 // Project/App: gsd-pi
 // File Purpose: Extracted from interactive-selectors-session.ts (Phase E2 seam remediation).
-// @ts-nocheck
 
 import type { OAuthProviderId } from "@gsd/pi-ai";
 import { getApiKeyEnvVars } from "@gsd/pi-ai";

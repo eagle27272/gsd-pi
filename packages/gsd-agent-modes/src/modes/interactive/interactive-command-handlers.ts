@@ -1,6 +1,5 @@
 // Project/App: gsd-pi
 // File Purpose: Extracted from interactive-mode.ts (Phase E2 seam remediation).
-// @ts-nocheck
 
 import * as fs from "node:fs";
 import * as path from "node:path";
