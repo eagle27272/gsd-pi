@@ -28,7 +28,6 @@ import {
   closeDatabase,
   insertMilestone,
   insertSlice,
-  insertTask,
 } from "../gsd-db.ts";
 import { deriveStateFromDb } from "../state.ts";
 import { _clearGsdRootCache } from "../paths.ts";

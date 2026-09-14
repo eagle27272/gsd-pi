@@ -7,7 +7,7 @@
 
 import { execFileSync } from "node:child_process";
 import type { ExecFileSyncOptionsWithStringEncoding } from "node:child_process";
-import { existsSync, readFileSync, unlinkSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { GSDError, GSD_GIT_ERROR } from "./errors.js";
 import { GIT_NO_PROMPT_ENV } from "./git-constants.js";

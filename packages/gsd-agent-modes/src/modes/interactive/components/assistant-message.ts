@@ -7,7 +7,7 @@ import { type TimestampFormat } from "./timestamp.js";
 import { formatTimestamp } from "./timestamp.js";
 import { RenderCache } from "./render-cache.js";
 import { renderPlainSpeakerMessage } from "./transcript-design.js";
-import { asServerToolUse, asWebSearchResult, isToolContentBlock } from "../gsd-content-blocks.js";
+import { isToolContentBlock } from "../gsd-content-blocks.js";
 
 export interface ContentRange {
 	startIndex: number;
@@ -257,8 +257,6 @@ export class AssistantMessageComponent extends Container {
 		}
 
 		// Insert new children at their correct positions
-		// Find the insertion point by looking at the last shared child before the gap
-		let insertIdx = 0;
 		for (let i = 0; i < newChildren.length; i++) {
 			const child = newChildren[i];
 			if (existingSet.has(child)) {
@@ -270,7 +268,6 @@ export class AssistantMessageComponent extends Container {
 					this.contentContainer.children.splice(i, 0, child);
 					// Don't invalidate — just reorder in-place
 				}
-				insertIdx = i + 1;
 			} else {
 				// New child — insert at this position
 				this.contentContainer.children.splice(i, 0, child);

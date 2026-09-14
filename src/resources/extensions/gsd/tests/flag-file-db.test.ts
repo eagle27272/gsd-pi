@@ -70,7 +70,6 @@ const PLAN_CONTENT = `# S01: Test Slice
 
 // Minimal task plan file content — deriveStateFromDb checks the tasks dir has .md files
 const TASK_PLAN_STUB = `# T02: Active Task\n\nDo stuff.\n`;
-const TASK_SUMMARY_STUB = `---\nblocker_discovered: false\n---\n# T01 Summary\nDone.\n`;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Tests

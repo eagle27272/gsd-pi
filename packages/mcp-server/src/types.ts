@@ -5,7 +5,6 @@
 import type { RpcClient } from '@opengsd/rpc-client';
 import type {
   McpPendingBlocker as PendingBlocker,
-  RpcCostUpdateEvent,
   SdkAgentEvent,
 } from '@opengsd/contracts';
 

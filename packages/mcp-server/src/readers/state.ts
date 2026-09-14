@@ -6,8 +6,6 @@ import {
   resolveGsdRoot,
   resolveRootFile,
   findMilestoneIds,
-  resolveMilestoneDir,
-  resolveMilestoneFile,
   findSliceIds,
   findTaskFiles,
 } from './paths.js';

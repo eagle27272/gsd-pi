@@ -20,7 +20,7 @@ import {
   _getRegisteredLockDirs,
 } from '../session-lock.ts';
 import { gsdRoot } from '../paths.ts';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 

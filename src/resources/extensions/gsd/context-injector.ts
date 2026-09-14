@@ -14,7 +14,7 @@
  */
 
 import { readFileSync, existsSync } from "node:fs";
-import { join, resolve, sep } from "node:path";
+import { resolve, sep } from "node:path";
 import type { StepDefinition } from "./definition-loader.js";
 import { readFrozenDefinition } from "./definition-io.js";
 

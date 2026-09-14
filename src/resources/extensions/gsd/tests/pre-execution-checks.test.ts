@@ -12,7 +12,7 @@
  *   5. Verify commands — reject unsafe or non-runnable task verification
  */
 
-import { afterEach, beforeEach, describe, test, mock } from "node:test";
+import { afterEach, beforeEach, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { homedir, tmpdir } from "node:os";
 import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";

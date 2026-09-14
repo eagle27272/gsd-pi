@@ -14,7 +14,7 @@
  *    after N units, escalates to LLM-assisted heal dispatch.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { gsdRoot, milestonesDir, resolveGsdRootFile } from "./paths.js";
 import { readCrashLock, isLockProcessAlive, clearLock } from "./crash-recovery.js";

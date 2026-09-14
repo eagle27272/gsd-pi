@@ -594,7 +594,7 @@ describe('derive-state-db', async () => {
       insertMilestone({ id: 'M001', title: 'First', status: 'active' });
 
       invalidateStateCache();
-      const dbState = await deriveStateFromDb(base);
+      await deriveStateFromDb(base);
 
 
       closeDatabase();

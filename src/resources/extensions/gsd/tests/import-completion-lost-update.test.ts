@@ -37,7 +37,7 @@ function copyFixture(): string {
   return base;
 }
 
-function taskStatus(base: string): string | undefined {
+function taskStatus(_base: string): string | undefined {
   return t01Row()?.status;
 }
 

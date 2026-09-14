@@ -16,34 +16,14 @@
 // The separate `.gsd/unit-claims.db` (unit-ownership.ts) is an intentionally
 // independent store and is excluded from this invariant.
 import { createHash } from "node:crypto";
-import { dirname, isAbsolute, join, normalize } from "node:path";
+import { dirname, isAbsolute, normalize } from "node:path";
 import { currentPhaseDirName, renamePhaseDirOnTitleChange } from "./phase-dir-rename.js";
-import type { Decision, Requirement, GateRow, GateId, GateScope, GateStatus, GateVerdict } from "./types.js";
+import type { Decision, Requirement, GateId, GateScope, GateStatus, GateVerdict } from "./types.js";
 import { GSDError, GSD_IO_ERROR, GSD_STALE_STATE } from "./errors.js";
 import { getGateIdsForTurn, type OwnerTurn } from "./gate-registry.js";
-import { logError, logWarning } from "./workflow-logger.js";
-import { type DbAdapter } from "./db-adapter.js";
-import {
-  emptyTaskStatusCounts,
-  rowToActiveTaskSummary,
-  rowToIdStatusSummary,
-  rowToTaskStatusCounts,
-  rowsToStringColumn,
-  type ActiveTaskSummary,
-  type IdStatusSummary,
-  type TaskStatusCounts,
-} from "./db-lightweight-query-rows.js";
-import {
-  rowToActiveDecision,
-  rowToActiveRequirement,
-  rowToDecision,
-  rowToRequirement,
-  rowsToRequirementCounts,
-} from "./db-decision-requirement-rows.js";
-import { rowToGate } from "./db-gate-rows.js";
-import { rowToArtifact, rowToMilestone, type ArtifactRow, type HorizontalChecklistItem, type MilestoneRow } from "./db-milestone-artifact-rows.js";
+import { logWarning } from "./workflow-logger.js";
+import { rowToArtifact, type ArtifactRow, type HorizontalChecklistItem } from "./db-milestone-artifact-rows.js";
 import { isClosedStatus, toStatus } from "./status-guards.js";
-import { rowToSlice, rowToTask, type SliceRow, type TaskRow } from "./db-task-slice-rows.js";
 
 // Connection ownership, lifecycle, schema/migrations and transaction
 // primitives now live in the engine; re-export the full public surface so

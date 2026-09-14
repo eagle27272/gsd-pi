@@ -8,11 +8,9 @@ import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  type BudgetAllocation,
   type MinimalModel,
   type MinimalModelRegistry,
   type MinimalPreferences,
-  type TruncationResult,
   computeBudgets,
   truncateAtSectionBoundary,
   resolveExecutorContextWindow,
@@ -26,8 +24,6 @@ import {
 beforeEach(() => {
   _resetEmpiricalCacheForTest();
 });
-
-import type { TokenProvider } from "../token-counter.js";
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 

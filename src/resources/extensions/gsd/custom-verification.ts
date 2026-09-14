@@ -20,7 +20,7 @@
 import { logWarning } from "./workflow-logger.js";
 import { createHash } from "node:crypto";
 import { readFileSync, existsSync, statSync } from "node:fs";
-import { join, resolve, sep } from "node:path";
+import { resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 import type { StepDefinition, VerifyPolicy } from "./definition-loader.js";
 import { readFrozenDefinition } from "./custom-workflow-engine.js";

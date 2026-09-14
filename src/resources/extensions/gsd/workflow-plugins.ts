@@ -23,7 +23,7 @@ import { join, dirname, extname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 
-import { loadRegistry, type TemplateEntry, type WorkflowMode } from "./workflow-templates.js";
+import { loadRegistry, type WorkflowMode } from "./workflow-templates.js";
 import { gsdHome } from "./gsd-home.js";
 
 export type { WorkflowMode } from "./workflow-templates.js";

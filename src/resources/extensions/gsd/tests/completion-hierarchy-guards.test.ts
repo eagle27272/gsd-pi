@@ -13,7 +13,6 @@ import {
   getSlice,
   getMilestone,
   getSliceTasks,
-  updateTaskStatus,
   updateSliceStatus,
 } from "../gsd-db.ts";
 import { isClosedStatus } from "../status-guards.ts";

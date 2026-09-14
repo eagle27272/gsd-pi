@@ -7,7 +7,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  openDatabase,
   openDatabaseByWorkspace,
   closeDatabase,
   isDbAvailable,

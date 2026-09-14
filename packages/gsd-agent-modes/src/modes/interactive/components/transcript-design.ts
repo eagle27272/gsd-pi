@@ -469,44 +469,6 @@ export function renderUserRail(
 	});
 }
 
-/**
- * Render a single titled rule line — the collapsed form of a tool/command
- * card on the "open" surface. `title` and `right` must be pre-styled.
- */
-function openRuleLine(title: string, right: string, width: number, tone: ThemeColor, sweep = false): string {
-	const w = Math.max(20, width);
-	if (!right) {
-		const clippedTitle = truncateToWidth(title, Math.max(0, w - 6), "");
-		const fill = Math.max(1, w - 5 - visibleWidth(clippedTitle));
-		return padLine(renderRailText("─── ", tone) + clippedTitle + renderRailText(` ${"─".repeat(fill)}`, tone), w);
-	}
-
-	const titleBudget = Math.max(0, w - 11);
-	const rightReserve = titleBudget > 1 && visibleWidth(right) > 0 ? 1 : 0;
-	const leftBudget = Math.min(visibleWidth(title), Math.max(0, titleBudget - rightReserve));
-	const rightBudget = Math.max(0, titleBudget - leftBudget);
-	const clippedTitle = truncateToWidth(title, leftBudget, "");
-	const clippedRight = truncateToWidth(right, rightBudget, "");
-	const fixed = 4 + visibleWidth(clippedTitle) + 2 + visibleWidth(clippedRight) + 4;
-	const fill = Math.max(1, w - fixed);
-	const sweepFrame = sweep && railAnimationEnabled ? runningRailFrame() : undefined;
-
-	return padLine(
-		renderRailText("─── ", tone) +
-			clippedTitle +
-			renderRailText(` ${"─".repeat(fill)} `, tone, sweepFrame) +
-			clippedRight +
-			renderRailText(" ───", tone),
-		w,
-	);
-}
-
-function indentRenderedLines(lines: string[], indent: number, width: number): string[] {
-	if (indent <= 0) return lines;
-	const prefix = indentSpaces(indent);
-	return lines.map((line) => padLine(prefix + truncateToWidth(line, Math.max(1, width - indent), ""), width));
-}
-
 export function renderTranscriptCard(
 	lines: string[],
 	width: number,

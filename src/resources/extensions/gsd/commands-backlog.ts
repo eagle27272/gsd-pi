@@ -109,7 +109,7 @@ async function promoteBacklogItem(
   basePath: string,
   itemId: string,
   ctx: ExtensionCommandContext,
-  pi: ExtensionAPI,
+  _pi: ExtensionAPI,
 ): Promise<void> {
   if (!itemId) {
     ctx.ui.notify("Usage: /gsd backlog promote <id>\nExample: /gsd backlog promote 999.1", "warning");

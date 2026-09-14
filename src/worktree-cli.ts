@@ -19,7 +19,6 @@
  */
 
 import chalk from 'chalk'
-import { bannerLines, name as styledName, warn } from './cli-style.js'
 import { createJiti } from '@mariozechner/jiti'
 import { fileURLToPath } from 'node:url'
 import { generateWorktreeName } from './worktree-name-gen.js'
@@ -344,25 +343,6 @@ async function handleRemove(basePath: string, args: string[]): Promise<void> {
 }
 
 // ─── Subcommand: status (default when no args) ─────────────────────────────
-
-async function handleStatusBanner(basePath: string): Promise<void> {
-  const ext = await loadExtensionModules()
-  basePath = ext.resolveWorktreeProjectRoot(basePath)
-  const worktrees = ext.listWorktrees(basePath)
-  if (worktrees.length === 0) return
-
-  const withChanges = findWorktreesWithChanges(worktreeStatusDependencies(ext), basePath, worktrees, 'status scan')
-
-  if (withChanges.length === 0) return
-
-  const names = withChanges.map(w => styledName(w.name)).join(', ')
-  process.stderr.write(
-    bannerLines(
-      warn(`${withChanges.length} worktree${withChanges.length === 1 ? '' : 's'} with unmerged changes: `) + names,
-      'Resume: gsd -w <name>  |  Merge: gsd worktree merge <name>  |  List: gsd worktree list',
-    ),
-  )
-}
 
 // ─── -w flag: create/resume worktree for interactive session ────────────────
 

@@ -15,7 +15,7 @@
  */
 
 import { readFileSync, existsSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join } from 'node:path';
 import { atomicWriteSync } from './atomic-write.js';
 import { gsdRoot } from './paths.js';
 import { formatCost, formatTokenCount } from './metrics.js';

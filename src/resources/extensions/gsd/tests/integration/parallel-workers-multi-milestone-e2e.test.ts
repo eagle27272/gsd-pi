@@ -38,7 +38,6 @@ import {
   getProjectTotals,
   aggregateByPhase,
   aggregateBySlice,
-  formatCost,
   formatCostProjection,
   getAverageCostPerUnitType,
   predictRemainingCost,

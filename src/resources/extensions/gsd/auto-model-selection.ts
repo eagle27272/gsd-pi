@@ -5,13 +5,13 @@
  */
 
 import type { Api, Model, ModelThinkingLevel } from "@gsd/pi-ai";
-import { getProviderCapabilities, clampThinkingLevel } from "@gsd/pi-ai";
+import { clampThinkingLevel } from "@gsd/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@gsd/pi-coding-agent";
 import type { GSDPreferences } from "./preferences.js";
 import { resolveModelWithFallbacksForUnit, resolveThinkingLevelForUnit, resolveDynamicRoutingConfig } from "./preferences.js";
 import type { ComplexityTier } from "./complexity-classifier.js";
 import { classifyUnitComplexity, extractTaskMetadata, tierLabel } from "./complexity-classifier.js";
-import { resolveModelForComplexity, escalateTier, getEligibleModels, loadCapabilityOverrides, adjustToolSet, filterToolsForProvider } from "./model-router.js";
+import { resolveModelForComplexity, escalateTier, getEligibleModels, loadCapabilityOverrides, adjustToolSet } from "./model-router.js";
 import { getLedger, getProjectTotals } from "./metrics.js";
 import { unitPhaseLabel } from "./auto-dashboard.js";
 import { getSessionModelOverride } from "./session-model-override.js";

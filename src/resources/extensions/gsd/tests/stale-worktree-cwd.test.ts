@@ -14,7 +14,6 @@ import { execSync } from "node:child_process";
 
 import { createAutoWorktree } from "../auto-worktree-creation.ts";
 import { mergeMilestoneToMain } from "../auto-worktree-merge.ts";
-import { teardownAutoWorktree } from "../auto-worktree-teardown.ts";
 import { _resetServiceCache } from "../worktree.ts";
 import { _clearGsdRootCache } from "../paths.ts";
 import { seedMergeReadyMilestone } from "./merge-ready-fixture.ts";

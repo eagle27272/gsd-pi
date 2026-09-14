@@ -206,7 +206,6 @@ const _legacyModuleCache = new Map<string, Record<string, unknown>>();
 async function runLegacyExportHook(
 	entryPath: string,
 	phase: LifecycleHookPhase,
-	context: LifecycleHookContext,
 ): Promise<LifecycleHookHandler | null> {
 	try {
 		let module = _legacyModuleCache.get(entryPath);
@@ -274,7 +273,7 @@ export async function runLifecycleHooks(
 			continue;
 		}
 
-		const legacyHook = await runLegacyExportHook(entryPath, phase, context);
+		const legacyHook = await runLegacyExportHook(entryPath, phase);
 		if (!legacyHook) continue;
 
 		legacyHooksRun += 1;

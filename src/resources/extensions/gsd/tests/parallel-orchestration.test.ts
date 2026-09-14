@@ -13,9 +13,6 @@ import {
   mkdirSync,
   rmSync,
   writeFileSync,
-  existsSync,
-  readFileSync,
-  lstatSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -43,7 +40,6 @@ import {
   getWorkerStatuses,
   startParallel,
   stopParallel,
-  shutdownParallel,
   pauseWorker,
   resumeWorker,
   getAggregateCost,

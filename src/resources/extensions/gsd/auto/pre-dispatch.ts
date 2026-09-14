@@ -19,7 +19,6 @@ import {
   formatCompletePhaseNextAction,
 } from "../requirements-backlog.js";
 import { isDbAvailable, getMilestoneSlices } from "../gsd-db.js";
-import { getIsolationMode } from "../preferences.js";
 import { gsdRoot } from "../paths.js";
 import { atomicWriteSync } from "../atomic-write.js";
 import { logWarning } from "../workflow-logger.js";
@@ -88,7 +87,7 @@ function formatBlockedResumeMessage(blockers: string[]): string {
  */
 export async function runPreDispatch(
   ic: IterationContext,
-  loopState: LoopState,
+  _loopState: LoopState,
 ): Promise<PhaseResult<PreDispatchData>> {
   const { ctx, pi, s, deps, prefs } = ic;
   const uokFlags = resolveUokFlags(prefs);

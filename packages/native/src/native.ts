@@ -136,7 +136,8 @@ function loadNative(): Record<string, unknown> {
   // (parseRoadmap, parsePlan, fuzzyFind, etc.) catch these and degrade gracefully.
   process.stderr.write(
     `[gsd] Native addon not available for ${platformTag}. Falling back to JS implementations (slower).\n` +
-      `  Supported native platforms: ${supportedPlatforms.join(", ")}\n`,
+      `  Supported native platforms: ${supportedPlatforms.join(", ")}\n` +
+      (details ? `  Load attempts:\n${details}\n` : ""),
   );
   return new Proxy({} as Record<string, unknown>, {
     get(_target, prop) {

@@ -18,8 +18,6 @@ import { validateSourceWriteWorktreeSafety } from "./worktree-safety-phase.js";
 import { closeoutAndStop } from "./closeout.js";
 import {
   _resolveDispatchGuardBasePath,
-  rememberRetryDispatch,
-  applyVerificationRetryPolicy,
 } from "./phase-helpers.js";
 import type { PendingVerificationRetry } from "./session.js";
 import type { IterationContext, IterationData, LoopState, PhaseResult, PreDispatchData } from "./types.js";

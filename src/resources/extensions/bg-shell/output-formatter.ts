@@ -9,19 +9,13 @@ import {
 } from "@gsd/pi-coding-agent";
 import type { BgProcess, OutputDigest, OutputLine, GetOutputOptions } from "./types.js";
 import {
-	ERROR_PATTERNS,
 	ERROR_PATTERN_UNION,
 	WARNING_PATTERN_UNION,
 	READINESS_PATTERN_UNION,
 	BUILD_COMPLETE_PATTERN_UNION,
 	TEST_RESULT_PATTERN_UNION,
-	WARNING_PATTERNS,
 	URL_PATTERN,
-	PORT_PATTERN,
 	PORT_PATTERN_SOURCE,
-	READINESS_PATTERNS,
-	BUILD_COMPLETE_PATTERNS,
-	TEST_RESULT_PATTERNS,
 } from "./types.js";
 import { addEvent, pushAlert } from "./process-manager.js";
 import { transitionToReady } from "./readiness-detector.js";
@@ -29,7 +23,7 @@ import { formatUptime, formatTimeAgo } from "./utilities.js";
 
 // ── Output Analysis ────────────────────────────────────────────────────────
 
-export function analyzeLine(bg: BgProcess, line: string, stream: "stdout" | "stderr"): void {
+export function analyzeLine(bg: BgProcess, line: string, _stream: "stdout" | "stderr"): void {
 	// Error detection — single union regex instead of .some(p => p.test(line))
 	if (ERROR_PATTERN_UNION.test(line)) {
 		bg.recentErrors.push(line.trim().slice(0, 200)); // Cap line length

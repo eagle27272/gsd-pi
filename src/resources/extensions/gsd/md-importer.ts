@@ -16,7 +16,7 @@
 // module from any non-test file; extend the Import Application instead.
 
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
-import { join, relative, basename, dirname } from 'node:path';
+import { join, basename, dirname } from 'node:path';
 import type { Requirement } from './types.js';
 import {
   upsertDecision,

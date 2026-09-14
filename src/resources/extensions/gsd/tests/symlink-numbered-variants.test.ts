@@ -16,14 +16,13 @@ import {
   realpathSync,
   mkdirSync,
   symlinkSync,
-  readlinkSync,
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 
 import { ensureGsdSymlink, externalGsdRoot } from "../repo-identity.ts";
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 

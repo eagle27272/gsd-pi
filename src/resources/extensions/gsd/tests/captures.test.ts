@@ -12,7 +12,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -358,7 +358,7 @@ test("captures: appendCapture handles special characters in text", (t) => {
   const tmp = makeTempDir("cap-special");
   t.after(() => rmSync(tmp, { recursive: true, force: true }));
 
-  const id = appendCapture(tmp, 'text with "quotes" and **bold** and `code`');
+  appendCapture(tmp, 'text with "quotes" and **bold** and `code`');
   const all = loadAllCaptures(tmp);
   assert.strictEqual(all.length, 1);
   assert.ok(all[0].text.includes('"quotes"'), "should preserve quotes");

@@ -8,7 +8,7 @@
  * Diagnostic extraction is handled by session-forensics.ts.
  */
 
-import { writeFileSync, writeSync, mkdirSync, readdirSync, unlinkSync, statSync, openSync, closeSync, constants } from "node:fs";
+import { writeSync, mkdirSync, readdirSync, unlinkSync, statSync, openSync, closeSync, constants } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { GSDError, GSD_IO_ERROR } from "./errors.js";

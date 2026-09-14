@@ -10,7 +10,6 @@ import {
 	getModels,
 	getProviders,
 	isModelsCatalogOverlay,
-	type KnownProvider,
 	type Model,
 	type OAuthProviderInterface,
 	type OpenAICompletionsCompat,

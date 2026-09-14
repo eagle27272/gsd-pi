@@ -10,7 +10,6 @@
  */
 
 import type { Browser, BrowserContext, BrowserContextOptions, Frame, Page } from "playwright";
-import type { ExtensionAPI } from "@gsd/pi-coding-agent";
 import path from "node:path";
 import {
 	createActionTimeline,

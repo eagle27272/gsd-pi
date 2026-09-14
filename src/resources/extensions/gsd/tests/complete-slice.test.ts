@@ -12,7 +12,6 @@ import {
   getSlice,
   getMilestone,
   updateSliceStatus,
-  getSliceTasks,
   insertGateRow,
   getGateResults,
   SCHEMA_VERSION,

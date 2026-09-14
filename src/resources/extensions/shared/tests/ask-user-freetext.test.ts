@@ -58,7 +58,7 @@ function makeMockCtx(opts: {
 			hasUI: true,
 			ui: {
 				custom: () => undefined, // force RPC fallback
-				select: async (title: string, options: string[], selectOpts?: any) => {
+				select: async (title: string, options: string[], _selectOpts?: any) => {
 					selectCalls.push({ title, options });
 					return opts.selectReturns[selectCallIdx++];
 				},

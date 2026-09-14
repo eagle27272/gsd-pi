@@ -54,7 +54,7 @@ function makeProject(): { root: string; cleanup: () => void } {
  * checkboxes in the slice plan file (no tasks/ subdir). The legacy layout
  * has an explicit tasks/ directory that resolveTasksDir returns.
  */
-function makeLegacyTasksDir(root: string, mid: string, sid: string): string {
+function makeLegacyTasksDir(root: string, mid: string, _sid: string): string {
   const dir = join(root, ".gsd", "phases", canonicalPhaseDirName(mid), "tasks");
   mkdirSync(dir, { recursive: true });
   return dir;

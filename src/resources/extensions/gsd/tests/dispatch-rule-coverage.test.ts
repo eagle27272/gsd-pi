@@ -64,7 +64,7 @@ function writeSliceFile(
   writeFileSync(join(dir, slicePlanFileName(milestoneIdToPhaseNum(mid), sid, suffix)), content);
 }
 
-function writeTaskPlan(basePath: string, mid: string, sid: string, tid: string): void {
+function writeTaskPlan(basePath: string, mid: string, _sid: string, tid: string): void {
   const dir = join(basePath, ".gsd", "phases", canonicalPhaseDirName(mid), "tasks");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${tid}-PLAN.md`), `# ${tid}\n\n## Steps\n- [ ] Step\n`);

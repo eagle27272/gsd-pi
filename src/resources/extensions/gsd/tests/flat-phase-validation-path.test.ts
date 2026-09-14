@@ -9,7 +9,7 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeRealPath, relMilestoneFile, relSliceFile, resolveMilestoneFile, resolveSliceFile, targetMilestoneFile } from "../paths.ts";
+import { normalizeRealPath, relMilestoneFile, resolveMilestoneFile, resolveSliceFile, targetMilestoneFile } from "../paths.ts";
 
 function makeFlatPhaseFixture(): { basePath: string; cleanup: () => void } {
   const basePath = mkdtempSync(join(tmpdir(), "flat-phase-validation-"));

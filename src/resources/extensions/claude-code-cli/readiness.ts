@@ -51,8 +51,6 @@ export function getClaudeCommand(platform: NodeJS.Platform = process.platform): 
 	return platform === "win32" ? "claude.cmd" : "claude";
 }
 
-const CLAUDE_COMMAND = getClaudeCommand();
-
 /**
  * Windows installs vary: some environments expose `claude.cmd` (npm shim),
  * `claude.exe` (direct binary install), or a bare `claude` shim on PATH

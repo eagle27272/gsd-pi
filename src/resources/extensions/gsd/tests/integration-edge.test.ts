@@ -19,7 +19,7 @@ import {
   formatDecisionsForPrompt,
   formatRequirementsForPrompt,
 } from '../context-store.ts';
-import { describe, test, beforeEach, afterEach } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 // ─── Fixture Helper ────────────────────────────────────────────────────────

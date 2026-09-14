@@ -14,7 +14,6 @@ import {
   insertSlice,
   insertTask,
   getMilestoneSlices,
-  getSliceTasks,
   _getAdapter,
 } from '../gsd-db.ts';
 import {
@@ -39,7 +38,7 @@ function createFixtureBase(): string {
 /** Scaffold the minimal directory structure the renderers need on disk. */
 function scaffoldDirs(base: string, milestoneId: string, sliceIds: string[]): void {
   mkdirSync(join(base, '.gsd', 'phases', canonicalPhaseDirName(milestoneId)), { recursive: true });
-  for (const sid of sliceIds) {
+  if (sliceIds.length > 0) {
     mkdirSync(join(base, '.gsd', 'phases', canonicalPhaseDirName(milestoneId), 'tasks'), { recursive: true });
   }
 }

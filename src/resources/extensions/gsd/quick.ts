@@ -433,7 +433,7 @@ export async function handleQuick(
   const quickDir = join(root, "quick");
   const taskNum = getNextTaskNum(quickDir);
   const slug = slugify(description);
-  const taskDir = ensureQuickDir(basePath, taskNum, slug);
+  ensureQuickDir(basePath, taskNum, slug);
   const taskDirRel = `.gsd/quick/${taskNum}-${slug}`;
   const date = new Date().toISOString().split("T")[0];
 

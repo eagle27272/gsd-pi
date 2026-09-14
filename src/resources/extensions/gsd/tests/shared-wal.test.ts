@@ -1,8 +1,8 @@
 // shared-wal.test.ts — Tests for shared WAL DB path resolution and concurrent writes.
 // Verifies: resolveProjectRootDbPath() for worktree/root paths, WAL concurrent writes.
 
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
-import { join, sep } from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { resolveProjectRootDbPath } from '../bootstrap/dynamic-tools.ts';
@@ -14,7 +14,7 @@ import {
   getAllMilestones,
   _getAdapter,
 } from '../gsd-db.ts';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 

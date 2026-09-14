@@ -1,7 +1,7 @@
 import type { ExtensionCommandContext } from "@gsd/pi-coding-agent";
 import { SettingsManager, getAgentDir } from "@gsd/pi-coding-agent";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, join, relative, resolve } from "node:path";
 import { homedir } from "node:os";
 import { PluginImporter, type ImportManifestEntry } from "./plugin-importer.js";
 import type { NamespacedComponent } from "./namespaced-registry.js";
@@ -474,7 +474,7 @@ function persistManifestToSettings(
     .filter(e => e.type === 'skill')
     .map(e => e.filePath);
 
-  const agentPaths = manifestEntries
+  manifestEntries
     .filter(e => e.type === 'agent')
     .map(e => e.filePath);
 
@@ -512,7 +512,7 @@ export async function runClaudeImportFlow(
 ): Promise<void> {
   const cwd = process.cwd();
   const settingsManager = SettingsManager.create(cwd, getAgentDir());
-  const { skillRoots, pluginRoots } = getClaudeSearchRoots(cwd);
+  const { pluginRoots } = getClaudeSearchRoots(cwd);
 
   // Categorize plugin roots into marketplaces vs flat paths
   const { marketplaces, flat } = categorizePluginRoots(pluginRoots);
