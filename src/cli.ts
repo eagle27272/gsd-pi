@@ -199,6 +199,20 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
   process.exit(0)
 }
 
+// The bash tool spawns its shell detached, so those children do not die with us
+// on SIGHUP (terminal/SSH closed) or SIGTERM. A survivor still holding
+// .git/index.lock wedges every later git write in the repo. Installing the
+// reaper is the host's call, not the library's, so the library only offers it.
+//
+// This has to precede every subcommand dispatch below — `gsd headless` and
+// `gsd quick` are full agent modes that run bash tools and exit without ever
+// reaching the interactive setup further down. Imported by subpath rather than
+// from the package index so a signal handler does not drag the whole module
+// graph into the startup path. Signal listeners do not hold the event loop
+// open, so short-lived subcommands still exit promptly.
+const { installDetachedChildReaper } = await import('@gsd/pi-coding-agent/utils/shell.js')
+installDetachedChildReaper()
+
 // RTK bootstrap — runs once per process, memoized via a module-level promise
 // so concurrent callers await the same initialization.
 let rtkBootstrapPromise: Promise<void> | undefined
