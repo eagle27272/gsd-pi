@@ -213,6 +213,13 @@ export function registerOllamaTool(pi: ExtensionAPI): void {
 
 						const info = await client.showModel(model);
 						const details = info.details;
+						if (!details) {
+							return {
+								content: [{ type: "text", text: `Ollama returned no details for ${model}. The model may not exist locally — run action='list' to see what is available.` }],
+								isError: true,
+								details: { action, model, durationMs: Date.now() - startTime, error: "missing_details" } as OllamaToolDetails,
+							};
+						}
 						const infoLines = [
 							`Model: ${model}`,
 							`Family: ${details.family}`,
