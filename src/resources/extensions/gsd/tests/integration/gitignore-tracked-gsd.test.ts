@@ -34,6 +34,9 @@ function makeTempRepo(): string {
   git(dir, "init");
   git(dir, "config", "user.email", "test@test.com");
   git(dir, "config", "user.name", "Test");
+  // A developer's global ignore file may list .gsd; these tests assert on
+  // repo-local .gitignore behaviour, so the global one must not interfere.
+  git(dir, "config", "core.excludesFile", "/dev/null");
   writeFileSync(join(dir, "README.md"), "# init\n");
   git(dir, "add", "-A");
   git(dir, "commit", "-m", "init");

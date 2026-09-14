@@ -8,7 +8,7 @@
  */
 
 import { readdirSync, existsSync, realpathSync, statSync, Dirent } from "node:fs";
-import { basename, join, dirname, normalize, relative, resolve } from "node:path";
+import { basename, join, dirname, isAbsolute as isAbsolutePath, normalize, relative, resolve } from "node:path";
 import { homedir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { nativeScanGsdTree, type GsdTreeEntry } from "./native-parser-bridge.js";
@@ -23,6 +23,7 @@ import {
   slicePlanFileName,
   slicePlanSegment,
   canonicalPhaseDirName,
+  assertSafePathSegment,
 } from "./layout-policy.js";
 
 export { canonicalPhaseDirName };
@@ -217,6 +218,7 @@ export function buildSliceFileName(sliceId: string, suffix: string): string {
   // but this helper only has the sliceId. Callers needing the full name should
   // use slicePlanFileName() from layout-policy. This returns MM-SUFFIX.md for
   // any incremental callers that haven't migrated yet.
+  assertSafePathSegment(sliceId, "slice id");
   return `${slicePlanSegment(sliceId)}-${suffix}.md`;
 }
 
@@ -228,6 +230,7 @@ export function buildSliceFileName(sliceId: string, suffix: string): string {
 export function buildTaskFileName(taskId: string, suffix: string, ext = "md"): string {
   // Flat-phase: tasks are checkboxes inside plan files, not separate files.
   // This helper is deprecated but kept for backward-compat callers.
+  assertSafePathSegment(taskId, "task id");
   return `${taskId}-${suffix}.${ext}`;
 }
 
@@ -238,6 +241,8 @@ export function buildTaskFileName(taskId: string, suffix: string, ext = "md"): s
 export function buildFlatTaskFileName(
   sliceId: string, taskId: string, suffix: string, ext = "md",
 ): string {
+  assertSafePathSegment(sliceId, "slice id");
+  assertSafePathSegment(taskId, "task id");
   const redundantPrefix = `${sliceId}-`;
   const bareTaskId = taskId.toUpperCase().startsWith(redundantPrefix.toUpperCase())
     ? taskId.slice(redundantPrefix.length)
@@ -924,6 +929,23 @@ export function relSlicePath(
 }
 
 /**
+ * Second line of defence behind {@link assertSafePathSegment}: a write target
+ * must land inside the milestone directory it was derived from. The file-name
+ * builders already reject traversing ids, but these paths are handed straight
+ * to write sinks, so containment is re-checked where the `join` happens rather
+ * than assumed from a caller two modules away (#9).
+ */
+function assertWithinMilestoneDir(milestoneDir: string, target: string): string {
+  const rel = relative(milestoneDir, target);
+  if (rel === "" || rel.startsWith("..") || isAbsolutePath(rel)) {
+    throw new Error(
+      `Refusing artifact write target ${target}: it escapes the milestone directory ${milestoneDir}.`,
+    );
+  }
+  return target;
+}
+
+/**
  * Build the canonical absolute write target for a slice file.
  * Existing compatibility filenames are intentionally ignored; readers that need
  * to preserve an existing file should call resolveSliceFile first.
@@ -933,10 +955,10 @@ export function targetSliceFile(
 ): string {
   const milestoneDir = resolveMilestonePath(basePath, milestoneId)
     ?? dirname(targetMilestoneFile(basePath, milestoneId, "ROADMAP", milestoneTitle));
-  return join(
+  return assertWithinMilestoneDir(milestoneDir, join(
     milestoneDir,
     slicePlanFileName(milestoneIdToPhaseNum(milestoneId), sliceId, suffix),
-  );
+  ));
 }
 
 /**
@@ -953,7 +975,10 @@ export function targetTaskFile(
 
   const milestoneDir = resolveMilestonePath(basePath, milestoneId)
     ?? dirname(targetMilestoneFile(basePath, milestoneId, "ROADMAP", milestoneTitle));
-  return join(milestoneDir, buildFlatTaskFileName(sliceId, taskId, suffix));
+  return assertWithinMilestoneDir(
+    milestoneDir,
+    join(milestoneDir, buildFlatTaskFileName(sliceId, taskId, suffix)),
+  );
 }
 
 /**
@@ -988,7 +1013,7 @@ export function relTaskFile(
   // The slice resolved to a slices/SID/ subdir inside the phase dir.
   if (sDir && phaseDir && sDir !== phaseDir) {
     const relS = relSlicePath(basePath, milestoneId, sliceId);
-    return `${relS}/tasks/${taskId}-${suffix}.md`;
+    return `${relS}/tasks/${buildTaskFileName(taskId, suffix)}`;
   }
   // Flat-phase: task plans are checkboxes inside the slice plan file
   if (suffix === "PLAN") {

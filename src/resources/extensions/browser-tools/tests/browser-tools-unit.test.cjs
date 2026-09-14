@@ -63,10 +63,16 @@ const {
 	setLastActionBeforeState,
 	getLastActionAfterState,
 	setLastActionAfterState,
+	getHarState,
+	pageRegistry,
 	resetAllState,
 } = jiti("../state.js");
 
 const { evaluateAssertionChecks } = jiti("../core.js");
+
+const { buildBrowserSession, commitBrowserSession } = jiti("../lifecycle.js");
+
+const { resolveDeviceMatch } = jiti("../tools/device.js");
 
 const { EVALUATE_HELPERS_SOURCE } = jiti("../evaluate-helpers.js");
 
@@ -691,6 +697,57 @@ describe("constrainScreenshot", () => {
 });
 
 // ---------------------------------------------------------------------------
+// browser_verify — zero-check runs must not report success
+// ---------------------------------------------------------------------------
+
+describe("browser_verify with no checks", () => {
+	function registerVerify(page) {
+		const { registerVerifyTools } = jiti("../tools/verify.ts");
+		const registeredTools = [];
+		const mockPi = { registerTool: (tool) => registeredTools.push(tool) };
+		const mockDeps = { ensureBrowser: async () => ({ page }) };
+		registerVerifyTools(mockPi, mockDeps);
+		return registeredTools[0];
+	}
+
+	it("does not report PASSED when the checks array is empty", async () => {
+		const tool = registerVerify({ goto: async () => {} });
+
+		const result = await tool.execute("call-1", { url: "http://localhost:3000", checks: [] }, undefined, undefined, undefined);
+
+		const text = result.content[0].text;
+		assert.equal(result.details.passed, false, "zero checks verified nothing, so details.passed must not be true");
+		assert.ok(!text.includes("PASSED"), `must not claim PASSED for a zero-check run: ${text}`);
+		assert.ok(text.includes("0 checks"), `should say how many checks ran: ${text}`);
+	});
+
+	it("still reports PASSED when every check passes", async () => {
+		const element = { isVisible: async () => true, textContent: async () => "Welcome" };
+		const tool = registerVerify({ goto: async () => {}, $: async () => element });
+
+		const result = await tool.execute(
+			"call-2",
+			{ url: "http://localhost:3000", checks: [{ description: "hero visible", selector: "h1", expectedVisible: true }] },
+			undefined,
+			undefined,
+			undefined,
+		);
+
+		assert.equal(result.details.passed, true);
+		assert.ok(result.content[0].text.includes("PASSED (1/1)"), result.content[0].text);
+	});
+
+	it("reports failure when navigation fails, even with no checks", async () => {
+		const tool = registerVerify({ goto: async () => { throw new Error("net::ERR_CONNECTION_REFUSED"); } });
+
+		const result = await tool.execute("call-3", { url: "http://localhost:3000", checks: [] }, undefined, undefined, undefined);
+
+		assert.equal(result.details.passed, false);
+		assert.ok(result.content[0].text.includes("Navigation failed"), result.content[0].text);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // browser_save_pdf — tool registration
 // ---------------------------------------------------------------------------
 
@@ -716,7 +773,7 @@ describe("browser_save_pdf tool registration", () => {
 });
 
 // ---------------------------------------------------------------------------
-// utils.ts — getRefFrameContext
+// utils.ts — getActiveFrameContext
 // ---------------------------------------------------------------------------
 
 const fakeMainFrame = (url = PAGE_URL) => ({ name: () => "", url: () => url, parentFrame: () => null });
@@ -1270,5 +1327,218 @@ describe("browser_fill_ref value verification", () => {
 		const tool = registerOne(registerRefTools, fillDeps("oldnew"), "browser_fill_ref");
 		const result = await tool.execute("c1", { ref: "@v1:e1", text: "new", slowly: true });
 		assert.equal(result.details.verified, true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// lifecycle.ts — browser session construction
+// ---------------------------------------------------------------------------
+
+const HAR_PATH = "/tmp/browser-tools-test/session.har";
+
+function makeFakePage(url = "about:blank") {
+	const handlers = new Map();
+	return {
+		handlers,
+		on(event, fn) { handlers.set(event, fn); },
+		url: () => url,
+		title: async () => "fake title",
+		opener: () => null,
+		waitForLoadState: async () => {},
+	};
+}
+
+/** Stands in for playwright's `chromium`, optionally failing at one step. */
+function makeFakeLauncher(failAt) {
+	const page = makeFakePage();
+	const contextHandlers = new Map();
+	const record = { page, handlers: contextHandlers, closeCalls: 0, contextOptions: null, launchOptions: null };
+
+	const context = {
+		handlers: contextHandlers,
+		on(event, fn) { contextHandlers.set(event, fn); },
+		async addInitScript(source) {
+			record.initScript = source;
+			if (failAt === "addInitScript") throw new Error("boom: addInitScript");
+		},
+		async newPage() {
+			if (failAt === "newPage") throw new Error("boom: newPage");
+			return page;
+		},
+	};
+	const browser = {
+		async newContext(options) {
+			record.contextOptions = options;
+			if (failAt === "newContext") throw new Error("boom: newContext");
+			return context;
+		},
+		async close() { record.closeCalls++; },
+	};
+	record.context = context;
+	record.browser = browser;
+
+	return {
+		record,
+		async launch(options) {
+			record.launchOptions = options;
+			if (failAt === "launch") throw new Error("boom: launch");
+			return browser;
+		},
+	};
+}
+
+describe("lifecycle — buildBrowserSession", () => {
+	beforeEach(() => {
+		resetAllState();
+	});
+
+	it("leaves shared state untouched on success", async () => {
+		const launcher = makeFakeLauncher();
+		const session = await buildBrowserSession(launcher, {}, HAR_PATH);
+
+		assert.equal(session.page, launcher.record.page);
+		assert.equal(getBrowser(), null, "browser must not be published before commit");
+		assert.equal(getContext(), null, "context must not be published before commit");
+		assert.equal(pageRegistry.activePageId, null);
+	});
+
+	it("records HAR into the session artifact path", async () => {
+		const launcher = makeFakeLauncher();
+		await buildBrowserSession(launcher, {}, HAR_PATH);
+
+		assert.deepEqual(launcher.record.contextOptions.recordHar, {
+			path: HAR_PATH,
+			mode: "minimal",
+			content: "omit",
+		});
+		assert.equal(launcher.record.initScript, EVALUATE_HELPERS_SOURCE);
+	});
+
+	it("lets device context options override the desktop defaults but keeps HAR", async () => {
+		const launcher = makeFakeLauncher();
+		await buildBrowserSession(
+			launcher,
+			{ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
+			HAR_PATH,
+		);
+
+		const options = launcher.record.contextOptions;
+		assert.deepEqual(options.viewport, { width: 393, height: 852 });
+		assert.equal(options.deviceScaleFactor, 3);
+		assert.equal(options.isMobile, true);
+		assert.equal(options.hasTouch, true);
+		assert.equal(options.recordHar.path, HAR_PATH, "device options must not disable HAR recording");
+	});
+
+	for (const failAt of ["newContext", "addInitScript", "newPage"]) {
+		it(`closes the browser and publishes nothing when ${failAt} throws`, async () => {
+			const launcher = makeFakeLauncher(failAt);
+
+			await assert.rejects(() => buildBrowserSession(launcher, {}, HAR_PATH), /boom: /);
+
+			assert.equal(launcher.record.closeCalls, 1, "chromium must not be left running");
+			assert.equal(getBrowser(), null, "a half-built session must not brick later tool calls");
+			assert.equal(getContext(), null);
+			assert.equal(pageRegistry.activePageId, null);
+		});
+	}
+
+	it("propagates a launch failure without calling close", async () => {
+		const launcher = makeFakeLauncher("launch");
+
+		await assert.rejects(() => buildBrowserSession(launcher, {}, HAR_PATH), /boom: launch/);
+
+		assert.equal(launcher.record.closeCalls, 0);
+	});
+});
+
+describe("lifecycle — commitBrowserSession", () => {
+	beforeEach(() => {
+		resetAllState();
+	});
+
+	it("publishes browser, context, registry entry and HAR state", async () => {
+		const launcher = makeFakeLauncher();
+		const session = await buildBrowserSession(launcher, {}, HAR_PATH);
+
+		await commitBrowserSession(session, HAR_PATH);
+
+		assert.equal(getBrowser(), session.browser);
+		assert.equal(getContext(), session.context);
+		assert.equal(pageRegistry.pages.length, 1);
+		assert.equal(pageRegistry.pages[0].page, session.page);
+		assert.equal(pageRegistry.activePageId, pageRegistry.pages[0].id);
+
+		const har = getHarState();
+		assert.equal(har.enabled, true);
+		assert.equal(har.configuredAtContextCreation, true);
+		assert.equal(har.path, HAR_PATH);
+	});
+
+	it("registers a context page listener so later tabs enter the registry", async () => {
+		const launcher = makeFakeLauncher();
+		const session = await buildBrowserSession(launcher, {}, HAR_PATH);
+
+		await commitBrowserSession(session, HAR_PATH);
+
+		const onPage = launcher.record.handlers.get("page");
+		assert.equal(typeof onPage, "function", "new tabs are invisible without a context page listener");
+
+		const popup = makeFakePage("https://example.test/popup");
+		onPage(popup);
+
+		assert.equal(pageRegistry.pages.length, 2);
+		assert.ok(
+			pageRegistry.pages.some((entry) => entry.page === popup),
+			"popup should be listable and switchable",
+		);
+		assert.ok(popup.handlers.has("console"), "popup should have console/network listeners attached");
+	});
+
+	it("attaches listeners to the initial page", async () => {
+		const launcher = makeFakeLauncher();
+		const session = await buildBrowserSession(launcher, {}, HAR_PATH);
+
+		await commitBrowserSession(session, HAR_PATH);
+
+		assert.ok(session.page.handlers.has("console"));
+		assert.ok(session.page.handlers.has("requestfailed"));
+	});
+});
+
+// ---------------------------------------------------------------------------
+// tools/device.ts — device name matching
+// ---------------------------------------------------------------------------
+
+describe("browser_emulate_device — resolveDeviceMatch", () => {
+	const NAMES = ["Pixel 7", "Pixel 7 landscape", "Pixel 7 Pro", "iPhone 15", "iPad Pro 11"];
+
+	it("prefers an exact case-insensitive match with no alternatives", () => {
+		const result = resolveDeviceMatch("pixel 7", NAMES);
+		assert.equal(result.kind, "match");
+		assert.equal(result.name, "Pixel 7");
+		assert.deepEqual(result.alternatives, []);
+	});
+
+	it("returns the single contains match with no alternatives", () => {
+		const result = resolveDeviceMatch("ipad", NAMES);
+		assert.equal(result.kind, "match");
+		assert.equal(result.name, "iPad Pro 11");
+		assert.deepEqual(result.alternatives, []);
+	});
+
+	it("picks the shortest contains match and reports the others", () => {
+		const result = resolveDeviceMatch("pixel", NAMES);
+		assert.equal(result.kind, "match");
+		assert.equal(result.name, "Pixel 7");
+		assert.deepEqual(result.alternatives, ["Pixel 7 Pro", "Pixel 7 landscape"]);
+	});
+
+	it("suggests near misses when nothing matches", () => {
+		const result = resolveDeviceMatch("galaxy fold", NAMES);
+		assert.equal(result.kind, "no_match");
+		assert.ok(result.suggestions.length > 0);
+		assert.ok(result.suggestions.length <= 5);
+		for (const name of result.suggestions) assert.ok(NAMES.includes(name));
 	});
 });

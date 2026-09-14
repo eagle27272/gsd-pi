@@ -10,7 +10,6 @@ import {
   collectTestFiles,
   classifyRunner,
   isInNpmTest,
-  isReachableTest,
   getLinkablePackages,
   strictUnwiredFailures,
   auditExtensionsFromTests,
@@ -54,6 +53,7 @@ function buildReport() {
       inNpmTest: allTests.filter((t) => isInNpmTest(classifyRunner(t))).length,
       notInNpmTest: allTests.filter((t) => !isInNpmTest(classifyRunner(t))).length,
       unwiredTests: matrix.unwiredTests.length,
+      acknowledgedUnrunTests: matrix.acknowledgedUnrunTests.length,
       orphanScriptTests: (byRunner['scripts-fast-gates'] ?? []).length,
       extensionsNoTests: extensions.filter((e) => e.tests === 0).length,
       extensionsUnwired: extensions.filter((e) => e.tests > 0 && !e.wired).length,
@@ -79,7 +79,8 @@ function buildReport() {
       .map(([name, command]) => ({ name, command })),
     extensions,
     packages,
-    unreachableTests: allTests.filter((t) => !isReachableTest(classifyRunner(t)) && classifyRunner(t) !== 'unknown'),
+    acknowledgedUnrunTests: matrix.acknowledgedUnrunTests,
+    unreachableTests: matrix.unreachableTests,
   };
 }
 
@@ -96,6 +97,23 @@ function printHuman(report) {
     process.stdout.write('  None detected ✓\n');
   } else {
     for (const f of report.critical.unwiredTests) process.stdout.write(`  ✗ ${f}\n`);
+  }
+  process.stdout.write('\n');
+
+  process.stdout.write('Acknowledged unrun tests (no runner executes these; excluded from the strict gate)\n');
+  if (report.acknowledgedUnrunTests.length === 0) {
+    process.stdout.write('  None\n');
+  } else {
+    const byReason = new Map();
+    for (const entry of report.acknowledgedUnrunTests) {
+      if (!byReason.has(entry.reason)) byReason.set(entry.reason, []);
+      byReason.get(entry.reason).push(entry);
+    }
+    for (const [reason, entries] of byReason) {
+      const runners = [...new Set(entries.map((e) => e.runner))].sort().join(', ');
+      process.stdout.write(`  ${runners}: ${entries.length} file(s)\n`);
+      process.stdout.write(`    ${reason}\n`);
+    }
   }
   process.stdout.write('\n');
 

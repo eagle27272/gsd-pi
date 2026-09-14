@@ -19,12 +19,16 @@ export const SKIP_DIRS = new Set([
   'worktrees', '.worktrees', '.gsd-worktrees',
 ]);
 
+// Must stay in sync with the extension test dirs globbed by the
+// `test:unit:compiled` script in package.json; a drift guard asserts that.
 export const UNIT_EXTENSION_GLOBS = new Set([
   'gsd',
   'shared',
+  'herdr',
   'subagent',
   'claude-code-cli',
   'github-sync',
+  'gsd-bug-report',
   'universal-config',
   'visual-brief',
   'mcp-client',
@@ -58,9 +62,42 @@ export const AUXILIARY_TEST_SCRIPTS = new Set([
   'test:e2e:windows-smoke',
 ]);
 
+// packages/pi-* are vendored from earendil-works/pi (docs/dev/pi-upstream.md);
+// mirrors the packageMap values in scripts/pi-upstream.json.
+export const VENDORED_PI_PACKAGE_DIRS = new Set([
+  'pi-agent-core',
+  'pi-ai',
+  'pi-tui',
+  'pi-coding-agent',
+]);
+
+// The one vendored pi test corpus a runner actually executes: pi-ai's vitest
+// include is `test/**/*.test.ts` and scripts/verify-merge.sh runs
+// `pnpm --filter @gsd/pi-ai test`.
+export const VERIFY_MERGE_PACKAGE_DIRS = new Set(['pi-ai']);
+
 export const NPM_TEST_RUNNERS = new Set(['unit', 'integration', 'integration-or-browser-tools', 'packages', 'e2e']);
 
 export const VERIFY_FAST_RUNNERS = new Set([...NPM_TEST_RUNNERS, 'scripts-fast-gates']);
+
+// Runners whose whole bucket is known dead and deliberately left that way.
+// Entries here are still listed by every audit; the acknowledgement only stops
+// the strict gate from re-reporting a state the repo has already decided on.
+export const ACKNOWLEDGED_UNRUN_RUNNERS = {
+  'vendored-upstream': 'Vendored earendil-works/pi test corpus (docs/dev/pi-upstream.md, scripts/pi-upstream.json). ADR-010 deleted the src/modes, src/cli, src/core/sdk.ts, src/core/compaction and src/core/export-html paths that roughly 40 of these files import, so the corpus cannot be enabled wholesale.',
+};
+
+// Individual dead test files accepted with a recorded reason.
+export const ACKNOWLEDGED_UNRUN_TEST_PATHS = new Map([
+  [
+    'packages/db/tests/schema.test.ts',
+    'packages/db has no package.json, so it is not a pnpm workspace package and run-package-tests.cjs never iterates it. Its packages/db/src files are excluded from the untested count by this same entry.',
+  ],
+]);
+
+// Source files whose only coverage came from an acknowledged unrun test. Kept
+// beside that test's entry so the two never drift apart.
+export const ACKNOWLEDGED_UNRUN_SOURCE_PREFIXES = ['packages/db/src/'];
 
 export function normalize(path) {
   return path.replaceAll('\\', '/');
@@ -92,6 +129,19 @@ export function collectTestFiles(root) {
   return files.sort();
 }
 
+// scripts/compile-tests.mjs mirrors packages/<pkg>/src into dist-test and
+// explicitly deletes dist-test/packages/<pkg>/test; run-package-tests.cjs then
+// globs only dist-test/packages/<pkg>/src. So `src` is the sole package path
+// the default test run reaches, and a package's own `test/` dir is dead unless
+// some other runner names it.
+function classifyPackageRunner(testPath) {
+  const [, pkg, sub] = testPath.split('/');
+  if (sub === 'src') return 'packages';
+  if (sub === 'test' && VERIFY_MERGE_PACKAGE_DIRS.has(pkg)) return 'verify-merge';
+  if (sub === 'test' && VENDORED_PI_PACKAGE_DIRS.has(pkg)) return 'vendored-upstream';
+  return 'unwired';
+}
+
 export function classifyRunner(testPath) {
   if (testPath.startsWith('tests/e2e/')) return 'e2e';
   if (testPath.startsWith('tests/smoke/') || testPath.startsWith('tests/live')) return 'release-pipeline';
@@ -99,7 +149,7 @@ export function classifyRunner(testPath) {
   if (testPath.startsWith('web/')) {
     return 'ui-sparse-manual';
   }
-  if (testPath.startsWith('packages/')) return 'packages';
+  if (testPath.startsWith('packages/')) return classifyPackageRunner(testPath);
 
   if (testPath.startsWith('src/resources/extensions/')) {
     const ext = testPath.split('/')[3];
@@ -115,7 +165,26 @@ export function classifyRunner(testPath) {
 }
 
 export function isReachableTest(runner) {
-  return VERIFY_FAST_RUNNERS.has(runner) || runner === 'release-pipeline' || runner === 'ui-sparse-manual';
+  return (
+    VERIFY_FAST_RUNNERS.has(runner) ||
+    runner === 'release-pipeline' ||
+    runner === 'ui-sparse-manual' ||
+    runner === 'verify-merge'
+  );
+}
+
+export function acknowledgedUnrunReason(testPath) {
+  const p = normalize(testPath);
+  return ACKNOWLEDGED_UNRUN_TEST_PATHS.get(p) ?? ACKNOWLEDGED_UNRUN_RUNNERS[classifyRunner(p)] ?? null;
+}
+
+export function isAcknowledgedUnrunTest(testPath) {
+  return acknowledgedUnrunReason(testPath) !== null;
+}
+
+export function isAcknowledgedUnrunSource(sourcePath) {
+  const p = normalize(sourcePath);
+  return ACKNOWLEDGED_UNRUN_SOURCE_PREFIXES.some((prefix) => p.startsWith(prefix));
 }
 
 export function isInNpmTest(runner) {
@@ -316,7 +385,7 @@ export function buildMatrix(root) {
   const sources = collectSourceFiles(root);
   const rows = sources.map((path) => {
     const mapping = resolveSourceTestMapping(path, testIndex);
-    const status = mapping.status;
+    const status = isAcknowledgedUnrunSource(path) ? 'acknowledged-unrun' : mapping.status;
     return {
       path,
       area: classifyArea(path),
@@ -328,18 +397,26 @@ export function buildMatrix(root) {
     };
   });
 
+  const acknowledgedUnrunTests = allTests
+    .filter(isAcknowledgedUnrunTest)
+    .map((path) => ({ path, runner: classifyRunner(path), reason: acknowledgedUnrunReason(path) }));
+
   const summary = {
     totalSourceFiles: rows.length,
     covered: rows.filter((r) => r.status === 'covered').length,
     indirect: rows.filter((r) => r.status === 'indirect').length,
     untested: rows.filter((r) => r.status === 'untested').length,
     unwired: rows.filter((r) => r.status === 'unwired').length,
+    acknowledgedUnrun: acknowledgedUnrunTests.length,
     criticalUntested: rows.filter((r) => r.status === 'untested' && r.risk === 'critical').length,
     highUntested: rows.filter((r) => r.status === 'untested' && r.risk === 'high').length,
   };
 
-  const unwiredTests = allTests.filter((t) => classifyRunner(t) === 'unwired');
-  const unreachableTests = allTests.filter((t) => !isReachableTest(classifyRunner(t)) && classifyRunner(t) !== 'unknown');
+  const live = allTests.filter((t) => !isAcknowledgedUnrunTest(t));
+  const unwiredTests = live.filter((t) => classifyRunner(t) === 'unwired');
+  const unreachableTests = live.filter(
+    (t) => !isReachableTest(classifyRunner(t)) && classifyRunner(t) !== 'unknown',
+  );
 
   return {
     generatedAt: new Date().toISOString(),
@@ -347,6 +424,7 @@ export function buildMatrix(root) {
     rows,
     unwiredTests,
     unreachableTests,
+    acknowledgedUnrunTests,
     allTests,
   };
 }
@@ -384,7 +462,8 @@ export function strictMatrixFailures(matrix) {
 export function strictUnwiredFailures(allTests) {
   return allTests.filter((t) => {
     const runner = classifyRunner(t);
-    return runner === 'unwired' || runner === 'unknown';
+    if (runner !== 'unwired' && runner !== 'unknown') return false;
+    return !isAcknowledgedUnrunTest(t);
   });
 }
 
