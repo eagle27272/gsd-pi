@@ -641,14 +641,21 @@ function resolveActiveWorktreeBasePath(
   projectRoot: string,
   milestoneId: string | null,
 ): string | null {
-  if (!milestoneId) return null;
+  // The id is joined onto a container and the result replaces an already
+  // validated projectRoot, so a traversing value that lands on another live
+  // checkout redirects every later workflow write into that repo (#21). The
+  // artifact-id alphabet has no separators and no `..`, so a milestone id that
+  // clears it can only ever name a direct child of the container.
+  if (!milestoneId || !isArtifactId(milestoneId)) return null;
   for (const container of worktreeContainers(projectRoot)) {
     const wtPath = join(container, milestoneId);
     if (!existsSync(wtPath)) continue;
     // Sanity check: a real git worktree has a `.git` file with a gitdir pointer.
     // Bare directories without it shouldn't hijack the write path.
     if (!existsSync(join(wtPath, ".git"))) continue;
-    return wtPath;
+    // The replacement inherits none of projectRoot's trust — it has to clear
+    // the same containment check on its own.
+    return validateProjectDir(wtPath);
   }
   return null;
 }
@@ -2353,6 +2360,11 @@ export const _sliceCompleteSchemaForTest = sliceCompleteSchema;
  */
 const ARTIFACT_ID_PATTERN = /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/;
 const ARTIFACT_ID_MAX_LENGTH = 64;
+
+/** The same alphabet applied outside a zod schema — see resolveActiveWorktreeBasePath. */
+function isArtifactId(value: string): boolean {
+  return value.length <= ARTIFACT_ID_MAX_LENGTH && ARTIFACT_ID_PATTERN.test(value);
+}
 
 function artifactIdParam(description: string) {
   return z.string()
