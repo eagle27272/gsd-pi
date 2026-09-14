@@ -10,7 +10,6 @@
 // Publication failure is non-fatal to a completed local merge: every failure is
 // logged and reported in the result, never thrown.
 
-import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -19,6 +18,7 @@ import {
 } from "./pull-request-process.js";
 import { emitJournalEvent } from "./journal.js";
 import { logWarning } from "./workflow-logger.js";
+import { gitCapture } from "./git-exec.js";
 
 export interface PublicationPrefs {
   autoPush: boolean;
@@ -50,11 +50,7 @@ export interface PublicationResult {
 
 export function gitRemoteExists(basePath: string, remote: string): boolean {
   try {
-    execFileSync("git", ["remote", "get-url", remote], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    });
+    gitCapture(basePath, ["remote", "get-url", remote]);
     return true;
   } catch {
     return false;
@@ -75,11 +71,7 @@ export function publishMilestone(request: PublicationRequest): PublicationResult
 
   if (prefs.autoPush && !prefs.autoPr && gitRemoteExists(basePath, remote)) {
     try {
-      execFileSync("git", ["push", remote, request.integrationBranch], {
-        cwd: basePath,
-        stdio: ["ignore", "pipe", "pipe"],
-        encoding: "utf-8",
-      });
+      gitCapture(basePath, ["push", remote, request.integrationBranch]);
       result.pushed = true;
     } catch (err) {
       // Push failure is non-fatal
@@ -91,11 +83,7 @@ export function publishMilestone(request: PublicationRequest): PublicationResult
   if (prefs.autoPr && gitRemoteExists(basePath, remote)) {
     try {
       // Push the milestone branch to remote first
-      execFileSync("git", ["push", remote, request.milestoneBranch], {
-        cwd: basePath,
-        stdio: ["ignore", "pipe", "pipe"],
-        encoding: "utf-8",
-      });
+      gitCapture(basePath, ["push", remote, request.milestoneBranch]);
       const prEvidence = buildPullRequestEvidence({
         milestoneId: request.milestoneId,
         milestoneTitle: request.milestoneTitle,
@@ -146,11 +134,7 @@ export interface PushIfAheadResult {
  */
 function isAheadOfUpstream(basePath: string): boolean {
   try {
-    return execFileSync("git", ["rev-list", "--count", "@{upstream}..HEAD"], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    }).trim() !== "0";
+    return gitCapture(basePath, ["rev-list", "--count", "@{upstream}..HEAD"]) !== "0";
   } catch (err) {
     const errWithStderr = err as { stderr?: string | Buffer };
     const stderr = errWithStderr.stderr?.toString() ?? "";
@@ -179,11 +163,7 @@ export function pushIntegrationBranchIfAhead(
   if (!isAheadOfUpstream(basePath)) return result;
 
   try {
-    execFileSync("git", ["push", remote, branch], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    });
+    gitCapture(basePath, ["push", remote, branch]);
     result.pushed = true;
   } catch (err) {
     // Push failure is non-fatal — closeout must not wedge on it (#2153)

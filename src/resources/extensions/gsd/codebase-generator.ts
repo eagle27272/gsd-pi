@@ -12,7 +12,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, mkdirSync } from "node:fs";
 import { join, dirname, extname, relative, sep } from "node:path";
 
-import { execSync } from "node:child_process";
+import { gitCapture } from "./git-exec.js";
 import { gsdRoot } from "./paths.js";
 import {
   createRepositoryRegistryFromPreferences,
@@ -212,7 +212,7 @@ function shouldExclude(filePath: string, excludes: string[]): boolean {
 
 function lsFiles(basePath: string): string[] {
   try {
-    const result = execSync("git ls-files", { cwd: basePath, encoding: "utf-8", timeout: 10000 });
+    const result = gitCapture(basePath, ["ls-files"], { timeout: 10000 });
     return result.split("\n").filter(Boolean);
   } catch {
     return [];

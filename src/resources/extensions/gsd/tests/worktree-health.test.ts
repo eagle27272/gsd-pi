@@ -12,7 +12,6 @@ import { execSync } from "node:child_process";
 
 import { getAllWorktreeHealth, getWorktreeHealth, formatWorktreeStatusLine } from "../worktree-health.ts";
 import { listWorktrees } from "../worktree-manager.ts";
-import { GIT_NO_PROMPT_ENV } from "../git-constants.ts";
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -193,16 +192,13 @@ describe('worktree-health', async () => {
       chmodSync(shim, 0o755);
 
       const originalPath = process.env.PATH ?? "";
-      const originalGitEnvPath = GIT_NO_PROMPT_ENV.PATH;
       try {
         process.env.PATH = `${bin}${delimiter}${originalPath}`;
-        GIT_NO_PROMPT_ENV.PATH = process.env.PATH;
 
         const health = getAllWorktreeHealth(dir);
         assert.equal(health.length, 2, "both worktrees have health entries");
       } finally {
         process.env.PATH = originalPath;
-        GIT_NO_PROMPT_ENV.PATH = originalGitEnvPath;
       }
 
       const invocations = readFileSync(logPath, "utf-8")

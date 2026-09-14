@@ -15,7 +15,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import type { Dirent } from "node:fs";
 import { isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 import { gsdRoot } from "./paths.js";
-import { GIT_NO_PROMPT_ENV } from "./git-constants.js";
+import { gitNoPromptEnv } from "./git-constants.js";
 import { loadEffectiveGSDPreferences } from "./preferences.js";
 import { logWarning } from "./workflow-logger.js";
 import { createRepositoryRegistryFromPreferences, defaultRepositoryTargets } from "./repository-registry.js";
@@ -46,6 +46,7 @@ import {
 import { GSDError, GSD_MERGE_CONFLICT, GSD_GIT_ERROR } from "./errors.js";
 import { getErrorMessage } from "./error-utils.js";
 import { isInfrastructureError } from "./auto/infra-errors.js";
+import { gitCapture } from "./git-exec.js";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -710,13 +711,7 @@ function filterGitSvnNoise(message: string): string {
  */
 export function runGit(basePath: string, args: string[], options: { allowFailure?: boolean; input?: string } = {}): string {
   try {
-    return execFileSync("git", args, {
-      cwd: basePath,
-      stdio: [options.input != null ? "pipe" : "ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-      ...(options.input != null ? { input: options.input } : {}),
-    }).trim();
+    return gitCapture(basePath, args, { input: options.input });
   } catch (error) {
     if (options.allowFailure) return "";
     const message = getErrorMessage(error);
@@ -1089,10 +1084,7 @@ export class GitServiceImpl {
         if (branch) {
           const remoteBranch = `origin/${branch}`;
           // merge-base --is-ancestor exits 0 if HEAD~1 is ancestor of remote
-          execFileSync("git", ["merge-base", "--is-ancestor", "HEAD~1", remoteBranch], {
-            cwd: this.basePath,
-            stdio: ["ignore", "pipe", "pipe"],
-          });
+          gitCapture(this.basePath, ["merge-base", "--is-ancestor", "HEAD~1", remoteBranch]);
           // If we get here, newest snapshot IS reachable from remote — already pushed
           return;
         }
@@ -1101,11 +1093,7 @@ export class GitServiceImpl {
       }
 
       // Save HEAD SHA so we can restore if the re-commit fails
-      const savedHead = execFileSync("git", ["rev-parse", "HEAD"], {
-        cwd: this.basePath,
-        stdio: ["ignore", "pipe", "pipe"],
-        encoding: "utf-8",
-      }).trim();
+      const savedHead = gitCapture(this.basePath, ["rev-parse", "HEAD"]);
 
       nativeResetSoft(this.basePath, resetTarget);
 
@@ -1264,7 +1252,7 @@ export class GitServiceImpl {
         cwd: this.basePath,
         stdio: "pipe",
         encoding: "utf-8",
-        env: GIT_NO_PROMPT_ENV,
+        env: gitNoPromptEnv(),
       });
       return { passed: true, skipped: false, command };
     } catch (err) {
@@ -1301,7 +1289,7 @@ export function createDraftPR(
       cwd: basePath,
       encoding: "utf8",
       timeout: 30000,
-      env: opts?.env ?? GIT_NO_PROMPT_ENV,
+      env: opts?.env ?? gitNoPromptEnv(),
     });
     return result.trim();
   } catch {

@@ -1,7 +1,6 @@
 // Project/App: gsd-pi
 // File Purpose: Git-based detection of milestone implementation evidence for closeout guards.
 
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { MILESTONE_ID_RE } from "./milestone-ids.js";
@@ -16,6 +15,7 @@ import {
 import { readIntegrationBranch } from "./git-service.js";
 import { logWarning } from "./workflow-logger.js";
 import { resolveTasksDir } from "./paths.js";
+import { gitCapture } from "./git-exec.js";
 
 /** Large enough for unbounded milestone-history git log scans in big repos. */
 const GIT_LOG_MAX_BUFFER = 16 * 1024 * 1024;
@@ -44,11 +44,7 @@ export function hasImplementationArtifacts(basePath: string, milestoneId?: strin
   try {
     // Verify we're in a git repo
     try {
-      execFileSync("git", ["rev-parse", "--is-inside-work-tree"], {
-        cwd: basePath,
-        stdio: ["ignore", "pipe", "pipe"],
-        encoding: "utf-8",
-      });
+      gitCapture(basePath, ["rev-parse", "--is-inside-work-tree"]);
     } catch (e) {
       logWarning("recovery", `git rev-parse check failed: ${(e as Error).message}`);
       return "unknown";
@@ -109,11 +105,7 @@ export function hasImplementationArtifacts(basePath: string, milestoneId?: strin
 
 function getCurrentBranch(basePath: string): string | null {
   try {
-    const branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    }).trim();
+    const branch = gitCapture(basePath, ["rev-parse", "--abbrev-ref", "HEAD"]);
     return branch || null;
   } catch {
     return null;
@@ -138,22 +130,14 @@ function normalizeRepoPath(file: string): string {
  */
 function detectMainBranch(basePath: string): string {
   try {
-    const result = execFileSync("git", ["rev-parse", "--verify", "main"], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    });
+    const result = gitCapture(basePath, ["rev-parse", "--verify", "main"], { trim: false });
     if (result.trim()) return "main";
   } catch (_) {
     // Expected — main doesn't exist, try master next
     void _;
   }
   try {
-    const result = execFileSync("git", ["rev-parse", "--verify", "master"], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    });
+    const result = gitCapture(basePath, ["rev-parse", "--verify", "master"], { trim: false });
     if (result.trim()) return "master";
   } catch (_) {
     // Expected — master doesn't exist either
@@ -171,16 +155,10 @@ function detectMainBranch(basePath: string): string {
 function getChangedFilesSinceBranch(basePath: string, targetBranch: string): { ok: boolean; files: string[] } {
   try {
     // Try merge-base approach first
-    const mergeBase = execFileSync(
-      "git", ["merge-base", targetBranch, "HEAD"],
-      { cwd: basePath, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" },
-    ).trim();
+    const mergeBase = gitCapture(basePath, ["merge-base", targetBranch, "HEAD"]);
 
     if (mergeBase) {
-      const result = execFileSync(
-        "git", ["diff", "--name-only", mergeBase, "HEAD"],
-        { cwd: basePath, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8", maxBuffer: GIT_LOG_MAX_BUFFER },
-      ).trim();
+      const result = gitCapture(basePath, ["diff", "--name-only", mergeBase, "HEAD"], { maxBuffer: GIT_LOG_MAX_BUFFER });
       return { ok: true, files: result ? result.split("\n").filter(Boolean) : [] };
     }
   } catch (err) {
@@ -190,10 +168,7 @@ function getChangedFilesSinceBranch(basePath: string, targetBranch: string): { o
 
   // Fallback: check last 20 commits
   try {
-    const result = execFileSync(
-      "git", ["log", "--name-only", "--pretty=format:", "-20", "HEAD"],
-      { cwd: basePath, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" },
-    ).trim();
+    const result = gitCapture(basePath, ["log", "--name-only", "--pretty=format:", "-20", "HEAD"]);
     return { ok: true, files: result ? [...new Set(result.split("\n").filter(Boolean))] : [] };
   } catch (e) {
     logWarning("recovery", `git log fallback failed: ${(e as Error).message}`);
@@ -333,12 +308,7 @@ function backfillChangedFilesFromUntaggedMilestoneCommits(
 }
 
 function getCommitRecords(basePath: string): CommitRecord[] {
-  const logOutput = execFileSync("git", ["log", "--name-only", "--format=%x1e%H%x1f%P%x1f%cI%x1f%B%x1f", "HEAD"], {
-    cwd: basePath,
-    stdio: ["ignore", "pipe", "pipe"],
-    encoding: "utf-8",
-    maxBuffer: GIT_LOG_MAX_BUFFER,
-  });
+  const logOutput = gitCapture(basePath, ["log", "--name-only", "--format=%x1e%H%x1f%P%x1f%cI%x1f%B%x1f", "HEAD"], { maxBuffer: GIT_LOG_MAX_BUFFER, trim: false });
   return logOutput
     .split(LOG_RECORD_SEPARATOR)
     .filter(Boolean)
@@ -366,12 +336,7 @@ function scanGsdTaggedCommits(
   gitArgs: readonly string[],
 ): { ok: boolean; matched: boolean; files: string[] } {
   try {
-    const logOutput = execFileSync("git", [...gitArgs], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      maxBuffer: GIT_LOG_MAX_BUFFER,
-    });
+    const logOutput = gitCapture(basePath, [...gitArgs], { maxBuffer: GIT_LOG_MAX_BUFFER, trim: false });
     const records = logOutput
       .split(LOG_RECORD_SEPARATOR)
       .filter(Boolean)
@@ -406,11 +371,7 @@ function scanGsdTaggedCommits(
 }
 
 function getChangedFilesForCommit(basePath: string, hash: string): string[] {
-  const fileOutput = execFileSync(
-    "git",
-    ["diff-tree", "--root", "--no-commit-id", "-r", "--name-only", hash],
-    { cwd: basePath, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" },
-  ).trim();
+  const fileOutput = gitCapture(basePath, ["diff-tree", "--root", "--no-commit-id", "-r", "--name-only", hash]);
   return fileOutput.split("\n").map((f) => f.trim()).filter(Boolean);
 }
 

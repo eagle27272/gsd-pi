@@ -7,7 +7,7 @@ import type { GSDState } from "./types.js";
 import { runProviderChecks, runProviderChecksAsync, summariseProviderIssues } from "./doctor-providers.js";
 import { runEnvironmentChecks, runEnvironmentChecksAsync } from "./doctor-environment.js";
 import { loadEffectiveGSDPreferences } from "./preferences.js";
-import { GIT_NO_PROMPT_ENV } from "./git-constants.js";
+import { gitNoPromptEnv } from "./git-constants.js";
 import { loadLedgerFromDisk, getProjectTotals } from "./metrics.js";
 import { describeNextUnit, estimateTimeRemaining, updateSliceProgressCache } from "./auto-dashboard.js";
 import { projectRoot } from "./commands/context.js";
@@ -51,7 +51,7 @@ function runHealthWidgetGit(basePath: string, args: string[]): Promise<string | 
         cwd: basePath,
         timeout: LAST_COMMIT_LOOKUP_TIMEOUT_MS,
         encoding: "utf-8",
-        env: GIT_NO_PROMPT_ENV,
+        env: gitNoPromptEnv(),
       },
       (err, stdout) => resolve(err ? null : String(stdout).trimEnd()),
     );

@@ -1,19 +1,17 @@
 // Native Git Bridge
 // Provides high-performance git operations backed by libgit2 via the Rust native module.
-// Falls back to execSync/execFileSync git commands when the native module is unavailable.
+// Falls back to git CLI commands (via git-exec.js) when the native module is unavailable.
 //
 // Both READ and WRITE operations are native — push operations remain as
 // execSync calls because git2 credential handling is too complex.
 
-import { execSync, execFileSync } from "node:child_process";
-import type { ExecFileSyncOptionsWithStringEncoding } from "node:child_process";
 import { existsSync, readFileSync, unlinkSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { GSDError, GSD_GIT_ERROR } from "./errors.js";
-import { GIT_NO_PROMPT_ENV } from "./git-constants.js";
 import { getErrorMessage } from "./error-utils.js";
 import { isInfrastructureError } from "./auto/infra-errors.js";
 import { debugCount } from "./debug-logger.js";
+import { gitCapture, type GitCaptureOptions } from "./git-exec.js";
 
 // Issue #453: keep auto-mode bookkeeping on the stable git CLI path unless a
 // caller explicitly opts into the native helper.
@@ -139,17 +137,12 @@ function loadNative(): typeof nativeModule {
 
 // ─── Fallback Helpers ──────────────────────────────────────────────────────
 
-/** Run a git command via execFileSync. Returns trimmed stdout. */
+/** Run a git command via the shared safe runner. Returns trimmed stdout. */
 function gitExec(basePath: string, args: string[], allowFailure = false): string {
   // Counts git CLI shell-outs only (native libgit2 paths bypass this helper).
   debugCount("gitInvocations");
   try {
-    return execFileSync("git", args, {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-    }).trim();
+    return gitCapture(basePath, args);
   } catch (err) {
     if (allowFailure) return "";
     throw new GSDError(GSD_GIT_ERROR, `git ${args.join(" ")} failed in ${basePath}: ${getErrorMessage(err)}`);
@@ -170,47 +163,18 @@ function isRetryableGitError(err: unknown): boolean {
 function execGitFileSyncWithRetry(
   basePath: string,
   args: string[],
-  options: Partial<ExecFileSyncOptionsWithStringEncoding>,
+  options: GitCaptureOptions,
 ): string {
   // Counts git CLI shell-outs only (native libgit2 paths bypass this helper).
   debugCount("gitInvocations");
   try {
-    return execFileSync("git", args, {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-      ...options,
-    }).trim();
+    return gitCapture(basePath, args, options);
   } catch (err) {
     if (!isRetryableGitError(err)) throw err;
     sleepSync(GIT_RETRY_DELAY_MS);
     // Retry is a second physical shell-out — count it too.
     debugCount("gitInvocations");
-    return execFileSync("git", args, {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-      ...options,
-    }).trim();
-  }
-}
-
-/** Run a git command via execFileSync. Returns trimmed stdout. */
-function gitFileExec(basePath: string, args: string[], allowFailure = false): string {
-  // Counts git CLI shell-outs only (native libgit2 paths bypass this helper).
-  debugCount("gitInvocations");
-  try {
-    return execFileSync("git", args, {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-    }).trim();
-  } catch (err) {
-    if (allowFailure) return "";
-    throw new GSDError(GSD_GIT_ERROR, `git ${args.join(" ")} failed in ${basePath}: ${getErrorMessage(err)}`);
+    return gitCapture(basePath, args, options);
   }
 }
 
@@ -405,7 +369,7 @@ export function nativeIsRepo(basePath: string): boolean {
     return native.gitIsRepo(basePath);
   }
   try {
-    execFileSync("git", ["rev-parse", "--git-dir"], { cwd: basePath, stdio: "pipe" });
+    gitCapture(basePath, ["rev-parse", "--git-dir"]);
     return true;
   } catch {
     return false;
@@ -415,11 +379,7 @@ export function nativeIsRepo(basePath: string): boolean {
 /** Return true only when the repository has a reachable committed HEAD. */
 export function nativeHasCommittedHead(basePath: string): boolean {
   try {
-    execFileSync("git", ["rev-parse", "--verify", "HEAD"], {
-      cwd: basePath,
-      stdio: ["ignore", "ignore", "ignore"],
-      env: GIT_NO_PROMPT_ENV,
-    });
+    gitCapture(basePath, ["rev-parse", "--verify", "HEAD"]);
     return true;
   } catch {
     return false;
@@ -645,7 +605,7 @@ export function nativeBranchList(basePath: string, pattern?: string): string[] {
   const args = ["branch", "--list"];
   if (pattern) args.push(pattern);
 
-  const result = gitFileExec(basePath, args, true);
+  const result = gitExec(basePath, args, true);
   if (!result) return [];
 
   return result
@@ -668,7 +628,7 @@ export function nativeBranchListMerged(basePath: string, target: string, pattern
   const args = ["branch", "--merged", target];
   if (pattern) args.push("--list", pattern);
 
-  const result = gitFileExec(basePath, args, true);
+  const result = gitExec(basePath, args, true);
   if (!result) return [];
 
   return result.split("\n").map(b => b.trim()).filter(Boolean);
@@ -685,7 +645,7 @@ export function nativeLsFiles(basePath: string, pathspec: string): string[] {
     return native.gitLsFiles(basePath, pathspec);
   }
 
-  const result = gitFileExec(basePath, ["ls-files", pathspec], true);
+  const result = gitExec(basePath, ["ls-files", pathspec], true);
   if (!result) return [];
   return result.split("\n").filter(Boolean);
 }
@@ -701,7 +661,7 @@ export function nativeForEachRef(basePath: string, prefix: string): string[] {
     return native.gitForEachRef(basePath, prefix);
   }
 
-  const result = gitFileExec(basePath, ["for-each-ref", prefix, "--format=%(refname)"], true);
+  const result = gitExec(basePath, ["for-each-ref", prefix, "--format=%(refname)"], true);
   if (!result) return [];
   return result.split("\n").filter(Boolean);
 }
@@ -776,7 +736,7 @@ export function nativeInit(basePath: string, initialBranch?: string): void {
 
   const args = ["init"];
   if (initialBranch) args.push("-b", initialBranch);
-  gitFileExec(basePath, args);
+  gitExec(basePath, args);
 }
 
 /**
@@ -790,7 +750,7 @@ export function nativeAddAll(basePath: string): void {
     native.gitAddAll(basePath);
     return;
   }
-  gitFileExec(basePath, ["add", "-A"]);
+  gitExec(basePath, ["add", "-A"]);
 }
 
 /**
@@ -800,16 +760,12 @@ export function nativeAddAll(basePath: string): void {
  * pulling in unknown untracked files (secrets, binaries) would be dangerous.
  */
 export function nativeAddTracked(basePath: string): void {
-  gitFileExec(basePath, ["add", "-u"]);
+  gitExec(basePath, ["add", "-u"]);
 }
 
 export function nativeIsIgnored(basePath: string, path: string): boolean {
   try {
-    execFileSync("git", ["check-ignore", "-q", "--", path], {
-      cwd: basePath,
-      stdio: "pipe",
-      env: GIT_NO_PROMPT_ENV,
-    });
+    gitCapture(basePath, ["check-ignore", "-q", "--", path]);
     return true;
   } catch {
     return false;
@@ -881,11 +837,11 @@ function trySelfHealGsdGitignore(basePath: string): boolean {
 function stageUntrackedExcludingDotGsd(basePath: string): void {
   // Stage tracked modifications first. `git add -u` never fails on pathspec
   // issues because it doesn't walk untracked trees.
-  gitFileExec(basePath, ["add", "-u"]);
+  gitExec(basePath, ["add", "-u"]);
 
   // Enumerate untracked paths via porcelain output. `?? ` prefix marks
   // untracked files (status respects `.gitignore`).
-  const status = gitFileExec(basePath, ["status", "--porcelain=v1", "-z"], true);
+  const status = gitExec(basePath, ["status", "--porcelain=v1", "-z"], true);
   if (!status) return;
 
   const untracked: string[] = [];
@@ -910,7 +866,7 @@ function stageUntrackedExcludingDotGsd(basePath: string): void {
   // Stage in chunks to avoid exceeding ARG_MAX on large change sets.
   const CHUNK = 200;
   for (let i = 0; i < untracked.length; i += CHUNK) {
-    gitFileExec(basePath, ["add", "--", ...untracked.slice(i, i + CHUNK)]);
+    gitExec(basePath, ["add", "--", ...untracked.slice(i, i + CHUNK)]);
   }
 }
 
@@ -921,11 +877,11 @@ function stageUntrackedExcludingDotGsd(basePath: string): void {
  */
 function fallbackStageWithSymlinkedDotGsd(basePath: string): void {
   if (isDotGsdIgnored(basePath)) {
-    gitFileExec(basePath, ["add", "-A"]);
+    gitExec(basePath, ["add", "-A"]);
     return;
   }
   if (trySelfHealGsdGitignore(basePath)) {
-    gitFileExec(basePath, ["add", "-A"]);
+    gitExec(basePath, ["add", "-A"]);
     return;
   }
   // `manage_gitignore: false` — protect work by staging files explicitly.
@@ -952,12 +908,7 @@ export function nativeAddAllWithExclusions(basePath: string, exclusions: readonl
   }
   const pathspecs = exclusions.map(e => `:!${e}`);
   try {
-    execFileSync("git", ["add", "-A", "--", ...pathspecs], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-    });
+    gitCapture(basePath, ["add", "-A", "--", ...pathspecs]);
   } catch (err: unknown) {
     const stderr = (err as { stderr?: string })?.stderr ?? "";
     const infraCode = isInfrastructureError(err) ?? isInfrastructureError(stderr);
@@ -994,7 +945,7 @@ export function nativeAddPaths(basePath: string, paths: string[]): void {
     native.gitAddPaths(basePath, paths);
     return;
   }
-  gitFileExec(basePath, ["add", "--", ...paths]);
+  gitExec(basePath, ["add", "--", ...paths]);
 }
 
 /**
@@ -1033,10 +984,7 @@ export function nativeCommit(
   try {
     const args = ["commit", "-F", "-"];
     if (options?.allowEmpty) args.push("--allow-empty");
-    const result = execGitFileSyncWithRetry(basePath, args, {
-      stdio: ["pipe", "pipe", "pipe"],
-      input: message,
-    });
+    const result = execGitFileSyncWithRetry(basePath, args, { input: message });
     return result;
   } catch (err: unknown) {
     const errObj = err as { stdout?: string; stderr?: string; message?: string; status?: number; signal?: NodeJS.Signals };
@@ -1067,21 +1015,12 @@ export function nativeCheckoutBranch(basePath: string, branch: string): void {
     native.gitCheckoutBranch(basePath, branch);
     return;
   }
-  execFileSync("git", ["checkout", branch], {
-    cwd: basePath,
-    stdio: ["ignore", "pipe", "pipe"],
-    encoding: "utf-8",
-  });
+  gitCapture(basePath, ["checkout", branch]);
 }
 
 /** Create and enter a branch when HEAD is unborn and has no commit target. */
 export function nativeCheckoutNewBranch(basePath: string, branch: string): void {
-  execFileSync("git", ["checkout", "-b", branch], {
-    cwd: basePath,
-    stdio: ["ignore", "pipe", "pipe"],
-    encoding: "utf-8",
-    env: GIT_NO_PROMPT_ENV,
-  });
+  gitCapture(basePath, ["checkout", "-b", branch]);
 }
 
 /**
@@ -1096,7 +1035,7 @@ export function nativeCheckoutTheirs(basePath: string, paths: string[]): void {
     return;
   }
   for (const path of paths) {
-    gitFileExec(basePath, ["checkout", "--theirs", "--", path]);
+    gitExec(basePath, ["checkout", "--theirs", "--", path]);
   }
 }
 
@@ -1112,12 +1051,7 @@ export function nativeMergeSquash(basePath: string, branch: string): GitMergeRes
   }
 
   try {
-    execFileSync("git", ["merge", "--squash", branch], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-    });
+    gitCapture(basePath, ["merge", "--squash", branch]);
     return { success: true, conflicts: [] };
   } catch (err: unknown) {
     // Distinguish pre-merge rejections (dirty working tree) from actual
@@ -1164,12 +1098,7 @@ export function nativeMergeSquash(basePath: string, branch: string): GitMergeRes
  */
 export function nativeMergeRegular(basePath: string, branch: string): GitMergeResult {
   try {
-    execFileSync("git", ["merge", "--no-ff", "--no-commit", branch], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-    });
+    gitCapture(basePath, ["merge", "--no-ff", "--no-commit", branch]);
     return { success: true, conflicts: [] };
   } catch (err: unknown) {
     const stderr =
@@ -1234,7 +1163,7 @@ export function nativeResetHard(basePath: string): void {
     native.gitResetHard(basePath);
     return;
   }
-  execFileSync("git", ["reset", "--hard", "HEAD"], { cwd: basePath, stdio: "pipe" });
+  gitCapture(basePath, ["reset", "--hard", "HEAD"]);
 }
 
 /**
@@ -1243,12 +1172,7 @@ export function nativeResetHard(basePath: string): void {
  * Used to squash snapshot commits back into a single real commit.
  */
 export function nativeResetSoft(basePath: string, target: string): void {
-  execFileSync("git", ["reset", "--soft", target], {
-    cwd: basePath,
-    stdio: ["ignore", "pipe", "pipe"],
-    encoding: "utf-8",
-    env: GIT_NO_PROMPT_ENV,
-  });
+  gitCapture(basePath, ["reset", "--soft", target]);
 }
 
 /**
@@ -1257,12 +1181,7 @@ export function nativeResetSoft(basePath: string, target: string): void {
  */
 export function nativeCommitSubject(basePath: string, ref: string): string {
   try {
-    return execFileSync("git", ["log", "-1", "--format=%s", ref], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-    }).trim();
+    return gitCapture(basePath, ["log", "-1", "--format=%s", ref]);
   } catch {
     return "";
   }
@@ -1279,7 +1198,7 @@ export function nativeBranchDelete(basePath: string, branch: string, force = tru
     native.gitBranchDelete(basePath, branch, force);
     return;
   }
-  gitFileExec(basePath, ["branch", force ? "-D" : "-d", branch]);
+  gitExec(basePath, ["branch", force ? "-D" : "-d", branch]);
 }
 
 /**
@@ -1332,7 +1251,7 @@ export function nativeRmForce(basePath: string, paths: string[]): void {
     return;
   }
   for (const path of paths) {
-    gitFileExec(basePath, ["rm", "--force", "--", path], true);
+    gitExec(basePath, ["rm", "--force", "--", path], true);
   }
 }
 
@@ -1437,7 +1356,7 @@ export function nativeRevertCommit(basePath: string, sha: string): void {
     native.gitRevertCommit(basePath, sha);
     return;
   }
-  gitFileExec(basePath, ["revert", "--no-commit", sha]);
+  gitExec(basePath, ["revert", "--no-commit", sha]);
 }
 
 /**
@@ -1451,7 +1370,7 @@ export function nativeRevertAbort(basePath: string): void {
     native.gitRevertAbort(basePath);
     return;
   }
-  gitFileExec(basePath, ["revert", "--abort"], true);
+  gitExec(basePath, ["revert", "--abort"], true);
 }
 
 /**
@@ -1488,11 +1407,7 @@ export function isNativeGitAvailable(): boolean {
  */
 export function nativeIsAncestor(basePath: string, ancestor: string, descendant: string): boolean {
   try {
-    execFileSync("git", ["merge-base", "--is-ancestor", ancestor, descendant], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: GIT_NO_PROMPT_ENV,
-    });
+    gitCapture(basePath, ["merge-base", "--is-ancestor", ancestor, descendant]);
     return true;
   } catch {
     return false;
@@ -1506,12 +1421,7 @@ export function nativeIsAncestor(basePath: string, ancestor: string, descendant:
  */
 export function nativeLastCommitEpoch(basePath: string, ref: string): number {
   try {
-    const result = execFileSync("git", ["log", "-1", "--format=%ct", ref], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-    }).trim();
+    const result = gitCapture(basePath, ["log", "-1", "--format=%ct", ref]);
     return parseInt(result, 10) || 0;
   } catch {
     return 0;
@@ -1525,12 +1435,7 @@ export function nativeLastCommitEpoch(basePath: string, ref: string): number {
  */
 export function nativeUnpushedCount(basePath: string, branch: string): number {
   try {
-    const result = execFileSync("git", ["rev-list", branch, "--not", "--remotes", "--count"], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-    }).trim();
+    const result = gitCapture(basePath, ["rev-list", branch, "--not", "--remotes", "--count"]);
     return parseInt(result, 10) || 0;
   } catch {
     return -1;

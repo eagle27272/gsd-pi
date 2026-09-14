@@ -16,7 +16,6 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
-import { GIT_NO_PROMPT_ENV } from "../git-constants.ts";
 import { handleTurnGitActionError, runTurnGitAction } from "../git-service.ts";
 import { _resetLogs, drainLogs } from "../workflow-logger.ts";
 
@@ -391,10 +390,9 @@ test("uok gitops turn action commit reuses the collected dirty status", () => {
   const logPath = join(wrapperDir, "git.log");
   const wrapperPath = join(wrapperDir, "git");
   const realGit = execSync("command -v git", { encoding: "utf-8" }).trim();
-  const gitEnv = GIT_NO_PROMPT_ENV as NodeJS.ProcessEnv;
-  const previousPath = gitEnv.PATH;
-  const previousRealGit = gitEnv.GSD_TEST_REAL_GIT;
-  const previousLogPath = gitEnv.GSD_TEST_GIT_LOG;
+  const previousPath = process.env.PATH;
+  const previousRealGit = process.env.GSD_TEST_REAL_GIT;
+  const previousLogPath = process.env.GSD_TEST_GIT_LOG;
 
   writeFileSync(wrapperPath, [
     "#!/bin/sh",
@@ -405,9 +403,9 @@ test("uok gitops turn action commit reuses the collected dirty status", () => {
   chmodSync(wrapperPath, 0o755);
 
   try {
-    gitEnv.PATH = `${wrapperDir}:${previousPath ?? ""}`;
-    gitEnv.GSD_TEST_REAL_GIT = realGit;
-    gitEnv.GSD_TEST_GIT_LOG = logPath;
+    process.env.PATH = `${wrapperDir}:${previousPath ?? ""}`;
+    process.env.GSD_TEST_REAL_GIT = realGit;
+    process.env.GSD_TEST_GIT_LOG = logPath;
 
     writeFileSync(join(repo, "feature.ts"), "export const x = 1;\n", "utf-8");
     const result = runTurnGitAction({
@@ -430,16 +428,17 @@ test("uok gitops turn action commit reuses the collected dirty status", () => {
       "autoCommit should not re-read working-tree status when turn status is known",
     );
   } finally {
-    gitEnv.PATH = previousPath;
+    if (previousPath === undefined) delete process.env.PATH;
+    else process.env.PATH = previousPath;
     if (previousRealGit === undefined) {
-      delete gitEnv.GSD_TEST_REAL_GIT;
+      delete process.env.GSD_TEST_REAL_GIT;
     } else {
-      gitEnv.GSD_TEST_REAL_GIT = previousRealGit;
+      process.env.GSD_TEST_REAL_GIT = previousRealGit;
     }
     if (previousLogPath === undefined) {
-      delete gitEnv.GSD_TEST_GIT_LOG;
+      delete process.env.GSD_TEST_GIT_LOG;
     } else {
-      gitEnv.GSD_TEST_GIT_LOG = previousLogPath;
+      process.env.GSD_TEST_GIT_LOG = previousLogPath;
     }
     rmSync(repo, { recursive: true, force: true });
     rmSync(wrapperDir, { recursive: true, force: true });

@@ -1,14 +1,13 @@
 // Project/App: gsd-pi
 // File Purpose: Detect and reconcile unresolved Git conflict state before automation runs.
 
-import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 import { autoResolveSafeConflictPaths } from "./git-conflict-resolve.js";
-import { GIT_NO_PROMPT_ENV } from "./git-constants.js";
 import { abortAndReset } from "./git-self-heal.js";
 import { logWarning } from "./workflow-logger.js";
+import { gitSpawn } from "./git-exec.js";
 
 function splitZeroDelimited(output: string): string[] {
   return output.split("\0").filter(Boolean);
@@ -31,12 +30,7 @@ function hasGitMarker(basePath: string): boolean {
 
 export function listUnmergedGitPaths(basePath: string): string[] | null {
   try {
-    const output = spawnSync("git", ["diff", "--name-only", "--diff-filter=U", "-z"], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-    });
+    const output = gitSpawn(basePath, ["diff", "--name-only", "--diff-filter=U", "-z"]);
     if (output.status !== 0) {
       return null;
     }
@@ -50,11 +44,7 @@ export function gitDiffCheckFailures(basePath: string): string[] | null {
   const failures: string[] = [];
 
   for (const args of [["--cached"], []] as const) {
-    const result = spawnSync("git", ["diff", "--check", ...args], {
-      cwd: basePath,
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-    });
+    const result = gitSpawn(basePath, ["diff", "--check", ...args]);
     if (result.status === 0) continue;
     if (result.error) {
       return null;

@@ -10,7 +10,6 @@
 import { readdirSync, existsSync, realpathSync, statSync, Dirent } from "node:fs";
 import { join, dirname, normalize, relative, resolve } from "node:path";
 import { homedir } from "node:os";
-import { spawnSync } from "node:child_process";
 import { nativeScanGsdTree, type GsdTreeEntry } from "./native-parser-bridge.js";
 import { DIR_CACHE_MAX } from "./constants.js";
 import { gsdHome } from "./gsd-home.js";
@@ -24,6 +23,7 @@ import {
   slicePlanSegment,
   canonicalPhaseDirName,
 } from "./layout-policy.js";
+import { gitSpawn } from "./git-exec.js";
 
 export { canonicalPhaseDirName };
 
@@ -555,10 +555,7 @@ function probeGsdRoot(rawBasePath: string): string {
   //    unrelated filesystem territory when running outside any repo.
   let gitRoot: string | null = null;
   try {
-    const out = spawnSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd: basePath,
-      encoding: "utf-8",
-    });
+    const out = gitSpawn(basePath, ["rev-parse", "--show-toplevel"]);
     if (out.status === 0) {
       const r = out.stdout.trim();
       if (r) gitRoot = normalize(r);

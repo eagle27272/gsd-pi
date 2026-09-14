@@ -13,13 +13,12 @@
  *  - Fast-path status check — clean trees pay no extra cost
  */
 
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { GIT_NO_PROMPT_ENV } from "./git-constants.js";
 import { logWarning } from "./workflow-logger.js";
 import { nativeHasChanges } from "./native-git-bridge.js";
 import { probeGitConflictState } from "./git-conflict-state.js";
+import { gitCapture, gitCaptureBuffer } from "./git-exec.js";
 
 const WINDOWS_RESERVED_BASENAMES = new Set([
   "con",
@@ -73,20 +72,11 @@ export interface PostflightResult {
 }
 
 function gitText(basePath: string, args: string[]): string {
-  return execFileSync("git", args, {
-    cwd: basePath,
-    stdio: ["ignore", "pipe", "pipe"],
-    encoding: "utf-8",
-    env: GIT_NO_PROMPT_ENV,
-  });
+  return gitCapture(basePath, args, { trim: false });
 }
 
 function gitBuffer(basePath: string, args: string[]): Buffer {
-  return execFileSync("git", args, {
-    cwd: basePath,
-    stdio: ["ignore", "pipe", "pipe"],
-    env: GIT_NO_PROMPT_ENV,
-  });
+  return gitCaptureBuffer(basePath, args);
 }
 
 function errorText(err: unknown): string {
@@ -121,11 +111,7 @@ function isGsdOwnedPath(path: string): boolean {
 
 function hasStashUntrackedParent(basePath: string, stashRef: string): boolean | null {
   try {
-    execFileSync("git", ["rev-parse", "--verify", "-q", `${stashRef}^3`], {
-      cwd: basePath,
-      stdio: ["ignore", "ignore", "ignore"],
-      env: GIT_NO_PROMPT_ENV,
-    });
+    gitCapture(basePath, ["rev-parse", "--verify", "-q", `${stashRef}^3`]);
     return true;
   } catch (err) {
     const status = typeof err === "object" && err && "status" in err ? (err as { status?: unknown }).status : null;
@@ -268,12 +254,7 @@ function reconcileAlreadyPresentUntrackedStash(
   if (allIdentical) {
     let dropped = true;
     try {
-      execFileSync("git", ["stash", "drop", stashRef], {
-        cwd: basePath,
-        stdio: ["ignore", "pipe", "pipe"],
-        encoding: "utf-8",
-        env: GIT_NO_PROMPT_ENV,
-      });
+      gitCapture(basePath, ["stash", "drop", stashRef]);
     } catch (err) {
       dropped = false;
       logWarning("preflight", `git stash drop ${stashRef} failed after identical preflight stash reconciliation: ${err instanceof Error ? err.message : String(err)}`);
@@ -304,12 +285,7 @@ function findPreflightStashRef(basePath: string, milestoneId: string, stashMarke
   const markerPrefix = `gsd-preflight-stash:${milestoneId}:`;
   let fallbackRef: string | null = null;
   try {
-    const list = execFileSync("git", ["stash", "list", "--format=%gd%x00%s"], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-    });
+    const list = gitCapture(basePath, ["stash", "list", "--format=%gd%x00%s"], { trim: false });
     for (const line of list.split("\n")) {
       const [ref, subject] = line.split("\x00");
       if (!ref || !subject) continue;
@@ -428,12 +404,7 @@ export function preflightCleanRoot(
   // Push the stash
   try {
     const stashMarker = `gsd-preflight-stash:${milestoneId}:${process.pid}:${Date.now()}:${process.hrtime.bigint().toString(36)}`;
-    execFileSync("git", ["stash", "push", "--include-untracked", "-m", `gsd-preflight-stash [${stashMarker}]`], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-    });
+    gitCapture(basePath, ["stash", "push", "--include-untracked", "-m", `gsd-preflight-stash [${stashMarker}]`]);
     const stashCreated = findPreflightStashRef(basePath, milestoneId, stashMarker) !== null;
     return {
       stashPushed: stashCreated,
@@ -487,12 +458,7 @@ export function postflightPopStash(
       if (stashPaths.length > 0 && stashPaths.every((path) => isGsdOwnedPath(path))) {
         let dropped = true;
         try {
-          execFileSync("git", ["stash", "drop", stashRef], {
-            cwd: basePath,
-            stdio: ["ignore", "pipe", "pipe"],
-            encoding: "utf-8",
-            env: GIT_NO_PROMPT_ENV,
-          });
+          gitCapture(basePath, ["stash", "drop", stashRef]);
         } catch (err) {
           dropped = false;
           logWarning("preflight", `git stash drop ${stashRef} failed after skipping GSD metadata-only restore: ${err instanceof Error ? err.message : String(err)}`);
@@ -510,20 +476,10 @@ export function postflightPopStash(
         };
       }
     }
-    execFileSync("git", ["stash", "apply", stashRef], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-    });
+    gitCapture(basePath, ["stash", "apply", stashRef]);
     let dropWarning: string | null = null;
     try {
-      execFileSync("git", ["stash", "drop", stashRef], {
-        cwd: basePath,
-        stdio: ["ignore", "pipe", "pipe"],
-        encoding: "utf-8",
-        env: GIT_NO_PROMPT_ENV,
-      });
+      gitCapture(basePath, ["stash", "drop", stashRef]);
     } catch (err) {
       dropWarning = ` Stash was restored, but git stash drop ${stashRef} failed: ${err instanceof Error ? err.message : String(err)}.`;
       logWarning("preflight", dropWarning.trim());

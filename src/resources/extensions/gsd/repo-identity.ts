@@ -7,7 +7,6 @@
  */
 
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { gsdHome } from "./gsd-home.js";
@@ -17,7 +16,7 @@ import {
   resolveExternalStateProjectIdentityFromWorktreePath,
 } from "./worktree-root.js";
 import { logWarning } from "./workflow-logger.js";
-
+import { gitCapture } from "./git-exec.js";
 
 // ─── Repo Metadata ───────────────────────────────────────────────────────────
 
@@ -196,12 +195,7 @@ function isProjectGsd(gsdPath: string): boolean {
  */
 function getRemoteUrl(basePath: string): string | null {
   try {
-    return execFileSync("git", ["config", "--get", "remote.origin.url"], {
-      cwd: basePath,
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: 5_000,
-    }).trim();
+    return gitCapture(basePath, ["config", "--get", "remote.origin.url"], { timeout: 5_000 });
   } catch (error) {
     const status = typeof error === "object" && error !== null && "status" in error
       ? (error as { status?: number }).status
@@ -238,19 +232,9 @@ function canonicalizeExistingPath(path: string): string {
 
 function resolveGitCommonDir(basePath: string): string {
   try {
-    return execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
-      cwd: basePath,
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: 5_000,
-    }).trim();
+    return gitCapture(basePath, ["rev-parse", "--path-format=absolute", "--git-common-dir"], { timeout: 5_000 });
   } catch {
-    const raw = execFileSync("git", ["rev-parse", "--git-common-dir"], {
-      cwd: basePath,
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: 5_000,
-    }).trim();
+    const raw = gitCapture(basePath, ["rev-parse", "--git-common-dir"], { timeout: 5_000 });
     return resolve(basePath, raw);
   }
 }
@@ -272,12 +256,7 @@ function resolveGitRoot(basePath: string): string {
     }
 
     // Fallback for unusual layouts.
-    return canonicalizeExistingPath(execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd: basePath,
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: 5_000,
-    }).trim());
+    return canonicalizeExistingPath(gitCapture(basePath, ["rev-parse", "--show-toplevel"], { timeout: 5_000 }));
   } catch {
     return resolve(basePath);
   }

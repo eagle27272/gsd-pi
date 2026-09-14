@@ -22,14 +22,15 @@ import { formatDuration } from "../shared/format-utils.js";
 import { parseEvalReviewFrontmatter, type Verdict } from "./eval-review-schema.js";
 import { currentDirectoryRoot } from "./commands/context.js";
 import { buildPullRequestEvidence } from "./pull-request-process.js";
+import { gitCapture } from "./git-exec.js";
 
 function git(basePath: string, args: readonly string[]): string {
-  return execFileSync("git", args, { cwd: basePath, encoding: "utf-8" }).trim();
+  return gitCapture(basePath, args);
 }
 
 function isValidRefName(name: string): boolean {
   try {
-    execFileSync("git", ["check-ref-format", "--branch", name], { stdio: "pipe" });
+    gitCapture(undefined, ["check-ref-format", "--branch", name]);
     return true;
   } catch {
     return false;

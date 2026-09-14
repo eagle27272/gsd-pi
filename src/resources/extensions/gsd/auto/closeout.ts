@@ -3,7 +3,6 @@
 
 import { importExtensionModule, type ExtensionAPI, type ExtensionContext } from "@gsd/pi-coding-agent";
 
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { join, basename } from "node:path";
 import { existsSync, cpSync, readFileSync } from "node:fs";
@@ -23,6 +22,7 @@ import { atomicWriteSync } from "../atomic-write.js";
 import { logWarning, logError } from "../workflow-logger.js";
 import { debugLog } from "../debug-logger.js";
 import { _resolveReportBasePath } from "./phase-helpers.js";
+import { gitCapture } from "../git-exec.js";
 
 /**
  * If a unit is in-flight, close it out, then stop auto-mode.
@@ -222,11 +222,7 @@ function hasDirtyGsdMarkdownProjections(
   ignoredProjectionSnapshot: GsdMarkdownSnapshot | null,
 ): boolean {
   try {
-    const output = execFileSync(
-      "git",
-      ["status", "--porcelain", "-z", "--untracked-files=all", "--", ".gsd"],
-      { cwd: basePath, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
-    );
+    const output = gitCapture(basePath, ["status", "--porcelain", "-z", "--untracked-files=all", "--", ".gsd"], { trim: false });
     const entries = output.split("\0").filter(Boolean);
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i];
@@ -268,11 +264,7 @@ function isGeneratedPlanningArtifactFileName(fileName: string): boolean {
 
 function snapshotIgnoredGsdMarkdownProjections(basePath: string): GsdMarkdownSnapshot | null {
   try {
-    const output = execFileSync(
-      "git",
-      ["ls-files", "--others", "--ignored", "--exclude-standard", "-z", "--", ".gsd"],
-      { cwd: basePath, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
-    );
+    const output = gitCapture(basePath, ["ls-files", "--others", "--ignored", "--exclude-standard", "-z", "--", ".gsd"], { trim: false });
     const snapshot: GsdMarkdownSnapshot = new Map();
     for (const path of output.split("\0")) {
       if (!isGeneratedGsdMarkdownProjection(path)) continue;

@@ -24,7 +24,6 @@ import {
   type PreMergeCheckResult,
   type TaskCommitContext,
 } from "../../git-service.ts";
-import { GIT_NO_PROMPT_ENV } from "../../git-constants.ts";
 import { nativeAddAllWithExclusions, nativeHasChanges, _resetHasChangesCache } from "../../native-git-bridge.ts";
 function run(command: string, cwd: string): string {
   return execSync(command, { cwd, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" }).trim();
@@ -505,9 +504,6 @@ process.exit(result.status ?? 0);
     const originalPath = process.env.PATH;
     const originalRealGit = process.env.GSD_REAL_GIT;
     const originalShimLog = process.env.GSD_GIT_SHIM_LOG;
-    const originalSafePath = GIT_NO_PROMPT_ENV.PATH;
-    const originalSafeRealGit = GIT_NO_PROMPT_ENV.GSD_REAL_GIT;
-    const originalSafeShimLog = GIT_NO_PROMPT_ENV.GSD_GIT_SHIM_LOG;
 
     try {
       installGitRmCachedCounterShim(shimDir);
@@ -515,9 +511,6 @@ process.exit(result.status ?? 0);
       process.env.GSD_REAL_GIT = realGit;
       process.env.GSD_GIT_SHIM_LOG = logFile;
       process.env.PATH = `${shimDir}${delimiter}${originalPath ?? ""}`;
-      GIT_NO_PROMPT_ENV.GSD_REAL_GIT = realGit;
-      GIT_NO_PROMPT_ENV.GSD_GIT_SHIM_LOG = logFile;
-      GIT_NO_PROMPT_ENV.PATH = process.env.PATH;
 
       createFile(repo, "src/first.ts", "first");
       const first = new GitServiceImpl(repo).commit({ message: "test: first cleanup pass" });
@@ -551,21 +544,6 @@ process.exit(result.status ?? 0);
         delete process.env.GSD_GIT_SHIM_LOG;
       } else {
         process.env.GSD_GIT_SHIM_LOG = originalShimLog;
-      }
-      if (originalSafePath === undefined) {
-        delete GIT_NO_PROMPT_ENV.PATH;
-      } else {
-        GIT_NO_PROMPT_ENV.PATH = originalSafePath;
-      }
-      if (originalSafeRealGit === undefined) {
-        delete GIT_NO_PROMPT_ENV.GSD_REAL_GIT;
-      } else {
-        GIT_NO_PROMPT_ENV.GSD_REAL_GIT = originalSafeRealGit;
-      }
-      if (originalSafeShimLog === undefined) {
-        delete GIT_NO_PROMPT_ENV.GSD_GIT_SHIM_LOG;
-      } else {
-        GIT_NO_PROMPT_ENV.GSD_GIT_SHIM_LOG = originalSafeShimLog;
       }
       rmSync(repo, { recursive: true, force: true });
       rmSync(shimDir, { recursive: true, force: true });

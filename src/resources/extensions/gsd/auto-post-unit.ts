@@ -902,6 +902,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from
 import { basename, join, relative } from "node:path";
 import { _resetHasChangesCache } from "./native-git-bridge.js";
 import { autoCommitCurrentBranch } from "./worktree.js";
+import { gitCapture } from "./git-exec.js";
 
 // ─── Rogue File Detection ──────────────────────────────────────────────────
 
@@ -1795,9 +1796,7 @@ export async function postUnitPreVerification(pctx: PostUnitContext, opts?: PreV
             const { nativeDetectMainBranch } = await import("./native-git-bridge.js");
             const mainBranch = nativeDetectMainBranch(projectRoot);
             const { execFileSync } = await import("node:child_process");
-            const sha = execFileSync("git", ["rev-parse", mainBranch], {
-              cwd: projectRoot, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8",
-            }).trim();
+            const sha = gitCapture(projectRoot, ["rev-parse", mainBranch]);
             if (sha) s.milestoneStartShas.set(mid, sha);
           } catch (err) {
             logWarning("engine", `slice-cadence: failed to record milestone start SHA: ${err instanceof Error ? err.message : String(err)}`);

@@ -1,8 +1,6 @@
 // Project/App: gsd-pi
 // File Purpose: Block new workflow entry when completed milestone branches are still unmerged.
 
-import { execFileSync } from "node:child_process";
-
 import {
   nativeBranchExists,
   nativeDetectMainBranch,
@@ -15,6 +13,7 @@ import { getAllMilestones } from "./gsd-db.js";
 import { resolveMilestoneIntegrationBranch, VALID_BRANCH_NAME } from "./git-service.js";
 import { loadEffectiveGSDPreferences } from "./preferences.js";
 import { isClosedStatus } from "./status-guards.js";
+import { gitCapture } from "./git-exec.js";
 
 export interface UnmergedMilestoneDirtyEntry {
   path: string;
@@ -79,11 +78,7 @@ function captureDirtyPathStatusSnapshot(rootPath: string): UnmergedMilestoneDirt
   const snapshot: UnmergedMilestoneDirtySnapshot = new Map();
   let status = "";
   try {
-    status = execFileSync("git", ["status", "--porcelain", "--untracked-files=all"], {
-      cwd: rootPath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    });
+    status = gitCapture(rootPath, ["status", "--porcelain", "--untracked-files=all"], { trim: false });
   } catch {
     return snapshot;
   }

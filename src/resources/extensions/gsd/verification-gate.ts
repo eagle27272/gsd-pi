@@ -32,6 +32,7 @@ import {
   buildScriptCommand,
   normalizeWindowsPackageManagerCommand,
 } from "./package-manager.js";
+import { gitSpawn } from "./git-exec.js";
 
 /** Maximum bytes of stdout/stderr to retain per command (10 KB). */
 const MAX_OUTPUT_BYTES = 10 * 1024;
@@ -1231,11 +1232,7 @@ export interface DependencyAuditOptions {
  */
 function defaultGitDiff(cwd: string): string[] {
   try {
-    const result = spawnSync("git", ["diff", "--name-only", "HEAD"], {
-      cwd,
-      encoding: "utf-8",
-      timeout: 10_000,
-    });
+    const result = gitSpawn(cwd, ["diff", "--name-only", "HEAD"], { timeout: 10_000 });
     if (result.status !== 0 || !result.stdout) return [];
     return result.stdout.trim().split("\n").filter(Boolean);
   } catch {
