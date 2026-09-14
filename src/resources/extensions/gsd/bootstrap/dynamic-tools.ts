@@ -57,17 +57,36 @@ function activeWorktrees(projectRoot: string): string[] {
   return live;
 }
 
+export interface WorkflowToolScope {
+  milestoneId?: unknown;
+  milestone_id?: unknown;
+  mid?: unknown;
+}
+
+/**
+ * Tool schemas in db-tools.ts are split between camelCase `milestoneId` and
+ * snake_case `milestone_id`, and `scope` is optional, so a spelling mismatch
+ * here is invisible to TypeScript. Accept every spelling packages/mcp-server
+ * extractMilestoneId accepts so the two implementations cannot drift apart.
+ */
+function scopedMilestoneId(scope?: WorkflowToolScope): string | null {
+  for (const candidate of [scope?.milestoneId, scope?.milestone_id, scope?.mid]) {
+    if (typeof candidate === "string" && candidate.trim() !== "") return candidate.trim();
+  }
+  return null;
+}
+
 /**
  * Base path for workflow MCP tools. Mirrors packages/mcp-server parseWorkflowArgs:
  * route writes to `<project>/.gsd/worktrees/<milestoneId>/` when that worktree exists.
  */
 export function resolveWorkflowToolBasePath(
   ctx?: unknown,
-  scope?: { milestone_id?: string },
+  scope?: WorkflowToolScope,
 ): string {
   const cwd = resolveCtxCwd(ctx);
   const projectRoot = resolveWorktreeProjectRoot(cwd);
-  const milestoneId = scope?.milestone_id?.trim();
+  const milestoneId = scopedMilestoneId(scope);
   if (milestoneId) {
     const worktree = getAutoWorktreePath(projectRoot, milestoneId);
     if (worktree) return worktree;
