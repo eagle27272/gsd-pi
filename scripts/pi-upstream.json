@@ -57,5 +57,5 @@
     "packages/pi-tui/src/editor-keybindings.ts"
   ],
   "legacyScopes": ["@mariozechner"],
-  "notes": "Run scripts/vendor-pi.cjs to sync vendored pi-* packages from earendil-works/pi. patchAllowlist enforced by verify:pi-patches (see docs/dev/pi-overlay-execution-plan.md). Complete ADR-010 clean seam before vendoring."
+  "notes": "Run scripts/vendor-pi.cjs [--ref vX.Y.Z] to sync vendored pi-* packages from earendil-works/pi: it is the only script that fetches the upstream remote, and it then runs vendor-pi-deps.cjs, vendor-pi-coding-agent-core.cjs and apply-seam.cjs against .cache/pi-upstream. Those three take no --ref; stage one with --checkout-only to drive them by hand. See docs/dev/pi-upstream.md 'Upgrade workflow'. patchAllowlist enforced by verify:pi-patches (see docs/dev/pi-overlay-execution-plan.md). Complete ADR-010 clean seam before vendoring."
 }
