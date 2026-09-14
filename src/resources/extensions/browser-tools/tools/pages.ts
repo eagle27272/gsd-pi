@@ -271,6 +271,13 @@ export function registerPageTools(pi: ExtensionAPI, deps: ToolDeps): void {
 				}
 
 				if (params.index !== undefined) {
+					if (!Number.isInteger(params.index)) {
+						return {
+							content: [{ type: "text", text: `Frame index must be a whole number, got ${params.index}. Use an index from browser_list_frames.` }],
+							details: { error: "index_not_integer", received: params.index },
+							isError: true,
+						};
+					}
 					if (params.index < 0 || params.index >= frames.length) {
 						return {
 							content: [{ type: "text", text: `Frame index ${params.index} out of range. ${frames.length} frame(s) available (0-${frames.length - 1}).` }],

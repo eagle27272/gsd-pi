@@ -287,16 +287,20 @@ test("parallel-research verify-fail logs a recovery warning when a research-read
 // ─── gate-evaluate DB-degradation gate ─────────────────────────────────────
 // gate-evaluate verifies dispatched gates are no longer pending via a DB query.
 // When the DB is available but the query throws (e.g. quality_gates table
-// missing), the catch (auto-recovery.ts:411) logs a recovery warning and treats
-// the unit as verified to avoid blocking. This pins that degradation log.
+// missing), the catch logs a recovery warning and fails the unit.
+//
+// This used to return true "to avoid blocking the loop", which made an
+// unreadable gate table read as proof that the gates had been evaluated (#17).
+// It now matches its four fail-closed siblings in the same function, and the
+// witnesses below.
 
 test("gate-evaluate verify logs a recovery warning when the pending-gates DB query throws", () => {
   const base = mkdtempSync(join(tmpdir(), "gsd-recovery-logs-gate-"));
   mkdirSync(join(base, ".gsd"), { recursive: true });
   try {
     // Open a DB then drop quality_gates so getPendingGatesForTurn throws inside
-    // the gate-evaluate DB branch → :411 warning. (getGateIdsForTurn returns
-    // default gate-evaluate ids, so the query path is reached.)
+    // the gate-evaluate DB branch. (getGateIdsForTurn returns default
+    // gate-evaluate ids, so the query path is reached.)
     openDatabase(join(base, ".gsd", "gsd.db"));
     _getAdapter()!.exec("DROP TABLE quality_gates");
 
@@ -314,9 +318,11 @@ test("gate-evaluate verify logs a recovery warning when the pending-gates DB que
       _resetLogs();
       setStderrLoggingEnabled(previous);
     }
-    // Per :411 comment, a DB failure is treated as verified (return true) to
-    // avoid blocking the loop — pin that resilience contract too.
-    assert.equal(result, true, "a gate-evaluate DB failure must not block verification");
+    assert.equal(
+      result,
+      false,
+      "an unreadable gate table is not evidence that the dispatched gates were evaluated",
+    );
   } finally {
     closeDatabase();
     rmSync(base, { recursive: true, force: true });

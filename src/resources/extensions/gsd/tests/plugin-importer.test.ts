@@ -13,7 +13,7 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import {
-  PluginImporter,
+	PluginImporter,
 } from '../plugin-importer.js';
 import type { NamespacedComponent } from '../namespaced-registry.js';
 

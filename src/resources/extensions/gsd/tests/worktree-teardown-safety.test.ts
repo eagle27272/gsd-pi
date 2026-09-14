@@ -122,8 +122,9 @@ describe("worktree-teardown-safety", () => {
     const wt2 = createWorktree(tempDir, "safe-wt");
     assertTrue(existsSync(wt2.path), "second worktree created");
 
-    removeWorktree(tempDir, "safe-wt");
+    const cleanResult = removeWorktree(tempDir, "safe-wt");
     assertTrue(!existsSync(wt2.path), "second worktree removed cleanly");
+    assertEq(cleanResult.quarantinePath, null, "an ordinary removal reports no quarantine");
 
     // External directory must be untouched
     assertTrue(existsSync(externalDir), "external directory survives second teardown");
@@ -143,13 +144,19 @@ describe("worktree-teardown-safety", () => {
     writeFileSync(join(wt.path, "README.md"), "# changed in worktree\n");
 
     _resetLogs();
-    removeWorktree(tempDir, "dirty-wt", { deleteBranch: false });
+    const result = removeWorktree(tempDir, "dirty-wt", { deleteBranch: false });
 
     assertTrue(!existsSync(wt.path), "original dirty worktree path removed after quarantine");
     const quarantineRoot = join(tempDir, ".gsd", "quarantine", "worktrees");
     const entries = readdirSync(quarantineRoot).filter((entry) => entry.startsWith("dirty-wt-"));
     assertEq(entries.length, 1, "dirty worktree snapshot quarantined");
     const quarantineDir = join(quarantineRoot, entries[0]!);
+    assertEq(result.removed, true, "a successful quarantine still reports the worktree as removed");
+    assertEq(
+      result.quarantinePath,
+      quarantineDir,
+      "callers must be able to tell the work was quarantined, not merely removed",
+    );
     const quarantineNotice = peekLogs().find(
       (entry) => entry.severity === "error" && entry.message.includes(quarantineDir),
     );

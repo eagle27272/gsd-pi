@@ -26,11 +26,11 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { buildHttpTransportOpts } from "./auth.js";
 import {
-  buildMcpChildEnv,
-  clearMcpConfigCache,
-  getMcpServerConfig,
-  readMcpServerConfigs,
-  type ManagedMcpServerConfig,
+	buildMcpChildEnv,
+	clearMcpConfigCache,
+	getMcpServerConfig,
+	readMcpServerConfigs,
+	type ManagedMcpServerConfig,
 } from "./manager.js";
 import { hasPersistedStdioTrust, persistStdioTrust, stdioPersistTrustKey } from "./stdio-trust-store.js";
 

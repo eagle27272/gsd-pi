@@ -77,7 +77,87 @@ const READ_ONLY_TOOL_NAMES = new Set([
 ]);
 
 const UNSAFE_SHELL_TOKENS_RE = /(?:&&|\|\||;|[<>]|`|\$\(|\n)/;
-const READ_ONLY_EXEC_COMMAND_RE = /^\s*(cat|head|tail|ls|find|grep|rg|git\s+(status|log|show|diff|branch|remote|rev-parse|ls-files)|npm\s+(ls|list|info|view|show|outdated|audit|doctor|ping|--version|-v)|node\s+(--version|-v\b)|python[23]?\s+(--version|-V\b)|jq|yq|env|printenv)\b[\w\s./:@,+-]*$/;
+
+/**
+ * Commands whose every flag is read-only, so their arguments need no scrutiny.
+ * `UNSAFE_SHELL_TOKENS_RE` has already rejected redirection and chaining, so
+ * none of these can write.
+ */
+const ALWAYS_READ_ONLY_COMMANDS: ReadonlySet<string> = new Set([
+  "cat", "head", "tail", "ls", "grep", "rg", "jq", "yq", "env", "printenv",
+]);
+
+/** `find` predicates that run or write something rather than just matching. */
+const MUTATING_FIND_PREDICATES: ReadonlySet<string> = new Set([
+  "-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls",
+]);
+
+/** `git <sub>` whose every form is read-only. */
+const READ_ONLY_GIT_SUBCOMMANDS: ReadonlySet<string> = new Set([
+  "status", "log", "show", "diff", "rev-parse", "ls-files",
+]);
+
+/** `git branch` flags that only list; anything else creates, moves or deletes. */
+const READ_ONLY_GIT_BRANCH_FLAGS =
+  /^-(?:a|r|v|vv|-all|-remotes|-list|-show-current|-contains|-no-contains|-merged|-no-merged|-points-at|-format|-sort|-color|-no-color|-column|-no-column|-quiet)(?:=.*)?$/;
+
+/** `git remote` forms that only report. */
+const READ_ONLY_GIT_REMOTE_SUBCOMMANDS: ReadonlySet<string> = new Set(["show", "get-url"]);
+
+/** `npm <sub>` that only reports. `audit` is read-only only without `fix`. */
+const READ_ONLY_NPM_SUBCOMMANDS: ReadonlySet<string> = new Set([
+  "ls", "list", "info", "view", "show", "outdated", "audit", "doctor", "ping", "--version", "-v",
+]);
+
+const VERSION_ONLY_ARGS: ReadonlySet<string> = new Set(["--version", "-v", "-V"]);
+
+/**
+ * True when a `gsd_exec` command line is pure reconnaissance.
+ *
+ * Matching a read-only command *head* is not enough: the old pattern accepted
+ * any trailing `[\w\s./:@,+-]*`, so `git branch -D main`, `git remote remove
+ * origin`, `find /tmp -type f -delete` and `npm audit fix` all classified as
+ * read-only (#17). Each head now vets its own arguments.
+ *
+ * Biased toward rejection — calling a read-only trace mutating only loses a
+ * recovery hint, while the reverse hides real work that was done.
+ */
+function isReadOnlyExecCommand(command: string): boolean {
+  const [head, ...args] = command.split(/\s+/);
+  if (!head) return false;
+
+  if (ALWAYS_READ_ONLY_COMMANDS.has(head)) return true;
+
+  if (head === "find") {
+    return !args.some((arg) => MUTATING_FIND_PREDICATES.has(arg));
+  }
+
+  if (head === "git") {
+    const [sub, ...rest] = args;
+    if (!sub) return false;
+    if (READ_ONLY_GIT_SUBCOMMANDS.has(sub)) return true;
+    if (sub === "branch") return rest.every((arg) => READ_ONLY_GIT_BRANCH_FLAGS.test(arg));
+    if (sub === "remote") {
+      if (rest.length === 0) return true;
+      if (rest[0] === "-v" || rest[0] === "--verbose") return rest.length === 1;
+      return READ_ONLY_GIT_REMOTE_SUBCOMMANDS.has(rest[0]);
+    }
+    return false;
+  }
+
+  if (head === "npm") {
+    const [sub, ...rest] = args;
+    if (!sub || !READ_ONLY_NPM_SUBCOMMANDS.has(sub)) return false;
+    // `npm audit fix` rewrites the lockfile and node_modules.
+    return !rest.includes("fix");
+  }
+
+  if (head === "node" || /^python[23]?$/.test(head)) {
+    return args.length === 1 && VERSION_ONLY_ARGS.has(args[0]);
+  }
+
+  return false;
+}
 
 function isReadOnlyReconnaissanceTool(call: ToolCall): boolean {
   const name = call.name.toLowerCase();
@@ -86,7 +166,7 @@ function isReadOnlyReconnaissanceTool(call: ToolCall): boolean {
   const command = String(call.input.command || call.input.cmd || "").trim();
   if (!command) return false;
   if (UNSAFE_SHELL_TOKENS_RE.test(command)) return false;
-  return READ_ONLY_EXEC_COMMAND_RE.test(command);
+  return isReadOnlyExecCommand(command);
 }
 
 export function classifyTraceProgress(trace: ExecutionTrace): { isReadOnlyReconnaissanceOnly: boolean } {

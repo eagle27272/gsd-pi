@@ -22,29 +22,34 @@ import {
 } from "./core.js";
 import type { PersistedBatchStep } from "./core.js";
 import {
-  getActiveFrame,
-  getArtifactRoot,
-  getActiveTraceSession,
-  getConsoleLogs,
-  getDialogLogs,
-  getHarState,
-  getNetworkLogs,
-  getSessionArtifactDir,
-  getSessionStartedAt,
-  setSessionArtifactDir,
-  setSessionStartedAt,
-  pageRegistry,
-  actionTimeline,
-  getPendingCriticalRequestsByPage,
-  type ConsoleEntry,
-  type NetworkEntry,
-  type CompactPageState,
-  type CompactSelectorState,
-  type ClickTargetStateSnapshot,
-  type BrowserVerificationCheck,
-  type BrowserVerificationResult,
-  type BrowserAssertionCheckInput,
-  type ParsedRefSpec,
+	getActiveFrame,
+	getArtifactRoot,
+	getActiveTraceSession,
+	getConsoleLogs,
+	getDialogLogs,
+	getHarState,
+	getNetworkLogs,
+	getSessionArtifactDir,
+	getSessionStartedAt,
+	setSessionArtifactDir,
+	setSessionStartedAt,
+	pageRegistry,
+	actionTimeline,
+	getPendingCriticalRequestsByPage,
+	type ConsoleEntry,
+	type NetworkEntry,
+	type CompactPageState,
+	type CompactSelectorState,
+	type ClickTargetStateSnapshot,
+	type BrowserVerificationCheck,
+	type BrowserVerificationResult,
+	type BrowserAssertionCheckInput,
+	type ParsedRefSpec,
+	type RefNode,
+	getCurrentRefMap,
+	getRefMetadata,
+	getRefSnapshotFrame,
+	getRefVersion,
 } from "./state.js";
 
 // ---------------------------------------------------------------------------
@@ -266,13 +271,18 @@ export function verificationFromChecks(
 	const passedChecks = checks
 		.filter((check) => check.passed)
 		.map((check) => check.name);
-	const verified = passedChecks.length > 0;
+	const failedCritical = checks
+		.filter((check) => check.critical && !check.passed)
+		.map((check) => check.name);
+	const verified = passedChecks.length > 0 && failedCritical.length === 0;
 	return {
 		verified,
 		checks,
 		verificationSummary: verified
 			? `PASS (${passedChecks.join(", ")})`
-			: "SOFT-FAIL (no observable state change)",
+			: failedCritical.length > 0
+				? `SOFT-FAIL (required check failed: ${failedCritical.join(", ")})`
+				: "SOFT-FAIL (no observable state change)",
 		retryHint: verified ? undefined : retryHint,
 	};
 }
@@ -622,6 +632,118 @@ export function formatVersionedRef(version: number, key: string): string {
 
 export function staleRefGuidance(refDisplay: string, reason: string): string {
 	return `Ref ${refDisplay} could not be resolved (${reason}). The ref is likely stale after DOM/navigation changes. Call browser_snapshot_refs again to refresh refs.`;
+}
+
+/**
+ * The selected frame, or null when tools operate on the top-level document.
+ *
+ * browser_select_frame can select the main frame explicitly (by index 0 or name
+ * "main"), which addresses the same document as selecting nothing — so both must
+ * normalize to null or refs would be rejected across an equivalent switch.
+ */
+export function getActiveSubFrame(): Frame | null {
+	const frame = getActiveFrame();
+	if (!frame || frame.parentFrame() === null) return null;
+	return frame;
+}
+
+/**
+ * Display identity of the frame a ref snapshot was taken in, stored as
+ * RefMetadata.frameContext. `undefined` means the top-level document.
+ *
+ * The URL is part of the identity, not a fallback for a missing name: a named
+ * frame keeps its name across in-frame navigations, and RefMetadata.url tracks
+ * the page rather than the frame, so a name-only context would miss an SPA route
+ * change inside the frame entirely.
+ */
+export function getActiveFrameContext(): string | undefined {
+	const frame = getActiveSubFrame();
+	if (!frame) return undefined;
+	return `${frame.name()}|${frame.url()}`;
+}
+
+export type RefActionGuard =
+	| { ok: true; node: RefNode; versionedRef: string }
+	| { ok: false; text: string; details: Record<string, unknown> };
+
+/**
+ * Shared staleness guard for every ref-consuming action (browser_click_ref,
+ * browser_hover_ref, browser_fill_ref and the browser_batch ref steps).
+ *
+ * The frame check matters because selecting a different frame changes which DOM
+ * a ref resolves against without changing either the ref version or the page URL.
+ */
+export function validateRefForAction(parsedRef: ParsedRefSpec, pageUrl: string): RefActionGuard {
+	const refMetadata = getRefMetadata();
+	const refVersion = getRefVersion();
+	const requestedRef = parsedRef.display;
+
+	if (parsedRef.version === null) {
+		return {
+			ok: false,
+			text: `Unversioned ref ${requestedRef} is ambiguous. Use a versioned ref (e.g. @v${refMetadata?.version ?? refVersion}:e1) from browser_snapshot_refs.`,
+			details: { error: "ref_unversioned", ref: requestedRef, metadata: refMetadata },
+		};
+	}
+
+	if (refMetadata && parsedRef.version !== refMetadata.version) {
+		return {
+			ok: false,
+			text: staleRefGuidance(requestedRef, `snapshot version mismatch (have v${refMetadata.version})`),
+			details: { error: "ref_stale", ref: requestedRef, expectedVersion: refMetadata.version, receivedVersion: parsedRef.version },
+		};
+	}
+
+	const node = getCurrentRefMap()[parsedRef.key];
+	if (!node) {
+		return {
+			ok: false,
+			text: staleRefGuidance(requestedRef, "ref not found"),
+			details: { error: "ref_not_found", ref: requestedRef, metadata: refMetadata },
+		};
+	}
+
+	if (refMetadata?.url && refMetadata.url !== pageUrl) {
+		return {
+			ok: false,
+			text: staleRefGuidance(requestedRef, "URL changed since snapshot"),
+			details: { error: "ref_stale", ref: requestedRef, snapshotUrl: refMetadata.url, currentUrl: pageUrl },
+		};
+	}
+
+	const currentContext = getActiveFrameContext();
+	const frameChanged =
+		refMetadata !== null &&
+		(refMetadata.frameContext !== currentContext || getRefSnapshotFrame() !== getActiveSubFrame());
+	if (frameChanged) {
+		return {
+			ok: false,
+			text: staleRefGuidance(
+				requestedRef,
+				`active frame changed since snapshot (snapshot: ${refMetadata!.frameContext ?? "main page"}, now: ${currentContext ?? "main page"})`,
+			),
+			details: {
+				error: "ref_stale",
+				ref: requestedRef,
+				snapshotFrame: refMetadata!.frameContext ?? null,
+				currentFrame: currentContext ?? null,
+			},
+		};
+	}
+
+	return {
+		ok: true,
+		node,
+		versionedRef: formatVersionedRef(refMetadata?.version ?? refVersion, node.ref),
+	};
+}
+
+/**
+ * Element-count limits reach page.evaluate() as `slice(0, limit)`, where a negative
+ * or fractional value silently returns the wrong window instead of erroring.
+ */
+export function clampElementLimit(value: number | undefined, fallback: number): number {
+	return Math.max(1, Math.min(200, Math.floor(value ?? fallback)));
 }
 
 // ---------------------------------------------------------------------------

@@ -1939,7 +1939,7 @@ describe("checkTaskOrdering false positive for pre-execution refs (#4071)", () =
       createTask({
         id: "T_SETUP",
         sequence: 5,
-        status: "completed",
+        status: "complete",
         inputs: [],
         expected_output: ["artifacts/setup.json"],
       }),
@@ -1985,6 +1985,24 @@ describe("checkTaskOrdering false positive for pre-execution refs (#4071)", () =
     assert.ok(results[0].message.includes("sequence violation"));
   });
 
+  test("legacy 'done' alias earns the exemption but 'skipped' does not (#17)", () => {
+    // The store writes canonical "complete" and older rows carry "done"/"closed"
+    // — all three mean the task ran, so the exemption applies. "skipped" is a
+    // closed status for a task that never ran, so its declared outputs do not
+    // exist and the sequence violation must still fire.
+    const reader = () =>
+      createTask({ id: "T_READER", sequence: 1, status: "pending", inputs: ["artifacts/out.json"], expected_output: [] });
+    const producer = (status: string) =>
+      createTask({ id: "T_PRODUCER", sequence: 5, status, inputs: [], expected_output: ["artifacts/out.json"] });
+
+    assert.equal(checkTaskOrdering([reader(), producer("done")], isolatedBase).length, 0);
+    assert.equal(checkTaskOrdering([reader(), producer("closed")], isolatedBase).length, 0);
+
+    const skipped = checkTaskOrdering([reader(), producer("skipped")], isolatedBase);
+    assert.equal(skipped.length, 1, "a skipped task never ran — its output must not be treated as available");
+    assert.ok(skipped[0].message.includes("sequence violation"));
+  });
+
   test("pending-first then completed-later: completed replaces pending in fileCreators (#4572)", () => {
     // Regression for PR #4572:
     // fileCreators only stored the FIRST task for a given path. If a PENDING task at
@@ -2017,7 +2035,7 @@ describe("checkTaskOrdering false positive for pre-execution refs (#4071)", () =
       createTask({
         id: "T_COMPLETED_PRODUCER",
         sequence: 2,
-        status: "completed",
+        status: "complete",
         inputs: [],
         expected_output: ["shared/artifact.json"],
       }),
@@ -2052,7 +2070,7 @@ describe("checkTaskOrdering false positive for pre-execution refs (#4071)", () =
       createTask({
         id: "T_INIT",
         sequence: 10,
-        status: "completed",
+        status: "complete",
         inputs: [],
         expected_output: ["generated/config.json"],
       }),
@@ -2088,7 +2106,7 @@ describe("checkFilePathConsistency completed-task output exemption (#4071)", () 
       createTask({
         id: "T_SETUP",
         sequence: 10,
-        status: "completed",
+        status: "complete",
         inputs: [],
         expected_output: ["artifacts/config.json"],
       }),
