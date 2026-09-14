@@ -80,13 +80,14 @@ function copyPackage(upstreamSubdir, targetSubdir, gsdPackageName, dryRun) {
   const src = join(CACHE_DIR, upstreamSubdir)
   const dest = join(REPO_ROOT, targetSubdir)
 
+  process.stderr.write(`${dryRun ? '[dry-run] ' : ''}Copy ${upstreamSubdir} → ${targetSubdir}\n`)
+
+  // A dry run skips the upstream checkout, so src is expected to be absent.
+  if (dryRun) return
+
   if (!existsSync(src)) {
     throw new Error(`Upstream package not found: ${src}`)
   }
-
-  process.stderr.write(`${dryRun ? '[dry-run] ' : ''}Copy ${upstreamSubdir} → ${targetSubdir}\n`)
-
-  if (dryRun) return
 
   rmSync(dest, { recursive: true, force: true })
   cpSync(src, dest, { recursive: true })
