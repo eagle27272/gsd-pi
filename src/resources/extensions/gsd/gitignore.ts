@@ -7,12 +7,11 @@
  */
 
 import { join } from "node:path";
-import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { nativeRmCached, nativeLsFiles } from "./native-git-bridge.js";
 import { gsdRoot } from "./paths.js";
-import { GIT_NO_PROMPT_ENV } from "./git-constants.js";
 import { atomicWriteSync } from "./atomic-write.js";
+import { gitCapture } from "./git-exec.js";
 
 /**
  * GSD runtime patterns for git index cleanup.
@@ -141,11 +140,7 @@ export function isGsdGitignored(basePath: string): boolean {
   for (const path of [".gsd", ".gsd/"]) {
     try {
       // git check-ignore exits 0 when the path IS ignored, 1 when it is NOT.
-      execFileSync("git", ["check-ignore", "--no-index", "-q", path], {
-        cwd: basePath,
-        stdio: "pipe",
-        env: GIT_NO_PROMPT_ENV,
-      });
+      gitCapture(basePath, ["check-ignore", "--no-index", "-q", path]);
       return true; // exit 0 → .gsd is ignored
     } catch {
       // exit 1 → this form is NOT ignored, try the other
@@ -186,11 +181,7 @@ export function hasGitTrackedGsdFiles(basePath: string): boolean {
     // could mean "nothing tracked" OR "git failed silently". Verify git is
     // reachable before trusting the empty result — if it isn't, fail safe
     // by assuming files ARE tracked to prevent data loss.
-    execFileSync("git", ["rev-parse", "--git-dir"], {
-      cwd: basePath,
-      stdio: "pipe",
-      env: GIT_NO_PROMPT_ENV,
-    });
+    gitCapture(basePath, ["rev-parse", "--git-dir"]);
 
     return false;
   } catch {

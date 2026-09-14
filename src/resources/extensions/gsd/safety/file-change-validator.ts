@@ -16,10 +16,10 @@
  */
 
 import { createRequire } from "node:module";
-import { execFileSync } from "node:child_process";
 import { isAbsolute, relative, resolve } from "node:path";
 import { normalizePlannedFileReference } from "../files.js";
 import { logWarning } from "../workflow-logger.js";
+import { gitCapture } from "../git-exec.js";
 
 const _require = createRequire(import.meta.url);
 type PicomatchMatcher = (input: string) => boolean;
@@ -160,11 +160,7 @@ export function validateFileChanges(
 /** Current committed HEAD SHA, or null when HEAD is missing/unborn. */
 export function readCommittedHeadSha(basePath: string): string | null {
   try {
-    const sha = execFileSync(
-      "git",
-      ["rev-parse", "--verify", "HEAD"],
-      { cwd: basePath, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" },
-    ).trim();
+    const sha = gitCapture(basePath, ["rev-parse", "--verify", "HEAD"]);
     return sha || null;
   } catch {
     return null;
@@ -181,11 +177,7 @@ function getChangedFilesFromLastCommit(
       const head = readCommittedHeadSha(basePath);
       if (!head || head === headBeforeCloseout) return [];
     }
-    const result = execFileSync(
-      "git",
-      ["diff-tree", "--root", "--no-commit-id", "-r", "--name-only", "HEAD"],
-      { cwd: basePath, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" },
-    ).trim();
+    const result = gitCapture(basePath, ["diff-tree", "--root", "--no-commit-id", "-r", "--name-only", "HEAD"]);
     return result ? result.split("\n").filter(Boolean) : [];
   } catch (e) {
     logWarning("safety", `git diff failed in file-change-validator: ${(e as Error).message}`);

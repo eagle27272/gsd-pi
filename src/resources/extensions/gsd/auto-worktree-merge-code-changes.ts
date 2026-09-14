@@ -3,11 +3,10 @@
 // Owns the git diff policy that decides whether a completed milestone actually
 // changed user code, and whether an empty merge result is safe to clean up.
 
-import { execFileSync } from "node:child_process";
-
 import { GSDError, GSD_GIT_ERROR } from "./errors.js";
 import { nativeDiffNumstat } from "./native-git-bridge.js";
 import { logWarning } from "./workflow-logger.js";
+import { gitCapture } from "./git-exec.js";
 
 const GIT_EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
@@ -36,11 +35,7 @@ export function detectMergedCodeFilesChanged(basePath: string, nothingToCommit: 
   if (nothingToCommit) return false;
 
   try {
-    const diffTreeOutput = execFileSync(
-      "git",
-      ["diff-tree", "--root", "--no-commit-id", "-r", "--name-only", "HEAD"],
-      { cwd: basePath, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" },
-    ).trim();
+    const diffTreeOutput = gitCapture(basePath, ["diff-tree", "--root", "--no-commit-id", "-r", "--name-only", "HEAD"]);
     return containsCodeFile(diffTreeOutput);
   } catch (err) {
     return detectCodeFilesChangedFromEmptyTree(basePath, err);
@@ -49,11 +44,7 @@ export function detectMergedCodeFilesChanged(basePath: string, nothingToCommit: 
 
 function detectCodeFilesChangedFromEmptyTree(basePath: string, originalError: unknown): boolean {
   try {
-    const fallbackOutput = execFileSync(
-      "git",
-      ["diff", "--name-only", GIT_EMPTY_TREE, "HEAD"],
-      { cwd: basePath, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" },
-    ).trim();
+    const fallbackOutput = gitCapture(basePath, ["diff", "--name-only", GIT_EMPTY_TREE, "HEAD"]);
     return containsCodeFile(fallbackOutput);
   } catch {
     // Truly unable to determine — assume code was changed to avoid silent data loss.

@@ -3,6 +3,7 @@
 import { existsSync, statSync, readdirSync } from 'node:fs';
 import { join, resolve, dirname, basename } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { gitNoPromptEnv } from '../git-env.js';
 
 // ---------------------------------------------------------------------------
 // Caching
@@ -138,6 +139,7 @@ export function resolveGsdRoot(projectDir: string): string {
       cwd: resolved,
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: gitNoPromptEnv(),
     }).trim();
     const gitGsd = join(gitRoot, '.gsd');
     if (existsSync(gitGsd) && statSync(gitGsd).isDirectory()) {

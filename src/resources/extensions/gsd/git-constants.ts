@@ -6,7 +6,7 @@
  * Parent process env vars that, if leaked into a git child process, can
  * silently redirect every operation to a different repo or index.
  *
- * Stripped from GIT_NO_PROMPT_ENV so a GSD invoked from inside a git hook,
+ * Stripped by gitNoPromptEnv() so a GSD invoked from inside a git hook,
  * a different worktree's terminal, or any context that pre-set these vars
  * cannot redirect GSD's git operations to the wrong target.
  * (Issue #4980 NEW-1)
@@ -31,11 +31,22 @@ function buildSafeParentEnv(): NodeJS.ProcessEnv {
   return safe as NodeJS.ProcessEnv;
 }
 
-/** Env overlay that suppresses interactive git credential prompts and git-svn noise. */
-export const GIT_NO_PROMPT_ENV: NodeJS.ProcessEnv = {
-  ...buildSafeParentEnv(),
-  GIT_TERMINAL_PROMPT: "0",
-  GIT_ASKPASS: "",
-  GIT_SVN_ID: "",
-  LC_ALL: "C", // force English git output so stderr string checks work on all locales (#1997)
-};
+/**
+ * Env overlay for git child processes: suppresses interactive credential
+ * prompts and git-svn noise, and strips the redirecting vars above.
+ *
+ * Rebuilt from the current process.env on every call. An earlier version was a
+ * module-load snapshot, which also froze PATH, HOME and everything else — a
+ * later `process.env.PATH = …` never reached the git child, and the behaviour
+ * depended on module import order.
+ */
+export function gitNoPromptEnv(): NodeJS.ProcessEnv {
+  return {
+    ...buildSafeParentEnv(),
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_ASKPASS: "",
+    GCM_INTERACTIVE: "Never", // Git Credential Manager's equivalent of GIT_TERMINAL_PROMPT=0
+    GIT_SVN_ID: "",
+    LC_ALL: "C", // force English git output so stderr string checks work on all locales (#1997)
+  };
+}

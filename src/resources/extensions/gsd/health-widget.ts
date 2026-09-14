@@ -6,7 +6,7 @@ import { execFile } from "node:child_process";
 import { runProviderChecks, runProviderChecksAsync, summariseProviderIssues } from "./doctor-providers.js";
 import { runEnvironmentChecks, runEnvironmentChecksAsync } from "./doctor-environment.js";
 import { loadEffectiveGSDPreferences } from "./preferences.js";
-import { GIT_NO_PROMPT_ENV } from "./git-constants.js";
+import { gitNoPromptEnv } from "./git-constants.js";
 import { loadLedgerFromDisk, getProjectTotals } from "./metrics.js";
 import { projectRoot } from "./commands/context.js";
 import {
@@ -48,7 +48,7 @@ function runHealthWidgetGit(basePath: string, args: string[]): Promise<string | 
         cwd: basePath,
         timeout: LAST_COMMIT_LOOKUP_TIMEOUT_MS,
         encoding: "utf-8",
-        env: GIT_NO_PROMPT_ENV,
+        env: gitNoPromptEnv(),
       },
       (err, stdout) => resolve(err ? null : String(stdout).trimEnd()),
     );

@@ -1,7 +1,6 @@
 // Project/App: gsd-pi
 // File Purpose: Bounded filesystem/Git/DB preflight for orphan milestone discard.
 
-import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
@@ -11,12 +10,12 @@ import {
   preflightOrphanMilestoneRows,
   type OrphanMilestoneDbSnapshot,
 } from "./db/writers/orphan-milestone-discard.js";
-import { GIT_NO_PROMPT_ENV } from "./git-constants.js";
 import { MILESTONE_ID_RE } from "./milestone-ids.js";
 import { gsdRoot, milestoneDirExists } from "./paths.js";
 import { isSessionStale, type SessionStatus } from "./session-status-io.js";
 import { worktreesDirs } from "./worktree-placement.js";
 import { resolveWorktreeProjectRoot } from "./worktree-root.js";
+import { gitCapture } from "./git-exec.js";
 
 export interface OrphanMilestoneSnapshot extends OrphanMilestoneDbSnapshot {
   diskProjection: boolean | null;
@@ -41,12 +40,7 @@ interface ExternalState {
 }
 
 function gitOutput(basePath: string, args: string[]): string {
-  return execFileSync("git", args, {
-    cwd: basePath,
-    stdio: ["ignore", "pipe", "pipe"],
-    encoding: "utf8",
-    env: GIT_NO_PROMPT_ENV,
-  }).trim();
+  return gitCapture(basePath, args);
 }
 
 function loadQueueOrderStrict(basePath: string): string[] {
