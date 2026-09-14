@@ -17,7 +17,7 @@ Takes about a minute. It runs in CI (`.github/workflows/ci.yml`), in
 
 ## The baseline ratchet
 
-A fully clean run would mean deleting or de-exporting ~1,800 symbols. Rather than
+A fully clean run would mean deleting or de-exporting ~1,500 symbols. Rather than
 bundle that into the rollout, `.config/knip-baseline.json` records every finding that
 existed when the gate landed, and `scripts/knip-gate.mjs` fails only on findings that
 are **not** in that list.
@@ -58,6 +58,17 @@ tighten the baseline in the same PR that removes the dead code.
 - **`include` restates the default issue types** because knip treats it as a whitelist,
   and `classMembers` has to be listed explicitly to be enabled at all.
 
+`scripts/knip-gate.mjs` also passes `--no-gitignore`, which is load-bearing rather than a
+convenience. knip's gitignore matcher applies this repo's `src/**/*.js`-style patterns
+more broadly than git does and silently drops real files from analysis: with it on, 311
+symbols that are demonstrably used — `AgentSession.abortBash`, called at
+`packages/gsd-agent-modes/src/modes/interactive/interactive-key-handlers.ts:30`, among
+them — are reported as dead. Turning it off makes the analysed set a function of
+`knip.jsonc` alone, so the baseline is identical on every machine and in CI instead of
+varying with local ignore state. `ignoreUnresolved` covers `dist/` paths for the same
+reason: the gate runs before `build:core`, so those imports would otherwise resolve or not
+depending on build state.
+
 ## What knip does *not* catch
 
 **Never-read interface or type-literal properties.** knip's member analysis covers
@@ -93,6 +104,5 @@ local-only today. Pre-existing and repo-wide, tracked in #191.
 - **`packages/db`** imports `drizzle-orm` and `@neondatabase/serverless`, neither of which
   is a dependency anywhere in the repo. The package has no `package.json`, so pnpm does not
   treat it as a workspace; knip sees it only because the root `project` glob names it.
-- **Two imports of a deleted module.** `scripts/m003-s07-dossier-input.ts` and its test
-  import `./semantic-shadow-no-cutover-gate.mjs`, removed in 185af73a. The `.ts` test is
-  not in any runner's glob, so nothing caught it. Tracked in #186.
+- **`packages/db/src/schema/` imports `./auth.js` and `./devices.js`**, neither of which
+  exists. Consistent with the package being unreachable aspirational code.

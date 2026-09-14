@@ -33,8 +33,17 @@ function parseArgs(argv) {
   return { write: argv.includes('--write') };
 }
 
+// --no-gitignore is load-bearing, not a convenience. knip's gitignore matcher
+// applies this repo's `src/**/*.js`-style patterns more broadly than git does,
+// which silently drops real files from analysis: with it on, 314 symbols that
+// are demonstrably used (AgentSession.abortBash, called at
+// packages/gsd-agent-modes/src/modes/interactive/interactive-key-handlers.ts:30,
+// among them) are reported as dead. Turning it off makes the analysed set a
+// function of knip.jsonc alone, so the baseline is identical on every machine
+// and in CI rather than varying with local ignore state.
 function runKnip() {
-  const result = spawnSync(process.execPath, [KNIP_BIN, '--no-progress', '--reporter', 'json'], {
+  const args = [KNIP_BIN, '--no-progress', '--no-gitignore', '--reporter', 'json'];
+  const result = spawnSync(process.execPath, args, {
     cwd: ROOT,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,

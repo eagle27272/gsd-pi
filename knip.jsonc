@@ -24,6 +24,12 @@
   // invoked as a PATH binary, not imported.
   "ignoreDependencies": ["@gsd/.*", "@opengsd/.*", "tiktoken", "gsd-browser"],
 
+  // The gate runs before build:core (it needs no build), so imports of compiled
+  // output are unresolved here and would resolve after a build — leaving them in
+  // would make findings depend on build state. Genuinely-missing siblings, such
+  // as packages/db's ./auth.js, are not dist paths and stay reported.
+  "ignoreUnresolved": [".*dist/.*"],
+
   // `include` is a whitelist, so the default types have to be restated to add
   // classMembers — which is off by default and is the closest knip gets to the
   // shape that motivated this gate (#81): a member written at one site and
@@ -124,24 +130,28 @@
     "packages/pi-agent-core": {
       "entry": ["src/**/*.ts"],
       "project": ["src/**/*.ts"],
-      "ignoreDependencies": [".*"]
+      "ignoreDependencies": [".*"],
+      "ignoreUnresolved": [".*"]
     },
     "packages/pi-ai": {
       "entry": ["src/**/*.ts"],
       "project": ["src/**/*.ts"],
       "ignore": ["test/**"],
-      "ignoreDependencies": [".*"]
+      "ignoreDependencies": [".*"],
+      "ignoreUnresolved": [".*"]
     },
     "packages/pi-tui": {
       "entry": ["src/**/*.ts"],
       "project": ["src/**/*.ts"],
-      "ignoreDependencies": [".*"]
+      "ignoreDependencies": [".*"],
+      "ignoreUnresolved": [".*"]
     },
     "packages/pi-coding-agent": {
       "entry": ["src/**/*.ts"],
       "project": ["src/**/*.ts"],
       "ignore": ["test/**", "examples/**"],
-      "ignoreDependencies": [".*"]
+      "ignoreDependencies": [".*"],
+      "ignoreUnresolved": [".*"]
     }
   }
 }
