@@ -54,8 +54,13 @@ upstream **v1.18.0**. Later changes are tracked in this repository's git history
   *replace* the validated `projectDir`; the two `existsSync` gates blocked traversal to
   nonexistent paths but not to a live sibling repository, whose `.gsd/` would then receive
   every subsequent write. The id must now match the artifact-id alphabet, and the
-  replacement path is re-checked with `validateProjectDir` instead of inheriting the
-  project root's trust ([#21](https://github.com/eagle27272/gsd-pi/issues/21)).
+  replacement path has to clear a realpath-based containment check against the project's
+  own worktree containers rather than inheriting the project root's trust. The check is
+  unconditional: `validateProjectDir` confines paths only when
+  `GSD_WORKFLOW_PROJECT_ROOT` is set, which the standalone server often runs without, so
+  on its own it would have left a symlinked container entry free to redirect writes. The
+  no-milestone-id fallback that adopts a sole live worktree goes through the same gate
+  ([#21](https://github.com/eagle27272/gsd-pi/issues/21)).
 - Three task-scoped artifacts no longer collide between sibling slices that reuse a task
   id. In the flat-phase layout every slice in a milestone resolves to the same phase
   directory, so a listing of it mixes all of their files together. The reactive-execute

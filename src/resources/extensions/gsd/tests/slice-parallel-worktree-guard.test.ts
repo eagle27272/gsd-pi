@@ -4,7 +4,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { createSliceWorktree } from "../slice-parallel-orchestrator.ts";
@@ -71,6 +71,25 @@ test("createSliceWorktree refuses empty identifiers", () => {
   try {
     assert.throws(() => createSliceWorktree(base, "", "S01"), /Invalid milestoneId/);
     assert.throws(() => createSliceWorktree(base, "M001", ""), /Invalid sliceId/);
+  } finally {
+    cleanup(base);
+  }
+});
+
+// The identifier check cannot see symlinks, so this is the case that the
+// containment gate exists for: a well-formed name whose path leaves the
+// container only once resolved.
+test("createSliceWorktree refuses to remove a container entry that symlinks outside", () => {
+  const base = makeTempRepo("gsd-slice-wt-guard-");
+  try {
+    const victim = plantVictim(base, "victim-target");
+    mkdirSync(join(base, ".gsd-worktrees"), { recursive: true });
+    symlinkSync(victim, join(base, ".gsd-worktrees", "M001-S01"));
+
+    const thrown = catchError(() => createSliceWorktree(base, "M001", "S01"));
+
+    assert.equal(readFileSync(join(victim, "keep.txt"), "utf-8"), "precious\n");
+    assert.match(thrown, /refusing to remove/);
   } finally {
     cleanup(base);
   }

@@ -7,7 +7,7 @@
 
 import { existsSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
 import {
@@ -637,6 +637,32 @@ function worktreeContainers(projectRoot: string): string[] {
   return [join(projectRoot, ".gsd-worktrees"), join(projectRoot, ".gsd", "worktrees")];
 }
 
+/**
+ * Gate for a worktree path that is about to replace the validated projectRoot.
+ * Returns the normalized path, or null when it is not genuinely inside one of
+ * this project's worktree containers.
+ *
+ * Boundary twin of `isInsideWorktreesDir` in
+ * src/resources/extensions/gsd/worktree-manager.ts — the MCP server cannot
+ * statically import the extension tree. Keep the two in sync.
+ *
+ * `validateProjectDir` is not sufficient on its own here: it enforces
+ * containment only when GSD_WORKFLOW_PROJECT_ROOT is set, and the standalone
+ * server is routinely launched without it. Both sides are realpath'd so a
+ * symlinked container entry cannot redirect writes into another checkout,
+ * while the external-state layout — where `.gsd` itself is a symlink into
+ * ~/.gsd/projects/<hash>/ — still resolves as contained (#21).
+ */
+function containedWorktreeBasePath(projectRoot: string, wtPath: string): string | null {
+  const resolved = safeRealpath(wtPath);
+  const contained = worktreeContainers(projectRoot).some((container) => {
+    const root = safeRealpath(container);
+    return resolved === root || resolved.startsWith(root + sep);
+  });
+  if (!contained) return null;
+  return validateProjectDir(resolved);
+}
+
 function resolveActiveWorktreeBasePath(
   projectRoot: string,
   milestoneId: string | null,
@@ -653,9 +679,9 @@ function resolveActiveWorktreeBasePath(
     // Sanity check: a real git worktree has a `.git` file with a gitdir pointer.
     // Bare directories without it shouldn't hijack the write path.
     if (!existsSync(join(wtPath, ".git"))) continue;
-    // The replacement inherits none of projectRoot's trust — it has to clear
-    // the same containment check on its own.
-    return validateProjectDir(wtPath);
+    // The replacement inherits none of projectRoot's trust.
+    const contained = containedWorktreeBasePath(projectRoot, wtPath);
+    if (contained) return contained;
   }
   return null;
 }
@@ -682,7 +708,9 @@ function resolveSoleActiveWorktree(projectRoot: string): string | null {
     );
   }
   if (live.length !== 1) return null;
-  return live[0];
+  // Same sink as resolveActiveWorktreeBasePath, so the same gate applies — a
+  // symlinked entry here redirects writes just as effectively (#21).
+  return containedWorktreeBasePath(projectRoot, live[0]);
 }
 
 async function bridgeRecoveryActionMilestoneId(
