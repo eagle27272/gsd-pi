@@ -84,7 +84,7 @@ import { mcpToolMatchesBaseName } from "../mcp-tool-name.js";
 import { RUN_UAT_READ_ONLY_TOOL_NAMES, RUN_UAT_WORKFLOW_TOOL_NAMES } from "../tool-presentation-plan.js";
 import { supportsSourceObservationsForUnit } from "../source-observations.js";
 import { clearPendingAutoStart } from "../pending-auto-start.js";
-import { resolveWorkflowToolBasePath } from "./dynamic-tools.js";
+import { resolveWorkflowToolBasePath, type WorkflowToolScope } from "./dynamic-tools.js";
 import { getRequiredWorkflowToolsForUnit } from "../unit-tool-contracts.js";
 import { flushAllManifests } from "../workflow-manifest.js";
 import { clearUnitHarnessAbort, recordUnitHarnessAbort, type UnitHarnessAbortRecord } from "../unit-runtime.js";
@@ -1873,7 +1873,7 @@ export function registerHooks(
     if (!event.isError && !isAutoActive() && isUnitCloseoutTool(toolName)) {
       try {
         runInteractiveUnitCloseout({
-          basePath: resolveWorkflowToolBasePath(ctx, event.input as { milestone_id?: string }),
+          basePath: resolveWorkflowToolBasePath(ctx, event.input as WorkflowToolScope),
           canonicalToolName: toolName,
           input: event.input,
         });
