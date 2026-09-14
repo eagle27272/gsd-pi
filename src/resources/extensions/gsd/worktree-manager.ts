@@ -773,14 +773,27 @@ export function listWorktrees(basePath: string): WorktreeInfo[] {
 
 /** Directories to skip when scanning for nested .git dirs. */
 const NESTED_GIT_SKIP_DIRS = new Set([
-  ".git", ".gsd", ".bg-shell", "node_modules", ".next", ".nuxt", "dist", "build",
+  ".git", ".bg-shell", "node_modules", ".next", ".nuxt", "dist", "build",
   "__pycache__", ".tox", ".venv", "venv", "target", "vendor",
+]);
+
+/**
+ * Root-relative subtrees to skip. `.gsd` itself is scanned because it also
+ * holds user-authored artifacts (ROADMAP/PLAN/SUMMARY, milestone docs), but
+ * these subtrees are GSD-owned runtime state — nested worktrees in particular
+ * are removed by their own teardown, not by this one, and quarantined work
+ * must be left byte-for-byte as it was preserved.
+ */
+const NESTED_GIT_SKIP_RELATIVE_DIRS = new Set([
+  ".gsd/worktrees", ".gsd/runtime", ".gsd/activity", ".gsd/audit",
+  ".gsd/forensics", ".gsd/parallel", ".gsd/journal", ".gsd/backups",
+  ".gsd/quarantine",
 ]);
 
 /**
  * Recursively find nested .git directories inside a worktree root.
  * Returns paths to directories that contain their own .git (directory, not file).
- * Skips node_modules, .gsd, and other non-project directories for performance.
+ * Skips node_modules, GSD runtime state, and other non-project directories for performance.
  *
  * A nested .git *directory* (not a .git file — which is a legitimate worktree
  * pointer) indicates a scaffolded repo that will become an orphaned gitlink.
@@ -788,7 +801,7 @@ const NESTED_GIT_SKIP_DIRS = new Set([
 export function findNestedGitDirs(rootPath: string): string[] {
   const results: string[] = [];
 
-  function walk(dir: string, depth: number): void {
+  function walk(dir: string, depth: number, relativeDir: string): void {
     // Cap recursion depth to avoid runaway scanning
     if (depth > 10) return;
 
@@ -802,6 +815,9 @@ export function findNestedGitDirs(rootPath: string): string[] {
 
     for (const entry of entries) {
       if (NESTED_GIT_SKIP_DIRS.has(entry)) continue;
+
+      const relativePath = relativeDir ? `${relativeDir}/${entry}` : entry;
+      if (NESTED_GIT_SKIP_RELATIVE_DIRS.has(relativePath)) continue;
 
       const fullPath = join(dir, entry);
 
@@ -820,7 +836,7 @@ export function findNestedGitDirs(rootPath: string): string[] {
       // A .git directory is a standalone repo created by scaffolding.
       const innerGit = join(fullPath, ".git");
       if (!existsSync(innerGit)) {
-        walk(fullPath, depth + 1);
+        walk(fullPath, depth + 1, relativePath);
         continue;
       }
       try {
@@ -834,12 +850,22 @@ export function findNestedGitDirs(rootPath: string): string[] {
         logWarning("worktree", `.git check failed for ${fullPath}: ${(e as Error).message}`);
       }
 
-      walk(fullPath, depth + 1);
+      walk(fullPath, depth + 1, relativePath);
     }
   }
 
-  walk(rootPath, 0);
+  walk(rootPath, 0, "");
   return results;
+}
+
+export interface RemoveWorktreeResult {
+  /** False only when removal was aborted to preserve uncommitted work. */
+  removed: boolean;
+  /**
+   * Set when uncommitted work was moved to `.gsd/quarantine/worktrees/<name>-<ts>/`.
+   * Callers must surface this — removal succeeded, but the user has files to recover.
+   */
+  quarantinePath: string | null;
 }
 
 /**
@@ -850,7 +876,7 @@ export function removeWorktree(
   basePath: string,
   name: string,
   opts: { deleteBranch?: boolean; force?: boolean; branch?: string } = {},
-): boolean {
+): RemoveWorktreeResult {
   basePath = normalizeBasePathForWorktreeOps(basePath);
 
   let wtPath = worktreePath(basePath, name);
@@ -912,7 +938,7 @@ export function removeWorktree(
     if (deleteBranchAfterRemoval) {
       deleteBranchIfPresent(basePath, branch, "nativeBranchDelete failed");
     }
-    return true;
+    return { removed: true, quarantinePath: null };
   }
 
   // Submodule safety (#2337): detect submodules with uncommitted changes
@@ -1001,6 +1027,7 @@ export function removeWorktree(
   // has no `.git` file and is not a registered worktree) is removed normally
   // rather than quarantined; otherwise its branch would never be deleted and
   // the worktree would never be unregistered (#1852).
+  let quarantinedTo: string | null = null;
   if (force && resolvedPathSafe && isLiveGitWorktreeCheckout(resolvedWtPath)) {
     const dirtyState = inspectUncommittedWorktreeState(resolvedWtPath);
     if (dirtyState.dirty) {
@@ -1012,13 +1039,14 @@ export function removeWorktree(
         dirtyState.status,
       );
       if (!quarantinePath) {
-        return false;
+        return { removed: false, quarantinePath: null };
       }
 
+      quarantinedTo = quarantinePath;
       deleteBranchAfterRemoval = false;
       if (!existsSync(resolvedWtPath)) {
         nativeWorktreePrune(basePath);
-        return true;
+        return { removed: true, quarantinePath };
       }
     }
   }
@@ -1076,7 +1104,7 @@ export function removeWorktree(
   if (deleteBranchAfterRemoval) {
     deleteBranchIfPresent(basePath, branch, "final branch delete failed");
   }
-  return true;
+  return { removed: true, quarantinePath: quarantinedTo };
 }
 
 /**
@@ -1269,14 +1297,12 @@ export function mergeWorktreeToMain(
   if (!result.success) {
     const dirtyWorkingTree = result.conflicts.includes("__dirty_working_tree__");
     if (!dirtyWorkingTree) {
+      // Reset main's half-applied squash, but leave the source worktree and
+      // branch alone: they hold the committed milestone work and are what the
+      // user is told to resolve the conflict against. Tearing them down here
+      // made the branch unreachable outside the reflog. Genuinely orphaned
+      // milestone branches are reported by listWorktrees/doctor instead.
       cleanupFailedSquashMergeState(basePath);
-    }
-    if (!dirtyWorkingTree && branch.startsWith("milestone/")) {
-      try {
-        removeWorktree(basePath, name, { branch, deleteBranch: true, force: true });
-      } catch (e) {
-        logWarning("worktree", `failed milestone branch cleanup after squash merge failure: ${(e as Error).message}`);
-      }
     }
     throw new GSDError(GSD_MERGE_CONFLICT, `Merge conflicts detected in: ${result.conflicts.join(", ")}`);
   }

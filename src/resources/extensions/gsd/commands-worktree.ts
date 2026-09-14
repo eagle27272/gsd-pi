@@ -18,7 +18,7 @@ import {
   worktreeBranchName,
 } from "./worktree-manager.js";
 import {
-  nativeHasChanges,
+  nativeWorkingTreeStatus,
   nativeDetectMainBranch,
   nativeCommitCountBetween,
 } from "./native-git-bridge.js";
@@ -42,7 +42,7 @@ export interface WorktreeStatus {
 
 // ─── Status helper ─────────────────────────────────────────────────────────
 
-function getStatus(basePath: string, name: string, wtPath: string, mainBranch: string): WorktreeStatus {
+export function getStatus(basePath: string, name: string, wtPath: string, mainBranch: string): WorktreeStatus {
   const diff = diffWorktreeAll(basePath, name, undefined, mainBranch);
   const numstat = diffWorktreeNumstat(basePath, name, undefined, mainBranch);
   const filesChanged = diff.added.length + diff.modified.length + diff.removed.length;
@@ -53,11 +53,17 @@ function getStatus(basePath: string, name: string, wtPath: string, mainBranch: s
     linesRemoved += s.removed;
   }
 
+  // `uncommitted` also decides whether handleMerge auto-commits before the
+  // squash merge, so it must be an uncached, fail-closed read. nativeHasChanges
+  // is neither: it caches its verdict for 10s and reports a failed status as
+  // clean, which silently drops the worktree's work from the merge.
   let uncommitted = false;
-  try {
-    uncommitted = existsSync(wtPath) && nativeHasChanges(wtPath);
-  } catch {
-    // native check failure → treat as clean for display purposes
+  if (existsSync(wtPath)) {
+    try {
+      uncommitted = nativeWorkingTreeStatus(wtPath, { allowFailure: false }).trim() !== "";
+    } catch {
+      uncommitted = true;
+    }
   }
 
   let commits = 0;
@@ -78,6 +84,16 @@ function getStatus(basePath: string, name: string, wtPath: string, mainBranch: s
     uncommitted,
     commits,
   };
+}
+
+/** Recovery instructions for work that removal moved aside instead of deleting. */
+function formatQuarantineNotice(name: string, quarantinePath: string): string[] {
+  return [
+    "",
+    `Uncommitted work in ${name} was quarantined, not deleted:`,
+    `  ${quarantinePath}`,
+    `Recover the files you need from there (skip .git, .gsd and .gsd-quarantine.json), then delete the directory.`,
+  ];
 }
 
 // ─── Formatters (exported for tests) ────────────────────────────────────────
@@ -165,8 +181,10 @@ async function handleMerge(args: string, ctx: ExtensionCommandContext): Promise<
   const status = getStatus(basePath, target, wt.path, mainBranch);
   if (status.filesChanged === 0 && !status.uncommitted) {
     try {
-      removeWorktree(basePath, target, { deleteBranch: true });
-      ctx.ui.notify(`Removed empty worktree ${target}.`, "info");
+      const removal = removeWorktree(basePath, target, { deleteBranch: true });
+      const lines = [`Removed empty worktree ${target}.`];
+      if (removal.quarantinePath) lines.push(...formatQuarantineNotice(target, removal.quarantinePath));
+      ctx.ui.notify(lines.join("\n"), removal.quarantinePath ? "warning" : "info");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       ctx.ui.notify(
@@ -222,8 +240,10 @@ async function handleMerge(args: string, ctx: ExtensionCommandContext): Promise<
   ];
 
   try {
-    removeWorktree(basePath, target, { deleteBranch: true });
-    ctx.ui.notify(successLines.join("\n"), "info");
+    const removal = removeWorktree(basePath, target, { deleteBranch: true });
+    const lines = [...successLines];
+    if (removal.quarantinePath) lines.push(...formatQuarantineNotice(target, removal.quarantinePath));
+    ctx.ui.notify(lines.join("\n"), removal.quarantinePath ? "warning" : "info");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const cleanupLines = [
@@ -250,13 +270,19 @@ async function handleClean(ctx: ExtensionCommandContext): Promise<void> {
 
   const removed: string[] = [];
   const kept: string[] = [];
+  const quarantined: string[] = [];
   const mainBranch = nativeDetectMainBranch(basePath);
   for (const wt of worktrees) {
     const status = getStatus(basePath, wt.name, wt.path, mainBranch);
     if (status.filesChanged === 0 && !status.uncommitted) {
       try {
-        removeWorktree(basePath, wt.name, { deleteBranch: true });
+        const removal = removeWorktree(basePath, wt.name, { deleteBranch: true });
+        if (!removal.removed) {
+          kept.push(`${wt.name} (removal aborted to preserve uncommitted changes)`);
+          continue;
+        }
         removed.push(wt.name);
+        if (removal.quarantinePath) quarantined.push(`${wt.name} → ${removal.quarantinePath}`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         kept.push(`${wt.name} (failed: ${msg})`);
@@ -276,7 +302,11 @@ async function handleClean(ctx: ExtensionCommandContext): Promise<void> {
     lines.push("", "Kept:");
     for (const n of kept) lines.push(`  ─ ${n}`);
   }
-  ctx.ui.notify(lines.join("\n"), "info");
+  if (quarantined.length > 0) {
+    lines.push("", "Quarantined uncommitted work (recover before deleting):");
+    for (const n of quarantined) lines.push(`  ! ${n}`);
+  }
+  ctx.ui.notify(lines.join("\n"), quarantined.length > 0 ? "warning" : "info");
 }
 
 // ─── Subcommand: remove ─────────────────────────────────────────────────────
@@ -315,9 +345,11 @@ async function handleRemove(args: string, ctx: ExtensionCommandContext): Promise
   }
 
   try {
-    const removed = removeWorktree(basePath, name, { deleteBranch: true });
-    if (removed) {
-      ctx.ui.notify(`Removed worktree ${name}.`, "info");
+    const removal = removeWorktree(basePath, name, { deleteBranch: true });
+    if (removal.removed) {
+      const lines = [`Removed worktree ${name}.`];
+      if (removal.quarantinePath) lines.push(...formatQuarantineNotice(name, removal.quarantinePath));
+      ctx.ui.notify(lines.join("\n"), removal.quarantinePath ? "warning" : "info");
     } else {
       ctx.ui.notify(
         [

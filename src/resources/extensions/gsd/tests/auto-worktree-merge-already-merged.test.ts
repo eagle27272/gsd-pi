@@ -105,7 +105,7 @@ function enableAutoPush(repo: string): void {
 
 function cleanupMocks(): void {
   _setMilestoneCleanupDepsForTests({
-    removeWorktree: () => true,
+    removeWorktree: () => ({ removed: true, quarantinePath: null }),
     nativeBranchDelete: () => {},
     setActiveWorkspace: () => {},
     nudgeGitBranchCache: () => {},
@@ -124,7 +124,7 @@ describe("finalizeAlreadyMergedMilestoneIfReachable", () => {
     _setMilestoneCleanupDepsForTests({
       removeWorktree: () => {
         cleanupCalled = true;
-        return true;
+        return { removed: true, quarantinePath: null };
       },
     });
 
@@ -149,7 +149,7 @@ describe("finalizeAlreadyMergedMilestoneIfReachable", () => {
         calls.push(
           `remove:${milestoneId}:${options.branch}:${String(options.deleteBranch)}`,
         );
-        return true;
+        return { removed: true, quarantinePath: null };
       },
       nativeBranchDelete: (_projectRoot, branch) => {
         calls.push(`delete:${branch}`);

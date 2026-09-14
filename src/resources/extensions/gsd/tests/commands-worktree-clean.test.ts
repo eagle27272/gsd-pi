@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
   formatCleanKeepReason,
+  getStatus,
   handleWorktree,
   type WorktreeStatus,
 } from "../commands-worktree.ts";
@@ -96,6 +97,84 @@ test("clean keep reason reports changed files without uncommitted suffix", () =>
 test("clean keep reason uses singular form for a single changed file", () => {
   const reason = formatCleanKeepReason(mkStatus({ filesChanged: 1, uncommitted: false }));
   assert.equal(reason, "1 changed file");
+});
+
+test("getStatus reports uncommitted when the worktree state cannot be read", () => {
+  const base = makeRepo();
+  const unreadable = mkdtempSync(join(tmpdir(), "gsd-not-a-repo-"));
+  try {
+    // `uncommitted` gates the auto-commit before a squash merge, so an
+    // unreadable worktree must not be reported as clean.
+    const status = getStatus(base, "ghost", unreadable, "main");
+    assert.equal(status.uncommitted, true, "unknown worktree state must fail closed");
+  } finally {
+    rmSync(unreadable, { recursive: true, force: true });
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("getStatus does not reuse a cached clean verdict for a worktree that just became dirty", () => {
+  const base = makeRepo();
+  try {
+    const wt = createWorktree(base, "cache-a");
+    const clean = getStatus(base, "cache-a", wt.path, "main");
+    assert.equal(clean.uncommitted, false, "a fresh worktree starts clean");
+
+    writeFileSync(join(wt.path, "scratch.ts"), "export const x = 1;\n", "utf-8");
+    const dirty = getStatus(base, "cache-a", wt.path, "main");
+    assert.equal(dirty.uncommitted, true, "a worktree dirtied within the cache TTL must read as dirty");
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("worktree remove reports the quarantine path when dirty work is preserved", async () => {
+  const base = makeRepo();
+  try {
+    const wt = createWorktree(base, "dirty-a");
+    writeFileSync(join(wt.path, "scratch.ts"), "export const x = 1;\n", "utf-8");
+
+    const ctx = createMockCtx();
+    await withCommandCwd(base, async () => {
+      await handleWorktree("remove dirty-a --force", ctx as any);
+    });
+
+    const message = ctx.notifications.map((n) => n.message).join("\n");
+    assert.match(message, /quarantine/i, "the user must be told the work was quarantined");
+    assert.match(
+      message,
+      /\.gsd[/\\]quarantine[/\\]worktrees[/\\]dirty-a-/,
+      `the quarantine path must appear in the output, got: ${message}`,
+    );
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("worktree merge carries uncommitted work into the merge instead of quarantining it", async () => {
+  const base = makeRepo();
+  try {
+    const wt = createWorktree(base, "dirty-b");
+    writeFileSync(join(wt.path, "feature.ts"), "export const shipped = true;\n", "utf-8");
+    git(wt.path, ["add", "."]);
+    git(wt.path, ["commit", "-m", "feat: dirty-b"]);
+    writeFileSync(join(wt.path, "scratch.ts"), "export const x = 1;\n", "utf-8");
+
+    const ctx = createMockCtx();
+    await withCommandCwd(base, async () => {
+      await handleWorktree("merge dirty-b", ctx as any);
+    });
+
+    const message = ctx.notifications.map((n) => n.message).join("\n");
+    assert.match(message, /Merged dirty-b/, `merge should succeed, got: ${message}`);
+    assert.ok(
+      existsSync(join(base, "scratch.ts")),
+      "uncommitted work must reach main via auto-commit, not be left behind",
+    );
+    assert.doesNotMatch(message, /quarantine/i, "nothing should need quarantining on this path");
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
 });
 
 test("worktree list detects main branch once for the command", async (t) => {
