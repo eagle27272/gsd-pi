@@ -15,7 +15,8 @@ import { Editor, type EditorTheme, Key, matchesKey, Text, truncateToWidth, wrapT
 import { Type } from "@sinclair/typebox";
 import { renderSharedDialogFrame } from "./shared/dialog-frame.js";
 import { makeUI } from "./shared/tui.js";
-import { maskEditorLine, type ProgressStatus } from "./shared/mod.js";
+import { type ProgressStatus } from "./shared/mod.js";
+import { maskEditorLine } from "./shared/tui.js";
 import { parseSecretsManifest, formatSecretsManifest } from "./gsd/files.js";
 import { resolveMilestoneFile } from "./gsd/paths.js";
 import type { SecretsManifestEntry } from "./gsd/types.js";
