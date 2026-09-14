@@ -1,0 +1,147 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+
+  // Root `src/` imports the workspace packages by name, but the root
+  // package.json does not declare them: they resolve through pnpm-workspace's
+  // publicHoistPattern at runtime and through src/jiti-workspace-aliases.ts
+  // under jiti. Mirror that alias map here so cross-package usage links up,
+  // and ignore the specifiers themselves so they are not reported as unlisted.
+  "paths": {
+    "@gsd/pi-ai": ["packages/pi-ai/src/index.ts"],
+    "@gsd/pi-ai/oauth": ["packages/pi-ai/src/utils/oauth/index.ts"],
+    "@gsd/pi-agent-core": ["packages/pi-agent-core/src/index.ts"],
+    "@gsd/pi-tui": ["packages/pi-tui/src/index.ts"],
+    "@gsd/pi-coding-agent": ["packages/pi-coding-agent/src/index.ts"],
+    "@earendil-works/pi-ai": ["packages/pi-ai/src/index.ts"],
+    "@earendil-works/pi-ai/oauth": ["packages/pi-ai/src/utils/oauth/index.ts"],
+    "@earendil-works/pi-agent-core": ["packages/pi-agent-core/src/index.ts"],
+    "@earendil-works/pi-tui": ["packages/pi-tui/src/index.ts"],
+    "@earendil-works/pi-coding-agent": ["packages/pi-coding-agent/src/index.ts"]
+  },
+
+  // tiktoken is a deliberate optional `await import` with a character-ratio
+  // fallback (src/resources/extensions/gsd/token-counter.ts); gsd-browser is
+  // invoked as a PATH binary, not imported.
+  "ignoreDependencies": ["@gsd/.*", "@opengsd/.*", "tiktoken", "gsd-browser"],
+
+  // `include` is a whitelist, so the default types have to be restated to add
+  // classMembers — which is off by default and is the closest knip gets to the
+  // shape that motivated this gate (#81): a member written at one site and
+  // never read. It covers classes and enums only; never-read *interface*
+  // properties, which is what #79 actually is, are outside knip entirely (#185).
+  // nsExports/nsTypes are left out: they only fire on namespace imports.
+  // Keep in step with ISSUE_TYPES in scripts/lib/knip-baseline-lib.mjs.
+  "include": [
+    "files",
+    "dependencies",
+    "devDependencies",
+    "optionalPeerDependencies",
+    "unlisted",
+    "binaries",
+    "unresolved",
+    "exports",
+    "types",
+    "enumMembers",
+    "classMembers",
+    "duplicates"
+  ],
+
+  // Every glob below is asserted to match at least one file by
+  // scripts/__tests__/knip-gate.test.mjs, so a pattern cannot silently rot
+  // into exempting the code it was meant to cover.
+  "workspaces": {
+    ".": {
+      // Every extension is reached through its index.ts entry, so without this
+      // the whole extension surface — the largest body of first-party code —
+      // would be exempt from unused-export analysis. Set per workspace rather
+      // than globally: the vendored pi-* workspaces below list all their source
+      // as entry, and turning this on for them would report their entire API.
+      "includeEntryExports": true,
+      "entry": [
+        "src/bootstrap.ts",
+        "src/loader.ts",
+        "src/loader-entrypoint.ts",
+        "src/cli.ts",
+        // Each extension is discovered at runtime via its package.json
+        // `pi.extensions` field, so knip cannot infer these.
+        "src/resources/extensions/*.ts",
+        "src/resources/extensions/*/index.ts",
+        "src/**/tests/**/*.test.{ts,mts,cts,mjs,cjs}",
+        "src/tests/**/*.test.ts",
+        "scripts/**/*.{mjs,cjs,js,ts}",
+        "tests/**/*.{ts,mjs}"
+      ],
+      // The extension test suites include .mjs and .cjs files; without those
+      // extensions here a dead .mjs helper under src/ is invisible.
+      "project": [
+        "src/**/*.{ts,mts,cts,tsx,mjs,cjs,js}",
+        "scripts/**/*.{mjs,cjs,js,ts}",
+        "tests/**/*.{ts,mjs}",
+        // packages/db has no package.json, so pnpm and knip both skip it as a
+        // workspace. Analyse it from the root instead of leaving it unseen.
+        "packages/db/**/*.ts"
+      ]
+    },
+
+    "packages/contracts": {
+      "entry": ["src/index.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/rpc-client": {
+      "entry": ["src/index.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts", "examples/**/*.ts"]
+    },
+    "packages/native": {
+      "entry": ["src/index.ts", "src/*/index.ts", "src/**/*.test.{ts,mjs,cjs}"],
+      "project": ["src/**/*.{ts,mjs,cjs}"]
+    },
+    "packages/mcp-server": {
+      "entry": ["src/index.ts", "src/readers/*.ts", "bin/*.js", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts", "bin/*.js", "test-fixtures/**/*.mjs"]
+    },
+    "packages/gsd-agent-core": {
+      "entry": ["src/index.ts", "src/**/*.test.ts", "scripts/*.cjs"],
+      "project": ["src/**/*.{ts,js}", "scripts/*.cjs"]
+    },
+    "packages/gsd-agent-modes": {
+      "entry": ["src/index.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+
+    // Vendored upstream packages (see scripts/verify-pi-boundary.cjs). Treating
+    // every source file as an entry keeps their dependency usage visible to the
+    // root workspace — so root deps like `openai` are not falsely reported as
+    // unused — while producing no file, export or member findings of their own.
+    // `ignoreDependencies` covers the remaining surface: manifest analysis is
+    // not governed by entry/project, so without it an upstream sync that edits
+    // a pi-* package.json would move the baseline.
+    //
+    // Their test dirs are excluded because the boundary, not this gate, owns
+    // that corpus — ADR-010 deleted paths that roughly 40 of those files still
+    // import (see scripts/lib/test-audit-lib.mjs). Note pi-ai's suite *is* run,
+    // by `pnpm --filter @gsd/pi-ai test` in verify-merge.sh; it is exempt here
+    // because it is vendored, not because it is dead.
+    "packages/pi-agent-core": {
+      "entry": ["src/**/*.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": [".*"]
+    },
+    "packages/pi-ai": {
+      "entry": ["src/**/*.ts"],
+      "project": ["src/**/*.ts"],
+      "ignore": ["test/**"],
+      "ignoreDependencies": [".*"]
+    },
+    "packages/pi-tui": {
+      "entry": ["src/**/*.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": [".*"]
+    },
+    "packages/pi-coding-agent": {
+      "entry": ["src/**/*.ts"],
+      "project": ["src/**/*.ts"],
+      "ignore": ["test/**", "examples/**"],
+      "ignoreDependencies": [".*"]
+    }
+  }
+}
