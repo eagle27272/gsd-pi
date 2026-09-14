@@ -23,7 +23,6 @@
 
 import { existsSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { execFileSync } from "node:child_process";
 
 import { GSDError, GSD_GIT_ERROR } from "./errors.js";
 import { MergeConflictError, readIntegrationBranch } from "./git-service.js";
@@ -41,8 +40,8 @@ import { resolveGitDir } from "./worktree-manager.js";
 import { logWarning } from "./workflow-logger.js";
 import { emitSliceMerged, emitMilestoneResquash } from "./worktree-telemetry.js";
 import { loadEffectiveGSDPreferences } from "./preferences.js";
-import { GIT_NO_PROMPT_ENV } from "./git-constants.js";
 import { getMilestone, getSlice, isDbAvailable } from "./gsd-db.js";
+import { gitCapture } from "./git-exec.js";
 
 /**
  * Auto-worktree milestone branch name. Must match autoWorktreeBranch() in
@@ -127,35 +126,20 @@ function advanceMilestoneBranch(
 ): void {
   let worktreeBranch: string | null = null;
   try {
-    worktreeBranch = execFileSync("git", ["branch", "--show-current"], {
-      cwd: worktreeCwd,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-    }).trim();
+    worktreeBranch = gitCapture(worktreeCwd, ["branch", "--show-current"]);
   } catch {
     worktreeBranch = null;
   }
 
   if (worktreeCwd !== projectRoot && worktreeBranch === milestoneBranch) {
-    const status = execFileSync("git", ["status", "--porcelain"], {
-      cwd: worktreeCwd,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-    }).trim();
+    const status = gitCapture(worktreeCwd, ["status", "--porcelain"]);
     if (status) {
       throw new GSDError(
         GSD_GIT_ERROR,
         `slice-cadence cannot advance ${milestoneBranch}: worktree has uncommitted changes. Status:\n${status}`,
       );
     }
-    execFileSync("git", ["reset", "--hard", mainBranch], {
-      cwd: worktreeCwd,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-    });
+    gitCapture(worktreeCwd, ["reset", "--hard", mainBranch]);
     return;
   }
 
@@ -233,11 +217,7 @@ export function mergeSliceToMain(
   try {
     // Dirty-main check — v1 fails loudly rather than auto-stashing. Users
     // running slice-cadence opt in knowing main stays clean between merges.
-    const status = execFileSync("git", ["status", "--porcelain"], {
-      cwd: projectRoot,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    }).trim();
+    const status = gitCapture(projectRoot, ["status", "--porcelain"]);
     if (status) {
       throw new GSDError(
         GSD_GIT_ERROR,
@@ -339,11 +319,7 @@ export function resquashMilestoneOnMain(
     const expectedMilestoneToken = ` of ${milestoneId} `;
     let subjectsRaw = "";
     try {
-      subjectsRaw = execFileSync(
-        "git",
-        ["log", "--format=%s", `${startSha}..HEAD`],
-        { cwd: projectRoot, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" },
-      );
+      subjectsRaw = gitCapture(projectRoot, ["log", "--format=%s", `${startSha}..HEAD`], { trim: false });
     } catch {
       return { resquashed: false, newSha: null };
     }
@@ -366,11 +342,7 @@ export function resquashMilestoneOnMain(
     }
 
     // Safe to collapse: all commits in the range are this milestone's slices.
-    execFileSync("git", ["reset", "--soft", startSha], {
-      cwd: projectRoot,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    });
+    gitCapture(projectRoot, ["reset", "--soft", startSha]);
 
     const newSha = nativeCommit(
       projectRoot,

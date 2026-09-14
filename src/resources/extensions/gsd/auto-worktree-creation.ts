@@ -4,7 +4,6 @@
 // branch reuse/start-point selection, initial untracked-content import,
 // post-create hook, cwd transition, and session registry update.
 
-import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 
@@ -26,6 +25,7 @@ import { resolveWorktreeProjectRoot } from "./worktree-root.js";
 import { createWorkspace } from "./workspace.js";
 import { debugLog } from "./debug-logger.js";
 import { logWarning } from "./workflow-logger.js";
+import { gitCapture } from "./git-exec.js";
 
 function importUntrackedProjectRootContentIntoEmptyWorktree(
   projectRoot: string,
@@ -76,10 +76,7 @@ export function createAutoWorktree(
 
   // Check if repo has commits — git worktree requires a valid HEAD.
   try {
-    execFileSync("git", ["rev-parse", "--verify", "HEAD"], {
-      cwd: basePath,
-      stdio: "pipe",
-    });
+    gitCapture(basePath, ["rev-parse", "--verify", "HEAD"]);
   } catch {
     throw new GSDError(
       GSD_GIT_ERROR,

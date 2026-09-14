@@ -6,14 +6,13 @@
  * symlink replaces the original directory so all paths remain valid.
  */
 
-import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, renameSync, cpSync, rmSync, statSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { externalGsdRoot, externalStateAlreadyExistsForProject, isInsideWorktree } from "./repo-identity.js";
 import { getErrorMessage } from "./error-utils.js";
 import { hasGitTrackedGsdFiles } from "./gitignore.js";
-import { GIT_NO_PROMPT_ENV } from "./git-constants.js";
 import { gsdRoot, milestonesDir, resolveGsdRootFile } from "./paths.js";
+import { gitCapture } from "./git-exec.js";
 
 export interface MigrationResult {
   migrated: boolean;
@@ -194,12 +193,7 @@ export function migrateToExternalState(basePath: string): MigrationResult {
     // as deleted. Remove them from the index so the working tree stays clean.
     // --ignore-unmatch makes this a no-op on fresh projects with no tracked .gsd/.
     try {
-      execFileSync("git", ["rm", "-r", "--cached", "--ignore-unmatch", ".gsd"], {
-        cwd: basePath,
-        stdio: ["ignore", "pipe", "ignore"],
-        env: GIT_NO_PROMPT_ENV,
-        timeout: 10_000,
-      });
+      gitCapture(basePath, ["rm", "-r", "--cached", "--ignore-unmatch", ".gsd"], { timeout: 10_000 });
     } catch {
       // Non-fatal — git may be unavailable or nothing was tracked
     }

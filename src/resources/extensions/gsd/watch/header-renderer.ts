@@ -1,7 +1,6 @@
 // Project/App: gsd-pi
 // File Purpose: Watch-mode terminal header and splash renderer for GSD project status.
 
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +12,7 @@ import { splashPalette } from "./splash-palette.js";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 import { GSD_PI_LOGO } from "../../../shared/gsd-pi-logo.js";
+import { gitCapture } from "../git-exec.js";
 
 /** Label column width for Model/Provider/Directory/Branch rows. */
 const LABEL_COL_WIDTH = 10;
@@ -124,11 +124,7 @@ export function shortenPath(fullPath: string): string {
  */
 export function readGitBranch(projectRoot: string): string {
   try {
-    return execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
-      cwd: projectRoot,
-      encoding: "utf-8",
-      timeout: 2000,
-    }).trim();
+    return gitCapture(projectRoot, ["rev-parse", "--abbrev-ref", "HEAD"], { timeout: 2000 });
   } catch {
     return "unknown";
   }

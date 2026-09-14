@@ -1,16 +1,15 @@
 // Project/App: gsd-pi
 // File Purpose: Closeout git failure discovery, retry, and manual resolution helpers.
 
-import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 
-import { GIT_NO_PROMPT_ENV } from "./git-constants.js";
 import { runTurnGitAction, type TurnGitActionMode, type TurnGitActionResult } from "./git-service.js";
 import { _getAdapter, upsertTurnGitTransaction } from "./gsd-db.js";
 import { probeGitConflictState } from "./git-conflict-state.js";
 import { parseUnitId } from "./unit-id.js";
 import { worktreePathFor } from "./worktree-placement.js";
+import { gitCapture } from "./git-exec.js";
 
 export interface CloseoutFailureRecord {
   traceId: string;
@@ -165,12 +164,7 @@ export function resolveCloseoutRecoveryBasePath(projectRoot: string, record: Clo
 }
 
 function runGit(basePath: string, args: string[]): string {
-  return execFileSync("git", args, {
-    cwd: basePath,
-    stdio: ["ignore", "pipe", "pipe"],
-    encoding: "utf-8",
-    env: GIT_NO_PROMPT_ENV,
-  }).trim();
+  return gitCapture(basePath, args);
 }
 
 function gitPathExists(basePath: string, marker: string): boolean {

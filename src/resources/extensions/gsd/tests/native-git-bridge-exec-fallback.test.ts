@@ -26,7 +26,6 @@ import {
   nativeResetHard,
   nativeWorktreeAdd,
 } from "../native-git-bridge.js";
-import { GIT_NO_PROMPT_ENV } from "../git-constants.js";
 
 // Note: prior static-analysis tests that scanned native-git-bridge.ts for
 // the raw shell-spawn pattern were removed under #4827 — the integration
@@ -114,16 +113,12 @@ process.exit(result.status ?? 1);
     git(["add", "."], repo);
 
     const originalPath = process.env.PATH ?? "";
-    const gitEnv = GIT_NO_PROMPT_ENV as NodeJS.ProcessEnv;
-    const originalGitEnvPath = gitEnv.PATH;
     try {
       process.env.PATH = `${bin}${delimiter}${originalPath}`;
-      gitEnv.PATH = process.env.PATH;
       const result = nativeCommit(repo, "test: retry ENOBUFS commit");
       assert.ok(result !== null, "commit should succeed after retry");
     } finally {
       process.env.PATH = originalPath;
-      gitEnv.PATH = originalGitEnvPath;
     }
 
     assert.equal(readFileSync(attempts, "utf-8").length, 2);

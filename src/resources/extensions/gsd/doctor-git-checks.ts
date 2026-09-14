@@ -1,5 +1,4 @@
 // gsd-pi doctor git health checks
-import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 
@@ -19,6 +18,7 @@ import { loadEffectiveGSDPreferences } from "./preferences.js";
 import { listUnmergedGitPaths, probeGitConflictState, reconcileGitConflictsOnSignal } from "./git-conflict-state.js";
 import { resolveWorktreeProjectRoot } from "./worktree-root.js";
 import { enterBranchModeForMilestone } from "./auto-worktree-branch-lifecycle.js";
+import { gitSpawn } from "./git-exec.js";
 
 /**
  * Returns true if the directory contains only doctor artifacts
@@ -88,10 +88,7 @@ function isProjectContentPath(path: string): boolean {
 }
 
 function gitLines(basePath: string, args: string[]): string[] {
-  const result = spawnSync("git", args, {
-    cwd: basePath,
-    encoding: "utf-8",
-  });
+  const result = gitSpawn(basePath, args);
   if (result.status !== 0) return [];
   return result.stdout
     .split("\n")
@@ -148,10 +145,7 @@ function getSnapshotDiffCheckFailure(basePath: string): string | null {
   const failures: string[] = [];
 
   for (const args of [["--cached"], []]) {
-    const result = spawnSync("git", ["diff", "--check", ...args], {
-      cwd: basePath,
-      encoding: "utf-8",
-    });
+    const result = gitSpawn(basePath, ["diff", "--check", ...args]);
     if (result.status === 0) continue;
 
     const output = [result.stdout, result.stderr, result.error?.message]
@@ -260,10 +254,7 @@ export async function checkGitHealth(
               branch: wt.branch,
               reuseExistingBranch: true,
             });
-            const reset = spawnSync("git", ["reset", "--hard"], {
-              cwd: recreated.path,
-              encoding: "utf-8",
-            });
+            const reset = gitSpawn(recreated.path, ["reset", "--hard"]);
             if (reset.status !== 0) {
               throw new Error(reset.stderr || reset.error?.message || "git reset --hard failed");
             }

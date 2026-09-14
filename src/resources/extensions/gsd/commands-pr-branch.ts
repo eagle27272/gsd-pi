@@ -8,23 +8,22 @@
 
 import type { ExtensionCommandContext } from "@gsd/pi-coding-agent";
 
-import { execFileSync } from "node:child_process";
-
 import {
   nativeGetCurrentBranch,
   nativeDetectMainBranch,
   nativeBranchExists,
 } from "./native-git-bridge.js";
+import { gitCapture } from "./git-exec.js";
 
 const EXCLUDED_PATHS = [".gsd", ".planning", "PLAN.md"] as const;
 
 function git(basePath: string, args: readonly string[]): string {
-  return execFileSync("git", args, { cwd: basePath, encoding: "utf-8" }).trim();
+  return gitCapture(basePath, args);
 }
 
 function gitAllowFail(basePath: string, args: readonly string[]): void {
   try {
-    execFileSync("git", args, { cwd: basePath, encoding: "utf-8", stdio: "pipe" });
+    gitCapture(basePath, args);
   } catch {
     // ignored — caller opts into non-fatal behavior
   }
@@ -32,10 +31,7 @@ function gitAllowFail(basePath: string, args: readonly string[]): void {
 
 function hasStagedChanges(basePath: string): boolean {
   try {
-    execFileSync("git", ["diff", "--cached", "--quiet"], {
-      cwd: basePath,
-      stdio: "pipe",
-    });
+    gitCapture(basePath, ["diff", "--cached", "--quiet"]);
     return false;
   } catch {
     return true;
@@ -44,7 +40,7 @@ function hasStagedChanges(basePath: string): boolean {
 
 function isValidBranchName(name: string): boolean {
   try {
-    execFileSync("git", ["check-ref-format", "--branch", name], { stdio: "pipe" });
+    gitCapture(undefined, ["check-ref-format", "--branch", name]);
     return true;
   } catch {
     return false;

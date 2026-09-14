@@ -28,7 +28,6 @@
  * repairs own their raw primitives (see CONTEXT.md, Drift repair).
  */
 
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 
@@ -44,6 +43,7 @@ import {
   nativeWorkingTreeStatus,
 } from "./native-git-bridge.js";
 import { resolveGitDir } from "./worktree-manager.js";
+import { gitCapture } from "./git-exec.js";
 
 /**
  * Pop the stash entry created with `stashMarker` in its subject, resolving it
@@ -64,11 +64,7 @@ export function popStashByRef(basePath: string, stashMarker: string | null): str
   let popArg: string | null = null;
   if (stashMarker) {
     try {
-      const list = execFileSync("git", ["stash", "list", "--format=%gd%x00%s"], {
-        cwd: basePath,
-        stdio: ["ignore", "pipe", "pipe"],
-        encoding: "utf-8",
-      }).trim().split("\n").filter(Boolean);
+      const list = gitCapture(basePath, ["stash", "list", "--format=%gd%x00%s"]).split("\n").filter(Boolean);
       for (const entry of list) {
         const [ref, subject] = entry.split("\0");
         if (ref && subject?.includes(stashMarker)) {
@@ -85,11 +81,7 @@ export function popStashByRef(basePath: string, stashMarker: string | null): str
     return null;
   }
   try {
-    execFileSync("git", ["stash", "pop", popArg], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    });
+    gitCapture(basePath, ["stash", "pop", popArg]);
   } catch (err) {
     if (err && typeof err === "object") {
       (err as { stashRef?: string }).stashRef = popArg;
@@ -153,11 +145,7 @@ export function gsdJsonlFilesWithConflictMarkers(basePath: string): string[] {
 export function removeMergeStateFiles(basePath: string, contextLabel: string): void {
   try {
     for (const f of ["SQUASH_MSG", "MERGE_MSG", "MERGE_MODE", "MERGE_HEAD", "AUTO_MERGE"]) {
-      const rawPath = execFileSync("git", ["rev-parse", "--git-path", f], {
-        cwd: basePath,
-        stdio: ["ignore", "pipe", "pipe"],
-        encoding: "utf-8",
-      }).trim();
+      const rawPath = gitCapture(basePath, ["rev-parse", "--git-path", f]);
       const p = rawPath.length > 0
         ? (isAbsolute(rawPath) ? rawPath : resolve(basePath, rawPath))
         : join(resolveGitDir(basePath), f);
@@ -182,11 +170,7 @@ export function cleanupConflictState(basePath: string): void {
     });
   }
   try {
-    execFileSync("git", ["reset", "--merge"], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    });
+    gitCapture(basePath, ["reset", "--merge"]);
   } catch (err) {
     logError("worktree", `git reset --merge failed after merge conflict: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -206,25 +190,9 @@ export function checkoutBranchWithStashGuard(
   const status = nativeWorkingTreeStatus(basePath).trim();
   if (status.length > 0) {
     stashMarker = `gsd-checkout-stash:${reason}:${process.pid}:${Date.now()}:${process.hrtime.bigint().toString(36)}`;
-    const stashListBefore = execFileSync("git", ["stash", "list"], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    });
-    execFileSync(
-      "git",
-      ["stash", "push", "--include-untracked", "-m", `gsd: checkout stash [${stashMarker}]`],
-      {
-        cwd: basePath,
-        stdio: ["ignore", "pipe", "pipe"],
-        encoding: "utf-8",
-      },
-    );
-    const stashListAfter = execFileSync("git", ["stash", "list"], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    });
+    const stashListBefore = gitCapture(basePath, ["stash", "list"], { trim: false });
+    gitCapture(basePath, ["stash", "push", "--include-untracked", "-m", `gsd: checkout stash [${stashMarker}]`]);
+    const stashListAfter = gitCapture(basePath, ["stash", "list"], { trim: false });
     stashed = stashListAfter !== stashListBefore;
   }
 
@@ -283,21 +251,13 @@ export function checkoutBranchWithStashGuard(
         nonGsdUnmerged.length === 0
       ) {
         for (const f of resolvable) {
-          execFileSync("git", ["checkout", "HEAD", "--", f], {
-            cwd: basePath,
-            stdio: ["ignore", "pipe", "pipe"],
-            encoding: "utf-8",
-          });
+          gitCapture(basePath, ["checkout", "HEAD", "--", f]);
           nativeAddPaths(basePath, [f]);
         }
 
         if (stashRefForDrop) {
           try {
-            execFileSync("git", ["stash", "drop", stashRefForDrop], {
-              cwd: basePath,
-              stdio: ["ignore", "pipe", "pipe"],
-              encoding: "utf-8",
-            });
+            gitCapture(basePath, ["stash", "drop", stashRefForDrop]);
           } catch (err) { /* stash may already be consumed */
             logWarning("worktree", `git stash drop failed: ${err instanceof Error ? err.message : String(err)}`);
           }

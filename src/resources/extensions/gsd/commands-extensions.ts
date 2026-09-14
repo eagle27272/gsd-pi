@@ -13,6 +13,7 @@ import { homedir, tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { gsdHome } from "./gsd-home.js";
 import { withFileLockSync } from "./file-lock.js";
+import { gitCapture } from "./git-exec.js";
 
 /**
  * Strict numeric comparison of two npm-style version strings.
@@ -880,7 +881,7 @@ function installFromGit(gitUrl: string, installedExtDir: string, ctx: ExtensionC
   // Clone into temp dir, validate, then rename to real ID (D-02)
   const tmpDir = join(installedExtDir, `__installing-${Date.now()}`);
   try {
-    execFileSync("git", ["clone", "--depth=1", gitUrl, tmpDir], { stdio: "pipe" });
+    gitCapture(undefined, ["clone", "--depth=1", gitUrl, tmpDir]);
 
     // Remove .git directory — not needed after clone
     const dotGit = join(tmpDir, ".git");

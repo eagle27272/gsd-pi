@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 /**
  * Regression tests for #1997: git locale not forced to C.
  *
- * Validates that GIT_NO_PROMPT_ENV includes LC_ALL=C so git always produces
+ * Validates that gitNoPromptEnv() includes LC_ALL=C so git always produces
  * English output, and that nativeMergeSquash passes the env to execFileSync.
  */
 
@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 
-import { GIT_NO_PROMPT_ENV } from "../../git-constants.ts";
+import { gitNoPromptEnv } from "../../git-constants.ts";
 import { nativeAddAllWithExclusions, nativeMergeSquash } from "../../native-git-bridge.ts";
 import { RUNTIME_EXCLUSION_PATHS } from "../../git-service.ts";
 function git(cwd: string, ...args: string[]): string {
@@ -38,18 +38,18 @@ function createFile(base: string, relPath: string, content: string): void {
 }
 
 describe('git-locale', async () => {
-  // ─── GIT_NO_PROMPT_ENV includes LC_ALL=C ─────────────────────────────
+  // ─── gitNoPromptEnv() includes LC_ALL=C ─────────────────────────────
 
 
   assert.deepStrictEqual(
-    GIT_NO_PROMPT_ENV.LC_ALL,
+    gitNoPromptEnv().LC_ALL,
     "C",
-    "GIT_NO_PROMPT_ENV must set LC_ALL to 'C' to force English git output"
+    "gitNoPromptEnv() must set LC_ALL to 'C' to force English git output"
   );
 
   assert.ok(
-    "GIT_TERMINAL_PROMPT" in GIT_NO_PROMPT_ENV,
-    "GIT_NO_PROMPT_ENV still contains GIT_TERMINAL_PROMPT"
+    "GIT_TERMINAL_PROMPT" in gitNoPromptEnv(),
+    "gitNoPromptEnv() still contains GIT_TERMINAL_PROMPT"
   );
 
   // ─── nativeAddAllWithExclusions: non-English locale does not throw ───

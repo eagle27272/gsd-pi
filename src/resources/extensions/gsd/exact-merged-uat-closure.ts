@@ -1,13 +1,13 @@
 // Project/App: gsd-pi
 // File Purpose: Enforce exact-merged UAT evidence required by source-declared closure dossiers.
 
-import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { getDb } from "./db/engine.js";
 import type { TaskTechnicalVerdictSnapshot } from "./task-verification-domain-operation.js";
 import { readUatExecEvidenceMetadata } from "./uat-run.js";
+import { gitSpawn } from "./git-exec.js";
 
 export interface ExactMergedUatClosureInput {
   basePath: string;
@@ -94,7 +94,7 @@ function requiredEnvironmentString(
 }
 
 function gitOutput(basePath: string, args: string[]): string {
-  const result = spawnSync("git", args, { cwd: basePath, encoding: "utf8" });
+  const result = gitSpawn(basePath, args);
   if (result.error) throw result.error;
   if (result.status !== 0) {
     throw new Error(result.stderr.trim() || `git ${args.join(" ")} failed`);

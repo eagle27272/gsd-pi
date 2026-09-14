@@ -1,9 +1,8 @@
+import { gitCapture } from "./git-exec.js";
 // gsd-pi + src/resources/extensions/gsd/orphan-stash-audit.ts
 // Startup sweep for orphaned gsd-preflight-stash entries left behind by
 // interrupted milestone merges (#5538-followup).
 
-import { execFileSync } from "node:child_process";
-import { GIT_NO_PROMPT_ENV } from "./git-constants.js";
 
 export interface OrphanPreflightStashAuditResult {
   applied: Array<{ milestoneId: string; stashRef: string }>;
@@ -34,12 +33,7 @@ function _isAlreadyRestoredApplyError(err: unknown): boolean {
 export { _isAlreadyRestoredApplyError };
 
 function gitOutput(basePath: string, args: string[]): string {
-  return execFileSync("git", args, {
-    cwd: basePath,
-    stdio: ["ignore", "pipe", "pipe"],
-    encoding: "utf-8",
-    env: GIT_NO_PROMPT_ENV,
-  });
+  return gitCapture(basePath, args, { trim: false });
 }
 
 function listStashUntrackedPaths(basePath: string, stashRef: string): string[] | null {

@@ -16,7 +16,6 @@ import { execFileSync } from "node:child_process";
 
 import { mergeMilestoneToMain } from "../auto-worktree-merge.ts";
 import { closeDatabase, insertAssessment, insertMilestone, insertSlice, openDatabase } from "../gsd-db.ts";
-import { GIT_NO_PROMPT_ENV } from "../git-constants.js";
 import { _clearGsdRootCache } from "../paths.ts";
 import { _resetServiceCache } from "../worktree.ts";
 import { worktreePath } from "../worktree-manager.ts";
@@ -121,8 +120,6 @@ function createRepo(root: string): { repo: string; worktree: string } {
 test("mergeMilestoneToMain keeps the Windows DB cycle closed through squash merge", () => {
   const savedCwd = process.cwd();
   const originalPath = process.env.PATH ?? "";
-  const gitEnv = GIT_NO_PROMPT_ENV as NodeJS.ProcessEnv;
-  const originalGitEnvPath = gitEnv.PATH;
   const originalHome = process.env.HOME;
   const originalGsdHome = process.env.GSD_HOME;
 
@@ -157,7 +154,6 @@ test("mergeMilestoneToMain keeps the Windows DB cycle closed through squash merg
 
     withPlatform("win32", () => {
       process.env.PATH = `${bin}${delimiter}${originalPath}`;
-      gitEnv.PATH = process.env.PATH;
       process.chdir(worktree);
 
       const result = mergeMilestoneToMain(repo, "M001", "# M001: Windows DB cycle\n");
@@ -170,7 +166,6 @@ test("mergeMilestoneToMain keeps the Windows DB cycle closed through squash merg
     closeDatabase();
     process.chdir(savedCwd);
     process.env.PATH = originalPath;
-    gitEnv.PATH = originalGitEnvPath;
     if (originalHome === undefined) {
       delete process.env.HOME;
     } else {
