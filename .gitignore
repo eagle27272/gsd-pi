@@ -59,7 +59,7 @@ bun.lock
 .plans/
 docs/coherence-audit/
 
-# Local GSD Path working state (tracked files stay tracked; new files ignored)
+# Local GSD Path working state
 .project/
 
 # Local MCP client config

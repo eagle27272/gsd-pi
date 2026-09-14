@@ -68,7 +68,7 @@ echo "── native addon from source (test-fault-injection) ──"
 if ! command -v rustc >/dev/null 2>&1; then
   echo "verify:merge needs Rust to build the local native engine (pnpm run build:native:test)."
   echo "CI does this before unit tests so ProjectionRootIdentityLock matches this commit."
-  echo "Install rustup, then re-run. See CONTRIBUTING.md (Native engine version lockstep)."
+  echo "Install rustup, then re-run. See docs/dev/development.md (Native engine version lockstep)."
   exit 1
 fi
 pnpm run build:native:test

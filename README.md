@@ -73,8 +73,7 @@ node scripts/dev-cli.js quick --output-format json "Describe the task"
 ## Docs
 
 - [`docs/`](./docs/) — user and developer documentation
-- [`VISION.md`](./VISION.md) — project vision
-- [`CONTRIBUTING.md`](./CONTRIBUTING.md) — development workflow
+- [`docs/dev/development.md`](./docs/dev/development.md) — local development workflow and engineering rules
 
 ## License
 

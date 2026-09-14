@@ -5,9 +5,9 @@
  * the latest Task Attempt and nothing else. There is no longer a legacy branch
  * that reads a slice PLAN — with the DB open the Attempt decides, and with the
  * DB unavailable the unit fails closed. The #3607 checkbox-discrimination
- * tests that used to live here were retired for that reason (see
- * `docs/dev/state-db-cutover-milestone-decision.md`); a test that asserts
- * against an unreachable branch reads as protection that does not exist.
+ * tests that used to live here were retired for that reason; a test that
+ * asserts against an unreachable branch reads as protection that does not
+ * exist.
  *
  * What remains here:
  * - `execute-task` fails closed with a `recovery` warning when the DB is

@@ -2,7 +2,6 @@
 //
 // Reports GSD lifecycle state, session identity, and auto-mode context to the
 // Herdr pane this session runs in. A no-op unless detectHerdrEnv() is non-null.
-// See docs/superpowers/specs/2026-09-09-herdr-extension-design.md.
 
 import type { ExtensionAPI } from "@gsd/pi-coding-agent";
 import { detectHerdrEnv } from "./env.js";

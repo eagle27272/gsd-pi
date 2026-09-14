@@ -1,6 +1,6 @@
 /**
  * single-writer-v3-tool-surface — Verifies the MCP tool surface that closes
- * the remaining gaps from .plans/single-writer-engine-v3-control-plane.md:
+ * the remaining single-writer engine v3 control-plane gaps:
  *
  *   1. The 8 mutating workflow tools (plan/complete/replan/reassess) expose
  *      actorName + triggerReason as optional schema params, so an agent can

@@ -109,4 +109,4 @@ These are tracked limitations, not bugs to hide:
 
 - [Test evaluation report](./test-evaluation-report.md) — regeneratable matrix snapshot
 - [CI/CD Pipeline Guide](./ci-cd-pipeline.md) — promotion pipeline and workflow files
-- [CONTRIBUTING.md](../../CONTRIBUTING.md) — local development commands
+- [Development](./development.md) — local development commands

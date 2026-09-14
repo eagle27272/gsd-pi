@@ -4,7 +4,7 @@
 #
 # Fails CI if a PR adds or modifies a test file that reads a source file with
 # readFileSync / readFile / fs.promises.readFile and asserts against its text
-# (regex, includes, match). See "No source-grep tests" in CONTRIBUTING.md.
+# (regex, includes, match). See "No source-grep tests" in docs/dev/development.md.
 #
 # Escape hatch: add `// allow-source-grep: <reason>` on or directly above the
 # offending line. The reason becomes part of the diff and is visible at review.
@@ -83,7 +83,7 @@ if [ -n "$OFFENDERS" ]; then
   echo ""
   printf '%s' "$OFFENDERS" | sed 's/^/  /'
   echo ""
-  echo "See \"No source-grep tests\" in CONTRIBUTING.md."
+  echo "See \"No source-grep tests\" in docs/dev/development.md."
   echo ""
   echo "If this is a legitimate exception (code generator, file-structure"
   echo "linter, manifest producer), add on or directly above the line:"

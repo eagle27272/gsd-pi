@@ -175,4 +175,4 @@ Every bundled extension PR must include:
 2. Move source to `src/resources/extensions/<name>/`.
 3. Change tier to `"bundled"` in manifest.
 4. Add tests meeting the standards above.
-5. Open a PR following the normal [contribution process](../../CONTRIBUTING.md).
+5. Open a PR following the normal [development workflow](../dev/development.md).

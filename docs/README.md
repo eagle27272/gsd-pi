@@ -6,8 +6,6 @@ Welcome to the GSD documentation. This covers everything from getting started to
 
 Guides for installing, configuring, and using GSD day-to-day. Located in [`user-docs/`](./user-docs/).
 
-Simplified Chinese translation: [`zh-CN/`](./zh-CN/).
-
 | Guide | Description |
 |-------|-------------|
 | [Getting Started](./user-docs/getting-started.md) | Installation, first run, and basic usage |
@@ -76,5 +74,5 @@ Guides for the underlying Pi SDK that GSD is built on. Located in [`dev/`](./dev
 | Guide | Description |
 |-------|-------------|
 | [Building Coding Agents](./dev/building-coding-agents/README.md) | Research notes on agent design — decomposition, context engineering, cost/quality tradeoffs |
-| [Proposals](./dev/proposals/) | Feature proposals and workflow definitions |
-| [Superpowers](./dev/superpowers/) | Plans and specs for superpower features |
+| [Proposals](./dev/proposals/) | Feature proposals |
+| [Development](./dev/development.md) | Local development workflow, testing standards, engineering rules |
