@@ -12,8 +12,8 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
 import {
-  NO_CUTOVER_BEHAVIORAL_WITNESSES,
-} from "../semantic-shadow-no-cutover-gate.mjs";
+  LIFECYCLE_SHADOW_BEHAVIORAL_WITNESSES,
+} from "../lifecycle-shadow-no-cutover-gate.mjs";
 import { buildDossier, renderDossier } from "../m003-s07-cutover-dossier.mjs";
 import {
   collectSemanticShadowCapstoneEvidence,
@@ -204,8 +204,8 @@ function passingReports(databasePath?: string) {
     runNoCutover: () => ({
       verdict: "pass",
       githubMetadataUsed: false,
-      structuralChecks: Array.from({ length: 8 }, (_, index) => ({ id: `structural-${index}`, verdict: "pass" })),
-      behavioralChecks: NO_CUTOVER_BEHAVIORAL_WITNESSES.map((witness) => ({ ...witness, verdict: "pass" })),
+      structuralChecks: Array.from({ length: 7 }, (_, index) => ({ id: `structural-${index}`, verdict: "pass" })),
+      behavioralChecks: LIFECYCLE_SHADOW_BEHAVIORAL_WITNESSES.map((witness) => ({ ...witness, verdict: "pass" })),
     }),
     runAuthorityBaseline: () => ({
       verdict: "pass",
@@ -255,7 +255,7 @@ test("collector emits one canonical read-only snapshot without relabeling fixtur
   );
   assert.deepEqual(input.taskReceiptHeads.map((head) => head.taskId), ["T01", "T02", "T03", "T04", "T05", "T06"]);
   assert.deepEqual(input.compatibilityInventory.map(({ id, file, title }) => ({ id, file, title })),
-    NO_CUTOVER_BEHAVIORAL_WITNESSES.map(({ id, file, title }) => ({ id, file, title })));
+    LIFECYCLE_SHADOW_BEHAVIORAL_WITNESSES.map(({ id, file, title }) => ({ id, file, title })));
   assert.equal(buildDossier(input).recommendation, "NO_GO");
   assert.deepEqual(input.commands.map(({ id, stage, verdict }) => ({ id, stage, verdict })), [
     { id: "semantic-shadow-capstone", stage: "post_generation", verdict: "required" },
@@ -489,9 +489,10 @@ test("CLI runs local reports and emits canonical validator-ready JSON", async ()
   assert.equal(stdout.trimStart()[0], "{");
   assert.equal(stdout.endsWith("\n"), true);
   assert.equal(buildDossier(input).recommendation, "NO_GO");
+  const witnessCount = LIFECYCLE_SHADOW_BEHAVIORAL_WITNESSES.length;
   assert.deepEqual(input.noCutover, {
-    structural: { passed: 8, total: 8 },
-    behavioral: { passed: 15, total: 15 },
+    structural: { passed: 7, total: 7 },
+    behavioral: { passed: witnessCount, total: witnessCount },
   });
   assert.deepEqual(input.authorityBaseline, { passed: 4, total: 4 });
 });
