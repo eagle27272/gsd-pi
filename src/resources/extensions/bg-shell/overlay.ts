@@ -18,7 +18,15 @@ export class BgManagerOverlay {
 	private tui: { requestRender: () => void };
 	private theme: Theme;
 	private onClose: () => void;
-	private selected = 0;
+	/**
+	 * Selection is anchored to a process id, not a row index: the registry is an
+	 * insertion-ordered Map that restart (delete + re-insert under a fresh id) and
+	 * pruneDeadProcesses mutate underneath an open overlay, so an index silently
+	 * re-points at a different process.
+	 */
+	private selectedId: string | null = null;
+	/** Row to fall back to when the selected id is gone from the registry. */
+	private selectedRow = 0;
 	private mode: "list" | "output" | "events" = "list";
 	private viewingProcess: BgProcess | null = null;
 	private scrollOffset = 0;
@@ -44,10 +52,38 @@ export class BgManagerOverlay {
 		return Array.from(processes.values());
 	}
 
+	/**
+	 * Resolve the selected row against the current list, re-anchoring to the
+	 * remembered row only when the selected process has left the registry.
+	 * Returns -1 when there is nothing to select.
+	 */
+	private selectedIndex(procs: BgProcess[]): number {
+		if (procs.length === 0) {
+			this.selectedId = null;
+			this.selectedRow = 0;
+			return -1;
+		}
+		const byId = this.selectedId ? procs.findIndex(p => p.id === this.selectedId) : -1;
+		const index = byId >= 0 ? byId : Math.min(this.selectedRow, procs.length - 1);
+		this.selectedRow = index;
+		this.selectedId = procs[index].id;
+		return index;
+	}
+
+	private selectedProcess(procs: BgProcess[]): BgProcess | undefined {
+		const index = this.selectedIndex(procs);
+		return index >= 0 ? procs[index] : undefined;
+	}
+
+	private select(procs: BgProcess[], index: number): void {
+		this.selectedRow = index;
+		this.selectedId = procs[index]?.id ?? null;
+	}
+
 	selectAndView(index: number): void {
 		const procs = this.getProcessList();
 		if (index >= 0 && index < procs.length) {
-			this.selected = index;
+			this.select(procs, index);
 			this.viewingProcess = procs[index];
 			this.mode = "output";
 			this.scrollOffset = Math.max(0, procs[index].output.length - 20);
@@ -76,8 +112,9 @@ export class BgManagerOverlay {
 		}
 
 		if (matchesKey(data, Key.up) || matchesKey(data, "k")) {
-			if (this.selected > 0) {
-				this.selected--;
+			const index = this.selectedIndex(procs);
+			if (index > 0) {
+				this.select(procs, index - 1);
 				this.invalidate();
 				this.tui.requestRender();
 			}
@@ -85,8 +122,9 @@ export class BgManagerOverlay {
 		}
 
 		if (matchesKey(data, Key.down) || matchesKey(data, "j")) {
-			if (this.selected < procs.length - 1) {
-				this.selected++;
+			const index = this.selectedIndex(procs);
+			if (index >= 0 && index < procs.length - 1) {
+				this.select(procs, index + 1);
 				this.invalidate();
 				this.tui.requestRender();
 			}
@@ -94,7 +132,7 @@ export class BgManagerOverlay {
 		}
 
 		if (matchesKey(data, Key.enter)) {
-			const proc = procs[this.selected];
+			const proc = this.selectedProcess(procs);
 			if (proc) {
 				this.viewingProcess = proc;
 				this.mode = "output";
@@ -107,7 +145,7 @@ export class BgManagerOverlay {
 
 		// e = view events
 		if (data === "e") {
-			const proc = procs[this.selected];
+			const proc = this.selectedProcess(procs);
 			if (proc) {
 				this.viewingProcess = proc;
 				this.mode = "events";
@@ -118,11 +156,13 @@ export class BgManagerOverlay {
 			return;
 		}
 
-		// r = restart
+		// r = restart. The relaunched process gets a fresh id and lands at the end of
+		// the registry, so carry the selection over to it explicitly.
 		if (data === "r") {
-			const proc = procs[this.selected];
+			const proc = this.selectedProcess(procs);
 			if (proc) {
-				restartProcess(proc.id).then(() => {
+				restartProcess(proc.id).then((restarted) => {
+					if (restarted) this.selectedId = restarted.id;
 					this.invalidate();
 					this.tui.requestRender();
 				}).catch((err) => {
@@ -140,7 +180,7 @@ export class BgManagerOverlay {
 		// plus slack so the row reflects the SIGKILL escalation (a 300ms re-render against
 		// the default 5s grace would show the process still alive).
 		if (data === "x" || data === "d") {
-			const proc = procs[this.selected];
+			const proc = this.selectedProcess(procs);
 			if (proc && proc.alive) {
 				const OVERLAY_KILL_GRACE_MS = 500;
 				terminateProcess(proc.id, OVERLAY_KILL_GRACE_MS);
@@ -155,7 +195,8 @@ export class BgManagerOverlay {
 		// X or D = kill all
 		if (data === "X" || data === "D") {
 			cleanupAll();
-			this.selected = 0;
+			this.selectedId = null;
+			this.selectedRow = 0;
 			this.invalidate();
 			this.tui.requestRender();
 			return;
@@ -276,6 +317,10 @@ export class BgManagerOverlay {
 	}
 
 	private box(inner: string[], width: number): string[] {
+		// resolveOverlayLayout clamps to Math.max(1, …) after applying minWidth, so a
+		// 1-column terminal really can hand us a width the border does not fit in.
+		if (width < 4) return inner.map(line => truncateToWidth(line, Math.max(0, width)));
+
 		const th = this.theme;
 		const bdr = (s: string) => th.fg("borderMuted", s);
 		const iw = width - 4;
@@ -306,9 +351,10 @@ export class BgManagerOverlay {
 		inner.push(th.fg("dim", "Background Processes"));
 		inner.push("");
 
+		const selectedIndex = this.selectedIndex(procs);
 		for (let i = 0; i < procs.length; i++) {
 			const p = procs[i];
-			const sel = i === this.selected;
+			const sel = i === selectedIndex;
 			const pointer = sel ? th.fg("accent", "▸ ") : "  ";
 
 			const statusIcon = p.alive

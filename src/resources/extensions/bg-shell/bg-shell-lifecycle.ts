@@ -18,6 +18,7 @@ import {
 	pendingAlerts,
 	pushAlert,
 	cleanupAll,
+	cleanupNonPersistentProcesses,
 	cleanupSessionProcesses,
 	persistManifest,
 	loadManifest,
@@ -54,14 +55,6 @@ export function registerBgShellLifecycle(pi: ExtensionAPI, state: BgShellSharedS
 	process.on("SIGTERM", signalCleanup);
 	process.on("SIGINT", signalCleanup);
 	process.on("beforeExit", signalCleanup);
-
-	// Clean up on session shutdown — remove signal handlers to prevent accumulation
-	pi.on("session_shutdown", async () => {
-		process.off("SIGTERM", signalCleanup);
-		process.off("SIGINT", signalCleanup);
-		process.off("beforeExit", signalCleanup);
-		cleanupAll();
-	});
 
 	// ── Compaction Awareness: Survive Context Resets ───────────────
 
@@ -401,13 +394,28 @@ export function registerBgShellLifecycle(pi: ExtensionAPI, state: BgShellSharedS
 		refreshWidget();
 	});
 
-	// Clean up on shutdown
-	pi.on("session_shutdown", async () => {
+	// Teardown and the manifest write belong in one handler: the manifest has to
+	// describe what survived, which is only knowable once teardown has run.
+	pi.on("session_shutdown", async (event) => {
 		clearInterval(maintenanceInterval);
+		process.off("SIGTERM", signalCleanup);
+		process.off("SIGINT", signalCleanup);
+		process.off("beforeExit", signalCleanup);
+
+		// "new"/"resume"/"fork" replace the session inside a live host: bg_shell
+		// promises persist_across_sessions processes survive that. "quit"/"reload"
+		// discard this module's registry, so anything left behind is unreachable.
+		const isSessionTransition =
+			event.reason === "new" || event.reason === "resume" || event.reason === "fork";
+		if (isSessionTransition) {
+			await cleanupNonPersistentProcesses();
+		} else {
+			cleanupAll();
+		}
+
 		if (state.latestCtx) {
 			syncLatestCtxCwd();
 			persistManifest(state.latestCtx.cwd);
 		}
-		cleanupAll();
 	});
 }
