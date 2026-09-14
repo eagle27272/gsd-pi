@@ -14,7 +14,8 @@
  */
 
 import { truncateToWidth, visibleWidth } from "@gsd/pi-tui";
-import { makeUI, GLYPH, INDENT } from "../src/resources/extensions/shared/mod.js";
+import { GLYPH, INDENT } from "../src/resources/extensions/shared/mod.js";
+import { makeUI } from "../src/resources/extensions/shared/tui.js";
 
 // ── Minimal ANSI color theme (no Theme class dependency) ────────────────
 

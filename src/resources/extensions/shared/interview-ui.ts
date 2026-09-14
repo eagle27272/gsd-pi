@@ -38,7 +38,8 @@ import {
 } from "@gsd/pi-tui";
 import { renderSharedDialogFrame } from "./dialog-frame.js";
 import { mergeSideBySide } from "./layout-utils.js";
-import { makeUI, INDENT } from "./ui.js";
+import { INDENT } from "./glyphs.js";
+import { makeUI } from "./ui.js";
 
 // ─── Exported types ───────────────────────────────────────────────────────────
 
