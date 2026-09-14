@@ -15,6 +15,7 @@ const __dirname = dirname(__filename);
 const ROOT = resolve(__dirname, '..');
 const require = createRequire(import.meta.url);
 const { getLinkablePackages } = require('./lib/workspace-manifest.cjs');
+const ROOT_PACKAGE_NAME = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).name;
 
 let tarball = null;
 let installDir = null;
@@ -38,6 +39,11 @@ function cleanNpmEnv(extra = {}) {
     npm_config_loglevel: 'error',
     ...extra,
   };
+  // `pnpm run` exports every .npmrc setting as npm_config_*, and npm reads those
+  // as if the matching flag were on the command line. `allow-scripts` is only
+  // accepted from a config file, so inheriting it makes npm reject the install
+  // outright (EALLOWSCRIPTS) and perturbs pack's prepack/postpack handling.
+  delete env.npm_config_allow_scripts;
   for (const key of Object.keys(env)) {
     if (!key.startsWith('npm_config_')) continue;
     const setting = key.slice('npm_config_'.length).replace(/_/g, '-');
@@ -226,8 +232,10 @@ try {
 
   console.log('==> Packing tarball...');
   const packOutput = runNpm(['pack', '--json', '--ignore-scripts']);
+  // npm 11 reports an array of entries; npm 12 reports an object keyed by
+  // package name. Accept both.
   const packEntries = JSON.parse(packOutput);
-  const packEntry = Array.isArray(packEntries) ? packEntries[0] : null;
+  const packEntry = (Array.isArray(packEntries) ? packEntries : Object.values(packEntries))[0] ?? null;
   if (!packEntry || typeof packEntry.filename !== 'string' || packEntry.filename.length === 0) {
     console.log('ERROR: npm pack returned no package metadata.');
     process.exit(1);
@@ -354,6 +362,13 @@ try {
   console.log('==> Testing install in isolated directory...');
   installDir = mkdtempSync(join(tmpdir(), 'validate-pack-'));
   writeFileSync(join(installDir, 'package.json'), JSON.stringify({ name: 'test-install', version: '1.0.0', private: true }, null, 2));
+  // npm 11 made lifecycle scripts opt-in, and this install exists precisely to
+  // prove the postinstall links the workspace packages — without approval the
+  // check below fails on a tarball that is actually fine. `allow-scripts` does
+  // not match a local tarball spec (verified against npm 11 and 12), so the
+  // blanket flag is the only form that works. It is scoped to this throwaway
+  // directory, installing a tarball we just built from this checkout.
+  writeFileSync(join(installDir, '.npmrc'), 'dangerously-allow-all-scripts=true\n');
 
   try {
     const installOutput = execFileSync(getNpmCommand(), ['install', tarball], {
@@ -382,7 +397,10 @@ try {
   // Checks every package with `gsd.linkable: true` — not just a hand-picked subset —
   // so any future addition is automatically covered.
   console.log('==> Verifying workspace package resolution (every linkable package)...');
-  const installedRoot = join(installDir, 'node_modules', '@opengsd', 'gsd-pi');
+  // Derived from the manifest, never hard-coded: a literal that disagrees with
+  // package.json makes every lookup below miss and reports all ten packages as
+  // "broken" while the tarball is perfectly fine.
+  const installedRoot = join(installDir, 'node_modules', ...ROOT_PACKAGE_NAME.split('/'));
   let resolutionFailed = false;
   for (const pkg of getLinkablePackages()) {
     const pkgPath = join(installedRoot, 'node_modules', pkg.scope, pkg.name);
@@ -580,7 +598,7 @@ try {
         npm_config_cache: npmCacheDir,
       }),
     }).trim();
-    const globalRoot = join(globalNodeModules, '@opengsd', 'gsd-pi');
+    const globalRoot = join(globalNodeModules, ...ROOT_PACKAGE_NAME.split('/'));
 
     // Workspace packages ship under packages/*/dist and are symlinked into
     // node_modules by the postinstall script, which `--ignore-scripts` skipped.
