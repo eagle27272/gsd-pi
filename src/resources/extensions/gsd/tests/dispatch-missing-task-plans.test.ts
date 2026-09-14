@@ -18,7 +18,7 @@ import { resolveDispatch } from "../auto-dispatch.ts";
 import type { DispatchContext } from "../auto-dispatch.ts";
 import type { AutoSession } from "../auto/session.ts";
 import type { GSDState } from "../types.ts";
-import { enableDebug, disableDebug, getDebugLogPath } from "../debug-logger.ts";
+import { enableDebug, disableDebug } from "../debug-logger.ts";
 import {
   closeDatabase,
   insertMilestone,
@@ -127,7 +127,7 @@ function scaffoldLegacySlicePlan(basePath: string, mid: string, sid: string): vo
   ].join("\n"));
 }
 
-function scaffoldLegacyTaskPlan(basePath: string, mid: string, sid: string, tid: string): void {
+function scaffoldLegacyTaskPlan(basePath: string, mid: string, _sid: string, tid: string): void {
   const dir = join(basePath, ".gsd", "phases", canonicalPhaseDirName(mid), "tasks");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${tid}-PLAN.md`), [
@@ -138,7 +138,7 @@ function scaffoldLegacyTaskPlan(basePath: string, mid: string, sid: string, tid:
   ].join("\n"));
 }
 
-function scaffoldTaskPlan(basePath: string, mid: string, sid: string, tid: string): void {
+function scaffoldTaskPlan(_basePath: string, _mid: string, _sid: string, _tid: string): void {
   // Flat-phase: no per-task plan files. This is a no-op — tasks live as
   // checkboxes inside the slice plan. Kept for backward-compat with tests
   // that call it; does nothing in flat-phase.

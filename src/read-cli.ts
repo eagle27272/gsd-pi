@@ -260,9 +260,8 @@ export async function runReadCli(
   }
 
   const projectDir = resolve(opts.project)
-  let gsdRoot: string
   try {
-    gsdRoot = resolveGsdRoot(projectDir)
+    resolveGsdRoot(projectDir)
   } catch (err) {
     process.stderr.write(
       `[gsd read] ${err instanceof Error ? err.message : String(err)}\n`,

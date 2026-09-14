@@ -1,0 +1,18 @@
+{
+  "//": [
+    "Compiler options shared by every project in the workspace.",
+    "",
+    "Deliberately NOT named tsconfig.base.json: five vendored pi package configs",
+    "(packages/pi-*/tsconfig.build.json and pi-coding-agent/tsconfig.examples.json)",
+    "already declare `extends: ../../tsconfig.base.json` against a file that does",
+    "not exist in this repo. Creating that filename would silently activate those",
+    "stale configs with upstream's options. See #82.",
+    "",
+    "Holds only the unused-code flags: every package tsconfig keeps its own",
+    "target/module/lib settings, which differ across the vendored packages."
+  ],
+  "compilerOptions": {
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  }
+}

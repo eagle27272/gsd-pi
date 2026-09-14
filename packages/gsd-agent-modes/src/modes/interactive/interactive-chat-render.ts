@@ -6,7 +6,7 @@ import type { AssistantMessage, Message } from "@gsd/pi-ai";
 import { parseSkillBlock } from "@gsd/agent-core";
 import type { SessionContext } from "@gsd/pi-coding-agent/core/session-manager.js";
 import type { TruncationResult } from "@gsd/pi-coding-agent/core/tools/truncate.js";
-import { Container, Markdown, Spacer, Text } from "@gsd/pi-tui";
+import { Markdown, Spacer, Text } from "@gsd/pi-tui";
 import { theme } from "@gsd/pi-coding-agent/theme/theme.js";
 import { AssistantMessageComponent } from "./components/assistant-message.js";
 import { reconcileChatTurnConnections } from "./components/chat-turn-connect.js";
@@ -24,7 +24,7 @@ import { MAX_CHAT_COMPONENTS } from "./interactive-mode-class-constants.js";
 import type { InteractiveModeDelegateHost } from "./interactive-mode-delegate-host.js";
 
 	/** Extract text content from a user message */
-export function getUserMessageText(host: InteractiveModeDelegateHost, message: Message): string {
+export function getUserMessageText(_host: InteractiveModeDelegateHost, message: Message): string {
 		if (message.role !== "user") return "";
 		const textBlocks =
 			typeof message.content === "string"
@@ -169,6 +169,7 @@ export function addMessageToChat(host: InteractiveModeDelegateHost, message: Age
 			}
 			default: {
 				const _exhaustive: never = message;
+				void _exhaustive;
 			}
 		}
 		finalizeChatMutation(host);

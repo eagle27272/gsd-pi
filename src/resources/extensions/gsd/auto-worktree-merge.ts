@@ -4,7 +4,6 @@
 // reconciliation, integration-branch merge, stash/shelter recovery, publication,
 // and safe teardown.
 
-import { atomicWriteSync } from "./atomic-write.js";
 import { debugLog } from "./debug-logger.js";
 import { GSDError, GSD_GIT_ERROR } from "./errors.js";
 import { autoResolveSafeConflictPaths } from "./git-conflict-resolve.js";
@@ -48,7 +47,7 @@ import {
   cleanupConflictState,
   removeMergeStateFiles,
 } from "./worktree-git-recovery.js";
-import { logError, logWarning } from "./workflow-logger.js";
+import { logWarning } from "./workflow-logger.js";
 
 export { _setRestoreEntryFnForTests } from "./auto-worktree-milestone-shelter.js";
 

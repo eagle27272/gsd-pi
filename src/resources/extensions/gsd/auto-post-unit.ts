@@ -118,7 +118,6 @@ import {
   isTaskAttemptAwaitingVerification,
   readLatestTaskAttempt,
 } from "./task-execution-domain-operation.js";
-import { recordFailureAndSelectRecovery } from "./task-recovery-domain-operation.js";
 import { isTaskExecutionReadyForHostVerification } from "./auto/task-execution-cutover.js";
 import { recaptureVerifiedSourceAfterDeferredCloseout } from "./auto/verified-source-recapture.js";
 import {
@@ -160,7 +159,6 @@ function isSamePathLocal(a: string, b: string): boolean {
 const _worktreeProjection = new WorktreeStateProjection();
 
 /** Maximum verification retry attempts before escalating to blocker placeholder (#2653). */
-const MAX_VERIFICATION_RETRIES = 3;
 const MAX_GIT_COMMIT_REMEDIATION_RETRIES = 2;
 /** Keep failure toasts short while still showing concrete examples. */
 const MAX_NOTIFICATION_DETAILS = 3;
@@ -877,7 +875,6 @@ const LIFECYCLE_ONLY_UNITS = new Set([
 ]);
 import {
   updateProgressWidget as _updateProgressWidget,
-  updateSliceProgressCache,
   unitVerb,
   describeNextUnit,
   setAutoOutcomeWidget,
@@ -2707,7 +2704,7 @@ export async function postUnitPreVerification(pctx: PostUnitContext, opts?: PreV
  * - "stopped" — stopAuto/pauseAuto was called
  */
 export async function postUnitPostVerification(pctx: PostUnitContext): Promise<"continue" | "step-wizard" | "retry" | "stopped"> {
-  const { s, ctx, pi, buildSnapshotOpts, lockBase, stopAuto, pauseAuto, updateProgressWidget } = pctx;
+  const { s, ctx, pi, buildSnapshotOpts, pauseAuto } = pctx;
 
   if (s.currentUnit) {
     if (shouldDeferCloseoutGitAction(s.currentUnit.type)) {

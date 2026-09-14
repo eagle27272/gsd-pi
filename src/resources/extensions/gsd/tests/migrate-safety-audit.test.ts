@@ -18,7 +18,7 @@ import {
 } from "node:fs";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, relative } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import test from "node:test";
 
@@ -153,13 +153,6 @@ function setNativeMutationBoundaryFault(
 ): void {
   (handle as unknown as { setMutationBoundaryFaultForTest(value: typeof fault): void })
     .setMutationBoundaryFaultForTest(fault);
-}
-
-function artifactEvidence(base: string, paths: readonly string[]): Array<{ logicalPath: string; sha256: string }> {
-  return paths.map((path) => ({
-    logicalPath: relative(gsdRoot(base), path).replaceAll("\\", "/"),
-    sha256: `sha256:${createHash("sha256").update(readFileSync(path)).digest("hex")}`,
-  }));
 }
 
 function createPlanningSource(base: string): string {

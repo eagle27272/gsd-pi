@@ -105,7 +105,7 @@ test("loadBacktrackCaptures returns only backtrack captures", () => {
 test("revertExecutorResolvedCaptures reverts captures resolved without classification", () => {
   const tmp = makeTempDir("revert-exec");
   setupGsdDir(tmp);
-  const id = appendCapture(tmp, "stop everything");
+  appendCapture(tmp, "stop everything");
 
   // Simulate an executor writing Status: resolved directly (no classification)
   const capPath = join(tmp, ".gsd", "CAPTURES.md");

@@ -222,7 +222,6 @@ export function configureToolCallLoopGuard(prefs?: ToolCallLoopGuardConfig | nul
 
 let consecutiveCount = 0;
 let lastSignature = "";
-let lastToolName = "";
 let enabled = true;
 
 /** Per-tool-name call counts within the current turn (#783 Brief C). */
@@ -275,7 +274,6 @@ export function checkToolCallLoop(
   } else {
     consecutiveCount = 1;
     lastSignature = sig;
-    lastToolName = toolName;
   }
 
   // ── Guard 1: identical-signature streak ──
@@ -375,7 +373,6 @@ export function recordToolCallLoopMutation(toolName: string, details?: unknown):
 export function resetToolCallLoopGuard(): void {
   consecutiveCount = 0;
   lastSignature = "";
-  lastToolName = "";
   enabled = true;
   perToolCounts.clear();
   mutationEpoch = 0;
@@ -387,7 +384,6 @@ export function disableToolCallLoopGuard(): void {
   enabled = false;
   consecutiveCount = 0;
   lastSignature = "";
-  lastToolName = "";
   perToolCounts.clear();
   mutationEpoch = 0;
   perToolLastMutationEpoch.clear();

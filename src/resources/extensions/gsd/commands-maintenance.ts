@@ -282,7 +282,7 @@ export async function handleDryRun(ctx: ExtensionCommandContext, basePath: strin
     return;
   }
 
-  const { getLedger, getProjectTotals, formatCost, formatTokenCount, loadLedgerFromDisk } = await import("./metrics.js");
+  const { getLedger, getProjectTotals, formatCost, loadLedgerFromDisk } = await import("./metrics.js");
   const { loadEffectiveGSDPreferences: loadPrefs } = await import("./preferences.js");
   const { formatDuration } = await import("../shared/format-utils.js");
 

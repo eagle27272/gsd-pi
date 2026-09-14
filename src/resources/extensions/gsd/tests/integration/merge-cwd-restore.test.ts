@@ -57,7 +57,7 @@ function createTempRepo(): string {
   return dir;
 }
 
-function makeRoadmap(mid: string, title: string): string {
+function makeRoadmap(mid: string, _title: string): string {
   return [
     `# ${mid}: Test milestone`,
     "",

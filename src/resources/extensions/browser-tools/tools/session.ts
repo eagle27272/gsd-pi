@@ -12,7 +12,6 @@ import {
 	HAR_FILENAME,
 	getArtifactRoot,
 	getPageRegistry,
-	getActiveFrame,
 	getConsoleLogs,
 	getNetworkLogs,
 	getDialogLogs,

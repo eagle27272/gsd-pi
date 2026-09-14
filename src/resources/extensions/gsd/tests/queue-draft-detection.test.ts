@@ -68,7 +68,6 @@ describe('queue-draft-detection', () => {
       );
 
       // both files: CONTEXT.md wins, no draft label
-      const m003Idx = context.indexOf("M003:");
       const m003Section = extractSourceRegion(context, "M003:");
       assert.ok(
         m003Section.includes("**Context:**"),
@@ -84,7 +83,6 @@ describe('queue-draft-detection', () => {
       );
 
       // neither file: no context section
-      const m004Idx = context.indexOf("M004:");
       const m004Section = extractSourceRegion(context, "M004:");
       assert.ok(
         !m004Section.includes("**Context:**"),

@@ -4,7 +4,7 @@
 //
 // Functions fall back to JS implementations if the native module is unavailable.
 
-import type { Roadmap, BoundaryMapEntry, RoadmapSliceEntry, RiskLevel } from './types.js';
+import type { Roadmap, RiskLevel } from './types.js';
 
 // Issue #453: auto-mode post-turn reconciliation must stay on the stable JS path
 // unless the native parser is explicitly requested.

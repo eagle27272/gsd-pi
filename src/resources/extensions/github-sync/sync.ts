@@ -445,7 +445,7 @@ async function ensureSlicePullRequest(
 async function syncTaskComplete(
   basePath: string,
   mapping: SyncMapping,
-  config: GitHubSyncConfig,
+  _config: GitHubSyncConfig,
   mid: string,
   sid: string,
   tid: string,

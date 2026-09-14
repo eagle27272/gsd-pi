@@ -73,7 +73,7 @@ function setupTestProject(): { tmpDir: string; dbPath: string } {
   return { tmpDir, dbPath };
 }
 
-function planSlice(tmpDir: string) {
+function planSlice(_tmpDir: string) {
   upsertSlicePlanning("M001", "S01", {
     goal: "Test goal",
     successCriteria: "Test criteria",

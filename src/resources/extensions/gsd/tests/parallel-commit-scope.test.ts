@@ -25,11 +25,6 @@ import {
   GitServiceImpl,
 } from "../git-service.ts";
 
-function run(command: string, cwd: string): string {
-  const [cmd, ...args] = command.split(" ");
-  return execFileSync(cmd, args, { cwd, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" }).trim();
-}
-
 function gitRun(args: string[], cwd: string): string {
   return execFileSync("git", args, { cwd, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" }).trim();
 }

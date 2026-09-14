@@ -12,7 +12,6 @@ import { tmpdir } from "node:os";
 import {
   resetHookState,
   consumeRetryTrigger,
-  isRetryPending,
   resolveHookArtifactPath,
 } from "../post-unit-hooks.ts";
 import { uncheckTaskInPlan } from "../undo.ts";

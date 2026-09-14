@@ -206,7 +206,7 @@ test("initHealthWidget: re-init paints fresh project state within cache TTL", (t
   assert.match(initialLineSets.at(-1)?.[0] ?? "", /System OK/);
 });
 
-test("buildHealthLines: none state shows single onboarding line pointing at /gsd", (t) => {
+test("buildHealthLines: none state shows single onboarding line pointing at /gsd", (_t) => {
   const lines = buildHealthLines(activeData({ projectState: "none" }));
   assert.equal(lines.length, 1, "renders exactly one line");
   // Should not show System OK / Budget / Last commit chrome when there's no project.
@@ -215,14 +215,14 @@ test("buildHealthLines: none state shows single onboarding line pointing at /gsd
   assert.match(lines[0]!, /\/gsd/);
 });
 
-test("buildHealthLines: initialized state shows concise initialized line", (t) => {
+test("buildHealthLines: initialized state shows concise initialized line", (_t) => {
   const lines = buildHealthLines(activeData({ projectState: "initialized" }));
   assert.equal(lines.length, 1, "renders exactly one line");
   assert.ok(!/System OK|Budget|Last commit/.test(lines[0]!), "no active-project chrome");
   assert.equal(lines[0], "  GSD  Project Initialized");
 });
 
-test("buildHealthLines: active state with ledger-driven spend shows spent summary", (t) => {
+test("buildHealthLines: active state with ledger-driven spend shows spent summary", (_t) => {
   const lines = buildHealthLines(activeData({ budgetSpent: 0.42 }));
   assert.equal(lines.length, 1);
   assert.match(lines[0]!, /● System OK/);
@@ -367,13 +367,13 @@ test("initHealthWidget: synchronous first-paint render never contains last-commi
   );
 });
 
-test("buildHealthLines: active state with budget ceiling shows percent summary", (t) => {
+test("buildHealthLines: active state with budget ceiling shows percent summary", (_t) => {
   const lines = buildHealthLines(activeData({ budgetSpent: 2.5, budgetCeiling: 10 }));
   assert.equal(lines.length, 1);
   assert.match(lines[0]!, /Budget: \$2\.50\/\$10\.00 \(25%\)/);
 });
 
-test("buildHealthLines: active state with issues reports issue summary", (t) => {
+test("buildHealthLines: active state with issues reports issue summary", (_t) => {
   const lines = buildHealthLines(activeData({
     providerIssue: "✗ OpenAI key missing",
     environmentErrorCount: 1,
@@ -386,7 +386,7 @@ test("buildHealthLines: active state with issues reports issue summary", (t) => 
 
 // ── Last commit display ──────────────────────────────────────────────────
 
-test("buildHealthLines: shows last commit with relative time and message", (t) => {
+test("buildHealthLines: shows last commit with relative time and message", (_t) => {
   const epoch = Math.floor(Date.now() / 1000) - 300; // 5 minutes ago
   const lines = buildHealthLines(activeData({
     lastCommitEpoch: epoch,
@@ -397,7 +397,7 @@ test("buildHealthLines: shows last commit with relative time and message", (t) =
   assert.match(lines[0]!, /feat\(widget\): add health display/);
 });
 
-test("buildHealthLines: truncates long commit messages with ellipsis", (t) => {
+test("buildHealthLines: truncates long commit messages with ellipsis", (_t) => {
   const epoch = Math.floor(Date.now() / 1000) - 60;
   const longMsg = "a".repeat(200); // far longer than any reasonable widget cap
   const lines = buildHealthLines(activeData({
@@ -413,13 +413,13 @@ test("buildHealthLines: truncates long commit messages with ellipsis", (t) => {
   assert.ok(!lines[0]!.includes("a".repeat(longMsg.length)), "untruncated message must not appear in output");
 });
 
-test("buildHealthLines: no last commit section when epoch is null", (t) => {
+test("buildHealthLines: no last commit section when epoch is null", (_t) => {
   const lines = buildHealthLines(activeData({ lastCommitEpoch: null }));
   assert.equal(lines.length, 1);
   assert.ok(!lines[0]!.includes("Last commit"), "no last commit when null");
 });
 
-test("buildHealthLines: last commit without message shows only time", (t) => {
+test("buildHealthLines: last commit without message shows only time", (_t) => {
   const epoch = Math.floor(Date.now() / 1000) - 3600; // 1 hour ago
   const lines = buildHealthLines(activeData({
     lastCommitEpoch: epoch,

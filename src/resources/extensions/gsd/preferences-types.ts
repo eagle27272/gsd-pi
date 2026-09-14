@@ -13,7 +13,6 @@ import type {
   BudgetEnforcementMode,
   NotificationPreferences,
   TokenProfile,
-  InlineLevel,
   PhaseSkipPreferences,
   ParallelConfig,
   ContextSelectionMode,

@@ -22,7 +22,7 @@ import {
 
 import { renderPreferencesForSystemPrompt } from '../preferences.ts';
 import type { GSDPreferences } from '../preferences.ts';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 

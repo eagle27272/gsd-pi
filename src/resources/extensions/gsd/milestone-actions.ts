@@ -16,7 +16,6 @@ import { join } from "node:path";
 import {
   resolveMilestonePath,
   resolveMilestoneFile,
-  buildMilestoneFileName,
   relMilestoneFile,
 } from "./paths.js";
 import { invalidateAllCaches } from "./cache.js";

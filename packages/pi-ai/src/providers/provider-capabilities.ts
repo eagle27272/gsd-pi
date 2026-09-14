@@ -2,8 +2,6 @@
 // Declarative registry of what each API provider supports, consolidating
 // scattered knowledge from *-shared.ts files into a queryable data structure.
 
-import type { Api } from "../types.js";
-
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 /**

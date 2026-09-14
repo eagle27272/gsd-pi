@@ -48,12 +48,10 @@ function writeRepoMeta(externalPath: string, remoteUrl: string, gitRoot: string)
   const metaPath = join(externalPath, "repo-meta.json");
   try {
     let createdAt = new Date().toISOString();
-    let existing: RepoMeta | null = null;
     if (existsSync(metaPath)) {
       try {
         const parsed = JSON.parse(readFileSync(metaPath, "utf-8"));
         if (isRepoMeta(parsed)) {
-          existing = parsed;
           createdAt = parsed.createdAt;
           // Fast path: nothing changed.
           if (

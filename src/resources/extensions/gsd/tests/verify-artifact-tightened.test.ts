@@ -27,7 +27,6 @@ import { tmpdir } from "node:os";
 import { verifyExpectedArtifact } from "../auto-recovery.ts";
 import { closeDatabase, insertMilestone, insertSlice, insertTask, isDbAvailable, openDatabase } from "../gsd-db.ts";
 import { drainLogs, setStderrLoggingEnabled, _resetLogs, type LogEntry } from "../workflow-logger.ts";
-import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 /**
  * Run `verifyExpectedArtifact` with stderr suppressed, returning both the

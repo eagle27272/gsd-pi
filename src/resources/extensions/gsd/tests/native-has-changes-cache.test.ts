@@ -34,7 +34,7 @@ test('nativeHasChanges: different basePath invalidates cache', () => {
   _resetHasChangesCache();
 
   // Prime cache with REPO_ROOT
-  const first = nativeHasChanges(REPO_ROOT);
+  nativeHasChanges(REPO_ROOT);
 
   // Call with a different path — should NOT return the stale cached value
   // (it will compute fresh). We just verify it doesn't throw and returns boolean.

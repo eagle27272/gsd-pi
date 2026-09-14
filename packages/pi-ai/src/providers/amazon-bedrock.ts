@@ -438,7 +438,7 @@ function handleMetadata(
 function handleContentBlockStop(
 	event: ContentBlockStopEvent,
 	blocks: Block[],
-	output: AssistantMessage,
+	_output: AssistantMessage,
 	stream: AssistantMessageEventStream,
 ): void {
 	const index = blocks.findIndex((b) => b.index === event.contentBlockIndex);

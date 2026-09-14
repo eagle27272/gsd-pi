@@ -8,7 +8,6 @@ import { tmpdir } from "node:os";
 import {
   setProviderSwitchObserver,
   transformMessagesWithReport,
-  type ProviderSwitchReport,
 } from "../../../../../packages/pi-ai/src/providers/transform-messages.ts";
 
 import { autoSession } from "../auto-runtime-state.ts";
@@ -23,19 +22,6 @@ import {
   installProviderSwitchObserver,
   uninstallProviderSwitchObserver,
 } from "../provider-switch-observer.ts";
-
-function makeReport(overrides: Partial<ProviderSwitchReport> = {}): ProviderSwitchReport {
-  return {
-    fromApi: "anthropic-messages",
-    toApi: "openai-responses",
-    thinkingBlocksDropped: 0,
-    thinkingBlocksDowngraded: 0,
-    toolCallIdsRemapped: 0,
-    syntheticToolResultsInserted: 0,
-    thoughtSignaturesDropped: 0,
-    ...overrides,
-  };
-}
 
 function withTempBasePath(): { basePath: string; cleanup: () => void } {
   const basePath = mkdtempSync(join(tmpdir(), "gsd-provider-switch-"));

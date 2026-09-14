@@ -2178,7 +2178,7 @@ function logClaudeCodeSdkStderr(data: unknown): void {
  */
 export function buildSdkOptions(
 	modelId: string,
-	prompt: string,
+	_prompt: string,
 	overrides?: { permissionMode?: "bypassPermissions" | "acceptEdits" | "default" | "plan" },
 	extraOptions: Record<string, unknown> & { reasoning?: ThinkingLevel; gsdPhase?: string } = {},
 ): Record<string, unknown> {

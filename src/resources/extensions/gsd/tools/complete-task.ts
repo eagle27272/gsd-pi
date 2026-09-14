@@ -11,7 +11,7 @@
  */
 
 import { existsSync } from "node:fs";
-import { basename, isAbsolute, join, relative } from "node:path";
+import { basename, isAbsolute, relative } from "node:path";
 
 import type { CompleteTaskParams, EscalationArtifact } from "../types.js";
 import { isClosedStatus } from "../status-guards.js";

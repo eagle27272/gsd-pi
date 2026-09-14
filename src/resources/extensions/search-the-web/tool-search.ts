@@ -19,7 +19,7 @@ import { LRUTTLCache } from "./cache.js";
 import { fetchWithRetryTimed, fetchWithRetry, classifyError, type RateLimitInfo } from "./http.js";
 import { normalizeQuery, toDedupeKey, detectFreshness } from "./url-utils.js";
 import { formatSearchResults, type SearchResultFormatted, type FormatSearchOptions } from "./format.js";
-import { getTavilyApiKey, getOllamaApiKey, getBraveApiKey, braveHeaders, resolveSearchProvider } from "./provider.js";
+import { getTavilyApiKey, getOllamaApiKey, braveHeaders, resolveSearchProvider } from "./provider.js";
 import { normalizeTavilyResult, mapFreshnessToTavily, type TavilySearchResponse } from "./tavily.js";
 
 // =============================================================================
@@ -345,7 +345,7 @@ export function registerSearchTool(pi: ExtensionAPI) {
       ),
     }),
 
-    async execute(toolCallId, params, signal, onUpdate, ctx) {
+    async execute(_toolCallId, params, signal, onUpdate, _ctx) {
       if (signal?.aborted) {
         return { content: [{ type: "text", text: "Search cancelled." }], details: undefined as unknown };
       }

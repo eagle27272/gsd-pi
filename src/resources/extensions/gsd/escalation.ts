@@ -179,7 +179,7 @@ export function readEscalationArtifact(path: string): EscalationArtifact | null 
  * `continueWithDefault=true` artifacts keep the awaiting_review flag for
  * compatibility, but still pause dispatch until the user explicitly responds.
  */
-export function detectPendingEscalation(tasks: TaskRow[], basePath: string): string | null {
+export function detectPendingEscalation(tasks: TaskRow[], _basePath: string): string | null {
   for (const t of tasks) {
     if (t.escalation_pending !== 1 && t.escalation_awaiting_review !== 1) continue;
     if (!t.escalation_artifact_path) continue;

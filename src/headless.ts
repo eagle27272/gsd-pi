@@ -1012,10 +1012,8 @@ async function runHeadlessOnce(options: HeadlessOptions, restartCount: number): 
   }
 
   // v2 protocol negotiation — attempt init for structured completion events
-  let v2Enabled = false
   try {
     await client.init({ clientId: 'gsd-headless' })
-    v2Enabled = true
   } catch {
     process.stderr.write('[headless] Warning: v2 init failed, falling back to v1 string-matching\n')
   }

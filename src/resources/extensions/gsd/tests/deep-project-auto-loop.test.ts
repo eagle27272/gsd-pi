@@ -34,7 +34,6 @@ import {
 import type { GSDPreferences } from "../preferences.ts";
 import type { GSDState } from "../types.ts";
 import { linkExternalGsdState } from "./test-utils.ts";
-import { canonicalPhaseDirName } from "../layout-policy.ts";
 
 function makeBase(): string {
   const base = join(tmpdir(), `gsd-deep-project-loop-${randomUUID()}`);

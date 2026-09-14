@@ -15,7 +15,6 @@ import {
 } from "./gsd-db.js";
 import type { MilestoneRow } from "./db-milestone-artifact-rows.js";
 import type { SliceRow, TaskRow } from "./db-task-slice-rows.js";
-import type { VerificationEvidenceRow } from "./db-verification-evidence-rows.js";
 import { atomicWriteSync } from "./atomic-write.js";
 import { dirname, join } from "node:path";
 import { mkdirSync, existsSync } from "node:fs";

@@ -17,7 +17,7 @@
  */
 
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { resolve, dirname, join, extname } from "node:path";
+import { resolve, dirname, extname } from "node:path";
 import type { TaskRow } from "./db-task-slice-rows.js";
 
 // ─── Result Types ────────────────────────────────────────────────────────────

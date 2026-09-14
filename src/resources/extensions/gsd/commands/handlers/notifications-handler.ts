@@ -37,7 +37,7 @@ function formatTimestamp(ts: string): string {
 export async function handleNotificationsCommand(
   args: string,
   ctx: ExtensionCommandContext,
-  pi: ExtensionAPI,
+  _pi: ExtensionAPI,
 ): Promise<boolean> {
   // /gsd notifications clear
   if (args === "clear") {

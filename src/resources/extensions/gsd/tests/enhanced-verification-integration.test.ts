@@ -18,11 +18,9 @@ import { fileURLToPath } from "node:url";
 
 import {
   runPreExecutionChecks,
-  type PreExecutionResult,
 } from "../pre-execution-checks.ts";
 import {
   runPostExecutionChecks,
-  type PostExecutionResult,
 } from "../post-execution-checks.ts";
 import type { TaskRow } from "../gsd-db.ts";
 

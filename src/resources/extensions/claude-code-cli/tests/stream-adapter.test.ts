@@ -4472,7 +4472,6 @@ describe("buildBashPermissionPatternOptions", () => {
 
 describe("bashCommandMatchesSavedRules — compound command bypass", () => {
 	let tempDir: string;
-	let originalCwd: string;
 
 	// Create a temp project directory with .claude/settings.local.json
 	function setupSettings(allow: string[]): void {

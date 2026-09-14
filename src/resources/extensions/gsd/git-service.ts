@@ -32,7 +32,6 @@ import {
   nativeBranchExists,
   nativeHasChanges,
   nativeAddAllWithExclusions,
-  nativeResetPaths,
   nativeHasStagedChanges,
   nativeCommit,
   nativeRmCached,
@@ -1155,7 +1154,6 @@ export class GitServiceImpl {
     const wtName = detectWorktreeName(this.basePath);
     if (wtName) {
       // Auto-mode worktrees use milestone/<MID> branches (wtName = milestone ID)
-      const milestoneBranch = `milestone/${wtName}`;
       const currentBranch = nativeGetCurrentBranch(this.basePath);
 
       // If we're on a milestone/<MID> branch, use it (auto-mode case)
@@ -1277,7 +1275,7 @@ export class GitServiceImpl {
  */
 export function createDraftPR(
   basePath: string,
-  milestoneId: string,
+  _milestoneId: string,
   title: string,
   body: string,
   opts?: { head?: string; base?: string; env?: NodeJS.ProcessEnv },

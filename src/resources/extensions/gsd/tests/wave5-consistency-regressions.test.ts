@@ -8,7 +8,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { isClosedStatus } from "../status-guards.js";
-import { openDatabase, closeDatabase, upsertDecision, _getAdapter, insertMilestone, insertSlice, insertTask, getTask } from "../gsd-db.js";
+import { openDatabase, closeDatabase, upsertDecision, _getAdapter } from "../gsd-db.js";
 import { extractEntityKey } from "../workflow-reconcile.js";
 import type { WorkflowEvent } from "../workflow-events.js";
 

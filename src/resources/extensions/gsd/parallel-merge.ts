@@ -6,7 +6,6 @@
  */
 
 import { existsSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { resolveGsdPathContract } from "./paths.js";
 import { worktreePathFor, worktreesDirs } from "./worktree-placement.js";

@@ -20,7 +20,7 @@
 
 // GSD State Machine Runtime Failure Tests
 
-import { describe, test, beforeEach, afterEach } from "node:test";
+import { describe, test, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import {
   mkdtempSync,
@@ -64,9 +64,7 @@ import {
   insertTask,
 } from "../../gsd-db.ts";
 import {
-  deriveState,
   deriveStateFromDb,
-  invalidateStateCache,
   isGhostMilestone,
 } from "../../state.ts";
 import { invalidateAllCaches } from "../../cache.ts";

@@ -15,7 +15,7 @@ import {
   parseOldState,
   parseOldConfig,
 } from '../migrate/parsers.ts';
-import { describe, test, beforeEach, afterEach } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 function createFixtureBase(): string {
