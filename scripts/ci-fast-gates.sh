@@ -66,6 +66,9 @@ node scripts/audit-test-matrix.mjs --strict
 echo "── pi boundary ──"
 pnpm run verify:pi-boundary
 
+echo "── dead code (knip baseline ratchet) ──"
+pnpm run lint:dead-code
+
 echo "── actionlint (workflow static analysis) ──"
 # Enforced as a blocking job in CI (ci.yml workflow-lint). Locally it runs
 # only when the binary is installed so the gate stays dependency-free.

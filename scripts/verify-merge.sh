@@ -82,6 +82,9 @@ pnpm run build:core
 echo "── typecheck:extensions ──"
 pnpm run typecheck:extensions
 
+echo "── lint:dead-code ──"
+pnpm run lint:dead-code
+
 echo "── validate-pack ──"
 pnpm run validate-pack
 
