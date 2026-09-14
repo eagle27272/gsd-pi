@@ -247,6 +247,7 @@ export function registerInteractionTools(pi: ExtensionAPI, deps: ToolDeps): void
 					return false;
 				}
 
+				let replacedWholeValue = false;
 				if (params.selector) {
 					if (params.slowly) {
 						let focused = false;
@@ -258,7 +259,7 @@ export function registerInteractionTools(pi: ExtensionAPI, deps: ToolDeps): void
 						}
 						if (!focused) throw new Error(`Could not focus selector "${params.selector}"`);
 						if (params.clearFirst) {
-							await p.keyboard.press("Control+A");
+							await p.keyboard.press("ControlOrMeta+A");
 							await p.keyboard.press("Delete");
 						}
 						await p.keyboard.type(params.text);
@@ -294,7 +295,7 @@ export function registerInteractionTools(pi: ExtensionAPI, deps: ToolDeps): void
 							}
 							if (!focused) throw new Error(`Could not focus selector "${params.selector}"`);
 							if (params.clearFirst) {
-								await p.keyboard.press("Control+A");
+								await p.keyboard.press("ControlOrMeta+A");
 								await p.keyboard.press("Delete");
 							}
 							await target.locator(":focus").pressSequentially(params.text, { timeout: 5000 }).catch(() =>
@@ -303,6 +304,7 @@ export function registerInteractionTools(pi: ExtensionAPI, deps: ToolDeps): void
 						} else if (params.clearFirst) {
 							// fill() already replaced the value; clearFirst is a no-op here
 						}
+						replacedWholeValue = filled;
 					}
 				} else {
 					const hasFocus = await target.evaluate(() => {
@@ -329,9 +331,15 @@ export function registerInteractionTools(pi: ExtensionAPI, deps: ToolDeps): void
 
 				const typedValue = await deps.readInputLikeValue(target, params.selector);
 				const afterUrl = p.url();
+				// Typing into whatever has focus, or slow-typing without clearFirst, appends —
+				// only a whole-value replace can require value_equals_expected.
+				// Only a whole-value replace can require value_equals_expected. Typing into
+				// whatever has focus appends, and so does the pressSequentially fallback that
+				// runs when every fill() attempt failed.
+				const expectExactValue = !!params.selector && (replacedWholeValue || !!params.clearFirst);
 				const verification = deps.verificationFromChecks(
 					[
-						{ name: "value_equals_expected", passed: typedValue === params.text, value: typedValue, expected: params.text },
+						{ name: "value_equals_expected", passed: typedValue === params.text, value: typedValue, expected: params.text, critical: expectExactValue },
 						{ name: "value_contains_expected", passed: typeof typedValue === "string" && typedValue.includes(params.text), value: typedValue, expected: params.text },
 						{ name: "url_changed_after_submit", passed: !!params.submit && afterUrl !== beforeUrl, value: afterUrl, expected: `!= ${beforeUrl}` },
 					],

@@ -32,7 +32,11 @@ const {
 	firstErrorLine,
 	formatArtifactTimestamp,
 	ensureSessionArtifactDir,
-} = jiti("../utils.ts");
+	getActiveFrameContext,
+	getActiveSubFrame,
+	validateRefForAction,
+	clampElementLimit,
+} = jiti("../utils.js");
 
 const {
 	getArtifactRoot,
@@ -53,16 +57,20 @@ const {
 	setRefVersion,
 	getRefMetadata,
 	setRefMetadata,
+	getRefSnapshotFrame,
+	setRefSnapshotFrame,
 	getLastActionBeforeState,
 	setLastActionBeforeState,
 	getLastActionAfterState,
 	setLastActionAfterState,
 	resetAllState,
-} = jiti("../state.ts");
+} = jiti("../state.js");
 
-const { EVALUATE_HELPERS_SOURCE } = jiti("../evaluate-helpers.ts");
+const { evaluateAssertionChecks } = jiti("../core.js");
 
-const { constrainScreenshot } = jiti("../capture.ts");
+const { EVALUATE_HELPERS_SOURCE } = jiti("../evaluate-helpers.js");
+
+const { constrainScreenshot } = jiti("../capture.js");
 
 // ---------------------------------------------------------------------------
 // utils.ts — parseRef
@@ -688,12 +696,12 @@ describe("constrainScreenshot", () => {
 
 describe("browser_save_pdf tool registration", () => {
 	it("registerPdfTools exports a function", () => {
-		const { registerPdfTools } = jiti("../tools/pdf.ts");
+		const { registerPdfTools } = jiti("../tools/pdf.js");
 		assert.equal(typeof registerPdfTools, "function", "registerPdfTools should be a function");
 	});
 
 	it("tool can be registered with a mock pi", () => {
-		const { registerPdfTools } = jiti("../tools/pdf.ts");
+		const { registerPdfTools } = jiti("../tools/pdf.js");
 		const registeredTools = [];
 		const mockPi = {
 			registerTool: (tool) => registeredTools.push(tool),
@@ -704,5 +712,563 @@ describe("browser_save_pdf tool registration", () => {
 		assert.equal(registeredTools[0].name, "browser_save_pdf", "tool name should be browser_save_pdf");
 		assert.ok(registeredTools[0].parameters, "tool should have parameters schema");
 		assert.equal(typeof registeredTools[0].execute, "function", "tool should have execute function");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// utils.ts — getRefFrameContext
+// ---------------------------------------------------------------------------
+
+const fakeMainFrame = (url = PAGE_URL) => ({ name: () => "", url: () => url, parentFrame: () => null });
+const fakeFrame = (name, url) => ({ name: () => name, url: () => url, parentFrame: () => fakeMainFrame() });
+
+describe("getActiveFrameContext", () => {
+	beforeEach(() => resetAllState());
+
+	it("returns undefined when no frame is selected", () => {
+		assert.equal(getActiveFrameContext(), undefined);
+	});
+
+	it("treats an explicitly selected main frame as no frame selection", () => {
+		setActiveFrame(fakeMainFrame());
+		assert.equal(getActiveFrameContext(), undefined);
+		assert.equal(getActiveSubFrame(), null);
+	});
+
+	it("combines name and url so an in-frame navigation is visible", () => {
+		setActiveFrame(fakeFrame("checkout", "https://pay.test/step1"));
+		const before = getActiveFrameContext();
+		setActiveFrame(fakeFrame("checkout", "https://pay.test/step2"));
+		assert.notEqual(getActiveFrameContext(), before);
+	});
+
+	it("identifies an unnamed frame by its url", () => {
+		setActiveFrame(fakeFrame("", "https://pay.test/widget"));
+		assert.equal(getActiveFrameContext(), "|https://pay.test/widget");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// utils.ts — validateRefForAction (shared ref staleness guard)
+// ---------------------------------------------------------------------------
+
+const PAGE_URL = "https://example.test/app";
+
+function seedSnapshot({ version = 1, url = PAGE_URL, frame = null } = {}) {
+	setRefVersion(version);
+	setActiveFrame(frame);
+	setRefSnapshotFrame(getActiveSubFrame());
+	const frameContext = getActiveFrameContext();
+	setCurrentRefMap({
+		e1: {
+			ref: "e1",
+			tag: "button",
+			role: "button",
+			name: "Save",
+			selectorHints: [],
+			isVisible: true,
+			isEnabled: true,
+			xpathOrPath: "body > button",
+			path: [1, 0],
+		},
+	});
+	setRefMetadata({
+		url,
+		timestamp: Date.now(),
+		interactiveOnly: true,
+		limit: 40,
+		version,
+		frameContext,
+	});
+}
+
+describe("validateRefForAction", () => {
+	beforeEach(() => resetAllState());
+
+	it("accepts a ref when version, url and frame all match", () => {
+		seedSnapshot();
+		const result = validateRefForAction(parseRef("@v1:e1"), PAGE_URL);
+		assert.equal(result.ok, true);
+		assert.equal(result.node.ref, "e1");
+		assert.equal(result.versionedRef, "@v1:e1");
+	});
+
+	it("rejects an unversioned ref as ambiguous", () => {
+		seedSnapshot();
+		const result = validateRefForAction(parseRef("e1"), PAGE_URL);
+		assert.equal(result.ok, false);
+		assert.equal(result.details.error, "ref_unversioned");
+	});
+
+	it("rejects a ref from an older snapshot version", () => {
+		seedSnapshot({ version: 7 });
+		const result = validateRefForAction(parseRef("@v1:e1"), PAGE_URL);
+		assert.equal(result.ok, false);
+		assert.equal(result.details.error, "ref_stale");
+		assert.equal(result.details.expectedVersion, 7);
+	});
+
+	it("rejects a ref that is not in the current map", () => {
+		seedSnapshot();
+		const result = validateRefForAction(parseRef("@v1:e9"), PAGE_URL);
+		assert.equal(result.ok, false);
+		assert.equal(result.details.error, "ref_not_found");
+	});
+
+	it("rejects a ref when the page url changed since the snapshot", () => {
+		seedSnapshot();
+		const result = validateRefForAction(parseRef("@v1:e1"), "https://example.test/other");
+		assert.equal(result.ok, false);
+		assert.equal(result.details.error, "ref_stale");
+		assert.equal(result.details.currentUrl, "https://example.test/other");
+	});
+
+	it("rejects a frame-scoped ref once the main frame is active again", () => {
+		seedSnapshot({ frame: fakeFrame("checkout", "https://pay.test/widget") });
+		setActiveFrame(null);
+		const result = validateRefForAction(parseRef("@v1:e1"), PAGE_URL);
+		assert.equal(result.ok, false);
+		assert.equal(result.details.error, "ref_stale");
+		assert.equal(result.details.snapshotFrame, "checkout|https://pay.test/widget");
+		assert.equal(result.details.currentFrame, null);
+	});
+
+	it("rejects a main-page ref while a frame is selected", () => {
+		seedSnapshot();
+		setActiveFrame(fakeFrame("checkout", "https://pay.test/widget"));
+		const result = validateRefForAction(parseRef("@v1:e1"), PAGE_URL);
+		assert.equal(result.ok, false);
+		assert.equal(result.details.error, "ref_stale");
+		assert.equal(result.details.currentFrame, "checkout|https://pay.test/widget");
+	});
+
+	it("rejects a ref snapshotted in a different frame", () => {
+		seedSnapshot({ frame: fakeFrame("checkout", "https://pay.test/widget") });
+		setActiveFrame(fakeFrame("ads", "https://ads.test/banner"));
+		const result = validateRefForAction(parseRef("@v1:e1"), PAGE_URL);
+		assert.equal(result.ok, false);
+		assert.equal(result.details.error, "ref_stale");
+	});
+
+	it("accepts a ref after the main frame is selected explicitly", () => {
+		seedSnapshot();
+		setActiveFrame(fakeMainFrame());
+		const result = validateRefForAction(parseRef("@v1:e1"), PAGE_URL);
+		assert.equal(result.ok, true);
+	});
+
+	it("rejects a ref after its named frame navigated in place", () => {
+		// Playwright keeps the same Frame handle across an in-frame navigation, so the
+		// handle check cannot see this — only the url half of frameContext can.
+		let frameUrl = "https://pay.test/step1";
+		const checkout = { name: () => "checkout", url: () => frameUrl, parentFrame: () => fakeMainFrame() };
+		seedSnapshot({ frame: checkout });
+		frameUrl = "https://pay.test/step2";
+		const result = validateRefForAction(parseRef("@v1:e1"), PAGE_URL);
+		assert.equal(result.ok, false);
+		assert.equal(result.details.error, "ref_stale");
+	});
+
+	it("rejects a ref from a different frame that shares its display identity", () => {
+		const widget = fakeFrame("", "https://ads.test/slot");
+		const twin = fakeFrame("", "https://ads.test/slot");
+		seedSnapshot({ frame: widget });
+		setActiveFrame(twin);
+		const result = validateRefForAction(parseRef("@v1:e1"), PAGE_URL);
+		assert.equal(result.ok, false);
+		assert.equal(result.details.error, "ref_stale");
+	});
+
+	it("accepts a frame-scoped ref when the same frame is still active", () => {
+		const checkout = fakeFrame("checkout", "https://pay.test/widget");
+		seedSnapshot({ frame: checkout });
+		setActiveFrame(checkout);
+		const result = validateRefForAction(parseRef("@v1:e1"), PAGE_URL);
+		assert.equal(result.ok, true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// utils.ts — clampElementLimit
+// ---------------------------------------------------------------------------
+
+describe("clampElementLimit", () => {
+	it("uses the fallback when the limit is undefined", () => {
+		assert.equal(clampElementLimit(undefined, 20), 20);
+	});
+
+	it("clamps zero up to 1", () => {
+		assert.equal(clampElementLimit(0, 20), 1);
+	});
+
+	it("clamps a negative limit up to 1", () => {
+		assert.equal(clampElementLimit(-1, 20), 1);
+	});
+
+	it("floors a fractional limit", () => {
+		assert.equal(clampElementLimit(1.9, 20), 1);
+	});
+
+	it("caps an oversized limit at 200", () => {
+		assert.equal(clampElementLimit(5000, 20), 200);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// utils.ts — verificationFromChecks critical checks
+// ---------------------------------------------------------------------------
+
+describe("verificationFromChecks with critical checks", () => {
+	it("does not verify when a critical check fails, even if another passes", () => {
+		const result = verificationFromChecks([
+			{ name: "value_equals_expected", passed: false, critical: true },
+			{ name: "value_contains_expected", passed: true },
+		], "retry");
+		assert.equal(result.verified, false);
+		assert.ok(result.verificationSummary.includes("value_equals_expected"));
+		assert.equal(result.retryHint, "retry");
+	});
+
+	it("verifies when the critical check passes", () => {
+		const result = verificationFromChecks([
+			{ name: "value_equals_expected", passed: true, critical: true },
+			{ name: "url_changed_after_submit", passed: false },
+		]);
+		assert.equal(result.verified, true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// core.ts — evaluateAssertionChecks with no checks
+// ---------------------------------------------------------------------------
+
+describe("evaluateAssertionChecks", () => {
+	it("does not report verified when given zero checks", () => {
+		const result = evaluateAssertionChecks({ checks: [], state: { url: PAGE_URL, title: "t" } });
+		assert.equal(result.verified, false);
+		assert.equal(result.checks.length, 0);
+		assert.ok(!result.summary.includes("PASS"), `summary should not claim PASS: ${result.summary}`);
+	});
+
+	it("reports PASS when every provided check passes", () => {
+		const result = evaluateAssertionChecks({
+			checks: [{ kind: "url_contains", text: "example" }],
+			state: { url: PAGE_URL, title: "t" },
+		});
+		assert.equal(result.verified, true);
+		assert.ok(result.summary.includes("PASS"));
+	});
+});
+
+// ---------------------------------------------------------------------------
+// tools/action-cache.ts — buildCacheKey
+// ---------------------------------------------------------------------------
+
+describe("buildCacheKey", () => {
+	const { buildCacheKey } = jiti("../tools/action-cache.js");
+
+	it("distinguishes urls that differ only by query string", () => {
+		const a = buildCacheKey({ url: "https://shop.test/orders?id=1", domHash: "h", intent: "open", pageId: 1, frameContext: undefined });
+		const b = buildCacheKey({ url: "https://shop.test/orders?id=2", domHash: "h", intent: "open", pageId: 1, frameContext: undefined });
+		assert.notEqual(a, b);
+	});
+
+	it("distinguishes the same url on different pages", () => {
+		const a = buildCacheKey({ url: PAGE_URL, domHash: "h", intent: "open", pageId: 1, frameContext: undefined });
+		const b = buildCacheKey({ url: PAGE_URL, domHash: "h", intent: "open", pageId: 2, frameContext: undefined });
+		assert.notEqual(a, b);
+	});
+
+	it("distinguishes the same url in different frames", () => {
+		const a = buildCacheKey({ url: PAGE_URL, domHash: "h", intent: "open", pageId: 1, frameContext: undefined });
+		const b = buildCacheKey({ url: PAGE_URL, domHash: "h", intent: "open", pageId: 1, frameContext: "checkout" });
+		assert.notEqual(a, b);
+	});
+
+	it("is stable for identical inputs", () => {
+		const args = { url: PAGE_URL, domHash: "h", intent: "open", pageId: 1, frameContext: "checkout" };
+		assert.equal(buildCacheKey(args), buildCacheKey({ ...args }));
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Tool-level guards — registered with a mock pi/deps, no live browser
+// ---------------------------------------------------------------------------
+
+const utils = jiti("../utils.js");
+
+function registerOne(registerFn, deps, toolName) {
+	const tools = [];
+	registerFn({ registerTool: (tool) => tools.push(tool) }, deps);
+	const tool = tools.find((t) => t.name === toolName);
+	assert.ok(tool, `${toolName} should be registered`);
+	return tool;
+}
+
+const fakePage = (url = PAGE_URL) => ({ url: () => url });
+
+const refDeps = (overrides = {}) => ({
+	ensureBrowser: async () => ({ page: fakePage() }),
+	getActiveTarget: () => ({}),
+	getActivePageOrNull: () => fakePage(),
+	parseRef: utils.parseRef,
+	formatVersionedRef: utils.formatVersionedRef,
+	staleRefGuidance: utils.staleRefGuidance,
+	captureErrorScreenshot: async () => null,
+	firstErrorLine: utils.firstErrorLine,
+	resolveRefTarget: async () => {
+		throw new Error("resolveRefTarget should not run once a guard rejects the ref");
+	},
+	...overrides,
+});
+
+describe("browser_click_ref frame guard", () => {
+	const { registerRefTools } = jiti("../tools/refs.js");
+	beforeEach(() => resetAllState());
+
+	it("rejects a ref snapshotted in a frame that is no longer active", async () => {
+		seedSnapshot({ frame: fakeFrame("checkout", "https://pay.test/widget") });
+		setActiveFrame(null);
+		const tool = registerOne(registerRefTools, refDeps(), "browser_click_ref");
+		const result = await tool.execute("c1", { ref: "@v1:e1" });
+		assert.equal(result.isError, true);
+		assert.equal(result.details.error, "ref_stale");
+	});
+});
+
+describe("browser_fill_ref frame guard", () => {
+	const { registerRefTools } = jiti("../tools/refs.js");
+	beforeEach(() => resetAllState());
+
+	it("rejects a ref snapshotted before a frame was selected", async () => {
+		seedSnapshot();
+		setActiveFrame(fakeFrame("checkout", "https://pay.test/widget"));
+		const tool = registerOne(registerRefTools, refDeps(), "browser_fill_ref");
+		const result = await tool.execute("c1", { ref: "@v1:e1", text: "hi" });
+		assert.equal(result.isError, true);
+		assert.equal(result.details.error, "ref_stale");
+	});
+});
+
+describe("browser_hover_ref frame guard", () => {
+	const { registerRefTools } = jiti("../tools/refs.js");
+	beforeEach(() => resetAllState());
+
+	it("rejects a ref snapshotted in a different frame", async () => {
+		seedSnapshot({ frame: fakeFrame("checkout", "https://pay.test/widget") });
+		setActiveFrame(fakeFrame("ads", "https://ads.test/banner"));
+		const tool = registerOne(registerRefTools, refDeps(), "browser_hover_ref");
+		const result = await tool.execute("c1", { ref: "@v1:e1" });
+		assert.equal(result.isError, true);
+		assert.equal(result.details.error, "ref_stale");
+	});
+});
+
+describe("browser_batch ref steps apply the staleness guards", () => {
+	const { registerAssertionTools } = jiti("../tools/assertions.js");
+
+	const batchDeps = (overrides = {}) => ({
+		ensureBrowser: async () => ({ page: fakePage() }),
+		getActiveTarget: () => ({}),
+		getActivePageOrNull: () => fakePage(),
+		captureCompactPageState: async () => ({ url: PAGE_URL, title: "t", counts: {}, dialog: { count: 0 } }),
+		beginTrackedAction: () => ({ id: 1 }),
+		finishTrackedAction: () => {},
+		formatDiffText: () => "",
+		settleAfterActionAdaptive: async () => ({}),
+		parseRef: utils.parseRef,
+		resolveRefTarget: async () => {
+			throw new Error("resolveRefTarget should not run once a guard rejects the ref");
+		},
+		...overrides,
+	});
+
+	beforeEach(() => resetAllState());
+
+	it("fails a click_ref step whose snapshot version is stale", async () => {
+		seedSnapshot({ version: 7 });
+		const tool = registerOne(registerAssertionTools, batchDeps(), "browser_batch");
+		const result = await tool.execute("c1", { steps: [{ action: "click_ref", ref: "@v1:e1" }] });
+		assert.equal(result.isError, true);
+		assert.match(result.details.stepResults[0].message, /version mismatch/i);
+	});
+
+	it("fails a fill_ref step whose ref came from another frame", async () => {
+		seedSnapshot({ frame: fakeFrame("checkout", "https://pay.test/widget") });
+		setActiveFrame(null);
+		const tool = registerOne(registerAssertionTools, batchDeps(), "browser_batch");
+		const result = await tool.execute("c1", { steps: [{ action: "fill_ref", ref: "@v1:e1", text: "x" }] });
+		assert.equal(result.isError, true);
+		assert.match(result.details.stepResults[0].message, /frame/i);
+	});
+
+	it("fails a click_ref step that uses an unversioned ref", async () => {
+		seedSnapshot();
+		const tool = registerOne(registerAssertionTools, batchDeps(), "browser_batch");
+		const result = await tool.execute("c1", { steps: [{ action: "click_ref", ref: "e1" }] });
+		assert.equal(result.isError, true);
+		assert.match(result.details.stepResults[0].message, /ambiguous/i);
+	});
+});
+
+describe("browser_assert with no checks", () => {
+	const { registerAssertionTools } = jiti("../tools/assertions.js");
+
+	const assertDeps = {
+		ensureBrowser: async () => ({ page: fakePage() }),
+		getActiveTarget: () => ({}),
+		collectAssertionState: async () => ({ url: PAGE_URL, title: "t" }),
+		formatAssertionText: utils.formatAssertionText,
+	};
+
+	it("requires at least one check in its parameter schema", () => {
+		const tool = registerOne(registerAssertionTools, assertDeps, "browser_assert");
+		assert.equal(tool.parameters.properties.checks.minItems, 1);
+	});
+
+	it("reports an error rather than PASS for an empty checks array", async () => {
+		const tool = registerOne(registerAssertionTools, assertDeps, "browser_assert");
+		const result = await tool.execute("c1", { checks: [] });
+		assert.equal(result.isError, true);
+	});
+
+	it("fails a batch assert step that carries no checks", async () => {
+		const batchTool = registerOne(registerAssertionTools, {
+			...assertDeps,
+			getActivePageOrNull: () => fakePage(),
+			captureCompactPageState: async () => ({ url: PAGE_URL, title: "t", counts: {}, dialog: { count: 0 } }),
+			beginTrackedAction: () => ({ id: 1 }),
+			finishTrackedAction: () => {},
+			formatDiffText: () => "",
+		}, "browser_batch");
+		const result = await batchTool.execute("c1", { steps: [{ action: "assert" }] });
+		assert.equal(result.isError, true);
+	});
+});
+
+describe("browser_select_frame index validation", () => {
+	const { registerPageTools } = jiti("../tools/pages.js");
+
+	const pageDeps = {
+		ensureBrowser: async () => ({ page: fakePage() }),
+		getActivePage: () => ({
+			frames: () => [fakeFrame("main", PAGE_URL), fakeFrame("checkout", "https://pay.test/widget")],
+		}),
+	};
+
+	it("rejects a fractional index with an explanatory message", async () => {
+		const tool = registerOne(registerPageTools, pageDeps, "browser_select_frame");
+		const result = await tool.execute("c1", { index: 1.5 });
+		assert.equal(result.isError, true);
+		assert.equal(result.details.error, "index_not_integer");
+	});
+
+	it("rejects an out-of-range index", async () => {
+		const tool = registerOne(registerPageTools, pageDeps, "browser_select_frame");
+		const result = await tool.execute("c1", { index: 5 });
+		assert.equal(result.isError, true);
+		assert.equal(result.details.error, "index_out_of_range");
+	});
+
+	it("selects a valid index", async () => {
+		const tool = registerOne(registerPageTools, pageDeps, "browser_select_frame");
+		const result = await tool.execute("c1", { index: 1 });
+		assert.notEqual(result.isError, true);
+		assert.equal(result.details.name, "checkout");
+	});
+});
+
+describe("browser_find limit clamping", () => {
+	const { registerInspectionTools } = jiti("../tools/inspection.js");
+
+	function toolWithCapture() {
+		const captured = {};
+		const deps = {
+			ensureBrowser: async () => ({ page: fakePage() }),
+			getActiveTarget: () => ({
+				evaluate: async (_fn, args) => {
+					Object.assign(captured, args);
+					return [];
+				},
+			}),
+			truncateText: (t) => t,
+		};
+		return { tool: registerOne(registerInspectionTools, deps, "browser_find"), captured };
+	}
+
+	it("clamps a zero limit up to 1", async () => {
+		const { tool, captured } = toolWithCapture();
+		await tool.execute("c1", { limit: 0 });
+		assert.equal(captured.limit, 1);
+	});
+
+	it("clamps a negative limit up to 1", async () => {
+		const { tool, captured } = toolWithCapture();
+		await tool.execute("c1", { limit: -1 });
+		assert.equal(captured.limit, 1);
+	});
+
+	it("floors a fractional limit", async () => {
+		const { tool, captured } = toolWithCapture();
+		await tool.execute("c1", { limit: 3.7 });
+		assert.equal(captured.limit, 3);
+	});
+});
+
+describe("browser_fill_ref value verification", () => {
+	const { registerRefTools } = jiti("../tools/refs.js");
+	beforeEach(() => resetAllState());
+
+	function fillDeps(filledValue, pressed = []) {
+		const locator = {
+			first: () => ({ click: async () => {}, fill: async () => {} }),
+		};
+		return refDeps({
+			getActiveTarget: () => ({ locator: () => locator }),
+			ensureBrowser: async () => ({
+				page: {
+					url: () => PAGE_URL,
+					keyboard: { press: async (key) => { pressed.push(key); }, type: async () => {} },
+				},
+			}),
+			resolveRefTarget: async () => ({ ok: true, selector: "input#q" }),
+			settleAfterActionAdaptive: async () => ({}),
+			readInputLikeValue: async () => filledValue,
+			verificationFromChecks: utils.verificationFromChecks,
+			verificationLine: utils.verificationLine,
+			captureCompactPageState: async () => ({ url: PAGE_URL, title: "t", counts: {}, dialog: { count: 0 } }),
+			formatCompactStateSummary: () => "",
+			getRecentErrors: () => "",
+		});
+	}
+
+	it("does not verify a clearFirst fill that left the old value in place", async () => {
+		seedSnapshot();
+		const tool = registerOne(registerRefTools, fillDeps("oldnew"), "browser_fill_ref");
+		const result = await tool.execute("c1", { ref: "@v1:e1", text: "new", clearFirst: true, slowly: true });
+		assert.equal(result.details.verified, false);
+	});
+
+	it("verifies a clearFirst fill that replaced the value exactly", async () => {
+		seedSnapshot();
+		const tool = registerOne(registerRefTools, fillDeps("new"), "browser_fill_ref");
+		const result = await tool.execute("c1", { ref: "@v1:e1", text: "new", clearFirst: true, slowly: true });
+		assert.equal(result.details.verified, true);
+	});
+
+	it("clears with the platform select-all rather than Control+A", async () => {
+		seedSnapshot();
+		const pressed = [];
+		const tool = registerOne(registerRefTools, fillDeps("new", pressed), "browser_fill_ref");
+		await tool.execute("c1", { ref: "@v1:e1", text: "new", clearFirst: true, slowly: true });
+		assert.ok(pressed.includes("ControlOrMeta+A"), `expected ControlOrMeta+A, got ${JSON.stringify(pressed)}`);
+		assert.ok(!pressed.includes("Control+A"), "Control+A moves the caret on macOS instead of selecting all");
+	});
+
+	it("verifies an appending slow fill that only contains the typed text", async () => {
+		seedSnapshot();
+		const tool = registerOne(registerRefTools, fillDeps("oldnew"), "browser_fill_ref");
+		const result = await tool.execute("c1", { ref: "@v1:e1", text: "new", slowly: true });
+		assert.equal(result.details.verified, true);
 	});
 });
