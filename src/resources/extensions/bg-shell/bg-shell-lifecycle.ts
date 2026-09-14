@@ -23,6 +23,7 @@ import {
 	loadManifest,
 	pruneDeadProcesses,
 } from "./process-manager.js";
+import { installBgShellSignalHandlers } from "./signal-handlers.js";
 import { formatUptime, getBgShellLiveCwd, resolveBgShellPersistenceCwd } from "./utilities.js";
 import { formatTokenCount } from "../shared/format-utils.js";
 
@@ -51,15 +52,11 @@ export function registerBgShellLifecycle(pi: ExtensionAPI, state: BgShellSharedS
 			}
 		} catch {}
 	};
-	process.on("SIGTERM", signalCleanup);
-	process.on("SIGINT", signalCleanup);
-	process.on("beforeExit", signalCleanup);
+	const uninstallSignalHandlers = installBgShellSignalHandlers(signalCleanup);
 
 	// Clean up on session shutdown — remove signal handlers to prevent accumulation
 	pi.on("session_shutdown", async () => {
-		process.off("SIGTERM", signalCleanup);
-		process.off("SIGINT", signalCleanup);
-		process.off("beforeExit", signalCleanup);
+		uninstallSignalHandlers();
 		cleanupAll();
 	});
 
