@@ -33,6 +33,49 @@ export function getBudgetEnforcementAction(
   return "warn";
 }
 
+/** The cost-bearing shape of a metrics-ledger unit entry. */
+export interface LedgerUnitCost {
+  id?: unknown;
+  cost?: unknown;
+}
+
+/**
+ * Split a metrics ledger into the cost of one unit and the rolling average of
+ * every *other* unit — the baseline `getUnitCostSpikeAction` judges it against.
+ *
+ * The unit under judgement must not appear in its own baseline. While it did
+ * (#17), a spike diluted the average it was compared to: with N ledger units
+ * and multiplier 3, firing required `cost·(N−3) ≥ 3·priorTotal`, so no spike
+ * could trip the guard until the fourth unit of a run — `[100]`, `[1,100]` and
+ * `[1,1,100]` all passed. A unit may contribute several ledger rows; all of
+ * them belong to its own cost, none to the baseline.
+ */
+export function splitUnitCostBaseline(
+  units: readonly LedgerUnitCost[] | null | undefined,
+  unitId: string,
+): { unitCostUsd: number; rollingAvgUsd: number } {
+  if (!Array.isArray(units) || units.length === 0) {
+    return { unitCostUsd: 0, rollingAvgUsd: 0 };
+  }
+  let unitCostUsd = 0;
+  let baselineCost = 0;
+  let baselineUnits = 0;
+  for (const unit of units) {
+    const cost = typeof unit?.cost === "number" ? unit.cost : 0;
+    if (!Number.isFinite(cost) || cost < 0) continue;
+    if (unit?.id === unitId) {
+      unitCostUsd += cost;
+      continue;
+    }
+    baselineCost += cost;
+    baselineUnits++;
+  }
+  return {
+    unitCostUsd,
+    rollingAvgUsd: baselineUnits > 0 ? baselineCost / baselineUnits : 0,
+  };
+}
+
 export function getUnitCostSpikeAction(
   unitCostUsd: number,
   rollingAvgUsd: number,

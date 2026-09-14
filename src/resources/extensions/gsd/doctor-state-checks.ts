@@ -308,12 +308,21 @@ export async function checkGsdStateHealth(
       }
 
       const slicePath = resolveSlicePath(basePath, milestoneId, slice.id);
-      if (!slicePath) {
+      // resolveSlicePath() returns null only when resolveMilestonePath() does,
+      // and the loop already `continue`d on a null milestonePath with the same
+      // arguments — so testing `!slicePath` alone left this check (and its
+      // --fix) unreachable (#17). Otherwise it falls back to the phase dir.
+      // That fallback is the correct answer for a flat-phase milestone, but in
+      // a milestone that uses the sliced layout (a slices/ root exists) it
+      // means this slice's own slices/<SID>/ directory is absent.
+      const slicesRoot = join(milestonePath, "slices");
+      const sliceDirMissing = !slicePath || (slicePath === milestonePath && existsSync(slicesRoot));
+      if (sliceDirMissing) {
         // Pending slices haven't been planned yet — directories are created
         // lazily by ensurePreconditions() at dispatch time. Skipped slices are
         // intentionally allowed to remain summary-less and directory-less.
         if (slice.pending || slice.skipped) continue;
-        const expectedPath = relSlicePath(basePath, milestoneId, slice.id);
+        const absoluteSliceDir = join(slicesRoot, slice.id);
         issues.push({
           severity: slice.done ? "warning" : "error",
           code: "missing_slice_dir",
@@ -322,11 +331,10 @@ export async function checkGsdStateHealth(
           message: slice.done
             ? `Missing slice directory for ${unitId} (slice is complete — cosmetic only)`
             : `Missing slice directory for ${unitId}`,
-          file: expectedPath,
+          file: `${relSlicePath(basePath, milestoneId, slice.id)}/slices/${slice.id}`,
           fixable: true,
         });
         if (fix) {
-          const absoluteSliceDir = join(milestonePath, "slices", slice.id);
           mkdirSync(absoluteSliceDir, { recursive: true });
           fixesApplied.push(`created ${absoluteSliceDir}`);
         }
