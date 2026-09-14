@@ -53,7 +53,6 @@ afterEach(() => {
   tmpDirs.length = 0;
 });
 
-
 function writeProjectPlugin(basePath: string, filename: string, content: string): void {
   const dir = join(basePath, ".gsd", "workflows");
   mkdirSync(dir, { recursive: true });

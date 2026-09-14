@@ -317,7 +317,6 @@ async function handleRemove(basePath: string, args: string[]): Promise<void> {
 
 // ─── Subcommand: status (default when no args) ─────────────────────────────
 
-
 // ─── -w flag: create/resume worktree for interactive session ────────────────
 
 async function handleWorktreeFlag(worktreeFlag: boolean | string): Promise<void> {

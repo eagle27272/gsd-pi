@@ -606,9 +606,6 @@ async function dispatchNextDeepProjectSetupStage(entry: PendingDeepProjectSetupE
   return true;
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 interface DispatchWorkflowOptions {

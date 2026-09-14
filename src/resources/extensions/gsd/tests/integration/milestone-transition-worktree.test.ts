@@ -13,14 +13,12 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 
-
 import { createAutoWorktree } from "../../auto-worktree-creation.ts";
 import { isInAutoWorktree } from "../../auto-worktree-entry.ts";
 import { mergeMilestoneToMain } from "../../auto-worktree-merge.ts";
 import { getAutoWorktreeOriginalBase } from "../../auto-worktree-session-registry.ts";
 import { teardownAutoWorktree } from "../../auto-worktree-teardown.ts";
 import { seedMergeReadyMilestone } from "../merge-ready-fixture.ts";
-
 
 function run(command: string, cwd: string): string {
   return execSync(command, { cwd, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" }).trim();

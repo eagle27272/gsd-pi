@@ -28,8 +28,6 @@ export function resolveBundledResourcesDirFromPackageRoot(
     : srcResources;
 }
 
-
-
 export function resolveBundledGsdExtensionModule(
   importUrl: string,
   moduleFile: string,

@@ -65,7 +65,6 @@ function stdioTrustKey(config: McpServerConfig): string {
 	return stdioPersistTrustKey(config);
 }
 
-
 export function _buildMcpChildEnvForTest(configEnv: Record<string, string> | undefined): Record<string, string> {
 	return buildMcpChildEnv(configEnv);
 }

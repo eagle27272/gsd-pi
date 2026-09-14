@@ -46,7 +46,6 @@ function cleanup(base: string): void {
   try { rmSync(base, { recursive: true, force: true }); } catch { /* noop */ }
 }
 
-
 function seedCompletedTask(base: string, taskId: string): void {
   openDatabase(join(base, ".gsd", "gsd.db"));
   insertMilestone({ id: "M001", title: "Test", status: "active" });

@@ -318,7 +318,6 @@ export async function checkForGsdBrowserUpdates(options: UpdateCheckOptions = {}
   })
 }
 
-
 /**
  * Interactive update prompt shown at startup when a newer version is available.
  * Fetches the latest version (with cache), then asks the user whether to

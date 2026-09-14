@@ -4,7 +4,6 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-
 import { ModelPolicyDispatchBlockedError, resolvePreferredModelConfig, resolveModelId, selectAndApplyModel, floorThinkingLevelForUnit } from "../auto-model-selection.js";
 import { blockModelUntil, clearTemporaryModelBlocksForTest } from "../blocked-models.ts";
 

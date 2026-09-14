@@ -655,7 +655,6 @@ export function _resolveEffectiveUnitIsolationModeForTest(
   );
 }
 
-
 /** Crash recovery prompt — set by startAuto, consumed by the main loop */
 
 /** Pending verification retry — set when gate fails with retries remaining, consumed by autoLoop */

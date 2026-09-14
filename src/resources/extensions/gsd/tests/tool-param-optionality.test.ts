@@ -43,7 +43,6 @@ function getRequiredProps(tool: any): string[] {
   return schema.required ?? [];
 }
 
-
 function validateSchema(tool: any, value: unknown): string[] {
   const ajv = new Ajv({ strict: false });
   const validate = ajv.compile(tool.parameters);

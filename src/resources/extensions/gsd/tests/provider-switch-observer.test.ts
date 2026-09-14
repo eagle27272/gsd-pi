@@ -23,7 +23,6 @@ import {
   uninstallProviderSwitchObserver,
 } from "../provider-switch-observer.ts";
 
-
 function withTempBasePath(): { basePath: string; cleanup: () => void } {
   const basePath = mkdtempSync(join(tmpdir(), "gsd-provider-switch-"));
   return {

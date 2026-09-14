@@ -39,7 +39,6 @@ const dirListCache = new Map<string, string[]>();
 let nativeTreeCache: Map<string, GsdTreeEntry[]> | null = null;
 let nativeTreeBase: string | null = null;
 
-
 /**
  * Convert a native tree lookup into a relative key for the tree map.
  * Returns the relative path from the gsdDir, or null if the path isn't under gsdDir.

@@ -85,7 +85,6 @@ function makeMetricUnit(id: string, startedAt: number, finishedAt: number): Unit
   };
 }
 
-
 // ─── unitVerb ─────────────────────────────────────────────────────────────
 
 test("unitVerb maps known unit types to verbs", () => {

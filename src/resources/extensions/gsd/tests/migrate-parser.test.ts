@@ -23,7 +23,6 @@ function createPlanningDir(base: string): string {
   return dir;
 }
 
-
 function cleanup(base: string): void {
   rmSync(base, { recursive: true, force: true });
 }

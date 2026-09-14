@@ -3,8 +3,6 @@ import assert from "node:assert/strict";
 
 // ─── Mock dispatcher to capture routed commands ─────────────────────────
 
-
-
 // We test the keyword matching logic directly since the handler imports
 // the dispatcher dynamically (which requires the full extension runtime).
 

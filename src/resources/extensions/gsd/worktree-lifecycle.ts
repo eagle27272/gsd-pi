@@ -597,8 +597,6 @@ function lifecycleGetIsolationMode(
     getIsolationMode(basePath);
 }
 
-
-
 function lifecycleLoadPreferences(
   deps: WorktreeLifecycleDeps,
   basePath?: string,

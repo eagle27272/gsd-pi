@@ -245,7 +245,6 @@ export function isExtensionEnabled(registry: ExtensionRegistry, id: string): boo
 
 // ─── Mutations ──────────────────────────────────────────────────────────────
 
-
 /**
  * Disable an extension. Returns an error string if the extension is core (cannot disable),
  * or null on success.

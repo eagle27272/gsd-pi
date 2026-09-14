@@ -52,7 +52,6 @@ function makeSliceRow(overrides?: Partial<SliceRow>): SliceRow {
   };
 }
 
-
 function makeMilestoneRow(overrides?: Partial<MilestoneRow>): MilestoneRow {
   return {
     id: 'M001',

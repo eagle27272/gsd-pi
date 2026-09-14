@@ -39,7 +39,6 @@ import { readUnitRuntimeRecord, type AutoUnitRuntimeRecord } from "./unit-runtim
 import { describeMilestoneReadinessPhase } from "./milestone-readiness.js";
 import type { ToolSurfaceSnapshot } from "./tool-surface-snapshot.js";
 
-
 // ─── UAT Slice Extraction ─────────────────────────────────────────────────────
 
 /**
@@ -196,7 +195,6 @@ export function formatToolSurfaceSnapshot(snapshot: ToolSurfaceSnapshot | null |
   return `${label}: ${counts.join(" / ")}`;
 }
 
-
 /**
  * Describe what the next unit will be, based on current state.
  */
@@ -283,10 +281,6 @@ export function shouldRenderRoadmapProgress(
 ): progress is { total: number; activeSliceTasks?: { total: number } | null } {
   return !!progress && progress.total > 0;
 }
-
-
-
-
 
 // ─── ETA Estimation ──────────────────────────────────────────────────────────
 

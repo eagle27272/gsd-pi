@@ -1301,7 +1301,6 @@ interface CachedProjection { mtimeMs: number; size: number; parsed: unknown }
 const _projectionParseCache = new Map<string, CachedProjection>();
 registerCacheClearCallback(() => _projectionParseCache.clear());
 
-
 // ─── Projection Drift (DB-vs-render-intent) ───────────────────────────────
 // Post-cutover staleness is judged DB-vs-render-intent: the on-disk bytes
 // (stamp-insensitive) are compared against what the renderer would emit from
@@ -1454,7 +1453,6 @@ export function detectStaleRenders(_basePath: string): StaleEntry[] {
   // is unified.
   return [];
 }
-
 
 /**
  * Render-verification helper: does the rendered ROADMAP markdown mark a slice

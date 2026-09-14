@@ -24,7 +24,6 @@ import {
 } from "../gsd-db.js";
 import { canonicalPhaseDirName } from "../layout-policy.ts";
 
-
 // ─── Fixture helpers ──────────────────────────────────────────────────────────
 
 function createFixtureBase(): string {

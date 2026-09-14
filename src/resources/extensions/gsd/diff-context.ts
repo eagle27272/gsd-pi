@@ -27,7 +27,6 @@ export interface RecentFilesOptions {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-
 /** Synchronous git — used where sequential control flow is required (fallback paths). */
 
 /** Async git — returns stdout on success, empty string on any error. */

@@ -90,7 +90,6 @@ steps:
     produces: []
 `;
 
-
 // ─── Catalog Registration ────────────────────────────────────────────────
 
 describe("workflow catalog registration", () => {

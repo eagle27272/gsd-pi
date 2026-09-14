@@ -25,7 +25,6 @@ beforeEach(() => {
   _resetEmpiricalCacheForTest();
 });
 
-
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 
 function makeRegistry(models: MinimalModel[]): MinimalModelRegistry {

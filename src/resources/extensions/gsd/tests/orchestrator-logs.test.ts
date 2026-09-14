@@ -45,7 +45,6 @@ import {
   type LogEntry,
 } from "../workflow-logger.ts";
 
-
 function gitInit(base: string): void {
   execFileSync("git", ["init", "--initial-branch=main"], { cwd: base, stdio: "ignore" });
   execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: base, stdio: "ignore" });

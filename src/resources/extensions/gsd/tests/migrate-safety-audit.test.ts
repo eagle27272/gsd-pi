@@ -155,7 +155,6 @@ function setNativeMutationBoundaryFault(
     .setMutationBoundaryFaultForTest(fault);
 }
 
-
 function createPlanningSource(base: string): string {
   const planning = join(base, ".planning");
   mkdirSync(planning, { recursive: true });
