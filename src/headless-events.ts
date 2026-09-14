@@ -269,6 +269,40 @@ export function shouldRestartHeadlessRun(summary: HeadlessRunSummary): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// v2 Protocol Negotiation
+// ---------------------------------------------------------------------------
+
+/** The subset of RpcClient negotiation needs — keeps this module native-free. */
+interface V2InitCapableClient {
+  init(options?: { clientId?: string }): Promise<unknown>
+}
+
+export interface V2NegotiationResult {
+  error?: string
+}
+
+/**
+ * Open the v2 protocol session. A non-undefined `error` is fatal to the run:
+ * the RPC peer is the same gsd binary as the parent (see the GSD_BIN_PATH
+ * resolution in headless.ts), and its rpc-mode answers `init` unconditionally,
+ * so a refusal means version skew or a dead child rather than a v1 peer.
+ *
+ * Continuing without v2 is not a safe degradation. `execution_complete` is the
+ * only signal that maps a failure status onto a non-zero exit code; the
+ * always-on string-matching path can produce EXIT_SUCCESS or EXIT_BLOCKED but
+ * never EXIT_ERROR, and the idle timer resolves a run without touching the
+ * exit code at all. A genuinely failed run would therefore exit 0. (#109)
+ */
+export async function negotiateV2Protocol(client: V2InitCapableClient): Promise<V2NegotiationResult> {
+  try {
+    await client.init({ clientId: 'gsd-headless' })
+    return {}
+  } catch (err) {
+    return { error: `v2 protocol init failed: ${err instanceof Error ? err.message : String(err)}` }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Quick Command Detection
 // ---------------------------------------------------------------------------
 
