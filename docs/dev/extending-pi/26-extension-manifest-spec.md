@@ -54,7 +54,7 @@ A manifest that fails this check is treated as missing — the extension loads w
 
 | Tier | Ships with GSD | Can be disabled | Load source |
 |------|---------------|-----------------|-------------|
-| `core` | Yes | **No** — `disableExtension()` returns an error | Built-in `src/resources/extensions/` |
+| `core` | Yes | **No** — `/gsd extensions disable` refuses | Built-in `src/resources/extensions/` |
 | `bundled` | Yes | Yes | Built-in `src/resources/extensions/` |
 | `community` | No | Yes | `~/.gsd/agent/extensions/` or `.gsd/extensions/` |
 
@@ -178,7 +178,7 @@ The registry (`registry.json`) tracks enable/disable state separately from manif
 1. On startup, `discoverAllManifests()` scans extension directories for `extension-manifest.json` files.
 2. `ensureRegistryEntries()` auto-populates registry entries for newly discovered extensions (enabled by default).
 3. `isExtensionEnabled()` checks the registry — missing entries default to **enabled**.
-4. Core-tier manifests prevent `disableExtension()` from succeeding.
+4. Core-tier manifests prevent `/gsd extensions disable <id>` from succeeding.
 
 ---
 
