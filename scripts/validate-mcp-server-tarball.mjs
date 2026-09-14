@@ -17,19 +17,35 @@ const installDir = mkdtempSync(join(tmpdir(), "mcp-server-install-"));
 const npmCacheDir = mkdtempSync(join(tmpdir(), "mcp-server-npm-cache-"));
 
 function runNpm(args, options = {}) {
+  const env = {
+    ...process.env,
+    npm_config_audit: "false",
+    npm_config_cache: npmCacheDir,
+    npm_config_fund: "false",
+    npm_config_loglevel: "error",
+  };
+  // `pnpm run` exports every .npmrc setting as npm_config_*, and npm reads those
+  // as if the matching flag were on the command line. A contributor with
+  // `allow-scripts` in any .npmrc therefore fails every install below with
+  // EALLOWSCRIPTS ("not allowed in project-scoped installs"), even though we
+  // pass --ignore-scripts and want no scripts at all.
+  delete env.npm_config_allow_scripts;
   return execFileSync(npmCommand, args, {
     encoding: "utf8",
     shell: process.platform === "win32",
     stdio: ["pipe", "pipe", "pipe"],
-    env: {
-      ...process.env,
-      npm_config_audit: "false",
-      npm_config_cache: npmCacheDir,
-      npm_config_fund: "false",
-      npm_config_loglevel: "error",
-    },
+    env,
     ...options,
   });
+}
+
+/**
+ * npm 11 reports `npm pack --json` as an array of entries; npm 12 reports an
+ * object keyed by package name. Accept both.
+ */
+function firstPackEntry(output) {
+  const parsed = JSON.parse(output);
+  return (Array.isArray(parsed) ? parsed : Object.values(parsed))[0] ?? null;
 }
 
 function getPackageClosure(packages, packageName) {
@@ -68,7 +84,7 @@ try {
       ["pack", "--json", "--ignore-scripts", "--pack-destination", packDir],
       { cwd: join(root, pkg.dir) },
     );
-    const packed = JSON.parse(output)[0];
+    const packed = firstPackEntry(output);
     if (!packed?.filename) throw new Error(`npm pack returned no tarball for ${pkg.name}`);
     tarballs.set(pkg.name, join(packDir, packed.filename));
   }

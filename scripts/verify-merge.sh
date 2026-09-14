@@ -96,7 +96,14 @@ pnpm run test:compile
 
 echo "── test:unit ──"
 mkdir -p dist-test/native/addon
-cp native/addon/*.node dist-test/native/addon/
+# test:compile symlinks dist-test/native at the real tree, so each destination
+# here can already be the source file; cp treats copying a file onto itself as
+# an error and takes the whole run down.
+for addon in native/addon/*.node; do
+	[ -e "$addon" ] || continue
+	dest="dist-test/native/addon/$(basename "$addon")"
+	[ "$addon" -ef "$dest" ] || cp "$addon" "$dest"
+done
 export GSD_NATIVE_PREFER_LOCAL=1
 pnpm run test:unit:compiled
 
