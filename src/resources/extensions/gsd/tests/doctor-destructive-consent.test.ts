@@ -138,16 +138,12 @@ test("doctor --fix does not delete worktree directories when git worktree list c
     `#!/bin/sh\nif [ "$1" = "worktree" ] && [ "$2" = "list" ]; then exit 128; fi\nexec ${realGit} "$@"\n`,
     { encoding: "utf-8", mode: 0o755 },
   );
-  // GIT_NO_PROMPT_ENV snapshots process.env at module load, so the shim has to
-  // be installed into that overlay too — it is what the git child actually gets.
-  const { GIT_NO_PROMPT_ENV } = await import("../git-constants.ts");
+  // gitNoPromptEnv() rebuilds the git child's env from the live process.env on
+  // every call, so installing the shim on PATH here is enough to reach it.
   const originalPath = process.env["PATH"];
-  const originalGitPath = GIT_NO_PROMPT_ENV["PATH"];
   process.env["PATH"] = `${shimDir}:${originalPath}`;
-  GIT_NO_PROMPT_ENV["PATH"] = `${shimDir}:${originalGitPath}`;
   t.after(() => {
     process.env["PATH"] = originalPath;
-    GIT_NO_PROMPT_ENV["PATH"] = originalGitPath;
     rmSync(shimDir, { recursive: true, force: true });
   });
 
