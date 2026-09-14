@@ -41,6 +41,26 @@ upstream **v1.18.0**. Later changes are tracked in this repository's git history
 
 ### Fixed
 
+- Slice-parallel worktree setup no longer deletes outside the worktrees container. The
+  `rmSync` that clears a stale slice worktree ran on a path built by interpolating the
+  milestone and slice ids into a worktree name, with no containment check — a `../` in
+  either id pointed it anywhere under the project's parent. `createWorktree`'s own name
+  validation does run, but only after the delete. Both ids are now rejected up front if
+  they carry a path separator or `..`, and the delete is gated on `isInsideWorktreesDir`,
+  matching the five other destructive worktree sites
+  ([#21](https://github.com/eagle27272/gsd-pi/issues/21)).
+- A crafted `milestoneId` can no longer redirect workflow tool writes into another
+  checkout. The MCP server joins the id onto the worktree container and lets the result
+  *replace* the validated `projectDir`; the two `existsSync` gates blocked traversal to
+  nonexistent paths but not to a live sibling repository, whose `.gsd/` would then receive
+  every subsequent write. The id must now match the artifact-id alphabet, and the
+  replacement path has to clear a realpath-based containment check against the project's
+  own worktree containers rather than inheriting the project root's trust. The check is
+  unconditional: `validateProjectDir` confines paths only when
+  `GSD_WORKFLOW_PROJECT_ROOT` is set, which the standalone server often runs without, so
+  on its own it would have left a symlinked container entry free to redirect writes. The
+  no-milestone-id fallback that adopts a sole live worktree goes through the same gate
+  ([#21](https://github.com/eagle27272/gsd-pi/issues/21)).
 - Three task-scoped artifacts no longer collide between sibling slices that reuse a task
   id. In the flat-phase layout every slice in a milestone resolves to the same phase
   directory, so a listing of it mixes all of their files together. The reactive-execute

@@ -427,20 +427,12 @@ async function waitForProcessExit(bg: BgProcess, timeoutMs: number): Promise<boo
 }
 
 /**
- * Terminate the alive, non-persistent processes owned by a session, gracefully.
- * Routes through the shared killProcessTree ladder (SIGTERM → grace → SIGKILL)
- * via terminateProcess, with a short grace (default 300ms) so cleanup between
- * units stays snappy; killProcessTree handles the SIGKILL escalation itself, so
- * there is no separate force-kill pass here.
+ * Terminate a set of processes gracefully via the shared killProcessTree ladder
+ * (SIGTERM → grace → SIGKILL), using a short grace (default 300ms) so cleanup
+ * between units stays snappy. killProcessTree handles the SIGKILL escalation
+ * itself, so there is no separate force-kill pass here.
  */
-export async function cleanupSessionProcesses(
-	sessionFile: string,
-	options?: { graceMs?: number },
-): Promise<string[]> {
-	const graceMs = Math.max(0, options?.graceMs ?? 300);
-	const matches = Array.from(processes.values()).filter(
-		(bg) => bg.alive && !bg.persistAcrossSessions && bg.ownerSessionFile === sessionFile,
-	);
+async function terminateMatches(matches: BgProcess[], graceMs: number): Promise<string[]> {
 	if (matches.length === 0) return [];
 
 	for (const bg of matches) {
@@ -451,6 +443,37 @@ export async function cleanupSessionProcesses(
 		await Promise.all(matches.map((bg) => waitForProcessExit(bg, graceMs + 200)));
 	}
 	return matches.map((bg) => bg.id);
+}
+
+/** Terminate the alive, non-persistent processes owned by a specific session. */
+export async function cleanupSessionProcesses(
+	sessionFile: string,
+	options?: { graceMs?: number },
+): Promise<string[]> {
+	return terminateMatches(
+		Array.from(processes.values()).filter(
+			(bg) => bg.alive && !bg.persistAcrossSessions && bg.ownerSessionFile === sessionFile,
+		),
+		Math.max(0, options?.graceMs ?? 300),
+	);
+}
+
+/**
+ * Terminate every alive process that did not opt out of session scoping.
+ *
+ * This is the session-transition teardown: bg_shell advertises that processes
+ * are session-scoped unless started with persist_across_sessions, so a new /
+ * resumed / forked session reaps everything else. Ownership is deliberately not
+ * consulted — a process started before the session had a file on disk has a null
+ * ownerSessionFile and would otherwise leak past every transition.
+ */
+export async function cleanupNonPersistentProcesses(
+	options?: { graceMs?: number },
+): Promise<string[]> {
+	return terminateMatches(
+		Array.from(processes.values()).filter((bg) => bg.alive && !bg.persistAcrossSessions),
+		Math.max(0, options?.graceMs ?? 300),
+	);
 }
 
 // ── Persistence ────────────────────────────────────────────────────────────

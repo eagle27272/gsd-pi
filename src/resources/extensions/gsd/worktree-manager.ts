@@ -212,7 +212,10 @@ export function isInsideWorktreesDir(basePath: string, targetPath: string): bool
  * catches anything which still slips through before a destructive operation.
  */
 export function isValidWorktreeIdentifier(id: string): boolean {
-  return id.length > 0 && !/[/\\]|\.\./.test(id);
+  // `.` is harmless in the composed `<milestone>-<slice>` name, but a caller
+  // that uses an id as a whole worktree name would resolve it to the container
+  // itself. Reject it here rather than rely on every caller composing.
+  return id.length > 0 && id !== "." && !/[/\\]|\.\./.test(id);
 }
 
 function isRegisteredGitWorktreeAtPath(basePath: string, wtPath: string): boolean {
