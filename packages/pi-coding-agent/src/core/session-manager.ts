@@ -1,28 +1,18 @@
-import { type AgentMessage, uuidv7 } from "@gsd/pi-agent-core";
+import { uuidv7 } from "@gsd/pi-agent-core";
 import type { ImageContent, Message, TextContent } from "@gsd/pi-ai";
-import { randomUUID } from "crypto";
 import {
 	appendFileSync,
-	closeSync,
 	existsSync,
 	mkdirSync,
-	openSync,
-	readdirSync,
-	readFileSync,
-	readSync,
-	statSync,
 	writeFileSync,
 } from "fs";
-import { readdir, readFile, stat } from "fs/promises";
+import { readdir } from "fs/promises";
 import { join, resolve } from "path";
-import { getAgentDir as getDefaultAgentDir, getSessionsDir } from "../config.js";
+import { getSessionsDir } from "../config.js";
 import { normalizePath, resolvePath } from "../utils/paths.js";
 import {
 	type BashExecutionMessage,
 	type CustomMessage,
-	createBranchSummaryMessage,
-	createCompactionSummaryMessage,
-	createCustomMessage,
 } from "./messages.js";
 import {
 	CURRENT_SESSION_VERSION,
@@ -36,7 +26,6 @@ import {
 	type NewSessionOptions,
 	type SessionContext,
 	type SessionEntry,
-	type SessionEntryBase,
 	type SessionHeader,
 	type SessionInfo,
 	type SessionInfoEntry,
@@ -44,7 +33,7 @@ import {
 	type SessionTreeNode,
 	type ThinkingLevelChangeEntry,
 } from "./session-manager-types.js";
-import { buildSessionContext, getLatestCompactionEntry } from "./session-manager-context.js";
+import { buildSessionContext } from "./session-manager-context.js";
 import {
 	buildSessionInfosWithConcurrency,
 	findMostRecentSession,
@@ -55,9 +44,7 @@ import {
 } from "./session-manager-list.js";
 import {
 	generateSessionEntryId,
-	migrateSessionEntries,
 	migrateToCurrentVersion,
-	parseSessionEntries,
 } from "./session-manager-migration.js";
 
 export {

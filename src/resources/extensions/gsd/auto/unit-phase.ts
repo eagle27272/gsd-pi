@@ -18,16 +18,11 @@ import { join } from "node:path";
 import { logWarning, _resetLogs } from "../workflow-logger.js";
 import {
   verifyExpectedArtifact,
-  diagnoseExpectedArtifact,
-  buildLoopRemediationSteps,
-  refreshRecoveryDbForArtifact,
 } from "../auto-recovery.js";
 import { writeUnitRuntimeRecord } from "../unit-runtime.js";
 import { isDbAvailable, getTask } from "../gsd-db.js";
-import { getLatestForUnit } from "../db/unit-dispatches.js";
 import { markWorkerStopping } from "../db/auto-workers.js";
 import { releaseMilestoneLease } from "../db/milestone-leases.js";
-import type { MinimalModelRegistry } from "../context-budget.js";
 import { parseUnitId } from "../unit-id.js";
 import { createCheckpoint, cleanupCheckpoint, rollbackToCheckpoint } from "../safety/git-checkpoint.js";
 import { resolveSafetyHarnessConfig } from "../safety/safety-harness.js";
@@ -39,7 +34,7 @@ import {
 } from "../auto-model-selection.js";
 import { isSuspiciousGhostCompletion } from "../auto-unit-closeout.js";
 import { classifyError, isTransient } from "../error-classifier.js";
-import { setCurrentPhase, clearCurrentPhase } from "../../shared/gsd-phase-state.js";
+import { setCurrentPhase } from "../../shared/gsd-phase-state.js";
 import { setAutoActiveStatus } from "../auto-dashboard.js";
 import { runUnit } from "./run-unit.js";
 import { verificationRetryKey } from "./verification-retry-policy.js";
@@ -227,7 +222,7 @@ export function resetSessionTimeoutState(): void {
 export async function runUnitPhase(
   ic: IterationContext,
   iterData: IterationData,
-  loopState: LoopState,
+  _loopState: LoopState,
   sidecarItem?: SidecarItem,
 ): Promise<PhaseResult<{ unitStartedAt?: number; requestDispatchedAt?: number; retryAfterMs?: number }>> {
   const { ctx, pi, s, deps, prefs } = ic;

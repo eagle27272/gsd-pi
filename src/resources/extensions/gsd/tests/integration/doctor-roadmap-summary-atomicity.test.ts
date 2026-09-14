@@ -64,7 +64,7 @@ test("fixLevel:task — roadmap checkbox is never toggled by doctor (reconciliat
 
   buildScaffold(tmp);
 
-  const report = await runGSDDoctor(tmp, { fix: true, fixLevel: "task" });
+  await runGSDDoctor(tmp, { fix: true, fixLevel: "task" });
 
   // Roadmap must remain unchecked — doctor no longer touches checkboxes
   const roadmapContent = readFileSync(join(tmp, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), "utf8");
@@ -84,7 +84,7 @@ test("fixLevel:all — roadmap checkbox is never toggled by doctor (reconciliati
 
   buildScaffold(tmp);
 
-  const report = await runGSDDoctor(tmp, { fix: true });
+  await runGSDDoctor(tmp, { fix: true });
 
   // Even at fixLevel:all, doctor no longer creates stubs or toggles checkboxes
   const roadmapContent = readFileSync(join(tmp, ".gsd", "milestones", "M001", "M001-ROADMAP.md"), "utf8");

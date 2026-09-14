@@ -10,9 +10,7 @@
 import type { Theme } from "@gsd/pi-coding-agent";
 import { truncateToWidth, matchesKey, Key } from "@gsd/pi-tui";
 import { deriveState } from "./state.js";
-import { loadFile } from "./files.js";
 import { isDbAvailable, getMilestoneSlices, getSliceTasks } from "./gsd-db.js";
-import { resolveMilestoneFile, resolveSliceFile } from "./paths.js";
 import { getAutoDashboardData } from "./auto.js";
 import type { AutoDashboardData } from "./auto-dashboard.js";
 import { getAutoRuntimeSnapshot } from "./auto-runtime-state.js";
@@ -26,10 +24,10 @@ import {
 import { loadEffectiveGSDPreferences } from "./preferences.js";
 import { countPendingCaptures } from "./captures.js";
 import { getActiveWorktreeName } from "./worktree-session-state.js";
-import { getWorkerBatches, hasActiveWorkers, type WorkerEntry } from "../subagent/worker-registry.js";
+import { getWorkerBatches, hasActiveWorkers } from "../subagent/worker-registry.js";
 import { formatDuration, padRight, joinColumns, centerLine, fitColumns, STATUS_GLYPH, STATUS_COLOR } from "../shared/mod.js";
 import { estimateTimeRemaining } from "./auto-dashboard.js";
-import { computeProgressScore, formatProgressLine } from "./progress-score.js";
+import { computeProgressScore } from "./progress-score.js";
 import { runEnvironmentChecksAsync, type EnvironmentCheckResult } from "./doctor-environment.js";
 import { formattedShortcutPair } from "./shortcut-defs.js";
 import { renderDialogFrame, renderKeyHints } from "./tui/render-kit.js";
@@ -247,8 +245,6 @@ export class GSDDashboardOverlay {
         },
       };
 
-      const roadmapFile = resolveMilestoneFile(base, mid, "ROADMAP");
-      const roadmapContent = roadmapFile ? await loadFile(roadmapFile) : null;
       // Normalize slices from DB
       type NormSlice = { id: string; done: boolean; title: string; risk: string };
       let normSlices: NormSlice[] = [];
@@ -458,7 +454,6 @@ export class GSDDashboardOverlay {
 
       const batches = getWorkerBatches();
       for (const [batchId, workers] of batches) {
-        const running = workers.filter(w => w.status === "running").length;
         const done = workers.filter(w => w.status === "completed").length;
         const failed = workers.filter(w => w.status === "failed").length;
         const total = workers[0]?.batchSize ?? workers.length;

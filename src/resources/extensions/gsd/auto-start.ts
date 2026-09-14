@@ -64,7 +64,6 @@ import {
   detectWorktreeName,
   setActiveMilestoneId,
 } from "./worktree.js";
-import { isInAutoWorktree } from "./auto-worktree-entry.js";
 import { getAutoWorktreePath } from "./auto-worktree-path-resolution.js";
 import { checkoutBranchWithStashGuard } from "./worktree-git-recovery.js";
 import { cleanStaleRuntimeUnits } from "./auto-worktree-runtime-cleanup.js";
@@ -106,7 +105,6 @@ import {
   getDebugLogPath,
 } from "./debug-logger.js";
 import { logWarning, logError } from "./workflow-logger.js";
-import { parseUnitId } from "./unit-id.js";
 import type { AutoSession } from "./auto/session.js";
 import {
   existsSync,

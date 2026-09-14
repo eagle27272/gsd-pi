@@ -8,7 +8,7 @@
 // Critical invariant: generated markdown must round-trip through
 // parseDecisionsTable() and parseRequirementsSections() with field fidelity.
 
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import type { Decision, Requirement } from './types.js';
 import { summarizeRequirementsCoverage } from './requirements-backlog.js';

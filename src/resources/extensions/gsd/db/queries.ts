@@ -1111,7 +1111,7 @@ export function getProgressHierarchyDetails(): ProgressHierarchyDetails {
     const remainingTaskRows = maxTasks + 1 - tasks.length;
     if (remainingTaskRows <= 0) break;
     const chunk = sliceKeys.slice(start, start + 400);
-    const taskClauses = chunk.map((slice, index) => `(milestone_id = :taskMid${index} AND slice_id = :taskSid${index})`).join(" OR ");
+    const taskClauses = chunk.map((_slice, index) => `(milestone_id = :taskMid${index} AND slice_id = :taskSid${index})`).join(" OR ");
     const taskParams: Record<string, string> = {};
     chunk.forEach((slice, index) => {
       taskParams[`:taskMid${index}`] = slice.milestoneId;

@@ -24,7 +24,7 @@ import {
   scoreEligibleModels,
   scoreModel,
 } from "../model-router.js";
-import type { DynamicRoutingConfig, ModelCapabilities, RoutingDecision } from "../model-router.js";
+import type { DynamicRoutingConfig, ModelCapabilities } from "../model-router.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

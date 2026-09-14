@@ -4,7 +4,6 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
-import { visibleWidth } from "@gsd/pi-tui";
 
 import {
   unitVerb,
@@ -85,8 +84,6 @@ function makeMetricUnit(id: string, startedAt: number, finishedAt: number): Unit
     userMessages: 0,
   };
 }
-
-type RenderableWidget = { render(width: number): string[]; invalidate(): void; dispose?: () => void };
 
 // ─── unitVerb ─────────────────────────────────────────────────────────────
 

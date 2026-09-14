@@ -15,7 +15,7 @@ import {
 	getModelCapabilities,
 	humanizeModelName,
 } from "./model-capabilities.js";
-import type { OllamaChatOptions, OllamaModelInfo, OllamaShowResponse } from "./types.js";
+import type { OllamaChatOptions, OllamaModelInfo } from "./types.js";
 
 /**
  * Extract context window from /api/show model_info.

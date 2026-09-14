@@ -10,7 +10,6 @@ import assert from "node:assert/strict";
 import {
   openDatabase,
   closeDatabase,
-  isDbAvailable,
   insertDecision,
 } from '../gsd-db.ts';
 import {

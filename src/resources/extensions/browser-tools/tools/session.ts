@@ -9,20 +9,19 @@ import {
 } from "../core.js";
 import type { ToolDeps } from "../state.js";
 import {
-	HAR_FILENAME,
-	getArtifactRoot,
-	getPageRegistry,
-	getActiveFrame,
-	getConsoleLogs,
-	getNetworkLogs,
-	getDialogLogs,
-	getActionTimeline,
-	getActiveTraceSession,
-	setActiveTraceSession,
-	getHarState,
-	setHarState,
-	getSessionStartedAt,
-	getSessionArtifactDir,
+  HAR_FILENAME,
+  getArtifactRoot,
+  getPageRegistry,
+  getConsoleLogs,
+  getNetworkLogs,
+  getDialogLogs,
+  getActionTimeline,
+  getActiveTraceSession,
+  setActiveTraceSession,
+  getHarState,
+  setHarState,
+  getSessionStartedAt,
+  getSessionArtifactDir,
 } from "../state.js";
 import {
 	getActiveFrameMetadata,

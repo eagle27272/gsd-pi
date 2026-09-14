@@ -20,7 +20,6 @@ import { execSync } from "node:child_process";
 import { createAutoWorktree } from "../auto-worktree-creation.ts";
 import { worktreePath } from "../worktree-manager.ts";
 import {
-  copyWorktreeDb,
   reconcileWorktreeDb,
   openDatabase,
   closeDatabase,
@@ -29,7 +28,7 @@ import {
   isDbAvailable,
 } from "../gsd-db.ts";
 
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 
@@ -82,7 +81,7 @@ describe('worktree-db-integration', async () => {
       run('git commit -m "add gsd dir"', tempDir);
 
       // createAutoWorktree should copy the DB into the worktree
-      const wtPath = createAutoWorktree(tempDir, "M004");
+      createAutoWorktree(tempDir, "M004");
 
       const worktreeDbPath = join(worktreePath(tempDir, "M004"), ".gsd", "gsd.db");
       assert.ok(
@@ -102,9 +101,8 @@ describe('worktree-db-integration', async () => {
 
       // No gsd.db — just a bare repo
       let threw = false;
-      let wtPath: string | null = null;
       try {
-        wtPath = createAutoWorktree(tempDir, "M004");
+        createAutoWorktree(tempDir, "M004");
       } catch (err) {
         threw = true;
         console.error("  Unexpected throw:", err);

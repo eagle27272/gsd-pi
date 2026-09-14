@@ -467,7 +467,7 @@ function parsePlanFrontmatter(fm: Record<string, unknown>, fmLines: string[] | n
  * Falls back to plain markdown for quick-task plans that lack XML tags.
  */
 export function parseOldPlan(content: string, fileName: string = '', planNumber: string = ''): PlanningPlan {
-  const [fmLines, body] = splitFrontmatter(content);
+  const [fmLines] = splitFrontmatter(content);
   const fm = fmLines ? parseFrontmatterMap(fmLines) : {};
   const frontmatter = parsePlanFrontmatter(fm, fmLines);
 

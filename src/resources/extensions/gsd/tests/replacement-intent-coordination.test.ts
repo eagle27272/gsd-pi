@@ -847,7 +847,7 @@ test("Windows ordinary database correlation falls back while exact inspection st
 });
 
 test("workspace cache retains ownership when an out-of-band inode swap prevents guarded close", (t) => {
-  const { base, databasePath } = makeDatabasePath("gsd-replacement-cache-inode-");
+  const { base } = makeDatabasePath("gsd-replacement-cache-inode-");
   t.after(() => cleanup(base));
   const engineUrl = new URL("../db/engine.ts", import.meta.url).href;
   const workspaceUrl = new URL("../workspace.ts", import.meta.url).href;

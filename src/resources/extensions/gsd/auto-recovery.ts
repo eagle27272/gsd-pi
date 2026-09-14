@@ -10,62 +10,38 @@
  */
 
 import { parseUnitId } from "./unit-id.js";
-import { MILESTONE_ID_RE } from "./milestone-ids.js";
 import { clearParseCache } from "./files.js";
 import {
   isDbAvailable,
-  getDb,
   getTask,
-  getSlice,
-  getSliceTasks,
-  getPendingGatesForTurn,
   insertGateRun,
   getMilestone,
   immediateTransaction,
   updateMilestoneStatus,
-  getCompletedMilestoneTaskFileHints,
-  getMilestoneCommitAttributionShas,
-  recordMilestoneCommitAttribution,
 } from "./gsd-db.js";
 import { refreshWorkflowDatabaseFromDisk } from "./db-workspace.js";
-import { invalidateStateCache, isValidationTerminal } from "./state.js";
+import { invalidateStateCache } from "./state.js";
 import { getErrorMessage } from "./error-utils.js";
-import { logWarning, logError } from "./workflow-logger.js";
-import { readIntegrationBranch } from "./git-service.js";
+import { logWarning } from "./workflow-logger.js";
 import { isClosedStatus } from "./status-guards.js";
 import {
   resolveSlicePath,
-  resolveSliceFile,
   resolveTaskFile,
   relMilestoneFile,
   relSliceFile,
-  buildSliceFileName,
-  resolveMilestoneFile,
   clearPathCache,
-  resolveGsdRootFile,
 } from "./paths.js";
 import {
   existsSync,
   mkdirSync,
 } from "node:fs";
-import { execFileSync } from "node:child_process";
 
-import { LAYOUT_SEGMENTS } from "./layout-policy.js";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, relative } from "node:path";
 import {
   resolveExpectedArtifactPath,
   diagnoseExpectedArtifact,
 } from "./auto-artifact-paths.js";
-import { classifyMilestoneSummaryContent } from "./milestone-summary-classifier.js";
-import { hasVerdict } from "./verdict-parser.js";
-import { validateArtifact } from "./schemas/validate.js";
-import { getProjectResearchStatus } from "./project-research-policy.js";
-import { isGsdWorktreePath } from "./worktree-root.js";
 import { atomicWriteSync } from "./atomic-write.js";
-import { resolveCanonicalMilestoneRoot } from "./worktree-manager.js";
-import { resolveWorktreeProjectRoot } from "./worktree-root.js";
-import { hasImplementationArtifacts } from "./milestone-implementation-evidence.js";
-import { loadAllCaptures, loadPendingCaptures } from "./captures.js";
 import {
   readExecuteTaskArtifactReadiness,
   readTerminalTaskRecoveryAbort,
@@ -446,22 +422,6 @@ export function writeReactiveExecuteBlocker(
     skippedTaskIds: [],
     unchangedTaskIds: batchIds,
   };
-}
-
-/**
- * Whether a milestone already has canonical Domain-Operation lifecycle
- * history. Adopted milestones must not have a fabricated blocker slice
- * inserted to paper over a stuck plan-milestone unit (fail-closed).
- */
-function hasAdoptedMilestoneHistory(milestoneId: string): boolean {
-  return Boolean(getDb().prepare(`
-    SELECT 1 AS adopted
-    FROM workflow_item_lifecycles
-    WHERE item_kind = 'milestone'
-      AND milestone_id = :milestone_id
-      AND slice_id IS NULL
-      AND task_id IS NULL
-  `).get({ ":milestone_id": milestoneId }));
 }
 
 /**

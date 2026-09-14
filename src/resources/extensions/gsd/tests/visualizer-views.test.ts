@@ -14,7 +14,6 @@ import {
   renderHealthView,
 } from "../visualizer-views.js";
 import type { VisualizerData } from "../visualizer-data.js";
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 

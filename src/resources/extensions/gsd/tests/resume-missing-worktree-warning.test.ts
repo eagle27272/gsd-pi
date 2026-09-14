@@ -16,7 +16,6 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import {
-  logWarning,
   peekLogs,
   _resetLogs,
   setStderrLoggingEnabled,

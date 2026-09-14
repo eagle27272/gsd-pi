@@ -15,7 +15,7 @@ import { createTestContext } from './test-helpers.ts';
 import { renderSummaryContent } from '../workflow-projections.ts';
 import type { TaskRow } from '../gsd-db.ts';
 
-const { assertEq, assertTrue, report } = createTestContext();
+const { assertTrue, report } = createTestContext();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Fixtures — same logical data in both shapes

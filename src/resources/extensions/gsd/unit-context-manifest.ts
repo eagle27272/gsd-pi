@@ -311,7 +311,6 @@ const COMMON_BUDGET_SMALL = 250_000;    // ~65K tokens
 
 const TOOLS_ALL: ToolsPolicy = { mode: "all" };
 const TOOLS_PLANNING: ToolsPolicy = { mode: "planning" };
-const TOOLS_VERIFICATION: ToolsPolicy = { mode: "verification" };
 const TOOLS_VERIFICATION_DISPATCH_UAT: ToolsPolicy = {
   mode: "verification",
   allowedSubagents: ["mnemo", "scout", "reviewer", "tester"],

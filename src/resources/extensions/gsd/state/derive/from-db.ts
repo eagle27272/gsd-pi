@@ -109,7 +109,7 @@ function stripMilestonePrefix(title: string): string {
   return title.replace(/^M\d+(?:-[a-z0-9]{6})?[^:]*:\s*/, '') || title;
 }
 
-function buildCompletenessSet(basePath: string, milestones: MilestoneRow[]) {
+function buildCompletenessSet(_basePath: string, milestones: MilestoneRow[]) {
   const completeMilestoneIds = new Set<string>();
   const parkedMilestoneIds = new Set<string>();
 
@@ -422,7 +422,7 @@ function resolveSliceDependencies(activeMilestoneSlices: SliceRow[]): { activeSl
   return { activeSlice: null, activeSliceRow: null };
 }
 
-async function detectBlockers(basePath: string, milestoneId: string, sliceId: string, tasks: TaskRow[]): Promise<string | null> {
+async function detectBlockers(_basePath: string, _milestoneId: string, _sliceId: string, tasks: TaskRow[]): Promise<string | null> {
   const completedTasks = tasks.filter(t => isStatusDone(t.status));
   for (const ct of completedTasks) {
     if (ct.blocker_discovered) {
@@ -432,7 +432,7 @@ async function detectBlockers(basePath: string, milestoneId: string, sliceId: st
   return null;
 }
 
-function checkReplanTrigger(basePath: string, milestoneId: string, sliceId: string): boolean {
+function checkReplanTrigger(_basePath: string, milestoneId: string, sliceId: string): boolean {
   const sliceRow = getSlice(milestoneId, sliceId);
   return !!sliceRow?.replan_triggered_at;
 }

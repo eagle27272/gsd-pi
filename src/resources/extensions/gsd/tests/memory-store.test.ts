@@ -20,14 +20,13 @@ import {
   supersedeMemory,
   isUnitProcessed,
   markUnitProcessed,
-  decayStaleMemories,
   enforceMemoryCap,
   queryMemoriesRanked,
   applyMemoryActions,
   formatMemoriesForPrompt,
 } from '../memory-store.ts';
 import type { MemoryAction } from '../memory-store.ts';
-import { describe, test, beforeEach, afterEach } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 function tempDbPath(): string {

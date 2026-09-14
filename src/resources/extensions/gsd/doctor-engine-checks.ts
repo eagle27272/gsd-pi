@@ -22,7 +22,6 @@ import {
   gsdRoot,
   resolveGsdPathContract,
   resolveMilestoneFile,
-  resolveMilestonePath,
   resolveSliceFile,
   resolveTaskFile,
 } from "./paths.js";

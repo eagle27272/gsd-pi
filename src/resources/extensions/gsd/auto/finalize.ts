@@ -16,7 +16,6 @@ import {
   formatRootWriteLeakMessage,
 } from "../root-write-leak-guard.js";
 import {
-  logWarning,
   drainLogs,
   drainAndSummarize,
   formatForNotification,

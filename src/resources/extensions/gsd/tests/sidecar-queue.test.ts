@@ -52,7 +52,6 @@ test("SidecarItem type is exported from session.ts", () => {
 
 test("SidecarItem has required kind field with hook/triage/quick-task union", () => {
   const source = getSessionTsSource();
-  const ifaceIdx = source.indexOf("export interface SidecarItem");
   const ifaceBlock = extractSourceRegion(source, "export interface SidecarItem");
   assert.ok(
     ifaceBlock.includes('"hook"') && ifaceBlock.includes('"triage"') && ifaceBlock.includes('"quick-task"'),

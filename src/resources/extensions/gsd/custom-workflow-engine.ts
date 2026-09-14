@@ -107,7 +107,7 @@ export class CustomWorkflowEngine implements WorkflowEngine {
    * - Expanded GRAPH.yaml is written to disk before dispatch — inspectable on disk.
    */
   async resolveDispatch(
-    state: EngineState,
+    _state: EngineState,
     _context: { basePath: string },
   ): Promise<EngineDispatchAction> {
     const graphPath = join(this.runDir, "GRAPH.yaml");
@@ -227,7 +227,7 @@ export class CustomWorkflowEngine implements WorkflowEngine {
    * Returns "milestone-complete" when all steps are now done, "continue" otherwise.
    */
   async reconcile(
-    state: EngineState,
+    _state: EngineState,
     completedStep: CompletedStep,
   ): Promise<ReconcileResult> {
     const graphPath = join(this.runDir, "GRAPH.yaml");

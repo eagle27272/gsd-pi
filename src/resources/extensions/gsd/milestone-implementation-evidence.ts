@@ -2,7 +2,7 @@
 // File Purpose: Git-based detection of milestone implementation evidence for closeout guards.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { MILESTONE_ID_RE } from "./milestone-ids.js";
 import {

@@ -20,7 +20,6 @@ import { showInterviewRound, type Question, type RoundResult } from "../intervie
 // Raw terminal sequences that matchesKey() recognises
 const ENTER = "\r";
 const DOWN = "\x1b[B";
-const TAB = "\t";
 const SPACE = " ";
 
 /**

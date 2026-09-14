@@ -15,7 +15,7 @@ import {
   setSliceRecord,
   setTaskRecord,
 } from "../mapping.ts";
-import type { SyncMapping, MilestoneSyncRecord, SliceSyncRecord, SyncEntityRecord } from "../types.ts";
+import type { MilestoneSyncRecord, SliceSyncRecord, SyncEntityRecord } from "../types.ts";
 
 describe("mapping", () => {
   let tmpDir: string;

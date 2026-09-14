@@ -5,7 +5,7 @@
 // Markdown files in these tests are projections unless the DB row explicitly
 // makes them authoritative.
 
-import { describe, test, beforeEach, afterEach } from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -24,7 +24,6 @@ import {
   getAllMilestones,
   setMilestoneQueueOrder,
   transaction,
-  updateTaskStatus,
 } from '../gsd-db.ts';
 
 // ─── Fixture Helpers ───────────────────────────────────────────────────────

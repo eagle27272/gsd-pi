@@ -649,7 +649,6 @@ function buildBudgetBurndown(data: VisualizerData): string {
   if (!data.health.budgetCeiling) return '';
   const ceiling = data.health.budgetCeiling;
   const spent = data.totals?.cost ?? 0;
-  const totalSlices = data.milestones.reduce((s, m) => s + m.slices.length, 0);
   const doneSlices = data.milestones.reduce((s, m) => s + m.slices.filter(sl => sl.done).length, 0);
   const avgCostPerSlice = doneSlices > 0 ? spent / doneSlices : 0;
   const projected = avgCostPerSlice > 0 ? avgCostPerSlice * data.remainingSliceCount + spent : spent;

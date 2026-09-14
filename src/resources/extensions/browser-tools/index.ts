@@ -268,7 +268,7 @@ function isWarmUpDisabled(): boolean {
  * already connected (or fell back) during registration, so they are excluded
  * to avoid re-warming and double-notifying.
  */
-function maybeWarmUpManagedEngine(pi: ExtensionAPI, ctx: ExtensionContext): void {
+function maybeWarmUpManagedEngine(_pi: ExtensionAPI, ctx: ExtensionContext): void {
   if (isWarmUpDisabled()) return;
 
   const projectRoot = ctx.cwd || process.cwd();

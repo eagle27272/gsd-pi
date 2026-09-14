@@ -17,7 +17,6 @@ import {
   emitWorktreeMerged,
   emitWorktreeOrphaned,
   emitAutoExit,
-  emitCanonicalRootRedirect,
   autoExitReasonForTerminalOutcome,
   normalizeAutoExitReason,
   summarizeWorktreeTelemetry,

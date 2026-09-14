@@ -2,7 +2,7 @@
 // File Purpose: Worktree-safety helpers shared across auto-loop phase modules.
 
 import { classifyProject } from "../detection.js";
-import { resolveEffectiveUnitIsolationMode, getIsolationMode } from "../preferences.js";
+import { resolveEffectiveUnitIsolationMode } from "../preferences.js";
 import { createWorktreeSafetyModule, type WorktreeSafetyResult } from "../worktree-safety.js";
 import { resolveWorktreeProjectRoot } from "../worktree-root.js";
 import { resolveManifest } from "../unit-context-manifest.js";

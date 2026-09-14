@@ -330,11 +330,6 @@ async function readProjectState(projectDir: string, query: string | undefined): 
 // MCP Server type — minimal interface for the dynamically-imported McpServer
 // ---------------------------------------------------------------------------
 
-interface ElicitResult {
-  action: 'accept' | 'decline' | 'cancel';
-  content?: Record<string, string | number | boolean | string[]>;
-}
-
 interface ElicitRequestFormParams {
   mode?: 'form';
   message: string;

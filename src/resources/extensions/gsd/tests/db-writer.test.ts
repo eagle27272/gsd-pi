@@ -8,8 +8,6 @@ import {
   closeDatabase,
   upsertDecision,
   upsertRequirement,
-  insertArtifact,
-  getDecisionById,
   getRequirementById,
   _getAdapter,
 } from '../gsd-db.ts';

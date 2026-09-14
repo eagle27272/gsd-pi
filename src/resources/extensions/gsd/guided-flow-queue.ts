@@ -18,15 +18,17 @@ import { loadPrompt, inlineTemplate } from "./prompt-loader.js";
 import { deriveState } from "./state.js";
 import { invalidateAllCaches } from "./cache.js";
 import {
-  gsdRoot, resolveMilestoneFile, resolveSliceFile,
-  resolveGsdRootFile, relGsdRootFile, relSliceFile,
+  gsdRoot,
+  resolveMilestoneFile,
+  resolveGsdRootFile,
+  relGsdRootFile,
   relMilestoneFile,
 } from "./paths.js";
 import { readFileSync, existsSync } from "node:fs";
 import { atomicWriteSync } from "./atomic-write.js";
 import { nativeAddPaths, nativeCommit } from "./native-git-bridge.js";
 import { loadEffectiveGSDPreferences } from "./preferences.js";
-import { loadQueueOrder, sortByQueueOrder, saveQueueOrder } from "./queue-order.js";
+import { saveQueueOrder } from "./queue-order.js";
 import { findMilestoneIds, nextMilestoneId } from "./milestone-ids.js";
 import { isFutureMilestoneStatus } from "./status-guards.js";
 
@@ -176,7 +178,7 @@ export async function handleQueueReorder(
 // ─── Queue Add ──────────────────────────────────────────────────────────────
 
 export async function showQueueAdd(
-  ctx: ExtensionCommandContext,
+  _ctx: ExtensionCommandContext,
   pi: ExtensionAPI,
   basePath: string,
   state: Awaited<ReturnType<typeof deriveState>>,

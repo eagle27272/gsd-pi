@@ -100,7 +100,7 @@ async function handleStatus(ctx: any): Promise<void> {
 	}
 
 	await ctx.ui.custom(
-		(tui: any, theme: any, _kb: any, done: (r: undefined) => void) => {
+		(_tui: any, theme: any, _kb: any, done: (r: undefined) => void) => {
 			const text = new Text(lines.map((l) => theme.fg("fg", l)).join("\n"), 0, 0);
 			setTimeout(() => done(undefined), 0);
 			return text;
@@ -127,7 +127,7 @@ async function handleList(ctx: any): Promise<void> {
 	}
 
 	await ctx.ui.custom(
-		(tui: any, theme: any, _kb: any, done: (r: undefined) => void) => {
+		(_tui: any, theme: any, _kb: any, done: (r: undefined) => void) => {
 			const text = new Text(lines.map((l) => theme.fg("fg", l)).join("\n"), 0, 0);
 			setTimeout(() => done(undefined), 0);
 			return text;
@@ -233,7 +233,7 @@ async function handlePs(ctx: any): Promise<void> {
 		}
 
 		await ctx.ui.custom(
-			(tui: any, theme: any, _kb: any, done: (r: undefined) => void) => {
+			(_tui: any, theme: any, _kb: any, done: (r: undefined) => void) => {
 				const text = new Text(lines.map((l) => theme.fg("fg", l)).join("\n"), 0, 0);
 				setTimeout(() => done(undefined), 0);
 				return text;

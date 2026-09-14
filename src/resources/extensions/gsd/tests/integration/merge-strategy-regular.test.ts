@@ -64,7 +64,7 @@ function makeRoadmap(milestoneId: string, title: string): string {
 }
 
 function addSliceToMilestone(
-  repo: string,
+  _repo: string,
   wtPath: string,
   milestoneId: string,
   sliceId: string,
