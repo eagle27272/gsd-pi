@@ -111,6 +111,9 @@
     "prepack": "node scripts/prepack-resolve-workspace.cjs",
     "postpack": "node scripts/postpack-restore-workspace.cjs",
     "typecheck:extensions": "tsc --noEmit --project tsconfig.extensions.json",
+    "lint": "pnpm run lint:dead-code",
+    "lint:dead-code": "node scripts/knip-gate.mjs",
+    "lint:dead-code:update": "node scripts/knip-gate.mjs --write",
     "verify:gsd-projection-mutations": "node scripts/check-gsd-projection-mutations.mjs",
     "audit:test-confidence": "node scripts/audit-test-confidence.mjs",
     "audit:test-gaps": "node scripts/audit-test-gaps.mjs",
@@ -182,6 +185,7 @@
     "cross-env": "^7.0.3",
     "esbuild": "^0.28.1",
     "jiti": "^2.7.0",
+    "knip": "^5.88.1",
     "typescript": "^5.9.3"
   },
   "optionalDependencies": {
