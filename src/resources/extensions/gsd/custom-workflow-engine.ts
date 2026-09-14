@@ -41,6 +41,12 @@ import { withFileLock } from "./file-lock.js";
 // Re-export for downstream consumers
 export { readFrozenDefinition } from "./definition-io.js";
 
+/** Every iterate match becomes a graph step, so the match count bounds graph size. */
+const MAX_ITERATE_ITEMS = 10_000;
+
+/** Backtracking cost grows with input length; bound what a pattern can be run against. */
+const MAX_ITERATE_SOURCE_BYTES = 5_000_000;
+
 function formatBlockedWorkflowReason(graph: WorkflowGraph): string {
   const statusById = new Map(graph.steps.map((step) => [step.id, step.status]));
   const blockedSteps = graph.steps
@@ -164,14 +170,33 @@ export class CustomWorkflowEngine implements WorkflowEngine {
           );
         }
 
-        // Extract items via regex with global+multiline flags.
-        // Guard against ReDoS: if matching takes too long on large inputs, bail.
+        // Extract items via regex with global+multiline flags. The pattern comes
+        // from the user's own workflow definition and is only validated for syntax
+        // and capture-group presence, so treat it as untrusted for cost purposes.
+        if (Buffer.byteLength(sourceContent, "utf8") > MAX_ITERATE_SOURCE_BYTES) {
+          throw new Error(
+            `Iterate source "${iterate.source}" on step "${next.id}" exceeds the ${MAX_ITERATE_SOURCE_BYTES}-byte limit — refusing to match an unbounded pattern against it`,
+          );
+        }
         const regex = new RegExp(iterate.pattern, "gm");
         const items: string[] = [];
         const matchStart = Date.now();
         let match: RegExpExecArray | null;
         while ((match = regex.exec(sourceContent)) !== null) {
-          if (match[1] !== undefined) items.push(match[1]);
+          // A capture that matches empty leaves lastIndex where it was, so exec
+          // returns the same offset forever. Step past it to guarantee progress.
+          if (match.index === regex.lastIndex) regex.lastIndex++;
+          // An empty capture cannot name a meaningful iteration step, and before
+          // the guard above these accumulated by the million.
+          if (match[1]) items.push(match[1]);
+          if (items.length > MAX_ITERATE_ITEMS) {
+            throw new Error(
+              `Iterate pattern "${iterate.pattern}" matched too many items on step "${next.id}" (limit ${MAX_ITERATE_ITEMS}) — refusing to expand the graph`,
+            );
+          }
+          // Only reached between exec() calls: this cannot interrupt a single
+          // catastrophically-backtracking match. The source-size bound above is
+          // what keeps that case survivable.
           if (Date.now() - matchStart > 5_000) {
             throw new Error(
               `Iterate pattern "${iterate.pattern}" exceeded 5s timeout on step "${next.id}" — possible ReDoS`,

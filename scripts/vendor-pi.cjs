@@ -83,7 +83,14 @@ function ensureUpstreamCheckout(repoUrl, ref) {
 function runPipeline(dryRun) {
   for (const [script, purpose] of PIPELINE) {
     process.stderr.write(`${dryRun ? '[dry-run] ' : ''}node scripts/${script}  # ${purpose}\n`)
-    if (!dryRun) run(process.execPath, [join(__dirname, script)], REPO_ROOT)
+    if (dryRun) continue
+    try {
+      run(process.execPath, [join(__dirname, script)], REPO_ROOT)
+    } catch {
+      // Stop on the first failure: a half-vendored tree is worse than an
+      // untouched one, and the later steps assume the earlier ones succeeded.
+      fail(`scripts/${script} failed — the tree is partially vendored, fix the cause and re-run`)
+    }
   }
 }
 

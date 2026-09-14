@@ -10,6 +10,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -71,7 +72,7 @@ after(() => {
 });
 
 /** Build a throwaway repo root holding the real vendor-pi.cjs plus stubbed pipeline steps. */
-function makeFixtureRoot(configOverrides = {}) {
+function makeFixtureRoot(configOverrides = {}, { failingStep } = {}) {
   const root = realpathSync(mkdtempSync(join(tmpRoot, 'root-')));
   mkdirSync(join(root, 'scripts'), { recursive: true });
   copyFileSync(SOURCE_SCRIPT, join(root, 'scripts', 'vendor-pi.cjs'));
@@ -85,7 +86,8 @@ function makeFixtureRoot(configOverrides = {}) {
     writeFileSync(
       join(root, 'scripts', step),
       `'use strict'\n` +
-        `require('fs').appendFileSync(require('path').join(__dirname, '..', 'pipeline.log'), ${JSON.stringify(`${step}\n`)})\n`,
+        `require('fs').appendFileSync(require('path').join(__dirname, '..', 'pipeline.log'), ${JSON.stringify(`${step}\n`)})\n` +
+        (step === failingStep ? `process.stderr.write('stub failure\\n')\nprocess.exit(1)\n` : ''),
     );
   }
 
@@ -108,6 +110,12 @@ function pipelineLog(root) {
   const p = join(root, 'pipeline.log');
   if (!existsSync(p)) return [];
   return readFileSync(p, 'utf8').trim().split('\n').filter(Boolean);
+}
+
+/** The fixture ships exactly one package dir; anything else means the run wrote to the tree. */
+function packageDirs(root) {
+  const p = join(root, 'packages');
+  return existsSync(p) ? readdirSync(p).sort() : [];
 }
 
 function cachedMarker(root) {
@@ -188,14 +196,31 @@ describe('vendor-pi.cjs --ref semantics', () => {
     assert.deepEqual(pipelineLog(root), []);
   });
 
-  test('--dry-run neither clones nor runs pipeline steps', () => {
+  test('--dry-run previews the pipeline without cloning, running steps, or touching the tree', () => {
     const root = makeFixtureRoot();
     const result = runVendorPi(root, ['--ref', 'v2.0.0', '--dry-run']);
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(cachedMarker(root), null);
-    assert.deepEqual(pipelineLog(root), []);
+    assert.match(result.stderr, /v2\.0\.0/);
     for (const step of PIPELINE_STEPS) assert.match(result.stderr, new RegExp(step));
+    assert.equal(cachedMarker(root), null, 'dry run must not create an upstream checkout');
+    assert.deepEqual(pipelineLog(root), []);
+    assert.deepEqual(packageDirs(root), ['pi-coding-agent'], 'dry run must not touch the working tree');
+  });
+});
+
+describe('vendor-pi.cjs pipeline failure handling', () => {
+  test('aborts on the first failing step instead of running the rest', () => {
+    const root = makeFixtureRoot({}, { failingStep: 'vendor-pi-coding-agent-core.cjs' });
+    const result = runVendorPi(root, []);
+
+    assert.notEqual(result.status, 0, 'a failed step must not report success');
+    assert.match(result.stderr, /vendor-pi-coding-agent-core\.cjs failed/);
+    assert.deepEqual(
+      pipelineLog(root),
+      ['vendor-pi-deps.cjs', 'vendor-pi-coding-agent-core.cjs'],
+      'apply-seam.cjs must not run on top of a half-vendored tree',
+    );
   });
 });
 

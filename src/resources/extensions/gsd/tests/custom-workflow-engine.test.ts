@@ -480,3 +480,66 @@ describe("CustomExecutionPolicy", () => {
     await policy.prepareWorkspace("/tmp", "M001"); // Should not throw
   });
 });
+
+// ─── iterate pattern guards ──────────────────────────────────────────────
+
+describe("CustomWorkflowEngine iterate pattern guards", () => {
+  /** Build a run dir whose single pending step iterates over `pattern` in an artifact. */
+  function setupIterate(pattern: string, artifact: string): CustomWorkflowEngine {
+    const runDir = makeTmpDir();
+    writeGraph(runDir, makeGraph([makeStep({ id: "fan-out", prompt: "Handle {{item}}" })], "iter-wf"));
+    writeFileSync(join(runDir, "items.md"), artifact, "utf-8");
+    const def = {
+      version: 1,
+      name: "iter-wf",
+      steps: [
+        {
+          id: "fan-out",
+          name: "fan-out",
+          prompt: "Handle {{item}}",
+          requires: [],
+          produces: [],
+          iterate: { source: "items.md", pattern },
+        },
+      ],
+    };
+    writeFileSync(join(runDir, "DEFINITION.yaml"), stringify(def), "utf-8");
+    return new CustomWorkflowEngine(runDir);
+  }
+
+  it("terminates on a pattern whose capture group can match empty", async () => {
+    // `(z*)` matches empty at every offset and never advances lastIndex, so the
+    // exec loop re-matches the same position forever. Before the zero-length
+    // guard this accumulated ~25M items/second until the 5s check fired.
+    const engine = setupIterate("(z*)", "zz alpha\nzz beta\n");
+    const state = await engine.deriveState("/unused");
+
+    const started = Date.now();
+    const dispatch = await engine.resolveDispatch(state, { basePath: "/unused" });
+    const elapsed = Date.now() - started;
+
+    assert.ok(elapsed < 5_000, `iterate expansion should terminate promptly, took ${elapsed}ms`);
+    assert.equal(dispatch.action, "dispatch");
+  });
+
+  it("expands only the non-empty captures of an empty-capable pattern", async () => {
+    const engine = setupIterate("(z*)", "zz alpha\nzz beta\n");
+    const state = await engine.deriveState("/unused");
+    await engine.resolveDispatch(state, { basePath: "/unused" });
+
+    const graph = readGraph((engine as unknown as { runDir: string }).runDir);
+    const instances = graph.steps.filter((s) => s.parentStepId === "fan-out");
+    assert.deepEqual(instances.map((s) => s.prompt), ["Handle zz", "Handle zz"]);
+  });
+
+  it("refuses a pattern that would expand into an unbounded number of steps", async () => {
+    const artifact = Array.from({ length: 12_000 }, (_, i) => `- item-${i}`).join("\n");
+    const engine = setupIterate("^- (\\S+)$", artifact);
+    const state = await engine.deriveState("/unused");
+
+    await assert.rejects(
+      () => engine.resolveDispatch(state, { basePath: "/unused" }),
+      /too many items|exceeded/i,
+    );
+  });
+});
