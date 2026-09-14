@@ -28,7 +28,6 @@ import {
   phaseDirMatchesMilestoneId,
 } from "./paths.js";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { LAYOUT_SEGMENTS, milestoneIdToPhaseNum } from "./layout-policy.js";
 import { basename, dirname, join, resolve } from "node:path";
 import {
@@ -51,6 +50,7 @@ import {
   readTaskRecoveryRoute,
 } from "./task-recovery-domain-operation.js";
 import { readMilestoneValidationVerdict } from "./milestone-validation-verdict.js";
+import { gitCapture } from "./git-exec.js";
 
 export type ExecuteTaskArtifactReadiness = "verify" | "route";
 
@@ -148,11 +148,7 @@ export function diagnoseWorktreeIntegrityFailure(basePath: string): string | nul
   }
 
   try {
-    execFileSync("git", ["rev-parse", "--git-dir"], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    });
+    gitCapture(basePath, ["rev-parse", "--git-dir"]);
     return null;
   } catch (err) {
     return `Worktree integrity failure: ${basePath} is not a valid git worktree (git rev-parse failed: ${getErrorMessage(err).split("\n")[0]}). Repair or recreate the worktree before retrying.`;

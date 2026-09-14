@@ -10,11 +10,11 @@
  * user-friendly messages suggesting `/gsd doctor`.
  */
 
-import { execFileSync } from "node:child_process";
 import { existsSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { MergeConflictError } from "./git-service.js";
 import { nativeMergeAbort, nativeRebaseAbort, nativeResetHard } from "./native-git-bridge.js";
+import { gitCapture } from "./git-exec.js";
 
 // Re-export for consumers
 export { MergeConflictError };
@@ -27,11 +27,7 @@ export interface AbortAndResetResult {
 
 function hasWorkingTreeChanges(cwd: string): boolean {
   try {
-    return execFileSync("git", ["status", "--porcelain"], {
-      cwd,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    }).trim().length > 0;
+    return gitCapture(cwd, ["status", "--porcelain"]).length > 0;
   } catch {
     return true;
   }
@@ -90,11 +86,7 @@ export function abortAndReset(cwd: string): AbortAndResetResult {
   // (Issue #4980 HIGH-5)
   if (hasWorkingTreeChanges(cwd)) {
     try {
-      execFileSync(
-        "git",
-        ["stash", "push", "--include-untracked", "-m", `gsd: pre-self-heal-reset ${new Date().toISOString()}`],
-        { cwd, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" },
-      );
+      gitCapture(cwd, ["stash", "push", "--include-untracked", "-m", `gsd: pre-self-heal-reset ${new Date().toISOString()}`]);
       cleaned.push("stashed working tree before reset");
     } catch {
       /* nothing to stash, or stash refused (e.g. unresolved conflicts) — proceed */

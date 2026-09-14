@@ -17,7 +17,6 @@ import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 
 import { runGSDDoctor } from "../doctor.ts";
-import { GIT_NO_PROMPT_ENV } from "../git-constants.ts";
 
 function gitInit(cwd: string): void {
   execFileSync("git", ["init"], { cwd, stdio: "ignore" });
@@ -98,10 +97,10 @@ test("doctor workspace git probe uses safe env and canonical toplevel comparison
 
   const originalProcessGitDir = process.env.GIT_DIR;
   const originalProcessGitWorkTree = process.env.GIT_WORK_TREE;
-  const originalGitEnvPath = GIT_NO_PROMPT_ENV.PATH;
-  const originalGitEnvRealGit = GIT_NO_PROMPT_ENV.GSD_REAL_GIT;
-  const originalGitEnvFakeCwd = GIT_NO_PROMPT_ENV.GSD_FAKE_TOPLEVEL_CWD;
-  const originalGitEnvFakeToplevel = GIT_NO_PROMPT_ENV.GSD_FAKE_TOPLEVEL;
+  const originalGitEnvPath = process.env.PATH;
+  const originalGitEnvRealGit = process.env.GSD_REAL_GIT;
+  const originalGitEnvFakeCwd = process.env.GSD_FAKE_TOPLEVEL_CWD;
+  const originalGitEnvFakeToplevel = process.env.GSD_FAKE_TOPLEVEL;
   const base = mkdtempSync(join(tmpdir(), "gsd-doctor-ws-safeenv-"));
 
   t.after(() => {
@@ -109,14 +108,14 @@ test("doctor workspace git probe uses safe env and canonical toplevel comparison
     else process.env.GIT_DIR = originalProcessGitDir;
     if (originalProcessGitWorkTree === undefined) delete process.env.GIT_WORK_TREE;
     else process.env.GIT_WORK_TREE = originalProcessGitWorkTree;
-    if (originalGitEnvPath === undefined) delete GIT_NO_PROMPT_ENV.PATH;
-    else GIT_NO_PROMPT_ENV.PATH = originalGitEnvPath;
-    if (originalGitEnvRealGit === undefined) delete GIT_NO_PROMPT_ENV.GSD_REAL_GIT;
-    else GIT_NO_PROMPT_ENV.GSD_REAL_GIT = originalGitEnvRealGit;
-    if (originalGitEnvFakeCwd === undefined) delete GIT_NO_PROMPT_ENV.GSD_FAKE_TOPLEVEL_CWD;
-    else GIT_NO_PROMPT_ENV.GSD_FAKE_TOPLEVEL_CWD = originalGitEnvFakeCwd;
-    if (originalGitEnvFakeToplevel === undefined) delete GIT_NO_PROMPT_ENV.GSD_FAKE_TOPLEVEL;
-    else GIT_NO_PROMPT_ENV.GSD_FAKE_TOPLEVEL = originalGitEnvFakeToplevel;
+    if (originalGitEnvPath === undefined) delete process.env.PATH;
+    else process.env.PATH = originalGitEnvPath;
+    if (originalGitEnvRealGit === undefined) delete process.env.GSD_REAL_GIT;
+    else process.env.GSD_REAL_GIT = originalGitEnvRealGit;
+    if (originalGitEnvFakeCwd === undefined) delete process.env.GSD_FAKE_TOPLEVEL_CWD;
+    else process.env.GSD_FAKE_TOPLEVEL_CWD = originalGitEnvFakeCwd;
+    if (originalGitEnvFakeToplevel === undefined) delete process.env.GSD_FAKE_TOPLEVEL;
+    else process.env.GSD_FAKE_TOPLEVEL = originalGitEnvFakeToplevel;
     rmSync(base, { recursive: true, force: true });
   });
 
@@ -154,10 +153,10 @@ test("doctor workspace git probe uses safe env and canonical toplevel comparison
 
   process.env.GIT_DIR = join(base, ".git");
   process.env.GIT_WORK_TREE = base;
-  GIT_NO_PROMPT_ENV.PATH = `${shimDir}${delimiter}${process.env.PATH ?? ""}`;
-  GIT_NO_PROMPT_ENV.GSD_REAL_GIT = realGit;
-  GIT_NO_PROMPT_ENV.GSD_FAKE_TOPLEVEL_CWD = realChild;
-  GIT_NO_PROMPT_ENV.GSD_FAKE_TOPLEVEL = linkedChild;
+  process.env.PATH = `${shimDir}${delimiter}${process.env.PATH ?? ""}`;
+  process.env.GSD_REAL_GIT = realGit;
+  process.env.GSD_FAKE_TOPLEVEL_CWD = realChild;
+  process.env.GSD_FAKE_TOPLEVEL = linkedChild;
 
   const report = await runGSDDoctor(base);
   const wsIssues = report.issues.filter(

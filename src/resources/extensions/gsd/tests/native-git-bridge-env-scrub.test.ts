@@ -1,13 +1,14 @@
 // native-git-bridge-env-scrub.test.ts — regression for #8
 //
-// GIT_NO_PROMPT_ENV strips GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE (#4980 NEW-1)
+// gitNoPromptEnv() strips GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE (#4980 NEW-1)
 // so a GSD invoked from a git hook or another worktree's shell cannot have its
 // git operations redirected at a different repo. Three execFileSync fallbacks
 // in native-git-bridge.ts did not pass that env, so they inherited the caller's
 // process.env — including `git reset --hard`, which discards uncommitted work.
 //
-// GIT_NO_PROMPT_ENV is snapshotted at module load, so setting the leaking vars
-// on process.env here only reaches call sites that omit `env:`.
+// Those fallbacks now run through gitCapture, which scrubs the leaking vars
+// from the live process.env, so setting them here only reaches a call site
+// that failed to scrub. See git-env-scrub.test.ts for the wider sweep.
 
 import { describe, test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";

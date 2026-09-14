@@ -2,13 +2,13 @@
 // File Purpose: Worktree Safety module contract for validating source-writing Unit roots.
 
 import { existsSync, lstatSync, type Stats } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { join, resolve } from "node:path";
 
 import { normalizeWorktreePathForCompare } from "./worktree-root.js";
 import { worktreesDirs } from "./worktree-placement.js";
 import { listWorktrees, removeStaleWorktreeDirectory } from "./worktree-manager.js";
 import { getCurrentBranch } from "./worktree.js";
+import { gitCapture } from "./git-exec.js";
 
 export type WorktreeSafetyWriteScope = "planning-only" | "source-writing";
 
@@ -96,10 +96,7 @@ const defaultDeps: WorktreeSafetyDeps = {
     }));
   },
   pruneRegisteredWorktrees(projectRoot) {
-    execFileSync("git", ["worktree", "prune"], {
-      cwd: projectRoot,
-      stdio: "pipe",
-    });
+    gitCapture(projectRoot, ["worktree", "prune"]);
   },
   removeStaleWorktreeDirectory,
   getCurrentBranch,

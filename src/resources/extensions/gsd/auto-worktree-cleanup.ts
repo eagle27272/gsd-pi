@@ -5,13 +5,13 @@
 // git pathspec conversion for externally-rooted .gsd paths, and expected
 // unlink error classification.
 
-import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync, unlinkSync } from "node:fs";
 import { isAbsolute, join, relative } from "node:path";
 
 import { gsdRoot } from "./paths.js";
 import { milestoneMetaPath } from "./git-service.js";
 import { logWarning } from "./workflow-logger.js";
+import { gitCapture } from "./git-exec.js";
 
 function isSamePath(a: string, b: string): boolean {
   try {
@@ -49,11 +49,7 @@ function gitPathspecForWorktreePath(
   let base = basePath;
   let target = targetPath;
   try {
-    base = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "ignore"],
-      encoding: "utf-8",
-    }).trim() || basePath;
+    base = gitCapture(basePath, ["rev-parse", "--show-toplevel"]) || basePath;
   } catch {
     /* keep original */
     void base;
@@ -133,15 +129,7 @@ export function clearProjectRootStateFiles(
 
       // Only remove files that are untracked by git — tracked files are
       // managed by the branch checkout and should not be deleted.
-      const untrackedOutput = execFileSync(
-        "git",
-        ["ls-files", "--others", "--exclude-standard", pathspec],
-        {
-          cwd: basePath,
-          stdio: ["ignore", "pipe", "pipe"],
-          encoding: "utf-8",
-        },
-      ).trim();
+      const untrackedOutput = gitCapture(basePath, ["ls-files", "--others", "--exclude-standard", pathspec]);
       if (!untrackedOutput) continue;
 
       for (const f of untrackedOutput.split("\n").filter(Boolean)) {

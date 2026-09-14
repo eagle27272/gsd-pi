@@ -8,8 +8,8 @@
  * Copyright (c) 2026 Jeremy McSpadden <jeremy@fluxlabs.net>
  */
 
-import { execFileSync } from "node:child_process";
 import { logWarning } from "../workflow-logger.js";
+import { gitCapture } from "../git-exec.js";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -23,21 +23,14 @@ const CHECKPOINT_PREFIX = "refs/gsd/checkpoints/";
  */
 export function createCheckpoint(basePath: string, unitId: string): string | null {
   try {
-    const sha = execFileSync("git", ["rev-parse", "--verify", "HEAD"], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    }).trim();
+    const sha = gitCapture(basePath, ["rev-parse", "--verify", "HEAD"]);
 
     if (!sha || sha.length < 7) return null;
 
     // Sanitize unitId for use in ref path (replace / with -)
     const safeUnitId = unitId.replace(/\//g, "-");
 
-    execFileSync("git", ["update-ref", `${CHECKPOINT_PREFIX}${safeUnitId}`, sha], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    gitCapture(basePath, ["update-ref", `${CHECKPOINT_PREFIX}${safeUnitId}`, sha]);
 
     return sha;
   } catch (e) {
@@ -70,11 +63,7 @@ export function rollbackToCheckpoint(
 ): boolean {
   try {
     // Get current branch name
-    const branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    }).trim();
+    const branch = gitCapture(basePath, ["rev-parse", "--abbrev-ref", "HEAD"]);
 
     if (!branch || branch === "HEAD") {
       logWarning("safety", "rollback: detached HEAD state, cannot rollback");
@@ -87,11 +76,7 @@ export function rollbackToCheckpoint(
     // covers committed state). Push a labeled stash first so recovery
     // is possible. (Issue #4980 HIGH-4)
     try {
-      execFileSync(
-        "git",
-        ["stash", "push", "--include-untracked", "-m", `gsd: pre-rollback-stash ${unitId} ${new Date().toISOString()}`],
-        { cwd: basePath, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" },
-      );
+      gitCapture(basePath, ["stash", "push", "--include-untracked", "-m", `gsd: pre-rollback-stash ${unitId} ${new Date().toISOString()}`]);
     } catch {
       /* nothing to stash, or stash refused — proceed with reset */
     }
@@ -99,10 +84,7 @@ export function rollbackToCheckpoint(
     // Reset branch pointer and working tree to checkpoint SHA in one step.
     // Using `git reset --hard <sha>` works on the currently checked-out branch
     // (unlike `git branch -f` which is rejected for checked-out branches).
-    execFileSync("git", ["reset", "--hard", sha], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    gitCapture(basePath, ["reset", "--hard", sha]);
 
     // Cleanup checkpoint ref
     cleanupCheckpoint(basePath, unitId);
@@ -120,10 +102,7 @@ export function rollbackToCheckpoint(
 export function cleanupCheckpoint(basePath: string, unitId: string): void {
   try {
     const safeUnitId = unitId.replace(/\//g, "-");
-    execFileSync("git", ["update-ref", "-d", `${CHECKPOINT_PREFIX}${safeUnitId}`], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    gitCapture(basePath, ["update-ref", "-d", `${CHECKPOINT_PREFIX}${safeUnitId}`]);
   } catch {
     // Non-fatal — ref may already have been cleaned up
   }
