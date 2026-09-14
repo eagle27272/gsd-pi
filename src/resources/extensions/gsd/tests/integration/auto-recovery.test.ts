@@ -667,6 +667,9 @@ function makeGitBase(): string {
   execFileSync("git", ["init", "--initial-branch=main"], { cwd: base, stdio: "ignore" });
   execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: base, stdio: "ignore" });
   execFileSync("git", ["config", "user.name", "Test"], { cwd: base, stdio: "ignore" });
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add .` stage nothing and the commit below fail.
+  execFileSync("git", ["config", "core.excludesFile", "/dev/null"], { cwd: base, stdio: "ignore" });
   // Create initial commit so HEAD exists
   writeFileSync(join(base, ".gitkeep"), "");
   execFileSync("git", ["add", "."], { cwd: base, stdio: "ignore" });

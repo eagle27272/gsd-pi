@@ -347,6 +347,9 @@ describe('git-service', async () => {
   runGit(tempDir, ["init", "-b", "main"]);
   runGit(tempDir, ["config", "user.name", "Pi Test"]);
   runGit(tempDir, ["config", "user.email", "pi@example.com"]);
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add` of .gsd fixtures stage nothing and the commits below fail.
+  runGit(tempDir, ["config", "core.excludesFile", "/dev/null"]);
 
   // runGit should work on a valid repo
   const branch = runGit(tempDir, ["branch", "--show-current"]);
@@ -394,6 +397,9 @@ describe('git-service', async () => {
     runGit(dir, ["init", "-b", "main"]);
     runGit(dir, ["config", "user.name", "Pi Test"]);
     runGit(dir, ["config", "user.email", "pi@example.com"]);
+    // A developer's global ignore file may list .gsd, which would silently make
+    // `git add` of .gsd fixtures stage nothing and the commits below fail.
+    runGit(dir, ["config", "core.excludesFile", "/dev/null"]);
     // Need an initial commit so HEAD exists
     createFile(dir, ".gitkeep", "");
     runGit(dir, ["add", "-A"]);
@@ -580,6 +586,9 @@ process.exit(result.status ?? 0);
       gitRun(["init", "-b", "main"], subSrc);
       gitRun(["config", "user.name", "Pi Test"], subSrc);
       gitRun(["config", "user.email", "pi@example.com"], subSrc);
+      // A developer's global ignore file may list .gsd, which would silently make
+      // `git add` of .gsd fixtures stage nothing and the commits below fail.
+      gitRun(["config", "core.excludesFile", "/dev/null"], subSrc);
       createFile(subSrc, "tracked.txt", "initial\n");
       gitRun(["add", "-A"], subSrc);
       gitRun(["commit", "-m", "init submodule"], subSrc);
@@ -625,6 +634,9 @@ process.exit(result.status ?? 0);
       gitRun(["init", "-b", "main"], subSrc);
       gitRun(["config", "user.name", "Pi Test"], subSrc);
       gitRun(["config", "user.email", "pi@example.com"], subSrc);
+      // A developer's global ignore file may list .gsd, which would silently make
+      // `git add` of .gsd fixtures stage nothing and the commits below fail.
+      gitRun(["config", "core.excludesFile", "/dev/null"], subSrc);
       createFile(subSrc, "tracked.txt", "initial\n");
       gitRun(["add", "-A"], subSrc);
       gitRun(["commit", "-m", "init submodule"], subSrc);
@@ -1074,6 +1086,9 @@ process.exit(result.status ?? 0);
     runGit(dir, ["init", "-b", "main"]);
     runGit(dir, ["config", "user.name", "Pi Test"]);
     runGit(dir, ["config", "user.email", "pi@example.com"]);
+    // A developer's global ignore file may list .gsd, which would silently make
+    // `git add` of .gsd fixtures stage nothing and the commits below fail.
+    runGit(dir, ["config", "core.excludesFile", "/dev/null"]);
     createFile(dir, ".gitkeep", "");
     runGit(dir, ["add", "-A"]);
     runGit(dir, ["commit", "-m", "init"]);
@@ -1714,6 +1729,9 @@ process.exit(result.status ?? 0);
     runGit(repo, ["init", "-b", "main"]);
     runGit(repo, ["config", "user.email", "test@test.com"]);
     runGit(repo, ["config", "user.name", "Test"]);
+    // A developer's global ignore file may list .gsd, which would silently make
+    // `git add` of .gsd fixtures stage nothing and the commits below fail.
+    runGit(repo, ["config", "core.excludesFile", "/dev/null"]);
 
     // Create and track runtime files (simulates pre-.gitignore state)
     mkdirSync(join(repo, ".gsd", "activity"), { recursive: true });
@@ -1771,6 +1789,9 @@ process.exit(result.status ?? 0);
     runGit(repo, ["init", "-b", "main"]);
     runGit(repo, ["config", "user.email", "test@test.com"]);
     runGit(repo, ["config", "user.name", "Test"]);
+    // A developer's global ignore file may list .gsd, which would silently make
+    // `git add` of .gsd fixtures stage nothing and the commits below fail.
+    runGit(repo, ["config", "core.excludesFile", "/dev/null"]);
     writeFileSync(join(repo, "README.md"), "init");
     runGit(repo, ["add", "-A"]);
     runGit(repo, ["commit", "-m", "init"]);

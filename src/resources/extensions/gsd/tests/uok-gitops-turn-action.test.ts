@@ -33,6 +33,9 @@ function initRepo(repo: string): string {
   run("git init", repo);
   run('git config user.email "test@example.com"', repo);
   run('git config user.name "Test User"', repo);
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add .` stage nothing and the commit below fail.
+  run("git config core.excludesFile /dev/null", repo);
   writeFileSync(join(repo, "README.md"), "# Test\n", "utf-8");
   run("git add README.md", repo);
   run('git commit -m "chore: init"', repo);

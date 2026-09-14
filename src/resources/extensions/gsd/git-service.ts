@@ -1089,10 +1089,7 @@ export class GitServiceImpl {
         if (branch) {
           const remoteBranch = `origin/${branch}`;
           // merge-base --is-ancestor exits 0 if HEAD~1 is ancestor of remote
-          execFileSync("git", ["merge-base", "--is-ancestor", "HEAD~1", remoteBranch], {
-            cwd: this.basePath,
-            stdio: ["ignore", "pipe", "pipe"],
-          });
+          runGit(this.basePath, ["merge-base", "--is-ancestor", "HEAD~1", remoteBranch]);
           // If we get here, newest snapshot IS reachable from remote — already pushed
           return;
         }
@@ -1101,11 +1098,7 @@ export class GitServiceImpl {
       }
 
       // Save HEAD SHA so we can restore if the re-commit fails
-      const savedHead = execFileSync("git", ["rev-parse", "HEAD"], {
-        cwd: this.basePath,
-        stdio: ["ignore", "pipe", "pipe"],
-        encoding: "utf-8",
-      }).trim();
+      const savedHead = runGit(this.basePath, ["rev-parse", "HEAD"]);
 
       nativeResetSoft(this.basePath, resetTarget);
 

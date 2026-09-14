@@ -25,6 +25,11 @@ export interface ExecOptions {
 	cwd?: string;
 	/** Per-stream buffered output ceiling. Defaults to {@link MAX_EXEC_OUTPUT_BYTES}. */
 	maxOutputBytes?: number;
+	/**
+	 * Data to write to the child's stdin, which is then closed. Use this rather
+	 * than an argv element for secrets — argv is world-readable via `ps`.
+	 */
+	stdin?: string;
 }
 
 /**
@@ -85,11 +90,18 @@ export async function execCommand(
 		const proc = spawn(command, args, {
 			cwd,
 			shell: false,
-			stdio: ["ignore", "pipe", "pipe"],
+			stdio: [options?.stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"],
 		});
 		// Register for shutdown reaping so a child cannot outlive the host holding a
 		// lock (a stranded `git` keeps .git/index.lock and wedges every later write).
 		if (proc.pid) trackDetachedChildPid(proc.pid);
+
+		if (options?.stdin !== undefined) {
+			// A child that exits before draining stdin gives us EPIPE; its real
+			// exit code is already being captured below, so swallow the write error.
+			proc.stdin?.on("error", () => {});
+			proc.stdin?.end(options.stdin, "utf8");
+		}
 
 		const limit = options?.maxOutputBytes ?? MAX_EXEC_OUTPUT_BYTES;
 		const stdout = createOutputBuffer(limit);
