@@ -311,18 +311,14 @@ export async function checkForUpdates(options: UpdateCheckOptions = {}): Promise
   }
 }
 
+/**
+ * gsd-browser is the only package startup checks for. gsd-pi is a personal fork
+ * with no npm release, so there is deliberately no self-update check or prompt —
+ * `gsd update` prints git-rebuild instructions instead.
+ */
 export async function checkForGsdBrowserUpdates(options: UpdateCheckOptions = {}): Promise<void> {
   await checkForUpdates({
     ...options,
     packageName: GSD_BROWSER_PACKAGE_NAME,
   })
 }
-
-/**
- * Interactive update prompt shown at startup when a newer version is available.
- * Fetches the latest version (with cache), then asks the user whether to
- * update now or skip. Runs at most once per 24 hours (same cache as checkForUpdates).
- * Defaults to skip after 30 seconds of inactivity.
- *
- * Returns true if an update was performed, false otherwise.
- */
