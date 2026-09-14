@@ -3,6 +3,7 @@
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { globSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -10,11 +11,16 @@ import { fileURLToPath } from "node:url";
 import {
   diffAgainstBaseline,
   exitCodeForDiff,
+  ISSUE_TYPES,
   flattenKnipReport,
   parseBaseline,
   parseKnipReport,
   renderBaselineFile,
 } from "../lib/knip-baseline-lib.mjs";
+
+// knip.jsonc allows comments; node:fs has no JSONC parser, so strip them.
+const parseJsonc = (text) =>
+  JSON.parse(text.replace(/^\s*\/\/.*$/gm, "").replace(/,(\s*[}\]])/g, "$1"));
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -137,4 +143,44 @@ test("the committed knip baseline parses and is sorted, so regeneration produces
   const text = readFileSync(join(repoRoot, ".config/knip-baseline.json"), "utf8");
 
   assert.equal(renderBaselineFile(parseBaseline(text)), text);
+});
+
+// A CODEOWNERS file makes knip's JSON reporter add an `owners` array to every
+// row; flattening blindly would turn all ~1800 rows into new findings.
+test("flattenKnipReport ignores report fields that are not knip issue types", () => {
+  const keys = flattenKnipReport({
+    files: [],
+    issues: [{ file: "src/a.ts", owners: [{ name: "@team" }], exports: [{ name: "unusedFn" }] }],
+  });
+
+  assert.deepEqual(keys, ["exports|src/a.ts|unusedFn"]);
+});
+
+// A glob that matches nothing silently exempts the code it was meant to cover.
+// knip reports these as configuration hints, which the JSON reporter drops, so
+// assert on them here instead.
+test("every entry, project and ignore glob in knip.jsonc matches at least one file", () => {
+  const config = parseJsonc(readFileSync(join(repoRoot, "knip.jsonc"), "utf8"));
+  const dead = [];
+
+  for (const [name, ws] of Object.entries(config.workspaces)) {
+    const cwd = join(repoRoot, name);
+    for (const key of ["entry", "project", "ignore"]) {
+      for (const pattern of ws[key] ?? []) {
+        const matches = globSync(pattern.replace(/^!/, ""), { cwd, nodir: true });
+        if (matches.length === 0) dead.push(`${name} ${key}: ${pattern}`);
+      }
+    }
+  }
+
+  assert.deepEqual(dead, []);
+});
+
+// ISSUE_TYPES drives which report fields become findings; a type enabled in
+// knip.jsonc but missing there would be silently dropped from the gate.
+test("ISSUE_TYPES covers every issue type knip.jsonc asks knip to report", () => {
+  const config = parseJsonc(readFileSync(join(repoRoot, "knip.jsonc"), "utf8"));
+  const reported = config.include.filter((type) => type !== "files");
+
+  assert.deepEqual([...reported].sort(), [...ISSUE_TYPES].sort());
 });

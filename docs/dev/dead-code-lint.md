@@ -12,7 +12,7 @@ dependencies, and unused class and enum members.
 pnpm run lint:dead-code
 ```
 
-Takes about 20 seconds. It runs in CI (`.github/workflows/ci.yml`), in
+Takes about a minute. It runs in CI (`.github/workflows/ci.yml`), in
 `scripts/ci-fast-gates.sh` (`pnpm run verify:fast`) and in `scripts/verify-merge.sh`.
 
 ## The baseline ratchet
@@ -45,10 +45,12 @@ tighten the baseline in the same PR that removes the dead code.
 
 `knip.jsonc` carries inline comments for each decision. The three that are not obvious:
 
-- **Vendored `packages/pi-*`** list all their source as `entry`. Their dependency usage
-  stays visible to the root workspace — so root deps like `openai` are not falsely
-  reported as unused — while they produce no findings of their own, and an upstream sync
-  never moves the baseline.
+- **Vendored `packages/pi-*`** list all their source as `entry`, and set
+  `ignoreDependencies: [".*"]`. Their dependency usage stays visible to the root
+  workspace — so root deps like `openai` are not falsely reported as unused — while they
+  produce no findings of their own. Entry/project globs govern file and export analysis
+  but not manifest analysis, so the `ignoreDependencies` line is what actually makes
+  "an upstream sync never moves the baseline" true.
 - **`includeEntryExports` is set on the root workspace only.** Every extension is
   reached through its `index.ts` entry, and without this the entire extension surface
   would be exempt from unused-export analysis. It is deliberately *not* global, because
@@ -66,7 +68,19 @@ interface properties:
 - `FuzzyMatchResult.contentForReplacement`, fixed in c680e785 after it shipped a real bug.
 
 Nothing in the TypeScript tooling ecosystem reports these; detecting them needs a custom
-TS-compiler-API pass. Tracked separately.
+TS-compiler-API pass. Tracked in #185.
+
+**Anything inside the vendored `packages/pi-*` tree.** That exemption is deliberate — the
+pi boundary (`scripts/verify-pi-boundary.cjs`) owns those packages, and deleting code
+there fights upstream syncs — but it costs real coverage: about 670 of the repo's ~3,400
+first-party source files. Note that `contentForReplacement`, one of the two findings that
+motivated this gate, lived in `packages/pi-coding-agent/src/core/tools/edit-diff.ts`, so
+even after #185 lands the gate would not have caught it where it actually was.
+
+**Its own drift tests, in CI.** `scripts/__tests__/knip-gate.test.mjs` asserts the gate is
+wired into all three runners and that no config glob has rotted, but nothing in
+`.github/workflows/` runs `scripts/__tests__/` or `ci-fast-gates.sh` — those tests are
+local-only today. Pre-existing and repo-wide, tracked in #191.
 
 ## Known baseline contents worth burning down
 
@@ -81,4 +95,4 @@ TS-compiler-API pass. Tracked separately.
   treat it as a workspace; knip sees it only because the root `project` glob names it.
 - **Two imports of a deleted module.** `scripts/m003-s07-dossier-input.ts` and its test
   import `./semantic-shadow-no-cutover-gate.mjs`, removed in 185af73a. The `.ts` test is
-  not in any runner's glob, so nothing caught it.
+  not in any runner's glob, so nothing caught it. Tracked in #186.

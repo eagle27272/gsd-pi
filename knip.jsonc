@@ -28,8 +28,9 @@
   // classMembers — which is off by default and is the closest knip gets to the
   // shape that motivated this gate (#81): a member written at one site and
   // never read. It covers classes and enums only; never-read *interface*
-  // properties, which is what #79 actually is, are outside knip entirely.
+  // properties, which is what #79 actually is, are outside knip entirely (#185).
   // nsExports/nsTypes are left out: they only fire on namespace imports.
+  // Keep in step with ISSUE_TYPES in scripts/lib/knip-baseline-lib.mjs.
   "include": [
     "files",
     "dependencies",
@@ -45,6 +46,9 @@
     "duplicates"
   ],
 
+  // Every glob below is asserted to match at least one file by
+  // scripts/__tests__/knip-gate.test.mjs, so a pattern cannot silently rot
+  // into exempting the code it was meant to cover.
   "workspaces": {
     ".": {
       // Every extension is reached through its index.ts entry, so without this
@@ -65,50 +69,79 @@
         "src/**/tests/**/*.test.{ts,mts,cts,mjs,cjs}",
         "src/tests/**/*.test.ts",
         "scripts/**/*.{mjs,cjs,js,ts}",
-        "tests/**/*.ts"
+        "tests/**/*.{ts,mjs}"
       ],
+      // The extension test suites include .mjs and .cjs files; without those
+      // extensions here a dead .mjs helper under src/ is invisible.
       "project": [
-        "src/**/*.{ts,mts,cts}",
+        "src/**/*.{ts,mts,cts,tsx,mjs,cjs,js}",
         "scripts/**/*.{mjs,cjs,js,ts}",
-        "tests/**/*.ts",
+        "tests/**/*.{ts,mjs}",
         // packages/db has no package.json, so pnpm and knip both skip it as a
         // workspace. Analyse it from the root instead of leaving it unseen.
         "packages/db/**/*.ts"
       ]
     },
 
-    "packages/contracts": { "entry": ["src/index.ts"], "project": ["src/**/*.ts"] },
-    "packages/rpc-client": { "entry": ["src/index.ts"], "project": ["src/**/*.ts"] },
+    "packages/contracts": {
+      "entry": ["src/index.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/rpc-client": {
+      "entry": ["src/index.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts", "examples/**/*.ts"]
+    },
     "packages/native": {
-      "entry": ["src/index.ts", "src/*/index.ts", "tests/**/*.test.{ts,mjs,cjs}"],
-      "project": ["src/**/*.ts", "tests/**/*.ts"]
+      "entry": ["src/index.ts", "src/*/index.ts", "src/**/*.test.{ts,mjs,cjs}"],
+      "project": ["src/**/*.{ts,mjs,cjs}"]
     },
     "packages/mcp-server": {
-      "entry": ["src/index.ts", "src/readers/*.ts", "bin/*.js", "test/**/*.test.ts"],
-      "project": ["src/**/*.ts", "test/**/*.ts"]
+      "entry": ["src/index.ts", "src/readers/*.ts", "bin/*.js", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts", "bin/*.js", "test-fixtures/**/*.mjs"]
     },
     "packages/gsd-agent-core": {
-      "entry": ["src/index.ts", "src/**/*.test.ts", "test/**/*.test.ts"],
-      "project": ["src/**/*.ts", "test/**/*.ts"]
+      "entry": ["src/index.ts", "src/**/*.test.ts", "scripts/*.cjs"],
+      "project": ["src/**/*.{ts,js}", "scripts/*.cjs"]
     },
     "packages/gsd-agent-modes": {
-      "entry": ["src/index.ts", "src/**/*.test.ts", "test/**/*.test.ts"],
-      "project": ["src/**/*.ts", "test/**/*.ts"]
+      "entry": ["src/index.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
     },
 
     // Vendored upstream packages (see scripts/verify-pi-boundary.cjs). Treating
     // every source file as an entry keeps their dependency usage visible to the
     // root workspace — so root deps like `openai` are not falsely reported as
-    // unused — while producing no findings of their own, so an upstream sync
-    // never moves the baseline. Their `test/` dirs are excluded: nothing runs
-    // them and many still import paths the pi boundary removed.
-    "packages/pi-agent-core": { "entry": ["src/**/*.ts"], "project": ["src/**/*.ts"], "ignore": ["test/**"] },
-    "packages/pi-ai": { "entry": ["src/**/*.ts"], "project": ["src/**/*.ts"], "ignore": ["test/**"] },
-    "packages/pi-tui": { "entry": ["src/**/*.ts"], "project": ["src/**/*.ts"], "ignore": ["test/**"] },
+    // unused — while producing no file, export or member findings of their own.
+    // `ignoreDependencies` covers the remaining surface: manifest analysis is
+    // not governed by entry/project, so without it an upstream sync that edits
+    // a pi-* package.json would move the baseline.
+    //
+    // Their test dirs are excluded because the boundary, not this gate, owns
+    // that corpus — ADR-010 deleted paths that roughly 40 of those files still
+    // import (see scripts/lib/test-audit-lib.mjs). Note pi-ai's suite *is* run,
+    // by `pnpm --filter @gsd/pi-ai test` in verify-merge.sh; it is exempt here
+    // because it is vendored, not because it is dead.
+    "packages/pi-agent-core": {
+      "entry": ["src/**/*.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": [".*"]
+    },
+    "packages/pi-ai": {
+      "entry": ["src/**/*.ts"],
+      "project": ["src/**/*.ts"],
+      "ignore": ["test/**"],
+      "ignoreDependencies": [".*"]
+    },
+    "packages/pi-tui": {
+      "entry": ["src/**/*.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": [".*"]
+    },
     "packages/pi-coding-agent": {
       "entry": ["src/**/*.ts"],
       "project": ["src/**/*.ts"],
-      "ignore": ["test/**", "examples/**"]
+      "ignore": ["test/**", "examples/**"],
+      "ignoreDependencies": [".*"]
     }
   }
 }

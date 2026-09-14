@@ -111,7 +111,6 @@
     "prepack": "node scripts/prepack-resolve-workspace.cjs",
     "postpack": "node scripts/postpack-restore-workspace.cjs",
     "typecheck:extensions": "tsc --noEmit --project tsconfig.extensions.json",
-    "lint": "pnpm run lint:dead-code",
     "lint:dead-code": "node scripts/knip-gate.mjs",
     "lint:dead-code:update": "node scripts/knip-gate.mjs --write",
     "verify:gsd-projection-mutations": "node scripts/check-gsd-projection-mutations.mjs",

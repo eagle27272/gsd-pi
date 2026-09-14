@@ -21,11 +21,17 @@ import {
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const BASELINE_PATH = join(ROOT, '.config', 'knip-baseline.json');
-const write = process.argv.slice(2).includes('--write');
-
 // Spawn the bin directly rather than `pnpm exec`: no shell wrapper to resolve
 // (which spawnSync cannot do for pnpm.cmd on Windows) and no nested pnpm.
 const KNIP_BIN = join(ROOT, 'node_modules', 'knip', 'bin', 'knip.js');
+
+function parseArgs(argv) {
+  const unknown = argv.filter((arg) => arg !== '--write');
+  if (unknown.length > 0) {
+    throw new Error(`unknown argument(s): ${unknown.join(' ')}. The only flag is --write.`);
+  }
+  return { write: argv.includes('--write') };
+}
 
 function runKnip() {
   const result = spawnSync(process.execPath, [KNIP_BIN, '--no-progress', '--reporter', 'json'], {
@@ -37,16 +43,48 @@ function runKnip() {
   return parseKnipReport(result);
 }
 
+function readBaseline() {
+  let text;
+  try {
+    text = readFileSync(BASELINE_PATH, 'utf8');
+  } catch (error) {
+    throw new Error(
+      `cannot read the knip baseline at ${BASELINE_PATH} (${error.code}). ` +
+        'Regenerate it with `pnpm run lint:dead-code:update`.',
+    );
+  }
+  return parseBaseline(text);
+}
+
+function printDiff(diff) {
+  for (const key of diff.resolved) process.stdout.write(`  resolved: ${key}\n`);
+  for (const key of diff.added) {
+    const [type, file, symbol] = key.split('|');
+    process.stdout.write(`  accepted: ${type} ${file}${symbol ? ` — ${symbol}` : ''}\n`);
+  }
+}
+
 function main() {
+  const { write } = parseArgs(process.argv.slice(2));
+  // Read the baseline before the 60-90s knip run so a missing or corrupt file
+  // fails immediately rather than at the end.
+  const baseline = write ? null : readBaseline();
   const current = flattenKnipReport(runKnip());
 
   if (write) {
+    const previous = (() => {
+      try {
+        return readBaseline();
+      } catch {
+        return [];
+      }
+    })();
     writeFileSync(BASELINE_PATH, renderBaselineFile(current));
     process.stdout.write(`knip baseline written: ${current.length} accepted finding(s)\n`);
+    printDiff(diffAgainstBaseline(current, previous));
     return;
   }
 
-  const baseline = parseBaseline(readFileSync(BASELINE_PATH, 'utf8'));
   const diff = diffAgainstBaseline(current, baseline);
 
   if (diff.resolved.length > 0) {
@@ -71,7 +109,15 @@ function main() {
     );
   }
 
-  process.exit(exitCodeForDiff(diff));
+  // Set the code rather than calling process.exit(): stdout and stderr are
+  // async when they are pipes, as they are under CI, and exiting outright
+  // truncates the finding list that makes a failure actionable.
+  process.exitCode = exitCodeForDiff(diff);
 }
 
-main();
+try {
+  main();
+} catch (error) {
+  process.stderr.write(`\nERROR: dead-code gate could not run: ${error.message}\n`);
+  process.exitCode = 2;
+}
