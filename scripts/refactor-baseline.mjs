@@ -17,8 +17,7 @@ const DEFAULT_PROMPT_DIRS = [
 ];
 
 const DEFAULT_CONTEXT_FILES = [
-  "CONTRIBUTING.md",
-  "VISION.md",
+  "docs/dev/development.md",
   "README.md",
   "docs/user-docs/auto-mode.md",
   "docs/dev/pi-context-optimization-opportunities.md",

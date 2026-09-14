@@ -343,7 +343,7 @@ gsd --web --host 0.0.0.0 --no-auth
 
 ### Developer and test environment variables
 
-These are for contributors debugging locally or running specific test tiers — not for normal use. See [CONTRIBUTING.md](../../CONTRIBUTING.md).
+These are for debugging locally or running specific test tiers — not for normal use. See [Development](../dev/development.md).
 
 | Variable | Scope | Description |
 |----------|-------|-------------|

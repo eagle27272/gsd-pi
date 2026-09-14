@@ -67,7 +67,7 @@ if [ -z "$TEST_FILES" ]; then
   echo "Changed source files ($SRC_COUNT):"
   echo "$SRC_FILES" | sed 's/^/  /'
   echo ""
-  echo "Per CONTRIBUTING.md:"
+  echo "Per docs/dev/development.md:"
   echo "  • Bug fixes must include a regression test"
   echo "  • Features must include tests covering primary success + one failure path"
   echo "  • Behavior changes must update existing tests"

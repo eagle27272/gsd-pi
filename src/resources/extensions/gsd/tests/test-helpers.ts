@@ -84,7 +84,7 @@ export function createTestContext() {
 // assert on its return value or observable effects) rather than check
 // whether specific identifier strings remain in source.
 //
-// CONTRIBUTING.md forbids new callers of this helper. Existing callers
+// docs/dev/development.md forbids new callers of this helper. Existing callers
 // are being migrated one file at a time; the helper is slated for
 // removal once the last caller is converted.
 //
@@ -94,8 +94,8 @@ export function createTestContext() {
 
 /**
  * @deprecated Use a real behaviour test against the function under
- *   inspection instead. See #4784 and CONTRIBUTING.md > "Test behaviour,
- *   not source shape". No new callers.
+ *   inspection instead. See #4784 and docs/dev/development.md > "No
+ *   source-grep tests". No new callers.
  *
  * Extract a region of source between a start anchor and either an explicit
  * end anchor or, if none is given, a set of reasonable structural
