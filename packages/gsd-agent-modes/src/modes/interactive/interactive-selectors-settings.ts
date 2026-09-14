@@ -1,53 +1,14 @@
 // Project/App: gsd-pi
 // File Purpose: Extracted from interactive-mode.ts (Phase E2 seam remediation).
-// @ts-nocheck
 
-import { Loader, Spacer } from "@gsd/pi-tui";
 import type { Component } from "@gsd/pi-tui";
-import type { Model, OAuthProviderId } from "@gsd/pi-ai";
-import { getAuthPath } from "@gsd/pi-coding-agent/config.js";
+import type { Model } from "@gsd/pi-ai";
 import { resolveModelScope } from "@gsd/pi-coding-agent/core/model-resolver.js";
-import { SessionManager } from "@gsd/pi-coding-agent/core/session-manager.js";
-import { getAvailableThemes, setRegisteredThemes, setTheme, theme } from "@gsd/pi-coding-agent/theme/theme.js";
-import { appKey } from "./components/keybinding-hints.js";
-import { LoginDialogComponent } from "./components/login-dialog.js";
+import { getAvailableThemes, setTheme } from "@gsd/pi-coding-agent/theme/theme.js";
 import { ModelSelectorComponent } from "./components/model-selector.js";
-import { OAuthSelectorComponent } from "./components/oauth-selector.js";
-import { ProviderManagerComponent } from "./components/provider-manager.js";
 import { ScopedModelsSelectorComponent } from "./components/scoped-models-selector.js";
-import { SessionSelectorComponent } from "./components/session-selector.js";
 import { SettingsSelectorComponent } from "./components/settings-selector.js";
 import { ToolExecutionComponent } from "./components/tool-execution.js";
-import { TreeSelectorComponent } from "./components/tree-selector.js";
-import { UserMessageSelectorComponent } from "./components/user-message-selector.js";
-import { AssistantMessageComponent } from "./components/assistant-message.js";
-import {
-  findExactModelMatch as findExactModelMatchController,
-  getModelCandidates as getModelCandidatesController,
-  handleModelCommand as handleModelCommandController,
-  updateAvailableProviderCount as updateAvailableProviderCountController,
-} from "./controllers/model-controller.js";
-import type { InteractiveModeDelegateHost } from "./interactive-mode-delegate-host.js";
-
-
-import { Loader, Spacer } from "@gsd/pi-tui";
-import type { Component } from "@gsd/pi-tui";
-import type { Model, OAuthProviderId } from "@gsd/pi-ai";
-import { getAuthPath } from "@gsd/pi-coding-agent/config.js";
-import { resolveModelScope } from "@gsd/pi-coding-agent/core/model-resolver.js";
-import { SessionManager } from "@gsd/pi-coding-agent/core/session-manager.js";
-import { getAvailableThemes, setRegisteredThemes, setTheme, theme } from "@gsd/pi-coding-agent/theme/theme.js";
-import { appKey } from "./components/keybinding-hints.js";
-import { LoginDialogComponent } from "./components/login-dialog.js";
-import { ModelSelectorComponent } from "./components/model-selector.js";
-import { OAuthSelectorComponent } from "./components/oauth-selector.js";
-import { ProviderManagerComponent } from "./components/provider-manager.js";
-import { ScopedModelsSelectorComponent } from "./components/scoped-models-selector.js";
-import { SessionSelectorComponent } from "./components/session-selector.js";
-import { SettingsSelectorComponent } from "./components/settings-selector.js";
-import { ToolExecutionComponent } from "./components/tool-execution.js";
-import { TreeSelectorComponent } from "./components/tree-selector.js";
-import { UserMessageSelectorComponent } from "./components/user-message-selector.js";
 import { AssistantMessageComponent } from "./components/assistant-message.js";
 import {
 	findExactModelMatch as findExactModelMatchController,

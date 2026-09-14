@@ -16,6 +16,18 @@ upstream **v1.18.0**. Later changes are tracked in this repository's git history
   spread over two `.gsd/phases/NN-*` directories, a state that was previously invisible
   because every row path still pointed at a file that existed
   ([#2](https://github.com/eagle27272/gsd-pi/issues/2)).
+- `.nvmrc` and `.node-version` at the repository root, both pinned to 24.20.0, so nvm,
+  fnm, mise, and `actions/setup-node` all select the same runtime CI builds against.
+
+### Changed
+
+- **BREAKING — the minimum supported Node.js version is now 24.20.0** (was 22.23.0).
+  `engines.node` on the root package and on `@opengsd/contracts`, `@opengsd/mcp-server`,
+  `@opengsd/rpc-client`, `@gsd/pi-agent-core`, and `@gsd/pi-ai` now declares `>=24.20.0`,
+  and the loader, the npx installer preflight, and the `node:sqlite` provider gate reject
+  anything older. Node 22 installs must upgrade before updating; `npm install -g
+  @opengsd/gsd-pi` will refuse on an unsupported runtime rather than failing later.
+- CI builds and tests on Node 24.20.0 instead of 22.23.0.
 
 ### Removed
 
