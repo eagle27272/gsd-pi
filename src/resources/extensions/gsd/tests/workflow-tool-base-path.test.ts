@@ -27,6 +27,28 @@ test("resolveWorkflowToolBasePath routes milestone writes to auto-worktree", () 
   }
 });
 
+test("resolveWorkflowToolBasePath accepts every milestone id spelling the tool schemas use", () => {
+  const project = mkdtempSync(join(tmpdir(), "gsd-wt-spelling-"));
+  const first = join(project, ".gsd", "worktrees", "M001-first");
+  const second = join(project, ".gsd", "worktrees", "M002-second");
+  for (const worktree of [first, second]) {
+    mkdirSync(worktree, { recursive: true });
+    writeFileSync(join(worktree, ".git"), "gitdir: /tmp/fake-git-dir\n", "utf-8");
+  }
+
+  try {
+    for (const scope of [
+      { milestoneId: "M002-second" },
+      { milestone_id: "M002-second" },
+      { mid: "M002-second" },
+    ]) {
+      assert.equal(resolveWorkflowToolBasePath({ cwd: project }, scope), second);
+    }
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
 test("resolveTaskRecoveryResumeBasePath selects the worktree owning the recovery action", () => {
   const project = mkdtempSync(join(tmpdir(), "gsd-recovery-base-"));
   const first = join(project, ".gsd-worktrees", "M001-first");
