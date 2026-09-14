@@ -72,6 +72,7 @@ Local parity: **`npm run verify:merge`** (runs the same npm scripts sequentially
 - `scripts/__tests__/`
 - `audit:test-gaps --strict-unwired`
 - `audit:test-matrix --strict`
+- `lint:dead-code` — knip against `.config/knip-baseline.json`; see [dead-code-lint.md](dead-code-lint.md)
 
 ### Coverage workflow
 
