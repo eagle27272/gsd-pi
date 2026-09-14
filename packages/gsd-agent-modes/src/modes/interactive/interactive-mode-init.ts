@@ -1,12 +1,10 @@
 // Project/App: gsd-pi
 // File Purpose: Extracted from interactive-mode.ts (Phase E2 seam remediation).
-// @ts-nocheck
 
 import * as path from "node:path";
 import { Text } from "@gsd/pi-tui";
 import { APP_NAME } from "@gsd/pi-coding-agent/config.js";
 import { theme } from "@gsd/pi-coding-agent/theme/theme.js";
-import { getChangelogForDisplay } from "./interactive-startup.js";
 import type { InteractiveModeDelegateHost } from "./interactive-mode-delegate-host.js";
 
 export { getChangelogForDisplay, checkForNewVersion, checkTmuxKeyboardSetup } from "./interactive-startup.js";

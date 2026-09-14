@@ -1,6 +1,5 @@
 // Project/App: gsd-pi
 // File Purpose: Extracted from interactive-extension-widgets.ts (Phase E2 seam remediation).
-// @ts-nocheck
 
 import type { KeyId } from "@gsd/pi-tui";
 import { matchesKey } from "@gsd/pi-tui";

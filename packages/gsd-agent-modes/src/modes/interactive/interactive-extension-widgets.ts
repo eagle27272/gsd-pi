@@ -1,24 +1,17 @@
 // Project/App: gsd-pi
 // File Purpose: Extracted from interactive-mode.ts (Phase E2 seam remediation).
-// @ts-nocheck
 
 import { Container, Spacer, Text, type Component, type TUI } from "@gsd/pi-tui";
-import type { ExtensionUIContext, ExtensionUIDialogOptions, ExtensionWidgetOptions } from "@gsd/pi-coding-agent/core/extensions/index.js";
+import type { ExtensionWidgetOptions } from "@gsd/pi-coding-agent/core/extensions/index.js";
 import { setupExtensionShortcuts } from "./interactive-extension-tools.js";
+import { hideExtensionEditor, hideExtensionInput, hideExtensionSelector } from "./interactive-extension-dialogs.js";
+import { createDefaultCommandContextActions } from "../shared/command-context-actions.js";
 export { getRegisteredToolDefinition, formatWebSearchResult } from "./interactive-extension-tools.js";
-import { FooterDataProvider, type ReadonlyFooterDataProvider } from "@gsd/pi-coding-agent/core/footer-data-provider.js";
-import { setRegisteredThemes, setTheme, Theme, theme } from "@gsd/pi-coding-agent/theme/theme.js";
+import { type ReadonlyFooterDataProvider } from "@gsd/pi-coding-agent/core/footer-data-provider.js";
+import { setRegisteredThemes, Theme, theme } from "@gsd/pi-coding-agent/theme/theme.js";
 import { appKey } from "./components/keybinding-hints.js";
-import { ExtensionEditorComponent } from "./components/extension-editor.js";
-import { ExtensionInputComponent } from "./components/extension-input.js";
-import { ExtensionSelectorComponent } from "./components/extension-selector.js";
-import type { ExtensionNotifyType } from "./interactive-notify-render.js";
-import { renderBlockingErrorBanner, renderExtensionNotifyInChat } from "./interactive-notify-render.js";
-import { createExtensionUIContext as buildExtensionUIContext } from "./controllers/extension-ui-controller.js";
 import { MAX_WIDGET_LINES } from "./interactive-mode-class-constants.js";
 import type { InteractiveModeDelegateHost } from "./interactive-mode-delegate-host.js";
-import { getEditorTheme } from "@gsd/pi-coding-agent/theme/theme.js";
-import type { EditorComponent, EditorTheme, KeybindingsManager, OverlayHandle, OverlayOptions } from "@gsd/pi-tui";
 
 export async function initExtensions(host: InteractiveModeDelegateHost): Promise<void> {
 		if (host.options.bindExtensions !== false) {
@@ -26,7 +19,7 @@ export async function initExtensions(host: InteractiveModeDelegateHost): Promise
 			await host.session.bindExtensions({
 				uiContext,
 				commandContextActions: {
-					waitForIdle: () => host.session.agent.waitForIdle(),
+					...createDefaultCommandContextActions(host.session),
 					newSession: async (options) => {
 						if (host.loadingAnimation) {
 							host.loadingAnimation.stop();
@@ -268,7 +261,7 @@ export function renderWidgets(host: InteractiveModeDelegateHost): void {
 		host.ui.requestRender();
 	}
 
-export function renderWidgetContainer(host: InteractiveModeDelegateHost, 
+export function renderWidgetContainer(_host: InteractiveModeDelegateHost, 
 		container: Container,
 		widgets: Map<string, Component & { dispose?(): void }>,
 		spacerWhenEmpty: boolean,

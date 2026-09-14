@@ -1,6 +1,6 @@
 {
-  "//": "noUnusedLocals is intentionally NOT enabled here and this config does not extend tsconfig.options.json. interactive-mode.ts has ~102 private members that are read and written only by its extracted delegate modules, which are @ts-nocheck and receive the instance as InteractiveModeDelegateHost = any. tsc cannot see those uses, and deleting the members breaks the TUI. See #89.",
   "compilerOptions": {
+    "noUnusedLocals": true,
     "noUnusedParameters": true,
     "target": "ES2024",
     "module": "Node16",
