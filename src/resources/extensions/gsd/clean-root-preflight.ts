@@ -115,8 +115,49 @@ function readZeroDelimitedPaths(output: string): string[] {
   return output.split("\0").filter(Boolean);
 }
 
-function isGsdOwnedPath(path: string): boolean {
-  return path === ".gsd" || path.startsWith(".gsd/");
+/**
+ * GSD-written runtime state under `.gsd/`. After a merge the merged copy is
+ * authoritative, so a stash holding only these can be dropped unapplied.
+ *
+ * Everything else under `.gsd/` — ROADMAP.md, PLAN/SUMMARY, milestone docs —
+ * is user-authored and must go through `git stash apply` instead.
+ *
+ * NOTE: GSD_RUNTIME_PATTERNS in gitignore.ts is the canonical source of truth;
+ * these entries must stay synchronized with it.
+ */
+const GSD_MACHINE_OWNED_DIRS = [
+  ".gsd/activity/",
+  ".gsd/audit/",
+  ".gsd/backups/",
+  ".gsd/forensics/",
+  ".gsd/journal/",
+  ".gsd/migration-applications/",
+  ".gsd/parallel/",
+  ".gsd/recovery-applications/",
+  ".gsd/runtime/",
+  ".gsd/worktrees/",
+];
+const GSD_MACHINE_OWNED_FILES = [
+  ".gsd/DISCUSSION-MANIFEST.json",
+  ".gsd/STATE.md",
+  ".gsd/auto.lock",
+  ".gsd/doctor-history.jsonl",
+  ".gsd/event-log.jsonl",
+  ".gsd/metrics.json",
+  ".gsd/notifications.jsonl",
+  ".gsd/state-manifest.json",
+  ".gsd/state.json",
+];
+const GSD_MACHINE_OWNED_FILE_PREFIXES = [
+  ".gsd/completed-units",
+  ".gsd/gsd.db",
+];
+
+function isGsdMachineOwnedPath(path: string): boolean {
+  if (GSD_MACHINE_OWNED_DIRS.some((dir) => path.startsWith(dir))) return true;
+  if (GSD_MACHINE_OWNED_FILES.includes(path)) return true;
+  if (GSD_MACHINE_OWNED_FILE_PREFIXES.some((prefix) => path.startsWith(prefix))) return true;
+  return /^\.gsd\/milestones\/.*(-CONTINUE\.md|\/continue\.md)$/.test(path);
 }
 
 function hasStashUntrackedParent(basePath: string, stashRef: string): boolean | null {
@@ -484,7 +525,7 @@ export function postflightPopStash(
     // If either is null, fall through to `git stash apply` as the safe default.
     if (trackedPaths !== null && untrackedPaths !== null) {
       const stashPaths = [...trackedPaths, ...untrackedPaths];
-      if (stashPaths.length > 0 && stashPaths.every((path) => isGsdOwnedPath(path))) {
+      if (stashPaths.length > 0 && stashPaths.every((path) => isGsdMachineOwnedPath(path))) {
         let dropped = true;
         try {
           execFileSync("git", ["stash", "drop", stashRef], {
