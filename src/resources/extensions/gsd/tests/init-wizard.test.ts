@@ -7,7 +7,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, readFileSync, rmSync, existsSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -48,7 +48,7 @@ test("init-wizard: clean folder detected as state=none", (t) => {
   assert.equal(detection.v2, undefined);
 });
 
-test("init-wizard: v1 .planning/ triggers v1-planning state", (t) => {
+test("init-wizard: v1 .planning/ triggers v1-planning state", (_t) => {
   const dir = makeTempDir("v1");
   try {
     mkdirSync(join(dir, ".planning", "phases", "01"), { recursive: true });
@@ -65,7 +65,7 @@ test("init-wizard: v1 .planning/ triggers v1-planning state", (t) => {
   }
 });
 
-test("init-wizard: existing .gsd/ with milestones skips init", (t) => {
+test("init-wizard: existing .gsd/ with milestones skips init", (_t) => {
   const dir = makeTempDir("existing");
   try {
     mkdirSync(join(dir, ".gsd", LAYOUT_SEGMENTS.level1, canonicalPhaseDirName("M001")), { recursive: true });
@@ -80,7 +80,7 @@ test("init-wizard: existing .gsd/ with milestones skips init", (t) => {
   }
 });
 
-test("init-wizard: empty .gsd/ (no milestones) returns v2-gsd-empty", (t) => {
+test("init-wizard: empty .gsd/ (no milestones) returns v2-gsd-empty", (_t) => {
   const dir = makeTempDir("empty-gsd");
   try {
     mkdirSync(join(dir, ".gsd", LAYOUT_SEGMENTS.level1), { recursive: true });
@@ -94,7 +94,7 @@ test("init-wizard: empty .gsd/ (no milestones) returns v2-gsd-empty", (t) => {
   }
 });
 
-test("init-wizard: project signals populate from Node.js project", (t) => {
+test("init-wizard: project signals populate from Node.js project", (_t) => {
   const dir = makeTempDir("node-project");
   try {
     writeFileSync(
@@ -121,7 +121,7 @@ test("init-wizard: project signals populate from Node.js project", (t) => {
   }
 });
 
-test("init-wizard: v2 .gsd/ preferences detected", (t) => {
+test("init-wizard: v2 .gsd/ preferences detected", (_t) => {
   const dir = makeTempDir("prefs-detect");
   try {
     mkdirSync(join(dir, ".gsd", LAYOUT_SEGMENTS.level1), { recursive: true });
@@ -135,7 +135,7 @@ test("init-wizard: v2 .gsd/ preferences detected", (t) => {
   }
 });
 
-test("init-wizard: v2 uppercase PREFERENCES.md also detected", (t) => {
+test("init-wizard: v2 uppercase PREFERENCES.md also detected", (_t) => {
   const dir = makeTempDir("prefs-upper");
   try {
     mkdirSync(join(dir, ".gsd", LAYOUT_SEGMENTS.level1), { recursive: true });
@@ -149,7 +149,7 @@ test("init-wizard: v2 uppercase PREFERENCES.md also detected", (t) => {
   }
 });
 
-test("init-wizard: CONTEXT.md detected in v2", (t) => {
+test("init-wizard: CONTEXT.md detected in v2", (_t) => {
   const dir = makeTempDir("context");
   try {
     mkdirSync(join(dir, ".gsd", LAYOUT_SEGMENTS.level1), { recursive: true });
@@ -163,7 +163,7 @@ test("init-wizard: CONTEXT.md detected in v2", (t) => {
   }
 });
 
-test("init-wizard: multiple project files detected together", (t) => {
+test("init-wizard: multiple project files detected together", (_t) => {
   const dir = makeTempDir("multi-files");
   try {
     writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "test" }), "utf-8");
@@ -223,7 +223,7 @@ test("init-wizard: default branch detection does not prefer checked-out feature 
   assert.equal(detectMainBranch(dir), "main");
 });
 
-test("init-wizard: v1 with both .planning/ and .gsd/ prioritizes v2", (t) => {
+test("init-wizard: v1 with both .planning/ and .gsd/ prioritizes v2", (_t) => {
   const dir = makeTempDir("both-v1-v2");
   try {
     mkdirSync(join(dir, ".planning", "phases"), { recursive: true });

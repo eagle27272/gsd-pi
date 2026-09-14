@@ -6,7 +6,6 @@
  * strips backslashes (escape characters), producing `C:Usersuserproject`.
  */
 
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 

@@ -1,7 +1,7 @@
 // GSD MCP Server — lightweight structural health checks
 // Copyright (c) 2026 Jeremy McSpadden <jeremy@fluxlabs.net>
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import {
   resolveGsdRoot,
   resolveRootFile,

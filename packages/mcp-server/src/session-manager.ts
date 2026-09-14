@@ -14,8 +14,6 @@ import type {
   ManagedSession,
   ExecuteOptions,
   PendingBlocker,
-  CostAccumulator,
-  SessionStatus,
 } from './types.js';
 import { MAX_EVENTS, INIT_TIMEOUT_MS } from './types.js';
 import { signalAutoLockPid } from './pid-registry.js';

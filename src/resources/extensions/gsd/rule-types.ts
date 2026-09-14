@@ -4,14 +4,8 @@
 // consistent when/where/then shape. This file defines the type system;
 // the `RuleRegistry` class in rule-registry.ts holds instances at runtime.
 
-import type { DispatchAction, DispatchContext } from "./auto-dispatch.js";
 import type {
   PostUnitHookConfig,
-  PreDispatchHookConfig,
-  HookDispatchResult,
-  PreDispatchResult,
-  HookExecutionState,
-  HookStatusEntry,
 } from "./types.js";
 
 // ─── Phase & Evaluation Strategy ────────────────────────────────────────────

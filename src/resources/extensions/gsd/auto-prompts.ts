@@ -9,17 +9,29 @@
  * utility.
  */
 
-import { loadFile, parseContinue, parseSummary, loadActiveOverrides, formatOverridesSection, parseTaskPlanFile } from "./files.js";
+import { loadFile, parseContinue, parseSummary, loadActiveOverrides, formatOverridesSection } from "./files.js";
 import type { Override } from "./files.js";
 import { extractVerdict } from "./verdict-parser.js";
 import { loadPrompt, inlineTemplate } from "./prompt-loader.js";
 import {
-  resolveMilestoneFile, resolveMilestonePath, resolveSliceFile, resolveSlicePath,
-  resolveTasksDir, resolveTaskFiles, resolveTaskFile,
-  resolveTaskSummariesLocation, taskSummaryBelongsToSlice,
+  resolveMilestoneFile,
+  resolveSliceFile,
+  resolveSlicePath,
+  resolveTasksDir,
+  resolveTaskFiles,
+  resolveTaskFile,
+  resolveTaskSummariesLocation,
+  taskSummaryBelongsToSlice,
   taskIdFromTaskFileName,
-  relMilestoneFile, relSliceFile, relSlicePath, relMilestonePath,
-  relTaskFile, resolveGsdRootFile, relGsdRootFile, resolveRuntimeFile, targetMilestoneFile,
+  relMilestoneFile,
+  relSliceFile,
+  relSlicePath,
+  relMilestonePath,
+  relTaskFile,
+  resolveGsdRootFile,
+  relGsdRootFile,
+  resolveRuntimeFile,
+  targetMilestoneFile,
   normalizeRealPath,
 } from "./paths.js";
 import { resolveInlineLevel, loadEffectiveGSDPreferences, renderLanguageDirectiveForPrompt } from "./preferences.js";
@@ -27,7 +39,7 @@ import { createRepositoryRegistryFromPreferences } from "./repository-registry.j
 import { isContextModeEnabled } from "./preferences-types.js";
 import type { GSDState, InlineLevel } from "./types.js";
 import type { GSDPreferences } from "./preferences.js";
-import { join, basename, relative, sep } from "node:path";
+import { join, relative, sep } from "node:path";
 import { existsSync } from "node:fs";
 import { computeBudgets, resolveExecutorContextWindow, truncateAtSectionBoundary, type MinimalModelRegistry } from "./context-budget.js";
 import type { TokenProvider } from "./token-counter.js";
@@ -35,14 +47,12 @@ import {
   getBlockingReworkFindingsForTask,
   getGateResults,
   getMilestoneSlices,
-  getPendingGates,
   getPendingGatesForTurn,
   getSlice,
   getTask,
   isDbAvailable,
 } from "./gsd-db.js";
 import {
-  GATE_REGISTRY,
   assertGateCoverage,
   getGatesForTurn,
   type GateDefinition,
@@ -1633,7 +1643,7 @@ function isCompletedSliceStatus(status: string): boolean {
  * - All slices are complete (milestone done — no point reassessing)
  */
 export async function checkNeedsReassessment(
-  base: string, mid: string, state: GSDState,
+  base: string, mid: string, _state: GSDState,
 ): Promise<{ sliceId: string } | null> {
   // DB read authority — post-cutover there is no markdown fallback. With no DB
   // there is no slice state to reason about, so returning null (never dispatch

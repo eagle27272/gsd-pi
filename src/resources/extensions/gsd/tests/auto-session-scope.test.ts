@@ -12,7 +12,6 @@ import { tmpdir } from "node:os";
 
 import { AutoSession } from "../auto/session.ts";
 import { createWorkspace, scopeMilestone } from "../workspace.ts";
-import type { MilestoneScope } from "../workspace.ts";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

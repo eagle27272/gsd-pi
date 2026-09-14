@@ -9,14 +9,6 @@ import type {
 /** SDK v1 exports `...Messages`; v2 exports `...Message` — derive from request shape instead. */
 type MistralStreamChatMessage = NonNullable<ChatCompletionStreamRequest["messages"]>[number];
 
-let _MistralClass: typeof Mistral | undefined;
-async function getMistralClass(): Promise<typeof Mistral> {
-	if (!_MistralClass) {
-		const mod = await import("@mistralai/mistralai");
-		_MistralClass = mod.Mistral;
-	}
-	return _MistralClass;
-}
 import { getEnvApiKey } from "../env-api-keys.js";
 import { calculateCost, clampThinkingLevel } from "../models.js";
 import type {

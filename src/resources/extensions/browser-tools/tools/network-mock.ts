@@ -218,7 +218,7 @@ export function registerNetworkMockTools(pi: ExtensionAPI, deps: ToolDeps): void
 				const routeDescriptions = activeRoutes.map((r) => r.description);
 
 				// Clean up all routes
-				for (const [id, cleanup] of routeCleanups) {
+				for (const cleanup of routeCleanups.values()) {
 					await cleanup();
 				}
 

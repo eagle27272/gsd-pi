@@ -6,7 +6,7 @@
  * Standalone module: only imports node:child_process and node:path.
  */
 
-import { execFileSync, execFile } from "node:child_process";
+import { execFile } from "node:child_process";
 import { resolve } from "node:path";
 import { GSDError, GSD_PARSE_ERROR } from "./errors.js";
 
@@ -27,16 +27,7 @@ export interface RecentFilesOptions {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const EXEC_OPTS = {
-  encoding: "utf-8" as const,
-  timeout: 5000,
-  stdio: ["pipe", "pipe", "pipe"] as ["pipe", "pipe", "pipe"],
-};
-
 /** Synchronous git — used where sequential control flow is required (fallback paths). */
-function gitSync(args: string[], cwd: string): string {
-  return execFileSync("git", args, { ...EXEC_OPTS, cwd }).trim();
-}
 
 /** Async git — returns stdout on success, empty string on any error. */
 function gitAsync(args: string[], cwd: string): Promise<string> {

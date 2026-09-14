@@ -62,10 +62,6 @@ export class DynamicBorder extends AnimatedComponent {
 		return this.isAnimating;
 	}
 
-	private get spinnerInterval(): ReturnType<typeof setInterval> | undefined {
-		return this.animationInterval;
-	}
-
 	/**
 	 * Stop the spinner when the component is removed. Without this, a spinner
 	 * started via startSpinner() keeps firing its interval (and calling

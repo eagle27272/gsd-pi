@@ -13,7 +13,7 @@ import { execSync } from "node:child_process";
 import { getAllWorktreeHealth, getWorktreeHealth, formatWorktreeStatusLine } from "../worktree-health.ts";
 import { listWorktrees } from "../worktree-manager.ts";
 import { GIT_NO_PROMPT_ENV } from "../git-constants.ts";
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 

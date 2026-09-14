@@ -846,7 +846,7 @@ export function shouldBlockPendingGateBash(
 
 export function shouldBlockPendingGateBashInSnapshot(
   snapshot: WriteGateSnapshot,
-  command: string,
+  _command: string,
   _milestoneId: string | null,
   _queuePhaseActive?: boolean,
 ): { block: boolean; reason?: string } {

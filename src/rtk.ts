@@ -10,7 +10,6 @@ import extractZip from "extract-zip";
 import {
   GSD_RTK_DISABLED_ENV,
   GSD_RTK_PATH_ENV,
-  RTK_TELEMETRY_DISABLED_ENV,
   applyRtkProcessEnv,
   buildRtkEnv,
   getManagedRtkDir,

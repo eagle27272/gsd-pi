@@ -14,12 +14,8 @@ import type {
   PlanningRoadmapMilestone,
   PlanningRequirement,
   PlanningResearch,
-  GSDProject,
-  GSDMilestone,
-  GSDSlice,
-  GSDTask,
 } from '../migrate/types.ts';
-import { describe, test, beforeEach, afterEach } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 // ─── Fixture Helpers ───────────────────────────────────────────────────────

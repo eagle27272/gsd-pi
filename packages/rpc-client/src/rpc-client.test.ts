@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -444,7 +444,7 @@ describe("events() async generator", () => {
 			on: (event: string, handler: () => void) => {
 				if (event === "exit") exitHandlers.push(handler);
 			},
-			removeListener: (event: string, handler: () => void) => {
+			removeListener: (_event: string, handler: () => void) => {
 				const idx = exitHandlers.indexOf(handler);
 				if (idx !== -1) exitHandlers.splice(idx, 1);
 			},

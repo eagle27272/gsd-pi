@@ -33,7 +33,7 @@ function writeArtifact(base: string, name: string, content: string): string {
 
 // ─── PROJECT.md ─────────────────────────────────────────────────────────
 
-test("Deep mode validator: valid PROJECT.md fixture passes", (t) => {
+test("Deep mode validator: valid PROJECT.md fixture passes", (_t) => {
   const result = validateArtifact(join(FIXTURES_DIR, "valid-project.md"), "project");
   assert.deepStrictEqual(result.errors, []);
   assert.strictEqual(result.ok, true);

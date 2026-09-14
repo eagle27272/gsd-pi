@@ -16,7 +16,7 @@ import {
   insertMilestone,
 } from "../gsd-db.ts";
 import { invalidateAllCaches } from "../cache.ts";
-import type { DoctorIssue, DoctorIssueCode } from "../doctor-types.ts";
+import type { DoctorIssue } from "../doctor-types.ts";
 import { canonicalPhaseDirName, milestoneIdToPhaseNum } from "../layout-policy.ts";
 
 function makeBase(prefix = "gsd-doctor-orphan-"): string {

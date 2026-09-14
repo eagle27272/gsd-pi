@@ -191,7 +191,6 @@ const SQLITE_EXTENSIONS = [".sqlite", ".sqlite3", ".db"] as const;
 const SQL_EXTENSIONS = [".sql"] as const;
 
 /** File extensions that indicate .NET / C# projects. */
-const DOTNET_EXTENSIONS = [".csproj", ".sln", ".fsproj"] as const;
 
 /** File extensions that indicate Vue.js single-file components. */
 const VUE_EXTENSIONS = [".vue"] as const;
@@ -598,7 +597,7 @@ function listUntrackedProjectFiles(basePath: string): string[] {
     .filter(isProjectContentFile);
 }
 
-function hasKnownProjectMarkers(basePath: string, signals: ProjectSignals): boolean {
+function hasKnownProjectMarkers(_basePath: string, signals: ProjectSignals): boolean {
   if (signals.detectedFiles.length > 0) return true;
   if (signals.xcodePlatforms.length > 0) return true;
   return false;

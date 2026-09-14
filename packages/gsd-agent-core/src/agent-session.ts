@@ -49,12 +49,9 @@ import {
 	type AgentSessionEventListener,
 	type ExtensionBindings,
 	type ModelCycleResult,
-	type ParsedSkillBlock,
 	type PromptOptions,
-	type SessionStateChangeReason,
 	type SessionStats,
 	type ToolDefinitionEntry,
-	parseSkillBlock,
 } from "./session/agent-session-types.js";
 import {
 	beginTurnLatency,

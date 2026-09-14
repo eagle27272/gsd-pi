@@ -1,5 +1,4 @@
-import type { Agent, AgentTool, ThinkingLevel } from "@gsd/pi-agent-core";
-import type { Model } from "@gsd/pi-ai";
+import type { Agent, AgentTool } from "@gsd/pi-agent-core";
 import { resetApiProviders } from "@gsd/pi-ai";
 import {
 	ExtensionRunner,

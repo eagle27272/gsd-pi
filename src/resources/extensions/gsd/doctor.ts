@@ -21,7 +21,6 @@ import { GLOBAL_STATE_CODES } from "./doctor-types.js";
 import { checkGitHealth, checkRuntimeHealth, checkGlobalHealth, checkEngineHealth } from "./doctor-checks.js";
 import { checkEnvironmentHealth } from "./doctor-environment.js";
 import { checkGsdStateHealth } from "./doctor-state-checks.js";
-import { validateTitle } from "./validation.js";
 
 // ── Re-exports ─────────────────────────────────────────────────────────────
 // All public types and functions from extracted modules are re-exported here

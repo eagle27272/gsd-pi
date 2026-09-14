@@ -15,7 +15,7 @@
  */
 
 import type { ExtensionAPI, ExtensionCommandContext } from "@gsd/pi-coding-agent";
-import { AsyncJobManager, type Job } from "./job-manager.js";
+import { AsyncJobManager } from "./job-manager.js";
 import { createAsyncBashTool } from "./async-bash-tool.js";
 import { createAwaitTool } from "./await-tool.js";
 import { createCancelJobTool } from "./cancel-job-tool.js";

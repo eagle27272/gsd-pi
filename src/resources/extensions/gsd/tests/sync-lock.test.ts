@@ -102,7 +102,7 @@ test('sync-lock: can re-acquire after release', () => {
 
 // ─── stale lock override ─────────────────────────────────────────────────
 
-test('sync-lock: overrides stale lock file (mtime backdated)', (t) => {
+test('sync-lock: overrides stale lock file (mtime backdated)', (_t) => {
   const base = tempDir();
   fs.mkdirSync(path.join(base, '.gsd'), { recursive: true });
   const lockPath = path.join(base, '.gsd', 'sync.lock');

@@ -14,10 +14,10 @@
  *   - onCompromised does not declare compromise when lock file is transiently unreadable
  */
 
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, renameSync, unlinkSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, renameSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { execSync, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 
 import {
   acquireSessionLock,

@@ -7,7 +7,7 @@ import type { ImageContent, Model } from "@gsd/pi-ai";
 import type { KeyId } from "@gsd/pi-tui";
 import { type Theme, theme } from "../../theme/theme.js";
 import type { ResourceDiagnostic } from "../diagnostics.js";
-import type { Keybinding, KeybindingsConfig } from "../keybindings.js";
+import type { KeybindingsConfig } from "../keybindings.js";
 import type { ModelRegistry } from "../model-registry.js";
 import type { SessionManager } from "../session-manager.js";
 import type { BuildSystemPromptOptions } from "../system-prompt.js";
@@ -57,29 +57,12 @@ import type {
 	UserBashEventResult,
 	AdjustToolSetEvent,
 	AdjustToolSetResult,
-	BeforeCommitEvent,
 	BeforeCommitEventResult,
 	BeforeModelSelectEvent,
 	BeforeModelSelectResult,
-	BeforePrEvent,
 	BeforePrEventResult,
-	BeforePushEvent,
 	BeforePushEventResult,
-	BeforeVerifyEvent,
 	BeforeVerifyEventResult,
-	BudgetThresholdEvent,
-	BudgetThresholdEventResult,
-	CommitEvent,
-	MilestoneEndEvent,
-	MilestoneStartEvent,
-	NotificationEvent,
-	PrOpenedEvent,
-	PushEvent,
-	SessionEndEvent,
-	StopEvent,
-	UnitEndEvent,
-	UnitStartEvent,
-	VerifyResultEvent,
 } from "./types.js";
 
 // Extension shortcuts compete with canonical keybinding ids from keybindings.json.

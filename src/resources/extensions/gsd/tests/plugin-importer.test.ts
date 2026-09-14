@@ -10,19 +10,12 @@
  * - Config manifest format: canonical identity preserved
  */
 
-import { describe, it, beforeEach, mock } from 'node:test';
+import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import {
 	PluginImporter,
-	type DiscoveryResult,
-	type ValidationResult,
-	type ImportManifest,
 } from '../plugin-importer.js';
 import type { NamespacedComponent } from '../namespaced-registry.js';
-import type {
-	MarketplaceDiscoveryResult,
-	DiscoveredPlugin,
-} from '../marketplace-discovery.js';
 
 // ============================================================================
 // Test Fixtures
@@ -31,50 +24,10 @@ import type {
 /**
  * Create a mock discovered plugin for testing.
  */
-function createMockPlugin(overrides: Partial<DiscoveredPlugin> = {}): DiscoveredPlugin {
-	return {
-		name: 'test-plugin',
-		canonicalName: 'test-plugin',
-		source: './plugins/test-plugin',
-		resolvedPath: '/plugins/test-plugin',
-		status: 'ok',
-		manifestSource: 'plugin.json',
-		description: 'A test plugin',
-		version: '1.0.0',
-		author: { name: 'Test Author' },
-		inventory: {
-			skills: ['skill-a', 'skill-b'],
-			agents: ['agent-x'],
-			commands: [],
-			mcpServers: {},
-			lspServers: {},
-			hooks: [],
-		},
-		...overrides,
-	};
-}
 
 /**
  * Create a mock marketplace discovery result.
  */
-function createMockDiscoveryResult(
-	plugins: DiscoveredPlugin[] = [],
-	overrides: Partial<MarketplaceDiscoveryResult> = {}
-): MarketplaceDiscoveryResult {
-	return {
-		status: 'ok',
-		marketplacePath: '/test/marketplace.json',
-		marketplaceName: 'Test Marketplace',
-		pluginFormat: 'jamie-style',
-		plugins,
-		summary: {
-			total: plugins.length,
-			ok: plugins.filter((p) => p.status === 'ok').length,
-			error: plugins.filter((p) => p.status === 'error').length,
-		},
-		...overrides,
-	};
-}
 
 // ============================================================================
 // Tests

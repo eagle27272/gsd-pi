@@ -1,7 +1,6 @@
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { execSync } from "node:child_process";
 import {
   resolveExpectedArtifactPath,
   writeBlockerPlaceholder,
@@ -22,7 +21,7 @@ import { deriveState, invalidateStateCache } from "../../state.ts";
 import { recoverTimedOutUnit } from "../../auto-timeout-recovery.ts";
 import { readUnitRuntimeRecord, writeUnitRuntimeRecord } from "../../unit-runtime.ts";
 import { drainLogs, setStderrLoggingEnabled, _resetLogs } from "../../workflow-logger.ts";
-import { describe, test, beforeEach, afterEach } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 function createFixtureBase(): string {

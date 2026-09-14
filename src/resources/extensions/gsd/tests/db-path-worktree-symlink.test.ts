@@ -19,7 +19,7 @@
 import { join, sep } from "node:path";
 import { createTestContext } from "./test-helpers.ts";
 
-const { assertEq, assertTrue, report } = createTestContext();
+const { assertEq, report } = createTestContext();
 
 // ── Part 1: resolveProjectRootDbPath handles symlink-resolved layout ─────
 

@@ -7,7 +7,7 @@
  */
 
 import type { ExtensionAPI, ExtensionCommandContext } from "@gsd/pi-coding-agent";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { showNextAction } from "../shared/tui.js";
 import {
@@ -73,7 +73,7 @@ const DEFAULT_PREFS: ProjectPreferences = {
  */
 export async function showProjectInit(
   ctx: ExtensionCommandContext,
-  pi: ExtensionAPI,
+  _pi: ExtensionAPI,
   basePath: string,
   detection: ProjectDetection,
 ): Promise<InitWizardResult> {
@@ -433,7 +433,7 @@ export async function handleReinit(
 async function customizeGitPrefs(
   ctx: ExtensionCommandContext,
   prefs: ProjectPreferences,
-  signals: ProjectSignals,
+  _signals: ProjectSignals,
 ): Promise<void> {
   // Isolation strategy
   const hasSubmodules = existsSync(join(process.cwd(), ".gitmodules"));

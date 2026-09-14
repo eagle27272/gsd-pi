@@ -257,7 +257,6 @@ export class GSDConfigOverlay {
   private cachedLines?: string[];
   private cachedWidth?: number;
   private scrollOffset = 0;
-  private disposed = false;
 
   constructor(
     tui: { requestRender: () => void },
@@ -276,9 +275,8 @@ export class GSDConfigOverlay {
     this.cachedWidth = undefined;
   }
 
-  dispose(): void {
-    this.disposed = true;
-  }
+  // Nothing to release: this overlay holds no timers, listeners or async work.
+  dispose(): void {}
 
   handleInput(data: string): void {
     if (matchesKey(data, Key.escape) || data === "q") {

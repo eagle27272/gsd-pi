@@ -15,12 +15,7 @@ import {
 } from "../copilot-overlay-writer.js";
 
 import {
-  applyLastKnownGood as applyLastKnownGoodSnapshot,
   CopilotCatalogFetchError,
-  dedupeShellNotifications as dedupeShellNotificationsSnapshot,
-  diffCatalogSnapshots as diffCatalogSnapshotsSnapshot,
-  fetchGitHubCopilotModels as fetchGitHubCopilotModelsSnapshot,
-  sanitizeGitHubCopilotModels as sanitizeGitHubCopilotModelsSnapshot,
 } from "../copilot-model-catalog.js";
 
 function normalizedRecord(id: string, overrides: Record<string, unknown> = {}) {

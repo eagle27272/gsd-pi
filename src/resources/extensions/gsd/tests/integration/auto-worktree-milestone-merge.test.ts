@@ -14,7 +14,7 @@
 
 import { describe, test, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, realpathSync, readFileSync, symlinkSync, unlinkSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, realpathSync, symlinkSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
@@ -26,7 +26,6 @@ import {
 } from "../../auto-worktree-merge.ts";
 import { getAutoWorktreeOriginalBase } from "../../auto-worktree-session-registry.ts";
 import { getSliceBranchName } from "../../worktree.ts";
-import { nativeMergeSquash } from "../../native-git-bridge.ts";
 import { drainLogs, setStderrLoggingEnabled } from "../../workflow-logger.ts";
 import {
   closeDatabase,
@@ -92,7 +91,7 @@ function makeRoadmap(milestoneId: string, title: string, slices: Array<{ id: str
 
 /** Set up a slice branch on the worktree, add commits, merge it --no-ff to milestone. */
 function addSliceToMilestone(
-  repo: string,
+  _repo: string,
   wtPath: string,
   milestoneId: string,
   sliceId: string,
@@ -255,7 +254,7 @@ describe("auto-worktree-milestone-merge", { timeout: 300_000 }, () => {
 
   test("nothing to commit — safe when no code changes (#1738, #1792)", () => {
     const repo = freshRepo();
-    const wtPath = createAutoWorktree(repo, "M030");
+    createAutoWorktree(repo, "M030");
     const roadmap = makeRoadmap("M030", "Empty milestone", []);
 
     let threw = false;
@@ -471,7 +470,7 @@ describe("auto-worktree-milestone-merge", { timeout: 300_000 }, () => {
 
   test("#1738 bug 2: branch preserved when squash commit empty", () => {
     const repo = freshRepo();
-    const wtPath = createAutoWorktree(repo, "M080");
+    createAutoWorktree(repo, "M080");
     const roadmap = makeRoadmap("M080", "Empty milestone", []);
 
     let threw = false;

@@ -16,7 +16,7 @@ import {
   isInteractiveCommandContext,
 } from "./command-feedback.js";
 import { loadFile, saveFile } from "./files.js";
-import { isDbAvailable, getMilestone, getMilestoneSlices, insertMilestone } from "./gsd-db.js";
+import { isDbAvailable, getMilestone, getMilestoneSlices } from "./gsd-db.js";
 import { parseRoadmapSlices } from "./roadmap-slices.js";
 import { loadPrompt, inlineTemplate } from "./prompt-loader.js";
 import {
@@ -59,7 +59,6 @@ import { resolveUokFlags } from "./uok/flags.js";
 import { ensurePlanV2Graph, isMissingFinalizedContextResult } from "./uok/plan-v2.js";
 import { detectProjectState, hasGsdBootstrapArtifacts } from "./detection.js";
 import { assertNoLegacyLayout } from "./legacy-layout-guard.js";
-import { isFutureMilestoneStatus } from "./status-guards.js";
 import { showProjectInit } from "./init-wizard.js";
 import { validateDirectory } from "./validate-directory.js";
 import { showConfirm } from "../shared/tui.js";
@@ -110,9 +109,7 @@ import { createWorkspace, scopeMilestone, type MilestoneScope } from "./workspac
 import { clearPendingGate, extractDepthVerificationMilestoneId, getPendingGate } from "./bootstrap/write-gate.js";
 import {
   _getPendingAutoStart,
-  clearPendingAutoStart,
   deletePendingAutoStart,
-  getDiscussionMilestoneId,
   hasPendingAutoStart,
   setPendingAutoStart,
 } from "./pending-auto-start.js";
@@ -609,10 +606,6 @@ async function dispatchNextDeepProjectSetupStage(entry: PendingDeepProjectSetupE
   return true;
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type UIContext = ExtensionContext;
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 interface DispatchWorkflowOptions {
@@ -896,40 +889,6 @@ function getStructuredQuestionsAvailability(
  * Resolve a model ID string to a model object from available models.
  * Handles "provider/model" and bare ID formats.
  */
-function resolveAvailableModel<T extends { id: string; provider: string }>(
-  modelId: string,
-  availableModels: T[],
-  currentProvider: string | undefined,
-): T | undefined {
-  const slashIdx = modelId.indexOf("/");
-
-  if (slashIdx !== -1) {
-    const maybeProvider = modelId.substring(0, slashIdx);
-    const id = modelId.substring(slashIdx + 1);
-
-    const knownProviders = new Set(availableModels.map(m => m.provider.toLowerCase()));
-    if (knownProviders.has(maybeProvider.toLowerCase())) {
-      const match = availableModels.find(
-        m => m.provider.toLowerCase() === maybeProvider.toLowerCase()
-          && m.id.toLowerCase() === id.toLowerCase(),
-      );
-      if (match) return match;
-    }
-
-    // Try matching the full string as a model ID (OpenRouter-style)
-    const lower = modelId.toLowerCase();
-    return availableModels.find(
-      m => m.id.toLowerCase() === lower
-        || `${m.provider}/${m.id}`.toLowerCase() === lower,
-    );
-  }
-
-  // Bare ID — prefer current provider, then first available
-  const exactProviderMatch = availableModels.find(
-    m => m.id === modelId && m.provider === currentProvider,
-  );
-  return exactProviderMatch ?? availableModels.find(m => m.id === modelId);
-}
 
 /**
  * Build the discuss-and-plan prompt for a new milestone.

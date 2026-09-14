@@ -14,7 +14,6 @@ import { execSync } from "node:child_process";
 
 import { createAutoWorktree } from "../../auto-worktree-creation.ts";
 import { mergeMilestoneToMain } from "../../auto-worktree-merge.ts";
-import { nativeMergeSquash } from "../../native-git-bridge.ts";
 import { seedMergeReadyMilestone } from "../merge-ready-fixture.ts";
 
 function run(cmd: string, cwd: string): string {
@@ -41,7 +40,7 @@ function makeRoadmap(milestoneId: string, title: string, slices: Array<{ id: str
 }
 
 function addSliceToMilestone(
-  repo: string, wtPath: string, milestoneId: string,
+  _repo: string, wtPath: string, milestoneId: string,
   sliceId: string, sliceTitle: string,
   commits: Array<{ file: string; content: string; message: string }>,
 ): void {

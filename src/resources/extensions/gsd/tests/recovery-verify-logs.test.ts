@@ -22,7 +22,6 @@ import { verifyExpectedArtifact, _setRoadmapParserFnForTests } from "../auto-rec
 import { closeDatabase, openDatabase, insertMilestone, insertSlice, _getAdapter } from "../gsd-db.ts";
 import {
   drainLogs,
-  peekLogs,
   setStderrLoggingEnabled,
   _resetLogs,
   type LogEntry,
@@ -41,7 +40,7 @@ function milestoneDir(base: string, mid: string): string {
   return dir;
 }
 
-function sliceDir(base: string, mid: string, sid: string): string {
+function sliceDir(base: string, mid: string, _sid: string): string {
   const dir = join(base, ".gsd", "phases", canonicalPhaseDirName(mid));
   mkdirSync(dir, { recursive: true });
   return dir;

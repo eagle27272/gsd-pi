@@ -307,7 +307,7 @@ export function _projectWorktreeToRootImpl(
 export function _finalizeProjectionForMergeImpl(
   mainBasePath: string,
   worktreePath: string,
-  milestoneId: string,
+  _milestoneId: string,
 ): { synced: string[] } {
   const contract = resolveGsdPathContract(worktreePath, mainBasePath);
   const mainGsd = contract.projectGsd;

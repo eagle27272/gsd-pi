@@ -15,7 +15,6 @@ export type ParsedChunk =
 
 const OPEN_TAG = "<think>";
 const CLOSE_TAG = "</think>";
-const MAX_TAG_LEN = Math.max(OPEN_TAG.length, CLOSE_TAG.length);
 
 export class ThinkingTagParser {
 	private buffer = "";

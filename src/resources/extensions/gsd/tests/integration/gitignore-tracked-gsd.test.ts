@@ -84,7 +84,7 @@ test("hasGitTrackedGsdFiles returns false when .gsd/ exists but is untracked", (
 
 // ─── ensureGitignore — tracked .gsd/ protection ─────────────────────
 
-test("ensureGitignore does NOT add .gsd when .gsd/ has tracked files (#1364)", (t) => {
+test("ensureGitignore does NOT add .gsd when .gsd/ has tracked files (#1364)", (_t) => {
   const dir = makeTempRepo();
   try {
     // Set up .gsd/ with tracked files
@@ -114,7 +114,7 @@ test("ensureGitignore does NOT add .gsd when .gsd/ has tracked files (#1364)", (
   }
 });
 
-test("ensureGitignore adds granular runtime patterns when .gsd/ has tracked files", (t) => {
+test("ensureGitignore adds granular runtime patterns when .gsd/ has tracked files", (_t) => {
   // Regression: pre-completion close-out gate (auto-dispatch.ts) blocks when
   // RUNTIME_EXCLUSION_PATHS artifacts appear as untracked. They are excluded
   // from smartStage by design, so the auto-commit can never absorb them; the
@@ -169,7 +169,7 @@ test("ensureGitignore adds granular runtime patterns when .gsd/ has tracked file
   }
 });
 
-test("ensureGitignore adds .gsd when .gsd/ has NO tracked files", (t) => {
+test("ensureGitignore adds .gsd when .gsd/ has NO tracked files", (_t) => {
   const dir = makeTempRepo();
   try {
     // Run ensureGitignore (no .gsd/ at all)
@@ -198,7 +198,7 @@ test("ensureGitignore respects manageGitignore: false", (t) => {
 
 // ─── ensureGitignore — verify no tracked files become invisible ─────
 
-test("ensureGitignore with tracked .gsd/ does not cause git to see files as deleted", (t) => {
+test("ensureGitignore with tracked .gsd/ does not cause git to see files as deleted", (_t) => {
   const dir = makeTempRepo();
   try {
     // Create tracked .gsd/ files
@@ -232,7 +232,7 @@ test("ensureGitignore with tracked .gsd/ does not cause git to see files as dele
   }
 });
 
-test("hasGitTrackedGsdFiles returns true (fail-safe) when git is not available", (t) => {
+test("hasGitTrackedGsdFiles returns true (fail-safe) when git is not available", (_t) => {
   const dir = makeTempRepo();
   try {
     // Create and track .gsd/ files

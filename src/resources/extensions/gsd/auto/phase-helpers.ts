@@ -5,7 +5,7 @@ import { debugLog } from "../debug-logger.js";
 import { resolveWorktreeProjectRoot, normalizeWorktreePathForCompare } from "../worktree-root.js";
 import { decideVerificationRetry, verificationRetryKey } from "./verification-retry-policy.js";
 import type { AutoSession } from "./session.js";
-import type { IterationContext, IterationData, LoopState, PhaseResult } from "./types.js";
+import type { IterationContext, IterationData, PhaseResult } from "./types.js";
 import type { Phase } from "../types.js";
 
 /** Compare two paths for physical identity, tolerating trailing slashes and symlinks. */

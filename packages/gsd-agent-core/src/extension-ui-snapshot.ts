@@ -52,7 +52,6 @@ export function extensionUiSnapshotFromWebFields(fields: WebExtensionUiFields): 
 }
 
 export function applyExtensionUiSnapshotToWebFields(
-	fields: WebExtensionUiFields,
 	snapshot: ExtensionUiSnapshot,
 ): WebExtensionUiFields {
 	const widgetContents: WebExtensionUiFields["widgetContents"] = {};

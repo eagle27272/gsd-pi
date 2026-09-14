@@ -6,7 +6,6 @@ import assert from "node:assert/strict";
 
 test("ship: generates TL;DR format", () => {
   // Simulate generatePRContent output structure
-  const milestoneId = "M001";
   const milestoneTitle = "User authentication system";
 
   const title = `feat: ${milestoneTitle}`;

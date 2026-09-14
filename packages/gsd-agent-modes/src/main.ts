@@ -28,7 +28,6 @@ import { type CreateAgentSessionOptions, createAgentSession } from "@gsd/agent-c
 import { SessionManager } from "@gsd/pi-coding-agent/core/session-manager.js";
 import { SettingsManager } from "@gsd/pi-coding-agent/core/settings-manager.js";
 import { printTimings, time } from "@gsd/pi-coding-agent/core/timings.js";
-import { allTools } from "@gsd/pi-coding-agent/core/tools/index.js";
 import { runMigrations, showDeprecationWarnings } from "@gsd/pi-coding-agent/migrations.js";
 import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.js";
 import { initTheme, stopThemeWatcher } from "@gsd/pi-coding-agent/theme/theme.js";

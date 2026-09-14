@@ -14,7 +14,6 @@ import {
   insertMilestone,
   insertSlice,
   insertTask,
-  updateTaskStatus,
   getTask,
   claimEscalationOverride,
   findUnappliedEscalationOverride,
@@ -45,17 +44,6 @@ function makeBase(): string {
 function cleanup(base: string): void {
   try { closeDatabase(); } catch { /* noop */ }
   try { rmSync(base, { recursive: true, force: true }); } catch { /* noop */ }
-}
-
-function writePrefs(base: string, enabled: boolean): void {
-  const path = join(base, ".gsd", "PREFERENCES.md");
-  writeFileSync(path, [
-    "---",
-    "version: 1",
-    "phases:",
-    `  mid_execution_escalation: ${enabled}`,
-    "---",
-  ].join("\n"));
 }
 
 function seedCompletedTask(base: string, taskId: string): void {

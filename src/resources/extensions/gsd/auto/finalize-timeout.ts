@@ -27,7 +27,7 @@ export const FINALIZE_POST_TIMEOUT_MS = 60_000;
 export async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
-  label: string,
+  _label: string,
 ): Promise<{ value: T; timedOut: false } | { value: undefined; timedOut: true }> {
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 

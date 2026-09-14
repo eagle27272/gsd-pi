@@ -294,14 +294,6 @@ function assertSafeGitArg(value: string, label: string): string {
 	return value;
 }
 
-function assertSafeGitRepo(repo: string): string {
-	const safeRepo = assertSafeGitArg(repo, "repository");
-	if (/[\s]/u.test(safeRepo)) {
-		throw new Error(`Invalid git repository: ${repo}`);
-	}
-	return safeRepo;
-}
-
 function assertSafeGitRef(ref: string): string {
 	const safeRef = assertSafeGitArg(ref, "ref");
 	if (!/^[A-Za-z0-9._/@+-]+$/u.test(safeRef)) {

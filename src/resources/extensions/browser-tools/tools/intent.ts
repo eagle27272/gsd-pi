@@ -22,8 +22,6 @@ const INTENTS = [
 	"back_navigation",
 ] as const;
 
-type Intent = (typeof INTENTS)[number];
-
 // ---------------------------------------------------------------------------
 // Scoring evaluate script — runs entirely in-browser via page.evaluate()
 // ---------------------------------------------------------------------------

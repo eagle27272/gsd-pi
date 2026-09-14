@@ -15,7 +15,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-import type { GSDState, ActiveRef } from '../types.ts'
+import type { ActiveRef } from '../types.ts'
 
 // ─── Guard Under Test ────────────────────────────────────────────────────────
 // Extracted guard logic identical to headless-query.ts (line 74) and

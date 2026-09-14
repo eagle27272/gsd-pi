@@ -28,7 +28,6 @@ import { spawnSync } from "node:child_process";
 import {
   initMetrics,
   resetMetrics,
-  getLedger,
   snapshotUnitMetrics,
   STALE_LOCK_THRESHOLD_MS,
   type MetricsLedger,
@@ -248,7 +247,7 @@ describe("metrics lock hardening (M3)", () => {
 
   // ── Test 2: PID stamp in lock file ──────────────────────────────────────
 
-  test("lock file contains the acquiring process's PID while the lock is held", (t) => {
+  test("lock file contains the acquiring process's PID while the lock is held", (_t) => {
     const lp = lockPath(tmpDir);
 
     // Spawn a worker that acquires the lock, writes a PID stamp, and holds it.

@@ -7,8 +7,6 @@ import {
   getDecisionById,
   getActiveDecisions,
   getRequirementById,
-  getActiveRequirements,
-  insertArtifact,
   SCHEMA_VERSION,
   _getAdapter,
 } from '../gsd-db.ts';
@@ -17,7 +15,7 @@ import {
   parseRequirementsSections,
   migrateFromMarkdown,
 } from '../md-importer.ts';
-import { describe, test, beforeEach, afterEach } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 // ═══════════════════════════════════════════════════════════════════════════

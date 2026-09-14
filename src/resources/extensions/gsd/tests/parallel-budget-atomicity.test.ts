@@ -33,8 +33,6 @@ import {
 } from "../parallel-orchestrator.ts";
 import {
   writeSessionStatus,
-  readSessionStatus,
-  removeSessionStatus,
 } from "../session-status-io.ts";
 import type { GSDPreferences } from "../preferences.ts";
 

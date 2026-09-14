@@ -117,7 +117,6 @@ export class FooterComponent implements Component {
 
 		const usageTotals = this.session.sessionManager.getUsageTotals();
 		const totalInput = usageTotals.input;
-		const totalOutput = usageTotals.output;
 		const totalCacheRead = usageTotals.cacheRead;
 		const totalCacheWrite = usageTotals.cacheWrite;
 		const totalCost = usageTotals.cost;
