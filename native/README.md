@@ -18,7 +18,7 @@ Inspired by [Oh My Pi's pi-natives](https://github.com/can1357/oh-my-pi), adapte
 ## Prerequisites
 
 - **Rust** (stable, 1.70+): https://rustup.rs
-- **Node.js** (22.18.0+)
+- **Node.js** (24.20.0+)
 
 ## Build
 
