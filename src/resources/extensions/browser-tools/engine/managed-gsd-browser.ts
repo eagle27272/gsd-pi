@@ -206,7 +206,7 @@ export const MANAGED_BROWSER_TOOL_SPECS: Record<BrowserContractToolName, Managed
       "Use checks for URL, text, selector state, value, and browser diagnostics whenever those signals are available.",
     ],
     parameters: Type.Object({
-      checks: Type.Array(AssertionCheck),
+      checks: Type.Array(AssertionCheck, { minItems: 1 }),
     }, { additionalProperties: true }),
   },
   browser_verify: {

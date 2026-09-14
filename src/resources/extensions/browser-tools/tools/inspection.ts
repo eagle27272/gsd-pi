@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@gsd/pi-coding-agent";
 import { StringEnum, Type } from "@gsd/pi-ai";
 import type { ToolDeps } from "../state.js";
+import { clampElementLimit } from "../utils.js";
 import {
 	getConsoleLogs,
 	setConsoleLogs,
@@ -328,7 +329,7 @@ export function registerInspectionTools(pi: ExtensionAPI, deps: ToolDeps): void 
 			),
 			limit: Type.Optional(
 				Type.Number({
-					description: "Maximum number of results to return (default: 20).",
+					description: "Maximum number of results to return (default: 20, max: 200).",
 				})
 			),
 		}),
@@ -337,7 +338,7 @@ export function registerInspectionTools(pi: ExtensionAPI, deps: ToolDeps): void 
 			try {
 				await deps.ensureBrowser();
 				const target = deps.getActiveTarget();
-				const limit = params.limit ?? 20;
+				const limit = clampElementLimit(params.limit, 20);
 
 				const results = await target.evaluate(({ text, role, selector, limit }) => {
 					const root = selector ? document.querySelector(selector) : document.body;

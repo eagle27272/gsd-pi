@@ -147,6 +147,8 @@ export interface BrowserVerificationCheck {
 	passed: boolean;
 	value?: unknown;
 	expected?: unknown;
+	/** When true, the action is not verified unless this specific check passes. */
+	critical?: boolean;
 }
 
 export interface BrowserVerificationResult {
@@ -258,6 +260,14 @@ let _refMetadata: RefMetadata | null = null;
 export function getRefMetadata(): RefMetadata | null { return _refMetadata; }
 export function setRefMetadata(m: RefMetadata | null): void { _refMetadata = m; }
 
+// 12b. refSnapshotFrame — the exact frame the current ref map was captured in.
+// RefMetadata.frameContext is a display string and two same-src iframes share it;
+// the handle is the only unambiguous identity, and it must not be serialized into
+// tool `details`, so it lives here rather than on RefMetadata.
+let _refSnapshotFrame: Frame | null = null;
+export function getRefSnapshotFrame(): Frame | null { return _refSnapshotFrame; }
+export function setRefSnapshotFrame(f: Frame | null): void { _refSnapshotFrame = f; }
+
 // 13. actionTimeline (object with internal state)
 export const actionTimeline = createActionTimeline(60);
 export function getActionTimeline() { return actionTimeline; }
@@ -320,6 +330,7 @@ export function resetAllState(): void {
 	_currentRefMap = {};
 	_refVersion = 0;
 	_refMetadata = null;
+	_refSnapshotFrame = null;
 	_lastActionBeforeState = null;
 	_lastActionAfterState = null;
 	actionTimeline.entries = [];

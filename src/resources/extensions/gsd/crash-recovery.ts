@@ -26,10 +26,12 @@ import {
   queryJournal,
 } from "./journal.js";
 import { readFileSync, unlinkSync, existsSync } from "node:fs";
+import { hostname } from "node:os";
 import { join } from "node:path";
 import {
   findStaleWorkerForProject,
   getAllAutoWorkers,
+  isHeartbeatFresh,
   markWorkerStopping,
   markWorkerStoppingByPid,
   type AutoWorkerRow,
@@ -47,10 +49,17 @@ import { settleRunningAttemptsForWorker } from "./task-execution-domain-operatio
 
 export interface LockData {
   pid: number;
+  /**
+   * Host that issued `pid`. Absent on locks written before #16 — those fall
+   * back to the bare PID probe, which is all the data allows.
+   */
+  host?: string;
   startedAt: string;
   unitType: string;
   unitId: string;
   unitStartedAt: string;
+  /** Worker heartbeat, the only liveness evidence available across hosts (#16). */
+  lastHeartbeatAt?: string;
   /** Path to the pi session JSONL file that was active when this unit started. */
   sessionFile?: string;
 }
@@ -88,6 +97,8 @@ function findActiveWorkerForCurrentProcess(
   for (const worker of workers) {
     if (
       worker.pid === process.pid
+      // A same-numbered PID on another host is a different process (#16).
+      && worker.host === hostname()
       && worker.project_root_realpath === projectRootRealpath
     ) {
       return worker;
@@ -136,10 +147,12 @@ function runtimeRecordToLockData(worker: AutoWorkerRow, record: AutoUnitRuntimeR
     : worker.started_at;
   return {
     pid: worker.pid,
+    host: worker.host,
     startedAt: worker.started_at,
     unitType: record.unitType,
     unitId: record.unitId,
     unitStartedAt: startedAt,
+    lastHeartbeatAt: worker.last_heartbeat_at,
     sessionFile,
   };
 }
@@ -154,6 +167,7 @@ function workerToLockData(basePath: string, worker: AutoWorkerRow): LockData {
   }
   return {
     pid: worker.pid,
+    host: worker.host,
     startedAt: worker.started_at,
     // Pre-Phase-C-pt-2 default: when no dispatch row exists yet (bootstrap
     // crash), report unitType="starting", unitId="bootstrap" — same shape
@@ -161,6 +175,7 @@ function workerToLockData(basePath: string, worker: AutoWorkerRow): LockData {
     unitType: dispatch?.unit_type ?? "starting",
     unitId: dispatch?.unit_id ?? "bootstrap",
     unitStartedAt: dispatch?.started_at ?? worker.started_at,
+    lastHeartbeatAt: worker.last_heartbeat_at,
     sessionFile,
   };
 }
@@ -188,6 +203,7 @@ export function writeLock(
   try {
     const data: LockData = {
       pid: process.pid,
+      host: hostname(),
       startedAt: new Date().toISOString(),
       unitType,
       unitId,
@@ -239,9 +255,11 @@ export function clearLock(basePath: string): void {
     }
     if (legacyLock?.pid) {
       markWorkerStoppingByPid(projectRoot, legacyLock.pid);
+      const legacyHost = legacyLock.host ?? hostname();
       const workerByLegacyPid = getAllAutoWorkers().find(
         (w) =>
           w.pid === legacyLock.pid
+          && w.host === legacyHost
           && normalizeRealPath(w.project_root_realpath) === projectRoot,
       );
       if (workerByLegacyPid) forceReleaseLeasesForWorker(workerByLegacyPid.worker_id);
@@ -311,11 +329,19 @@ export function readCrashLock(basePath: string): LockData | null {
  * Uses `process.kill(pid, 0)` which sends no signal but checks liveness.
  * Returns true if the PID matches our own — we are the lock holder (#2470).
  *
- * Unchanged from the file-based era — pure stateless OS check.
+ * A `pid` is only resolvable on the host that issued it. For a lock owned by
+ * another host the local process table is not evidence in either direction,
+ * and a "dead" verdict here authorizes takeover — so those locks are judged
+ * on the worker heartbeat instead, and default to held when no heartbeat was
+ * recorded (#16). Locks written before #16 carry no `host` and keep the
+ * historical bare-PID behaviour.
  */
 export function isLockProcessAlive(lock: LockData): boolean {
   const pid = lock.pid;
   if (!Number.isInteger(pid) || pid <= 0) return false;
+  if (lock.host && lock.host !== hostname()) {
+    return lock.lastHeartbeatAt ? isHeartbeatFresh(lock.lastHeartbeatAt) : true;
+  }
   if (pid === process.pid) return true;
   try {
     process.kill(pid, 0);

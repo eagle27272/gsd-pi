@@ -18,7 +18,7 @@ function makeDeps(overrides: Partial<WorktreeStatusDependencies> = {}): Worktree
       { added: 5, removed: 1 },
       { added: 8, removed: 3 },
     ],
-    nativeHasChanges: () => true,
+    nativeWorkingTreeStatus: () => " M changed.ts",
     nativeDetectMainBranch: () => "main",
     nativeCommitCountBetween: () => 2,
     onDebugFailure: () => {},
@@ -51,7 +51,7 @@ test("getWorktreeStatus falls back loudly through debug callbacks when native ch
   const failures: string[] = [];
   const status = getWorktreeStatus(
     makeDeps({
-      nativeHasChanges: () => {
+      nativeWorkingTreeStatus: () => {
         throw new Error("dirty unavailable");
       },
       nativeDetectMainBranch: () => {
@@ -71,6 +71,29 @@ test("getWorktreeStatus falls back loudly through debug callbacks when native ch
   assert.equal(status.uncommitted, false);
   assert.equal(status.commits, 0);
   assert.deepEqual(failures, ["native commit count: main unavailable"]);
+});
+
+test("getWorktreeStatus reports uncommitted when an existing worktree's state cannot be read", () => {
+  const wtPath = mkdtempSync(join(tmpdir(), "gsd-worktree-cli-status-"));
+  try {
+    // `uncommitted` gates the auto-commit before a squash merge, so an
+    // unreadable worktree must not be reported as clean.
+    const status = getWorktreeStatus(
+      makeDeps({
+        nativeWorkingTreeStatus: () => {
+          throw new Error("dirty unavailable");
+        },
+      }),
+      "/repo",
+      "alpha",
+      wtPath,
+      "worktree/alpha",
+    );
+
+    assert.equal(status.uncommitted, true, "unknown worktree state must fail closed");
+  } finally {
+    rmSync(wtPath, { recursive: true, force: true });
+  }
 });
 
 test("hasWorktreeChanges checks changed files rather than uncommitted dirty state", () => {

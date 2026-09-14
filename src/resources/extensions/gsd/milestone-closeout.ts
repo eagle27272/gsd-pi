@@ -14,6 +14,7 @@ import {
   getClosedSliceIds,
   getLatestAssessmentByScope,
   getMilestoneSlices,
+  getSliceTasks,
   isDbAvailable,
 } from "./gsd-db.js";
 import { isClosedStatus } from "./status-guards.js";
@@ -49,6 +50,68 @@ import {
 const COMPLETE_MILESTONE_DB_SETTLE_MS = 1500;
 const COMPLETE_MILESTONE_DB_SETTLE_POLL_MS = 100;
 
+/** How far past the first "operational" mention the verdict for that class may appear. */
+const OPERATIONAL_SECTION_WINDOW = 2000;
+
+const VALIDATION_SKIP_MARKERS = [
+  /^skip_validation:\s*true$/im,
+  /skip(?:ped)?[\s\-]+(?:by|per|due to)\s+(?:preference|budget|profile)/i,
+  /trivial-scope pipeline variant/i,
+];
+
+/** "This class does not apply here" — a legitimate way to address the class. */
+const NOT_APPLICABLE_RE = /\b(?:n\/a|not[\s-]+(?:applicable|required|needed))\b/i;
+
+/**
+ * An explicitly negative outcome. Checked before the positive tokens because
+ * every negation embeds the positive word it negates.
+ */
+const NEGATED_OUTCOME_RE =
+  /\b(?:un(?:met|satisfied|covered|verified|addressed)|fail(?:s|ed|ing|ure)?)\b|\b(?:not|never|no)[\s-]+(?:met|satisfied|covered|passed?|verified|confirmed|addressed|complete[d]?|checked|done)\b/i;
+
+const POSITIVE_OUTCOME_RE =
+  /✅|\b(?:met|satisfied|covered|pass(?:ed|es)?|verified|confirmed|addressed|complete[d]?|partially|deferred|true|yes)\b/i;
+
+/**
+ * True when a VALIDATION document actually addresses the planned operational
+ * verification class.
+ *
+ * The previous matchers were presence-only over the whole document: `MET` is a
+ * substring of `NOT MET` and `PASS` of `PASSED`, so
+ * `"## Operational\nStatus: NOT MET. Every verification class FAILED."`
+ * satisfied both of them (#17). Text asserting that operational verification
+ * failed must not clear a milestone-completion gate.
+ *
+ * Scoped to the operational section so an unrelated "FAILED" elsewhere in the
+ * document does not block a milestone whose operational class is genuinely met.
+ */
+export function _operationalVerificationAddressed(validationContent: string): boolean {
+  if (VALIDATION_SKIP_MARKERS.some((re) => re.test(validationContent))) return true;
+
+  const mention = /operational/i.exec(validationContent);
+  if (!mention) return false;
+  const section = validationContent.slice(mention.index, mention.index + OPERATIONAL_SECTION_WINDOW);
+
+  if (NOT_APPLICABLE_RE.test(section)) return true;
+  if (NEGATED_OUTCOME_RE.test(section)) return false;
+  return POSITIVE_OUTCOME_RE.test(section);
+}
+
+/**
+ * True when any slice or task under the milestone is still open.
+ *
+ * `isClosedStatus` treats `cancelled` and `skipped` as closed, so a milestone
+ * row can read terminal while its slices and tasks are mid-flight. Git cleanup
+ * force-deletes branches, so it must see the whole tree, not just the
+ * milestone row (#11).
+ */
+function hasOpenMilestoneWork(milestoneId: string): boolean {
+  return getMilestoneSlices(milestoneId).some((slice) =>
+    !isClosedStatus(slice.status) ||
+    getSliceTasks(milestoneId, slice.id).some((task) => !isClosedStatus(task.status)),
+  );
+}
+
 /**
  * True when a milestone is terminal for git cleanup (orphaned worktrees, stale branches).
  * DB-authoritative (ADR-017): closed status, or validation-pass with all slices closed.
@@ -67,7 +130,9 @@ export async function isCompletedMilestoneTerminal(
 
   const lifecycleStatus = readMilestoneLifecycleStatus(milestoneId);
   if (lifecycleStatus) {
-    if (lifecycleStatus === "completed" || lifecycleStatus === "cancelled") return true;
+    if (lifecycleStatus === "completed" || lifecycleStatus === "cancelled") {
+      return !hasOpenMilestoneWork(milestoneId);
+    }
     const artifactBasePath = resolveCanonicalMilestoneRoot(basePath, milestoneId);
     const source = captureMilestoneVerificationSourceRevision(
       artifactBasePath,
@@ -78,14 +143,18 @@ export async function isCompletedMilestoneTerminal(
       sourceRevision: source.sourceRevision,
     }).authorized) return false;
   } else {
-    if (isClosedStatus(milestone.status)) return true;
+    if (isClosedStatus(milestone.status)) {
+      return !hasOpenMilestoneWork(milestoneId);
+    }
     const validation = getLatestAssessmentByScope(milestoneId, "milestone-validation");
     if (validation?.status !== "pass") return false;
   }
 
+  // No explicit closeout record — slice and task closure is the only evidence,
+  // so an empty slice set proves nothing.
   const slices = getMilestoneSlices(milestoneId);
   if (slices.length === 0) return false;
-  return slices.every((slice) => isClosedStatus(slice.status));
+  return !hasOpenMilestoneWork(milestoneId);
 }
 
 /** Write a missing milestone SUMMARY projection when canonical DB closeout already settled. */
@@ -310,21 +379,7 @@ export async function evaluateGuardedCompleteMilestoneDispatch(
         if (validationPath) {
           const validationContent = await loadFile(validationPath);
           if (validationContent) {
-            const skippedByMarker = /^skip_validation:\s*true$/im.test(validationContent);
-            const skippedByPreference = /skip(?:ped)?[\s\-]+(?:by|per|due to)\s+(?:preference|budget|profile)/i.test(validationContent);
-            const skippedByTrivialVariant = /trivial-scope pipeline variant/i.test(validationContent);
-            const structuredMatch =
-              validationContent.includes("Operational") &&
-              (validationContent.includes("MET") || validationContent.includes("N/A") || validationContent.includes("SATISFIED") || validationContent.includes("DEFERRED") || validationContent.includes("PASS") || validationContent.includes("COVERED"));
-            const proseMatch =
-              /[Oo]perational[\s\S]{0,2000}?(?:✅|pass|verified|confirmed|met|complete|true|yes|addressed|covered|satisfied|partially|deferred|n\/a|not[\s-]+applicable)/i.test(validationContent);
-            const hasOperationalCheck =
-              skippedByMarker ||
-              skippedByPreference ||
-              skippedByTrivialVariant ||
-              structuredMatch ||
-              proseMatch;
-            if (!hasOperationalCheck) {
+            if (!_operationalVerificationAddressed(validationContent)) {
               return {
                 action: "stop",
                 reason: `Milestone ${mid} has planned operational verification ("${milestone.verification_operational.substring(0, 100)}") but the validation output does not address it. Re-run validation with verification class awareness, or update the validation to document operational compliance.`,
@@ -336,7 +391,16 @@ export async function evaluateGuardedCompleteMilestoneDispatch(
       }
     }
   } catch (err) {
-    logWarning("dispatch", `verification class check failed: ${err instanceof Error ? err.message : String(err)}`);
+    // Fail closed (#17): this is a milestone-completion gate. Swallowing the
+    // error and falling through to dispatch let an unreadable VALIDATION or an
+    // unavailable DB complete the milestone as if the class had been verified.
+    const detail = err instanceof Error ? err.message : String(err);
+    logWarning("dispatch", `verification class check failed: ${detail}`);
+    return {
+      action: "stop",
+      reason: `Cannot complete milestone ${mid}: the operational verification-class check could not run (${detail}). Resolve the underlying error and retry — completing without it would skip a planned verification class.`,
+      level: "warning",
+    };
   }
 
   return {

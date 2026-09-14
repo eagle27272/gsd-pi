@@ -30,9 +30,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const jiti = require("jiti")(__dirname, { interopDefault: true, debug: false });
-const { EVALUATE_HELPERS_SOURCE } = jiti("../evaluate-helpers.ts");
-const { buildIntentScoringScript } = jiti("../tools/intent.ts");
-const { buildFormAnalysisScript } = jiti("../tools/forms.ts");
+const { EVALUATE_HELPERS_SOURCE } = jiti("../evaluate-helpers.js");
+const { buildIntentScoringScript } = jiti("../tools/intent.js");
+const { buildFormAnalysisScript } = jiti("../tools/forms.js");
 
 // ---------------------------------------------------------------------------
 // Browser lifecycle
@@ -678,5 +678,37 @@ describe("session HAR recording", () => {
 
     assert.ok(existsSync(harPath), "closeBrowser must flush the HAR before tearing the context down");
     assert.deepEqual(harUrls(harPath), [recordableUrl("closing")]);
+  });
+});
+
+// =========================================================================
+// 5. action-cache computeDomHash — real DOM
+// =========================================================================
+
+describe("computeDomHash", () => {
+  const { computeDomHash } = jiti("../tools/action-cache.js");
+
+  it("is stable for the same DOM", async () => {
+    await page.setContent("<div><button>Save</button><button>Delete</button></div>");
+    const h1 = await computeDomHash(page);
+    await page.setContent("<div><button>Save</button><button>Delete</button></div>");
+    const h2 = await computeDomHash(page);
+    assert.equal(h1, h2);
+  });
+
+  it("changes when same-tag siblings are reordered", async () => {
+    await page.setContent("<div><button>Save</button><button>Delete</button></div>");
+    const before = await computeDomHash(page);
+    await page.setContent("<div><button>Delete</button><button>Save</button></div>");
+    const after = await computeDomHash(page);
+    assert.notEqual(before, after);
+  });
+
+  it("changes when an element id changes", async () => {
+    await page.setContent('<div><button id="save">Go</button></div>');
+    const before = await computeDomHash(page);
+    await page.setContent('<div><button id="delete">Go</button></div>');
+    const after = await computeDomHash(page);
+    assert.notEqual(before, after);
   });
 });

@@ -25,12 +25,13 @@ import { Container, Markdown, Spacer, Text } from "@gsd/pi-tui";
 import { formatTokenCount } from "../shared/mod.js";
 import { getCurrentPhase } from "../shared/gsd-phase-state.js";
 import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.js";
+import { isChildProcessRunning, resolveSubagentExitCode } from "./child-exit.js";
 import {
 	type IsolationEnvironment,
 	type IsolationMode,
 	type MergeResult,
+	applyIsolationDelta,
 	createIsolation,
-	mergeDeltaPatches,
 	readIsolationMode,
 } from "./isolation.js";
 import { registerWorker, updateWorker } from "./worker-registry.js";
@@ -532,7 +533,7 @@ async function runSingleAgent(
 		if (launch.session.mode === "fork") currentResult.sessionFile = launch.session.sessionFile;
 		let wasAborted = false;
 
-		const exitCode = await new Promise<number>((resolve) => {
+		const exit = await new Promise<{ code: number; terminationSignal: NodeJS.Signals | null }>((resolve) => {
 			const bundledPaths = (process.env.GSD_BUNDLED_EXTENSION_PATHS ?? "").split(path.delimiter).map(s => s.trim()).filter(Boolean);
 			const extensionArgs = bundledPaths.flatMap(p => ["--extension", p]);
 			const proc = spawn(
@@ -554,33 +555,39 @@ async function runSingleAgent(
 				currentResult.stderr += data.toString();
 			});
 
-			proc.on("close", (code) => {
+			proc.on("close", (code, terminationSignal) => {
 				liveSubagentProcesses.delete(proc);
 				if (buffer.trim()) processSubagentEventLine(buffer, currentResult, emitUpdate);
-				resolve(code ?? 0);
+				resolve({ code: resolveSubagentExitCode(code, terminationSignal), terminationSignal });
 			});
 
 			proc.on("error", () => {
 				liveSubagentProcesses.delete(proc);
-				resolve(1);
+				resolve({ code: 1, terminationSignal: null });
 			});
 
 			if (signal) {
 				const killProc = () => {
 					wasAborted = true;
 					proc.kill("SIGTERM");
-					setTimeout(() => {
-						if (!proc.killed) proc.kill("SIGKILL");
+					const escalation = setTimeout(() => {
+						if (isChildProcessRunning(proc)) proc.kill("SIGKILL");
 					}, 5000);
+					escalation.unref?.();
 				};
 				if (signal.aborted) killProc();
 				else signal.addEventListener("abort", killProc, { once: true });
 			}
 		});
 
-		currentResult.exitCode = exitCode;
+		currentResult.exitCode = exit.code;
 		currentResult.running = false;
 		if (wasAborted) throw new Error("Subagent was aborted");
+		if (exit.terminationSignal !== null) {
+			currentResult.stopReason = "error";
+			currentResult.errorMessage = `Subagent was killed by signal ${exit.terminationSignal}.`;
+			currentResult.stderr = currentResult.stderr || currentResult.errorMessage;
+		}
 		markMissingFinalResponse(currentResult);
 		return currentResult;
 	} finally {
@@ -1148,19 +1155,7 @@ export default function (pi: ExtensionAPI) {
 								projectRootSourceCwd: isolation ? effectiveCwd : undefined,
 							},
 						);
-						if (isolation && result.exitCode === 0) {
-							const patches = await isolation.captureDelta();
-							if (patches.length > 0) {
-								const mergeResult = await mergeDeltaPatches(effectiveCwd, patches);
-								result.mergeResult = mergeResult;
-								if (!mergeResult.success) {
-									result.exitCode = 1;
-									result.stopReason = "error";
-									result.errorMessage = `Patch merge failed: ${mergeResult.error || "unknown error"}`;
-									result.stderr = result.stderr || result.errorMessage;
-								}
-							}
-						}
+						await applyIsolationDelta(isolation, effectiveCwd, result);
 						finalResults = [result];
 						finishDispatch([result]);
 					} catch (err) {
@@ -1351,19 +1346,7 @@ export default function (pi: ExtensionAPI) {
 								projectRoot,
 								isolation ? effectiveCwd : undefined,
 							);
-							if (isolation && result.exitCode === 0) {
-								const patches = await isolation.captureDelta();
-								const mergeResult = patches.length > 0
-									? await mergeDeltaPatches(effectiveCwd, patches)
-									: { success: true, appliedPatches: [], failedPatches: [] };
-								result.mergeResult = mergeResult;
-								if (!mergeResult.success) {
-									result.exitCode = 1;
-									result.stopReason = "error";
-									result.errorMessage = `Patch merge failed: ${mergeResult.error || "unknown error"}`;
-									result.stderr = result.stderr || result.errorMessage;
-								}
-							}
+							await applyIsolationDelta(isolation, effectiveCwd, result);
 							return result;
 						} finally {
 							if (isolation) await isolation.cleanup();
@@ -1446,20 +1429,9 @@ export default function (pi: ExtensionAPI) {
 					);
 					finalResults = [result];
 
-					// Capture and merge delta if isolated
-					if (isolation) {
-						const patches = await isolation.captureDelta();
-						if (patches.length > 0) {
-							mergeResult = await mergeDeltaPatches(effectiveCwd, patches);
-							result.mergeResult = mergeResult;
-							if (!mergeResult.success) {
-								result.exitCode = 1;
-								result.stopReason = "error";
-								result.errorMessage = `Patch merge failed: ${mergeResult.error || "unknown error"}`;
-								result.stderr = result.stderr || result.errorMessage;
-							}
-						}
-					}
+					// Capture and merge delta if isolated and the agent actually succeeded
+					await applyIsolationDelta(isolation, effectiveCwd, result);
+					mergeResult = result.mergeResult;
 
 					const isError = result.exitCode !== 0 || result.stopReason === "error" || result.stopReason === "aborted";
 					if (isError) {

@@ -85,7 +85,7 @@ describe("cleanupMergedMilestoneWorktree", () => {
       clearProjectRootStateFiles: () => calls.push("clear-state"),
       removeWorktree: () => {
         calls.push("remove-worktree");
-        return false;
+        return { removed: false, quarantinePath: null };
       },
       nativeBranchDelete: () => calls.push("delete-branch"),
       setActiveWorkspace: () => calls.push("clear-active-workspace"),

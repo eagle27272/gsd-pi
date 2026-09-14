@@ -381,9 +381,11 @@ async function runSingleAgent(
 				currentResult.stderr += data.toString();
 			});
 
-			proc.on("close", (code) => {
+			proc.on("close", (code, terminationSignal) => {
 				if (buffer.trim()) processLine(buffer);
-				resolve(code ?? 0);
+				// A signal-killed child has a null code; reporting 0 for it would make a
+				// SIGKILLed subagent look like it succeeded.
+				resolve(terminationSignal !== null ? 1 : (code ?? 1));
 			});
 
 			proc.on("error", () => {
@@ -394,8 +396,10 @@ async function runSingleAgent(
 				const killProc = () => {
 					wasAborted = true;
 					proc.kill("SIGTERM");
+					// `proc.killed` is true the instant kill() is called, so it cannot gate
+					// the escalation — check actual liveness instead.
 					setTimeout(() => {
-						if (!proc.killed) proc.kill("SIGKILL");
+						if (proc.exitCode === null && proc.signalCode === null) proc.kill("SIGKILL");
 					}, 5000);
 				};
 				if (signal.aborted) killProc();
