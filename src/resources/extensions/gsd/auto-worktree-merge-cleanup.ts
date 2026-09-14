@@ -78,10 +78,18 @@ export function cleanupMergedMilestoneWorktree(
 
   let worktreeRemoved = true;
   try {
-    worktreeRemoved = deps.removeWorktree(projectRoot, milestoneId, {
+    const removal = deps.removeWorktree(projectRoot, milestoneId, {
       branch: milestoneBranch,
       deleteBranch: false,
     });
+    worktreeRemoved = removal.removed;
+    if (removal.quarantinePath) {
+      logWarning(
+        "reconcile",
+        `Uncommitted work in ${milestoneId} was quarantined at ${removal.quarantinePath} during milestone cleanup. ` +
+          `Recover the files you need from there before deleting it.`,
+      );
+    }
   } catch (err) {
     worktreeRemoved = false;
     logWarning("worktree", `worktree removal failed: ${err instanceof Error ? err.message : String(err)}`);

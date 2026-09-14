@@ -48,12 +48,33 @@ export function _resetPreTeardownSafetyDepsForTests(): void {
 }
 
 /**
+ * Build the abort error before restoring the cwd, so a failing `chdir` cannot
+ * swallow an abort that was already decided.
+ */
+function abortTeardown(previousCwd: string, message: string): never {
+  const abort = new GSDError(GSD_GIT_ERROR, message);
+  try {
+    deps.chdir(previousCwd);
+  } catch (err) {
+    deps.debugLog("mergeMilestoneToMain", {
+      phase: "pre-teardown-chdir-failed",
+      error: String(err),
+    });
+  }
+  throw abort;
+}
+
+/**
  * Abort teardown when the milestone worktree still has uncommitted changes.
  *
  * The guard is intentionally scoped to worktree paths that are still on the
  * milestone branch. In branch-mode or parallel merge paths, `worktreeCwd` can
  * point at the integration branch; blocking on that dirty state would conflate
  * unrelated milestones and preserve the wrong recovery ref.
+ *
+ * Every step fails closed: an unreadable branch or an unreadable status leaves
+ * the worktree in an unknown state, and teardown deletes work irreversibly, so
+ * the unknown case aborts rather than proceeds.
  */
 export function assertMilestoneWorktreeCleanBeforeTeardown(
   request: PreTeardownSafetyRequest,
@@ -62,8 +83,10 @@ export function assertMilestoneWorktreeCleanBeforeTeardown(
   if (!deps.existsSync(worktreeCwd)) return;
 
   let preTeardownBranch: string | null = null;
+  let branchDetected = false;
   try {
     preTeardownBranch = deps.nativeGetCurrentBranch(worktreeCwd);
+    branchDetected = true;
   } catch (err) {
     deps.debugLog("mergeMilestoneToMain", {
       phase: "pre-teardown-branch-detect-failed",
@@ -71,23 +94,28 @@ export function assertMilestoneWorktreeCleanBeforeTeardown(
     });
   }
 
-  if (preTeardownBranch !== milestoneBranch) return;
+  if (branchDetected && preTeardownBranch !== milestoneBranch) return;
 
+  let dirtyCheck: string;
   try {
-    const dirtyCheck = deps.nativeWorkingTreeStatus(worktreeCwd);
-    if (!dirtyCheck) return;
-
-    deps.chdir(previousCwd);
-    throw new GSDError(
-      GSD_GIT_ERROR,
-      `Milestone worktree still has uncommitted changes after squash merge. ` +
-        `Aborting teardown to preserve ${milestoneBranch}. Status:\n${dirtyCheck}`,
-    );
+    dirtyCheck = deps.nativeWorkingTreeStatus(worktreeCwd, { allowFailure: false });
   } catch (err) {
-    if (err instanceof GSDError) throw err;
     deps.debugLog("mergeMilestoneToMain", {
       phase: "pre-teardown-dirty-check-error",
       error: String(err),
     });
+    abortTeardown(
+      previousCwd,
+      `Milestone worktree state could not be verified before teardown. ` +
+        `Aborting teardown to preserve ${milestoneBranch}. Error: ${String(err)}`,
+    );
   }
+
+  if (!dirtyCheck) return;
+
+  abortTeardown(
+    previousCwd,
+    `Milestone worktree still has uncommitted changes after squash merge. ` +
+      `Aborting teardown to preserve ${milestoneBranch}. Status:\n${dirtyCheck}`,
+  );
 }

@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { tmpdir, hostname } from "node:os";
 
 import { openDatabase, closeDatabase } from "../gsd-db.ts";
 import { _getAdapter } from "../gsd-db.ts";
@@ -17,8 +17,25 @@ import {
   getActiveAutoWorkers,
   getAutoWorker,
   findStaleWorkerForProject,
+  isAutoWorkerLive,
   isDeadLocalAutoWorker,
 } from "../db/auto-workers.ts";
+
+const FOREIGN_HOST = `${hostname()}-not-this-box`;
+/** High enough to be free on a fresh box, so the local PID probe says "dead". */
+const DEAD_PID = 999999999;
+
+function setWorkerHostAndPid(workerId: string, host: string, pid: number): void {
+  _getAdapter()!.prepare(
+    `UPDATE workers SET host = :host, pid = :pid WHERE worker_id = :worker_id`,
+  ).run({ ":host": host, ":pid": pid, ":worker_id": workerId });
+}
+
+function expireHeartbeat(workerId: string): void {
+  _getAdapter()!.prepare(
+    `UPDATE workers SET last_heartbeat_at = '1970-01-01T00:00:00.000Z' WHERE worker_id = :worker_id`,
+  ).run({ ":worker_id": workerId });
+}
 
 function makeBase(): string {
   const base = mkdtempSync(join(tmpdir(), "gsd-auto-workers-"));
@@ -163,6 +180,89 @@ for (const status of ["pending", "claimed", "running"] as const) {
     assert.equal(isDeadLocalAutoWorker(id, base), true);
   });
 }
+
+// ─── Cross-host liveness (#16) ───────────────────────────────────────────
+// A PID is only meaningful on the host that issued it. When the worker row
+// belongs to another host the local process table proves nothing, so the
+// heartbeat TTL is the only admissible evidence.
+
+test("#16: findStaleWorkerForProject leaves a foreign-host worker alone while its heartbeat is fresh", (t) => {
+  const base = makeBase();
+  t.after(() => cleanup(base));
+  openDatabase(join(base, ".gsd", "gsd.db"));
+
+  const id = registerAutoWorker({ projectRootRealpath: base });
+  setWorkerHostAndPid(id, FOREIGN_HOST, DEAD_PID);
+
+  assert.equal(
+    findStaleWorkerForProject(base),
+    null,
+    "a live remote holder must not be swept just because its PID is absent here",
+  );
+});
+
+test("#16: findStaleWorkerForProject sweeps a foreign-host worker once its heartbeat lapses", (t) => {
+  const base = makeBase();
+  t.after(() => cleanup(base));
+  openDatabase(join(base, ".gsd", "gsd.db"));
+
+  const id = registerAutoWorker({ projectRootRealpath: base });
+  setWorkerHostAndPid(id, FOREIGN_HOST, DEAD_PID);
+  expireHeartbeat(id);
+
+  const stale = findStaleWorkerForProject(base);
+  assert.ok(stale, "a lapsed heartbeat is the only liveness signal available for a remote host");
+  assert.equal(stale!.worker_id, id);
+});
+
+test("#16: findStaleWorkerForProject ignores a foreign-host PID that collides with a live local one", (t) => {
+  const base = makeBase();
+  t.after(() => cleanup(base));
+  openDatabase(join(base, ".gsd", "gsd.db"));
+
+  const id = registerAutoWorker({ projectRootRealpath: base });
+  setWorkerHostAndPid(id, FOREIGN_HOST, process.pid);
+  expireHeartbeat(id);
+
+  const stale = findStaleWorkerForProject(base);
+  assert.ok(stale, "our own PID says nothing about a worker registered on another host");
+  assert.equal(stale!.worker_id, id);
+});
+
+test("#16: isAutoWorkerLive trusts a fresh heartbeat from a foreign host", (t) => {
+  const base = makeBase();
+  t.after(() => cleanup(base));
+  openDatabase(join(base, ".gsd", "gsd.db"));
+
+  const id = registerAutoWorker({ projectRootRealpath: base });
+  setWorkerHostAndPid(id, FOREIGN_HOST, DEAD_PID);
+
+  assert.equal(isAutoWorkerLive(id), true);
+});
+
+test("#16: isAutoWorkerLive rejects a foreign host whose heartbeat lapsed", (t) => {
+  const base = makeBase();
+  t.after(() => cleanup(base));
+  openDatabase(join(base, ".gsd", "gsd.db"));
+
+  const id = registerAutoWorker({ projectRootRealpath: base });
+  setWorkerHostAndPid(id, FOREIGN_HOST, process.pid);
+  expireHeartbeat(id);
+
+  assert.equal(isAutoWorkerLive(id), false);
+});
+
+test("#16: isDeadLocalAutoWorker never claims a foreign-host worker is dead", (t) => {
+  const base = makeBase();
+  t.after(() => cleanup(base));
+  openDatabase(join(base, ".gsd", "gsd.db"));
+
+  const id = registerAutoWorker({ projectRootRealpath: base });
+  setWorkerHostAndPid(id, FOREIGN_HOST, DEAD_PID);
+  expireHeartbeat(id);
+
+  assert.equal(isDeadLocalAutoWorker(id, base), false);
+});
 
 test("findStaleWorkerForProject ignores a stopping worker with no active dispatch (#1773)", (t) => {
   const base = makeBase();

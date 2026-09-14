@@ -171,10 +171,12 @@ export async function checkRuntimeHealth(
             try {
               if (isLockProcessAlive({
                 pid: worker.pid,
+                host: worker.host,
                 startedAt: worker.started_at,
                 unitType: "starting",
                 unitId: "bootstrap",
                 unitStartedAt: worker.started_at,
+                lastHeartbeatAt: worker.last_heartbeat_at,
               })) {
                 lockHolderAlive = true;
                 break;

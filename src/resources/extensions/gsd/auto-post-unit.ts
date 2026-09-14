@@ -112,7 +112,7 @@ import { validateArtifact } from "./schemas/validate.js";
 import { verificationRetryKey } from "./auto/verification-retry-policy.js";
 import { saveCustomVerifyRetryCounts } from "./auto/custom-verify-retry-store.js";
 import { getLedger } from "./metrics.js";
-import { getUnitCostSpikeAction, resolveUnitCostSpikeMultiplier } from "./auto-budget.js";
+import { getUnitCostSpikeAction, resolveUnitCostSpikeMultiplier, splitUnitCostBaseline } from "./auto-budget.js";
 import { resolveCanonicalMilestoneRoot } from "./worktree-manager.js";
 import {
   isTaskAttemptAwaitingVerification,
@@ -366,24 +366,7 @@ const DEFAULT_PER_UNIT_COST_CAP_USD = 5.0;
 const MAX_PRE_EXEC_RETRIES = 2;
 
 function getCurrentUnitCostStats(unitId: string): { unitCostUsd: number; rollingAvgUsd: number } {
-  const ledger = getLedger();
-  if (!ledger || !Array.isArray(ledger.units) || ledger.units.length === 0) {
-    return { unitCostUsd: 0, rollingAvgUsd: 0 };
-  }
-  let unitCostUsd = 0;
-  let totalCost = 0;
-  let totalUnits = 0;
-  for (const unit of ledger.units) {
-    const cost = typeof unit?.cost === "number" ? unit.cost : 0;
-    if (!Number.isFinite(cost) || cost < 0) continue;
-    totalCost += cost;
-    totalUnits++;
-    if (unit?.id === unitId) unitCostUsd += cost;
-  }
-  return {
-    unitCostUsd,
-    rollingAvgUsd: totalUnits > 0 ? totalCost / totalUnits : 0,
-  };
+  return splitUnitCostBaseline(getLedger()?.units, unitId);
 }
 
 async function hasArtifactCostGuardAdvancedPastUnit(
@@ -1170,20 +1153,36 @@ const TASK_COMPLETION_TOOL_NAMES = new Set(["gsd_task_complete", "gsd_complete_t
  * validate-milestone unit may only complete when its save actually persisted.
  * Returns null when the durable receipt exists, else an error naming the
  * missing artifact and the owning save tool.
+ *
+ * `unitStartedAtMs` scopes the UAT receipt to *this* run. UAT rows are only
+ * deleted at task or milestone scope (`gsd-db.ts`), so a reopened slice still
+ * carries the verdict from its previous run. The check used to select `status`
+ * and then discard it, accepting any row that existed — which passed a run-uat
+ * unit that saved nothing at all (#17).
  */
-function missingDurableSaveReceipt(unitType: string, unitId: string): string | null {
+function missingDurableSaveReceipt(unitType: string, unitId: string, unitStartedAtMs: number): string | null {
   if (!isDbAvailable()) return null;
   const db = _getAdapter();
   if (!db) return null;
   if (unitType === "run-uat") {
     const { milestone, slice } = parseUnitId(unitId);
     const row = db.prepare(`
-      SELECT status FROM quality_gates
+      SELECT status, evaluated_at FROM quality_gates
       WHERE milestone_id = :milestone_id AND slice_id = :slice_id
         AND gate_id = 'UAT' AND (task_id = '' OR task_id IS NULL)
     `).get({ ":milestone_id": milestone, ":slice_id": slice }) as Record<string, unknown> | undefined;
-    if (!row) {
-      return `Artifact verification failed: UAT verdict for ${unitId} was not durably persisted (no quality_gates UAT row). Re-call gsd_uat_result_save with the existing evidence.`;
+    const staleBefore = Number.isFinite(unitStartedAtMs) ? new Date(unitStartedAtMs).toISOString() : null;
+    const evaluatedAt = typeof row?.evaluated_at === "string" ? row.evaluated_at : null;
+    const persistedThisRun =
+      row !== undefined &&
+      row.status === "complete" &&
+      evaluatedAt !== null &&
+      (staleBefore === null || evaluatedAt >= staleBefore);
+    if (!persistedThisRun) {
+      const detail = row === undefined
+        ? "no quality_gates UAT row"
+        : `the quality_gates UAT row is from a previous run (status=${String(row.status)}, evaluated_at=${evaluatedAt ?? "never"})`;
+      return `Artifact verification failed: UAT verdict for ${unitId} was not durably persisted (${detail}). Re-call gsd_uat_result_save with the existing evidence.`;
     }
     return null;
   }
@@ -2087,7 +2086,11 @@ export async function postUnitPreVerification(pctx: PostUnitContext, opts?: PreV
         triggerArtifactVerified &&
         (s.currentUnit.type === "run-uat" || s.currentUnit.type === "validate-milestone")
       ) {
-        durableReceiptFailure = missingDurableSaveReceipt(s.currentUnit.type, s.currentUnit.id);
+        durableReceiptFailure = missingDurableSaveReceipt(
+          s.currentUnit.type,
+          s.currentUnit.id,
+          s.currentUnit.startedAt,
+        );
         if (durableReceiptFailure) {
           triggerArtifactVerified = false;
           debugLog("postUnit", {

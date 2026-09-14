@@ -24,7 +24,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 import type { TaskRow } from "./db-task-slice-rows.js";
 import type { PreExecutionCheckJSON } from "./verification-evidence.ts";
 import { validateVerificationCommand } from "./verification-gate.js";
-import { isClosedStatus } from "./status-guards.js";
+import { isClosedStatus, toStatus } from "./status-guards.js";
 import { FRAMEWORK_METADATA_DIRS, PLANNING_ARTIFACT_NAME_RE } from "./paths.js";
 
 const NPM_COMMAND = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -525,6 +525,18 @@ function containsGlobPattern(candidate: string): boolean {
   return ["*", "?", "[", "]", "{", "}"].some((char) => candidate.includes(char));
 }
 
+/**
+ * True when a task has actually run to completion, so its expected_output is
+ * already on hand. `TaskRow.status` is free-form (`db-task-slice-rows.ts`) and
+ * the store writes canonical `"complete"` (`gsd-db.ts`), so this normalizes
+ * through `toStatus` to also accept the legacy `done`/`closed` aliases.
+ * Deliberately narrower than `isClosedStatus`: a skipped or cancelled task is
+ * closed but never ran, so its outputs must not be treated as available.
+ */
+function hasTaskProducedOutputs(status: string): boolean {
+  return toStatus(status) === "complete";
+}
+
 function toComparisonPath(filePath: string, basePath: string): string {
   const normalized = normalizeFilePath(filePath);
   if (!isAbsolute(normalized)) return normalized;
@@ -544,7 +556,7 @@ function getExpectedOutputsUpTo(tasks: TaskRow[], taskIndex: number): Set<string
   for (let i = 0; i < tasks.length; i++) {
     const task = tasks[i];
     // Include prior tasks (i < taskIndex) OR completed tasks at any position
-    if (i < taskIndex || task.status === "completed") {
+    if (i < taskIndex || hasTaskProducedOutputs(task.status)) {
       for (const file of task.expected_output) {
         outputs.add(normalizeFilePath(file));
       }
@@ -771,12 +783,13 @@ export function checkTaskOrdering(
     for (const file of task.expected_output) {
       const normalizedFile = toComparisonPath(file, basePath);
       const existing = fileCreators.get(normalizedFile);
-      if (!existing || (!existing.completed && task.status === "completed")) {
+      const taskCompleted = hasTaskProducedOutputs(task.status);
+      if (!existing || (!existing.completed && taskCompleted)) {
         fileCreators.set(normalizedFile, {
           taskId: task.id,
           index: i,
           originalPath: file,
-          completed: task.status === "completed",
+          completed: taskCompleted,
         });
       }
     }

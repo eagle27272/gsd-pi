@@ -1,7 +1,7 @@
 // Project/App: gsd-pi
 // File Purpose: Auto-loop unit execution phase.
 
-import { importExtensionModule } from "@gsd/pi-coding-agent";
+import { importExtensionModule, type ExtensionContext } from "@gsd/pi-coding-agent";
 import type { SidecarItem, AutoSession } from "./session.js";
 import { resetEvidence, loadEvidenceFromDisk } from "../safety/evidence-collector.js";
 import { captureRootDirtySnapshot } from "../root-write-leak-guard.js";
@@ -109,6 +109,63 @@ export function _shouldProceedWithInvalidRepoClassificationForTest(
   hasGit: boolean,
 ): boolean {
   return reason === "missing .git" && hasGit;
+}
+
+/**
+ * Unit-end statuses that mean the unit failed, for safety-harness purposes.
+ *
+ * `UnitResult.status` never carries "error" — every real failure resolves as
+ * "cancelled" with an errorContext (auto/run-unit.ts, auto/resolve.ts) — and a
+ * unit that returned "completed" without its artifact is reported as
+ * "no-artifact". Keying the harness off "error" (#17) left `rollbackToCheckpoint`
+ * with no reachable call site and routed a no-artifact failure into checkpoint
+ * cleanup, destroying the very ref a rollback would have needed.
+ */
+const FAILED_UNIT_END_STATUSES: ReadonlySet<string> = new Set(["cancelled", "no-artifact"]);
+
+/** What to do with the pre-unit checkpoint once a unit has stopped. */
+export function _resolveCheckpointDisposition(
+  unitEndStatus: string,
+  autoRollback: boolean,
+): "rollback" | "retain" | "cleanup" {
+  if (!FAILED_UNIT_END_STATUSES.has(unitEndStatus)) return "cleanup";
+  return autoRollback ? "rollback" : "retain";
+}
+
+/**
+ * Apply the checkpoint disposition and clear the session's checkpoint handle.
+ *
+ * Only called on paths where the unit has genuinely stopped. A recoverable
+ * pause or a cooldown retry deliberately leaves `s.checkpointSha` in place: the
+ * same unit is about to run again and still needs its pre-unit safety net.
+ */
+function settleUnitCheckpoint(
+  s: AutoSession,
+  ctx: Pick<ExtensionContext, "ui">,
+  unitId: string,
+  unitEndStatus: string,
+  autoRollback: boolean,
+): void {
+  if (!s.checkpointSha) return;
+  switch (_resolveCheckpointDisposition(unitEndStatus, autoRollback)) {
+    case "rollback":
+      if (rollbackToCheckpoint(s.basePath, unitId, s.checkpointSha)) {
+        ctx.ui.notify(`Rolled back to pre-unit checkpoint for ${unitId}`, "info");
+        debugLog("runUnitPhase", { phase: "checkpoint-rollback", unitId });
+      }
+      break;
+    case "retain":
+      ctx.ui.notify(
+        `Unit ${unitId} failed. Pre-unit checkpoint available at ${s.checkpointSha.slice(0, 8)}`,
+        "warning",
+      );
+      break;
+    case "cleanup":
+      cleanupCheckpoint(s.basePath, unitId);
+      debugLog("runUnitPhase", { phase: "checkpoint-cleaned", unitId });
+      break;
+  }
+  s.checkpointSha = null;
 }
 
 function observeTaskPlan(s: AutoSession, unitType: string, unitId: string): void {
@@ -811,7 +868,12 @@ export async function runUnitPhase(
       await emitCancelledUnitEnd(ic, unitType, unitId, unitStartSeq, unitResult.errorContext);
       return { action: "break", reason: "unit-aborted-pause" };
     }
-    // All other cancelled states (structural errors, non-transient failures): hard stop
+    // All other cancelled states (structural errors, non-transient failures): hard stop.
+    // This is the only terminal failure exit from the cancelled branch, so it owns
+    // the safety harness here — the shared handler further down is never reached
+    // once this branch returns (#17). Settle before closeout/auto-commit so a
+    // rollback discards the failed unit's work rather than committing it.
+    settleUnitCheckpoint(s, ctx, unitId, "cancelled", safetyConfig.auto_rollback);
     if (s.currentUnit) {
       await deps.closeoutUnit(
         ctx,
@@ -1001,25 +1063,7 @@ export async function runUnitPhase(
   deps.emitJournalEvent({ ts: new Date().toISOString(), flowId: ic.flowId, seq: ic.nextSeq(), eventType: "unit-end", data: { unitType, unitId, status: unitEndStatus, artifactVerified, ...(unitResult.errorContext ? { errorContext: unitResult.errorContext } : {}) }, causedBy: { flowId: ic.flowId, seq: unitStartSeq } });
 
   // ── Safety harness: checkpoint cleanup or rollback ──
-  if (s.checkpointSha) {
-    if (unitResult.status === "error" && safetyConfig.auto_rollback) {
-      const rolled = rollbackToCheckpoint(s.basePath, unitId, s.checkpointSha);
-      if (rolled) {
-        ctx.ui.notify(`Rolled back to pre-unit checkpoint for ${unitId}`, "info");
-        debugLog("runUnitPhase", { phase: "checkpoint-rollback", unitId });
-      }
-    } else if (unitResult.status === "error") {
-      ctx.ui.notify(
-        `Unit ${unitId} failed. Pre-unit checkpoint available at ${s.checkpointSha.slice(0, 8)}`,
-        "warning",
-      );
-    } else {
-      // Success — clean up checkpoint ref
-      cleanupCheckpoint(s.basePath, unitId);
-      debugLog("runUnitPhase", { phase: "checkpoint-cleaned", unitId });
-    }
-    s.checkpointSha = null;
-  }
+  settleUnitCheckpoint(s, ctx, unitId, unitEndStatus, safetyConfig.auto_rollback);
 
   if (unitEndStatus === "no-artifact" && unitType === "complete-slice") {
     let failedToolResult: { toolName?: unknown; content?: unknown } | undefined;

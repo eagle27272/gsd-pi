@@ -291,13 +291,20 @@ export function nativeHasMergeConflicts(basePath: string): boolean {
  * Get working tree status (porcelain format).
  * Native: reads status via libgit2.
  * Fallback: `git status --porcelain`.
+ *
+ * The fallback returns "" for both a clean tree and a failed `git status`.
+ * Callers that treat "" as proof of cleanliness before destroying work must
+ * pass `allowFailure: false` so the failure surfaces as a throw instead.
  */
-export function nativeWorkingTreeStatus(basePath: string): string {
+export function nativeWorkingTreeStatus(
+  basePath: string,
+  opts: { allowFailure?: boolean } = {},
+): string {
   const native = loadNative();
   if (native) {
     return native.gitWorkingTreeStatus(basePath);
   }
-  return gitExec(basePath, ["status", "--porcelain"], true);
+  return gitExec(basePath, ["status", "--porcelain"], opts.allowFailure ?? true);
 }
 
 // ─── nativeHasChanges fallback cache (10s TTL) ─────────────────────────

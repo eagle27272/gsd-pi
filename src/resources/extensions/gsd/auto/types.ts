@@ -67,7 +67,14 @@ export interface ErrorContext {
  * Result of a single unit execution (one iteration of the loop).
  */
 export interface UnitResult {
-  status: "completed" | "cancelled" | "error";
+  /**
+   * Only two states are ever produced. A failure — provider error, timeout,
+   * abort, structural fault — resolves as "cancelled" carrying an
+   * `errorContext`; there is no separate "error" state. The union used to
+   * advertise one, and the safety harness keyed its rollback off it, which made
+   * that rollback unreachable (#17).
+   */
+  status: "completed" | "cancelled";
   event?: AgentEndEvent;
   errorContext?: ErrorContext;
   requestDispatchedAt?: number;
