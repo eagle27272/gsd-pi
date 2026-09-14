@@ -1130,6 +1130,34 @@ describe('createMcpServer tool registration', () => {
     assert.equal(payload.status, 'running');
   });
 
+  it('secure_env_collect only advertises .env-family write destinations', async () => {
+    const { server } = await createMcpServer(sm, { includeWorkflowTools: false });
+    const secureTool = (server as any)._registeredTools?.secure_env_collect;
+    assert.ok(secureTool, 'secure_env_collect should be registered');
+
+    const parse = (envFilePath: string) =>
+      secureTool.inputSchema.safeParse({
+        projectDir: '/tmp/secure-env-schema',
+        keys: [{ key: 'API_KEY' }],
+        envFilePath,
+      }).success;
+
+    for (const allowed of ['.env', '.env.local', 'config/.env.production']) {
+      assert.equal(parse(allowed), true, `${allowed} should be accepted`);
+    }
+    for (const refused of [
+      '.bashrc',
+      '.envrc',
+      'profile',
+      'src/index.ts',
+      '.env.example',
+      '.env.template',
+      '.env.local:evil',
+    ]) {
+      assert.equal(parse(refused), false, `${refused} should be refused by the schema`);
+    }
+  });
+
   it('creates gsd --mode mcp workflow adapter tools from the workflow MCP surface', async () => {
     const tools = await createWorkflowMcpAdapterToolDefs(sm);
     const toolNames = new Set(tools.map((tool) => tool.name));

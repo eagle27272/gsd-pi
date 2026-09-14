@@ -13,7 +13,28 @@
 
 import { open, readFile, rename, rm } from "node:fs/promises";
 import { constants, existsSync, lstatSync, realpathSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, isAbsolute, join, parse, relative, resolve } from "node:path";
+
+function escapeRegExp(literal: string): string {
+	return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Keys this process wrote and then mirrored into `process.env`. Their presence
+ * in the environment says nothing about whether the *destination file* is
+ * configured, so `checkExistingEnvKeys` must not read them as "already set".
+ */
+const hydratedByThisProcess = new Set<string>();
+
+/**
+ * Mirror a freshly written value into `process.env` so the current session
+ * sees it, while remembering that we are the reason it is there.
+ */
+export function hydrateProcessEnv(key: string, value: string): void {
+	process.env[key] = value;
+	hydratedByThisProcess.add(key);
+}
 
 /**
  * Check which keys already exist in a .env file or process.env.
@@ -23,15 +44,20 @@ export async function checkExistingEnvKeys(keys: string[], envFilePath: string):
 	let fileContent = "";
 	try {
 		fileContent = await readFile(envFilePath, "utf8");
-	} catch {
-		// ENOENT or other read error — proceed with empty content
+	} catch (err) {
+		// A missing file means nothing is configured yet. Any other failure
+		// (EACCES, EISDIR, …) would make every key look unset and re-prompt the
+		// user for secrets they have already supplied.
+		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+			throw err;
+		}
 	}
 
 	const existing: string[] = [];
 	for (const key of keys) {
-		const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-		const regex = new RegExp(`^${escaped}\\s*=`, "m");
-		if (regex.test(fileContent) || key in process.env) {
+		const regex = new RegExp(`^${escapeRegExp(key)}\\s*=`, "m");
+		const inheritedFromEnvironment = key in process.env && !hydratedByThisProcess.has(key);
+		if (regex.test(fileContent) || inheritedFromEnvironment) {
 			existing.push(key);
 		}
 	}
@@ -79,22 +105,149 @@ function isWithinProjectRoot(projectRoot: string, candidatePath: string): boolea
 }
 
 /**
+ * Destinations this module is willing to write a secret to. Containment alone
+ * is not enough: `.bashrc`, `.envrc` (executed by direnv on `cd`) and tracked
+ * source files are all "inside the project". The user consented to storing a
+ * secret in a .env file.
+ *
+ * `:` is excluded from the suffix so an NTFS alternate data stream
+ * (`.env.local:evil`) cannot hide a secret beside the file the user expects.
+ */
+const ENV_FILE_NAME_PATTERN = /^\.env(?:\.[^.:\\/]+)*$/;
+
+/** Conventionally git-tracked placeholders — a secret here is staged for commit. */
+const PLACEHOLDER_ENV_SUFFIXES = new Set(["example", "sample", "template", "dist", "defaults"]);
+
+export const ENV_FILE_NAME_ERROR =
+	"envFilePath must name a .env file (.env, .env.local, .env.production, …) and not a tracked placeholder";
+
+/**
+ * Shared by the tool schema and the write path so the two cannot drift. Takes a
+ * whole path and judges its last segment, splitting on either separator so a
+ * Windows-style path is not mistaken for one long filename.
+ */
+export function isAllowedEnvFilePath(envFilePath: string): boolean {
+	const name = envFilePath.split(/[\\/]/).pop() ?? "";
+	if (!ENV_FILE_NAME_PATTERN.test(name)) return false;
+	const suffixes = name.slice(".env".length).split(".").filter(Boolean);
+	const last = suffixes[suffixes.length - 1];
+	return last === undefined || !PLACEHOLDER_ENV_SUFFIXES.has(last.toLowerCase());
+}
+
+/**
+ * Files that mark a directory as a real project. `.git` is matched as a plain
+ * entry so a linked worktree, where it is a file rather than a directory, still
+ * counts.
+ */
+const PROJECT_ROOT_MARKERS = [
+	".gsd",
+	".git",
+	"package.json",
+	"deno.json",
+	"pyproject.toml",
+	"requirements.txt",
+	"setup.py",
+	"go.mod",
+	"Cargo.toml",
+	"pom.xml",
+	"build.gradle",
+	"build.gradle.kts",
+	"Gemfile",
+	"composer.json",
+	"vercel.json",
+	"convex",
+];
+
+function resolveHomeDir(): string {
+	try {
+		return realpathSync.native(resolve(homedir()));
+	} catch {
+		return resolve(homedir());
+	}
+}
+
+/**
+ * Nearest self-or-ancestor of `startDir` that carries a project marker, or null.
+ *
+ * The walk stops before `$HOME` and the filesystem root rather than passing
+ * through them: a stray `~/package.json` should not make every directory under
+ * the home directory look like a project.
+ */
+function findVerifiedProjectRoot(startDir: string): string | null {
+	const home = resolveHomeDir();
+	const fsRoot = parse(startDir).root;
+	let current = startDir;
+	while (current !== home && current !== fsRoot) {
+		if (PROJECT_ROOT_MARKERS.some((marker) => existsSync(join(current, marker)))) {
+			return current;
+		}
+		const parent = dirname(current);
+		if (parent === current) break;
+		current = parent;
+	}
+	return null;
+}
+
+/**
+ * Containment is only meaningful against a root this module has some reason to
+ * believe in. The caller's directory is not otherwise constrained, so without
+ * this an arbitrary path — `$HOME`, `/`, a scratch directory — becomes the root
+ * and the containment check below is a no-op.
+ *
+ * This does not distinguish one real project from another: a caller naming a
+ * different checkout still passes. It rules out the directories that are not
+ * projects at all.
+ */
+function assertPlausibleProjectRoot(projectRoot: string): void {
+	if (projectRoot === parse(projectRoot).root) {
+		throw new Error("projectDir must not be a filesystem root");
+	}
+	if (projectRoot === resolveHomeDir()) {
+		throw new Error("refusing to write env files directly into the user's home directory");
+	}
+	if (findVerifiedProjectRoot(projectRoot) === null) {
+		throw new Error(
+			`projectDir does not look like a project: no ${PROJECT_ROOT_MARKERS.slice(0, 3).join(", ")} ` +
+			`or similar marker at or above ${projectRoot}`,
+		);
+	}
+}
+
+/**
  * Resolve a caller-supplied env file path against the project directory,
- * refusing anything that lands outside it. Checks the real path of the target
- * when it exists and of its parent when it does not, so neither an absolute
- * path, a `../` escape, nor a symlink can redirect the write.
+ * refusing anything that lands outside it or that is not a .env-family file.
+ * Checks the real path of the target when it exists and of its parent when it
+ * does not, so neither an absolute path, a `../` escape, nor a symlink can
+ * redirect the write.
  */
 export function resolveProjectEnvFilePath(projectDir: string, envFilePath = ".env"): string {
 	const projectRoot = realpathSync.native(resolve(projectDir));
+	assertPlausibleProjectRoot(projectRoot);
 	const candidate = resolve(projectRoot, envFilePath);
 	if (!isWithinProjectRoot(projectRoot, candidate)) {
 		throw new Error("envFilePath must resolve inside the project directory");
 	}
+	if (!isAllowedEnvFilePath(candidate)) {
+		throw new Error(ENV_FILE_NAME_ERROR);
+	}
 	if (existsSync(candidate)) {
-		if (isWithinProjectRoot(projectRoot, realpathSync.native(candidate))) {
-			return candidate;
+		const targetRealPath = realpathSync.native(candidate);
+		if (!isWithinProjectRoot(projectRoot, targetRealPath)) {
+			throw new Error("envFilePath must resolve inside the project directory");
 		}
-		throw new Error("envFilePath must resolve inside the project directory");
+		// The name check above only saw the link. Judge the file we will actually
+		// write, or an in-repo `.env -> .envrc` would route the secret into a file
+		// direnv executes on `cd`.
+		if (!isAllowedEnvFilePath(targetRealPath)) {
+			throw new Error(ENV_FILE_NAME_ERROR);
+		}
+		// Hand back the link target rather than the link. writeEnvKey renames a
+		// temp file into place, which would replace an in-root symlink with a
+		// regular file — and assertWritableEnvFileTarget refuses to do that at
+		// all, so a project laid out as `.env -> config/.env.local` could never
+		// be written. Resolving here keeps the link intact and the write
+		// contained.
+		return targetRealPath;
 	}
 	if (isWithinProjectRoot(projectRoot, realpathSync.native(dirname(candidate)))) {
 		return candidate;
@@ -103,6 +256,30 @@ export function resolveProjectEnvFilePath(projectDir: string, envFilePath = ".en
 }
 
 // ─── writeEnvKey ──────────────────────────────────────────────────────────────
+
+/**
+ * Render a value so both `dotenv` and `set -a; source .env` read back exactly
+ * what the user typed.
+ *
+ * Single quotes are the only form dotenv returns byte-for-byte — it strips the
+ * quotes and unescapes nothing inside them — and POSIX shells treat them the
+ * same way, so `$`, a backtick, `"`, `#` and spaces all survive. A value that
+ * contains a single quote cannot use them and falls back to double quotes with
+ * the four characters a shell still expands escaped; that form is exact for
+ * dotenv too unless the value mixes a quote with one of ``\ " $ ` ``.
+ *
+ * The one input this is lossy for is a newline, stored as the two-character
+ * escape `\n` so the file stays line-oriented for the in-place update below.
+ * Both consumers read that back as a literal backslash-n, so a multi-line
+ * secret (a PEM key, a service-account JSON) does not survive.
+ */
+function formatEnvValue(value: string): string {
+	const stripped = value.replace(/\r/g, "");
+	if (!stripped.includes("'")) {
+		return `'${stripped.replace(/\n/g, "\\n")}'`;
+	}
+	return `"${stripped.replace(/[\\"$`]/g, "\\$&").replace(/\n/g, "\\n")}"`;
+}
 
 function assertWritableEnvFileTarget(filePath: string): void {
 	try {
@@ -144,11 +321,14 @@ export async function writeEnvKey(filePath: string, key: string, value: string):
 		}
 		content = "";
 	}
-	const escaped = value.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/\r/g, "");
-	const line = `${key}=${escaped}`;
-	const regex = new RegExp(`^${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=.*$`, "m");
-	if (regex.test(content)) {
-		content = content.replace(regex, line);
+	const line = `${key}=${formatEnvValue(value)}`;
+	const keyLinePattern = `^${escapeRegExp(key)}\\s*=.*$`;
+	if (new RegExp(keyLinePattern, "m").test(content)) {
+		// Every definition is rewritten, not just the first: dotenv and `source`
+		// both honour the last one, so a duplicate left behind would keep the old
+		// value operative while we report the write as applied. The replacement is
+		// a function so `$&`-style sequences inside the secret stay literal.
+		content = content.replace(new RegExp(keyLinePattern, "gm"), () => line);
 	} else {
 		if (content.length > 0 && !content.endsWith("\n")) content += "\n";
 		content += `${line}\n`;

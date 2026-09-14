@@ -40,7 +40,14 @@ import {
   warmWorkflowToolBridges,
 } from './workflow-tools.js';
 import { installMoonshotCompatibleToolSchemas } from './moonshot-tool-schema.js';
-import { applySecrets, checkExistingEnvKeys, detectDestination, resolveProjectEnvFilePath } from './env-writer.js';
+import {
+  applySecrets,
+  checkExistingEnvKeys,
+  detectDestination,
+  ENV_FILE_NAME_ERROR,
+  isAllowedEnvFilePath,
+  resolveProjectEnvFilePath,
+} from './env-writer.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -1375,7 +1382,10 @@ export async function createMcpServer(
         guidance: z.array(z.string()).optional().describe('Step-by-step instructions for obtaining this key'),
       })).min(1).describe('Environment variables to collect'),
       destination: z.enum(['dotenv', 'vercel', 'convex']).optional().describe('Where to write secrets. Auto-detected from project files if omitted.'),
-      envFilePath: z.string().optional().describe('Path to .env file (dotenv only). Defaults to .env in projectDir.'),
+      envFilePath: z.string()
+        .refine(isAllowedEnvFilePath, ENV_FILE_NAME_ERROR)
+        .optional()
+        .describe('Path to a .env-family file inside projectDir (dotenv only), e.g. ".env", ".env.local", "apps/web/.env". Defaults to .env in projectDir.'),
       environment: z.enum(['development', 'preview', 'production']).optional().describe('Target environment (vercel/convex only)'),
     },
     async (args: Record<string, unknown>, extra?: McpToolExtra) =>
