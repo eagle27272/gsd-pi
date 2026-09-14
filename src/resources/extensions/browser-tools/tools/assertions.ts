@@ -13,13 +13,13 @@ import {
 import type { ToolDeps, CompactPageState } from "../state.js";
 import {
 	getConsoleLogs,
-	getCurrentRefMap,
 	getLastActionBeforeState,
 	getLastActionAfterState,
 	setLastActionBeforeState,
 	setLastActionAfterState,
 	getActionTimeline,
 } from "../state.js";
+import { validateRefForAction } from "../utils.js";
 
 export function registerAssertionTools(pi: ExtensionAPI, deps: ToolDeps): void {
 	// -------------------------------------------------------------------------
@@ -44,11 +44,19 @@ export function registerAssertionTools(pi: ExtensionAPI, deps: ToolDeps): void {
 					value: Type.Optional(Type.String()),
 					checked: Type.Optional(Type.Boolean()),
 					sinceActionId: Type.Optional(Type.Number()),
-				})
+				}),
+				{ minItems: 1, description: "At least one assertion check. An empty list verifies nothing and is rejected." }
 			),
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 			try {
+				if (!params.checks || params.checks.length === 0) {
+					return {
+						content: [{ type: "text", text: "Browser assert requires at least one check — an empty checks list verifies nothing." }],
+						details: { error: "no_checks", verified: false },
+						isError: true,
+					};
+				}
 				const { page: p } = await deps.ensureBrowser();
 				const target = deps.getActiveTarget();
 				const state = await deps.collectAssertionState(p, params.checks, target);
@@ -146,7 +154,7 @@ export function registerAssertionTools(pi: ExtensionAPI, deps: ToolDeps): void {
 					timeout: Type.Optional(Type.Number()),
 					clearFirst: Type.Optional(Type.Boolean()),
 					submit: Type.Optional(Type.Boolean()),
-					ref: Type.Optional(Type.String()),
+					ref: Type.Optional(Type.String({ description: "For click_ref/fill_ref: reference id in versioned format, e.g. '@v3:e2'. Unversioned refs are rejected." })),
 					checks: Type.Optional(Type.Array(Type.Object({
 						kind: Type.String({ description: "Assertion kind, e.g. url_contains, text_visible, selector_visible, value_equals, no_console_errors, no_failed_requests, request_url_seen, response_status, console_message_matches, network_count, console_count, no_console_errors_since, no_failed_requests_since" }),
 						selector: Type.Optional(Type.String()),
@@ -154,7 +162,7 @@ export function registerAssertionTools(pi: ExtensionAPI, deps: ToolDeps): void {
 						value: Type.Optional(Type.String()),
 						checked: Type.Optional(Type.Boolean()),
 						sinceActionId: Type.Optional(Type.Number()),
-					}))),
+					}), { minItems: 1 })),
 				})
 			),
 			stopOnFailure: Type.Optional(Type.Boolean({ description: "Stop after the first failing step (default: true)." })),
@@ -266,27 +274,26 @@ export function registerAssertionTools(pi: ExtensionAPI, deps: ToolDeps): void {
 								return { ok: true, action: step.action, condition: step.condition, value: step.value };
 							}
 							case "assert": {
-								const state = await deps.collectAssertionState(p, step.checks ?? [], stepTarget);
-								const assertion = evaluateAssertionChecks({ checks: step.checks ?? [], state });
+								if (!step.checks || step.checks.length === 0) {
+									throw new Error("assert step requires at least one check — an empty checks list verifies nothing.");
+								}
+								const state = await deps.collectAssertionState(p, step.checks, stepTarget);
+								const assertion = evaluateAssertionChecks({ checks: step.checks, state });
 								return { ok: assertion.verified, action: step.action, summary: assertion.summary, assertion };
 							}
 							case "click_ref": {
-								const parsedRef = deps.parseRef(step.ref);
-								const currentRefMap = getCurrentRefMap();
-								const node = currentRefMap[parsedRef.key];
-								if (!node) throw new Error(`Unknown ref: ${step.ref}`);
-								const resolved = await deps.resolveRefTarget(stepTarget, node);
+								const guard = validateRefForAction(deps.parseRef(step.ref), p.url());
+								if (!guard.ok) throw new Error(guard.text);
+								const resolved = await deps.resolveRefTarget(stepTarget, guard.node);
 								if (!resolved.ok) throw new Error(resolved.reason);
 								await stepTarget.locator(resolved.selector).first().click({ timeout: step.timeout ?? 8000 });
 								await deps.settleAfterActionAdaptive(p);
 								return { ok: true, action: step.action, ref: step.ref };
 							}
 							case "fill_ref": {
-								const parsedRef = deps.parseRef(step.ref);
-								const currentRefMap = getCurrentRefMap();
-								const node = currentRefMap[parsedRef.key];
-								if (!node) throw new Error(`Unknown ref: ${step.ref}`);
-								const resolved = await deps.resolveRefTarget(stepTarget, node);
+								const guard = validateRefForAction(deps.parseRef(step.ref), p.url());
+								if (!guard.ok) throw new Error(guard.text);
+								const resolved = await deps.resolveRefTarget(stepTarget, guard.node);
 								if (!resolved.ok) throw new Error(resolved.reason);
 								if (step.clearFirst) await stepTarget.locator(resolved.selector).first().fill("");
 								await stepTarget.locator(resolved.selector).first().fill(step.text ?? "", { timeout: step.timeout ?? 8000 });
