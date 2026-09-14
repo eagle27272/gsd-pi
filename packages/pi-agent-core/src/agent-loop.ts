@@ -1113,12 +1113,11 @@ async function raceToolExecutionAgainstAbort(
 	execution: Promise<AgentToolResult<any>>,
 	signal: AbortSignal,
 ): Promise<ExecutedToolCallOutcome> {
-	if (signal.aborted) {
-		return { result: createErrorToolResult("Operation aborted"), isError: true };
-	}
 	// If abort wins the race, `execution` is abandoned but still pending; swallow any
 	// later settlement so a background rejection does not surface as an unhandled
-	// rejection after the turn has moved on.
+	// rejection after the turn has moved on. This must be attached before the
+	// `signal.aborted` early return below: the caller has already invoked the tool by
+	// the time we get here, so returning without a handler leaves that promise bare.
 	const guardedExecution = execution.then(
 		(result) => ({ result, isError: result?.isError ?? false }) satisfies ExecutedToolCallOutcome,
 		(error) => ({
@@ -1126,6 +1125,9 @@ async function raceToolExecutionAgainstAbort(
 			isError: true,
 		}),
 	);
+	if (signal.aborted) {
+		return { result: createErrorToolResult("Operation aborted"), isError: true };
+	}
 	let onAbort: (() => void) | undefined;
 	const abortPromise = new Promise<ExecutedToolCallOutcome>((resolve) => {
 		onAbort = () => resolve({ result: createErrorToolResult("Operation aborted"), isError: true });
