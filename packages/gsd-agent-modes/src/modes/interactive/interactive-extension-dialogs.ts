@@ -1,20 +1,15 @@
 // Project/App: gsd-pi
 // File Purpose: Extracted from interactive-mode.ts (Phase E2 seam remediation).
-// @ts-nocheck
 
-import type { KeyId } from "@gsd/pi-tui";
-import { Container, matchesKey, Spacer, Text, type Component, type TUI } from "@gsd/pi-tui";
-import type { ExtensionContext, ExtensionRunner, ExtensionUIContext, ExtensionUIDialogOptions, ExtensionWidgetOptions } from "@gsd/pi-coding-agent/core/extensions/index.js";
-import { FooterDataProvider, type ReadonlyFooterDataProvider } from "@gsd/pi-coding-agent/core/footer-data-provider.js";
-import { setRegisteredThemes, setTheme, Theme, theme } from "@gsd/pi-coding-agent/theme/theme.js";
-import { appKey } from "./components/keybinding-hints.js";
+import { Text, type Component, type TUI } from "@gsd/pi-tui";
+import type { ExtensionUIContext, ExtensionUIDialogOptions } from "@gsd/pi-coding-agent/core/extensions/index.js";
+import { Theme, theme } from "@gsd/pi-coding-agent/theme/theme.js";
 import { ExtensionEditorComponent } from "./components/extension-editor.js";
 import { ExtensionInputComponent } from "./components/extension-input.js";
 import { ExtensionSelectorComponent } from "./components/extension-selector.js";
 import type { ExtensionNotifyType } from "./interactive-notify-render.js";
 import { renderExtensionNotifyInChat } from "./interactive-notify-render.js";
 import { createExtensionUIContext as buildExtensionUIContext } from "./controllers/extension-ui-controller.js";
-import { MAX_WIDGET_LINES } from "./interactive-mode-class-constants.js";
 import type { InteractiveModeDelegateHost } from "./interactive-mode-delegate-host.js";
 import { getEditorTheme } from "@gsd/pi-coding-agent/theme/theme.js";
 import type { EditorComponent, EditorTheme, KeybindingsManager, OverlayHandle, OverlayOptions } from "@gsd/pi-tui";

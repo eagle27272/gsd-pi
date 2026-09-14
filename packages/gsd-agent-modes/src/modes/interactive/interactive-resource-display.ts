@@ -1,15 +1,14 @@
 // Project/App: gsd-pi
 // File Purpose: Extracted from interactive-mode.ts (Phase E2 seam remediation).
-// @ts-nocheck — host-delegated helpers; types flow from InteractiveMode at runtime.
 
 import * as os from "node:os";
 import * as path from "node:path";
-import { Container, Spacer, Text } from "@gsd/pi-tui";
+import { Spacer, Text } from "@gsd/pi-tui";
 import type { ResourceDiagnostic } from "@gsd/pi-coding-agent/core/resource-loader.js";
 import { theme, type ThemeColor } from "@gsd/pi-coding-agent/theme/theme.js";
 import type { InteractiveModeDelegateHost } from "./interactive-mode-delegate-host.js";
 
-export function formatDisplayPath(host: InteractiveModeDelegateHost, p: string): string {
+export function formatDisplayPath(_host: InteractiveModeDelegateHost, p: string): string {
 		const home = os.homedir();
 		let result = p;
 
@@ -41,7 +40,7 @@ export function getShortPath(host: InteractiveModeDelegateHost, fullPath: string
 		return formatDisplayPath(host, fullPath);
 	}
 
-export function getDisplaySourceInfo(host: InteractiveModeDelegateHost, source: string,
+export function getDisplaySourceInfo(_host: InteractiveModeDelegateHost, source: string,
 		scope: string,
 	): { label: string; scopeLabel?: string; color: "accent" | "muted" } {
 		if (source === "local") {
@@ -66,14 +65,14 @@ export function getDisplaySourceInfo(host: InteractiveModeDelegateHost, source: 
 		return { label: source, scopeLabel, color: "accent" };
 	}
 
-export function getScopeGroup(host: InteractiveModeDelegateHost, source: string, scope: string): "user" | "project" | "path" {
+export function getScopeGroup(_host: InteractiveModeDelegateHost, source: string, scope: string): "user" | "project" | "path" {
 		if (source === "cli" || scope === "temporary") return "path";
 		if (scope === "user") return "user";
 		if (scope === "project") return "project";
 		return "path";
 	}
 
-export function isPackageSource(host: InteractiveModeDelegateHost, source: string): boolean {
+export function isPackageSource(_host: InteractiveModeDelegateHost, source: string): boolean {
 		return source.startsWith("npm:") || source.startsWith("git:");
 	}
 
@@ -111,7 +110,7 @@ export function buildScopeGroups(host: InteractiveModeDelegateHost, paths: strin
 	}
 
 export function formatScopeGroups(
-	host: InteractiveModeDelegateHost,
+	_host: InteractiveModeDelegateHost,
 	groups: Array<{ scope: "user" | "project" | "path"; paths: string[]; packages: Map<string, string[]> }>,
 	options: {
 		formatPath: (p: string) => string;
@@ -145,7 +144,7 @@ export function formatScopeGroups(
 	 * Find metadata for a path, checking parent directories if exact match fails.
 	 * Package manager stores metadata for directories, but we display file paths.
 	 */
-export function findMetadata(host: InteractiveModeDelegateHost, p: string,
+export function findMetadata(_host: InteractiveModeDelegateHost, p: string,
 		metadata: Map<string, { source: string; scope: string; origin: string }>,
 	): { source: string; scope: string; origin: string } | undefined {
 		// Try exact match first
