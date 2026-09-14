@@ -22,7 +22,7 @@ node --test src/resources/extensions/my-ext/tests/my-feature.test.ts
 # Run all tests in a directory
 node --test src/resources/extensions/my-ext/tests/*.test.ts
 
-# Run with TypeScript (Node 22+)
+# Run with TypeScript (Node 24+)
 node --experimental-strip-types --test my-extension.test.ts
 ```
 
