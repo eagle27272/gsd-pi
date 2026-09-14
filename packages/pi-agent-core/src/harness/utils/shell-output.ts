@@ -45,28 +45,34 @@ export async function executeShellWithCapture(
 	command: string,
 	options?: ShellCaptureOptions,
 ): Promise<Result<ShellCaptureResult, ExecutionError>> {
-	const outputChunks: string[] = [];
+	const outputChunks: Array<{ text: string; bytes: number }> = [];
 	let outputBytes = 0;
 	const maxOutputBytes = DEFAULT_MAX_BYTES * 2;
 	const encoder = new TextEncoder();
+	const joinChunks = () => outputChunks.map((entry) => entry.text).join("");
 
 	let totalBytes = 0;
 	let fullOutputPath: string | undefined;
+	// `fullOutputPath` is only assigned once the queued createTempFile settles, so it
+	// cannot gate work scheduled from the synchronous chunk callback — every chunk
+	// arriving during that window would queue another temp file and strand its writes.
+	let fullOutputRequested = false;
 	let writeChain: Promise<Result<void, ExecutionError>> = Promise.resolve(ok(undefined));
 	let captureError: ExecutionError | undefined;
 
 	const appendFullOutput = (text: string): void => {
-		if (!fullOutputPath || captureError) return;
-		const path = fullOutputPath;
+		if (!fullOutputRequested || captureError) return;
 		writeChain = writeChain.then(async (previous) => {
 			if (!previous.ok) return previous;
-			const appendResult = await env.appendFile(path, text, options?.abortSignal);
+			if (!fullOutputPath) return previous;
+			const appendResult = await env.appendFile(fullOutputPath, text, options?.abortSignal);
 			return appendResult.ok ? ok(undefined) : err(toExecutionError(appendResult.error));
 		});
 	};
 
 	const ensureFullOutputFile = (initialContent: string): void => {
-		if (fullOutputPath || captureError) return;
+		if (fullOutputRequested || captureError) return;
+		fullOutputRequested = true;
 		writeChain = writeChain.then(async (previous) => {
 			if (!previous.ok) return previous;
 			const tempFile = await env.createTempFile({
@@ -85,16 +91,17 @@ export async function executeShellWithCapture(
 		try {
 			totalBytes += encoder.encode(chunk).byteLength;
 			const text = sanitizeBinaryOutput(chunk).replace(/\r/g, "");
-			if (totalBytes > DEFAULT_MAX_BYTES && !fullOutputPath) {
-				ensureFullOutputFile(outputChunks.join("") + text);
+			if (totalBytes > DEFAULT_MAX_BYTES && !fullOutputRequested) {
+				ensureFullOutputFile(joinChunks() + text);
 			} else {
 				appendFullOutput(text);
 			}
-			outputChunks.push(text);
-			outputBytes += text.length;
+			const textBytes = encoder.encode(text).byteLength;
+			outputChunks.push({ text, bytes: textBytes });
+			outputBytes += textBytes;
 			while (outputBytes > maxOutputBytes && outputChunks.length > 1) {
 				const removed = outputChunks.shift()!;
-				outputBytes -= removed.length;
+				outputBytes -= removed.bytes;
 			}
 			options?.onChunk?.(text);
 		} catch (error) {
@@ -108,9 +115,9 @@ export async function executeShellWithCapture(
 			onStdout: onChunk,
 			onStderr: onChunk,
 		});
-		const tailOutput = outputChunks.join("");
+		const tailOutput = joinChunks();
 		const truncationResult = truncateTail(tailOutput);
-		if (truncationResult.truncated && !fullOutputPath) {
+		if (truncationResult.truncated && !fullOutputRequested) {
 			ensureFullOutputFile(tailOutput);
 		}
 		const writeResult = await writeChain;
