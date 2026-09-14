@@ -791,6 +791,12 @@ function makeFakeLauncher(failAt) {
 	const context = {
 		handlers: contextHandlers,
 		on(event, fn) { contextHandlers.set(event, fn); },
+		tracing: {
+			async startHar(harPath, options) {
+				record.harRecorder = { path: harPath, options };
+				if (failAt === "startHar") throw new Error("boom: startHar");
+			},
+		},
 		async addInitScript(source) {
 			record.initScript = source;
 			if (failAt === "addInitScript") throw new Error("boom: addInitScript");
@@ -840,11 +846,12 @@ describe("lifecycle — buildBrowserSession", () => {
 		const launcher = makeFakeLauncher();
 		await buildBrowserSession(launcher, {}, HAR_PATH);
 
-		assert.deepEqual(launcher.record.contextOptions.recordHar, {
-			path: HAR_PATH,
-			mode: "minimal",
-			content: "omit",
-		});
+		// Recording runs through tracing.startHar, not the recordHar context
+		// option: recordHar only writes when the context closes, which no
+		// mid-session export can wait for.
+		assert.equal(launcher.record.contextOptions.recordHar, undefined);
+		assert.equal(launcher.record.harRecorder.path, `${HAR_PATH}.part`);
+		assert.deepEqual(launcher.record.harRecorder.options, { mode: "minimal", content: "omit" });
 		assert.equal(launcher.record.initScript, EVALUATE_HELPERS_SOURCE);
 	});
 
@@ -861,10 +868,14 @@ describe("lifecycle — buildBrowserSession", () => {
 		assert.equal(options.deviceScaleFactor, 3);
 		assert.equal(options.isMobile, true);
 		assert.equal(options.hasTouch, true);
-		assert.equal(options.recordHar.path, HAR_PATH, "device options must not disable HAR recording");
+		assert.equal(
+			launcher.record.harRecorder.path,
+			`${HAR_PATH}.part`,
+			"device options must not disable HAR recording",
+		);
 	});
 
-	for (const failAt of ["newContext", "addInitScript", "newPage"]) {
+	for (const failAt of ["newContext", "addInitScript", "startHar", "newPage"]) {
 		it(`closes the browser and publishes nothing when ${failAt} throws`, async () => {
 			const launcher = makeFakeLauncher(failAt);
 
@@ -906,6 +917,7 @@ describe("lifecycle — commitBrowserSession", () => {
 		const har = getHarState();
 		assert.equal(har.enabled, true);
 		assert.equal(har.configuredAtContextCreation, true);
+		assert.equal(har.recordingActive, true, "the committed session must know its recorder is live");
 		assert.equal(har.path, HAR_PATH);
 	});
 

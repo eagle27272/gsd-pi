@@ -149,7 +149,7 @@ export function registerSessionTools(pi: ExtensionAPI, deps: ToolDeps): void {
 	pi.registerTool({
 		name: "browser_export_har",
 		label: "Browser Export HAR",
-		description: "Export the truthfully recorded session HAR from disk to a stable artifact path and return compact metadata.",
+		description: "Flush the live network recording to disk and export the session HAR to a stable artifact path, returning compact metadata. Callable at any point in the session; every export contains the whole session recorded so far, not just the traffic since the previous export.",
 		parameters: Type.Object({
 			filename: Type.Optional(Type.String({ description: "Optional destination filename within the session artifact directory." })),
 		}),
@@ -164,21 +164,37 @@ export function registerSessionTools(pi: ExtensionAPI, deps: ToolDeps): void {
 						isError: true,
 					};
 				}
-				const sourcePath = harState.path;
+				// Playwright only writes the HAR when its recorder stops, so flush
+				// before reading — otherwise the source path never exists.
+				const flushed = await deps.flushSessionHar();
+				if (!flushed) {
+					return {
+						content: [{ type: "text", text: "HAR export unavailable: no HAR recorder is running for this browser context." }],
+						details: { error: "har_not_recording", ...deps.getSessionArtifactMetadata() },
+						isError: true,
+					};
+				}
+				const sourcePath = flushed.path;
 				const destinationName = (params.filename?.trim() || `export-${HAR_FILENAME}`).replace(/[^a-zA-Z0-9._-]+/g, "-");
 				const destinationPath = deps.buildSessionArtifactPath(destinationName);
 				const exportResult = sourcePath === destinationPath
 					? { path: sourcePath, bytes: (await stat(sourcePath)).size }
 					: await deps.copyArtifactFile(sourcePath, destinationPath);
+				// Re-read: the flush above advanced recordingActive.
 				setHarState({
-					...harState,
+					...getHarState(),
 					exportCount: harState.exportCount + 1,
 					lastExportedPath: exportResult.path,
 					lastExportedAt: Date.now(),
 				});
 				return {
-					content: [{ type: "text", text: `HAR exported: ${exportResult.path}` }],
-					details: { path: exportResult.path, bytes: exportResult.bytes, ...deps.getSessionArtifactMetadata() },
+					content: [{ type: "text", text: `HAR exported: ${exportResult.path} (${flushed.entries} entries)` }],
+					details: {
+						path: exportResult.path,
+						bytes: exportResult.bytes,
+						entries: flushed.entries,
+						...deps.getSessionArtifactMetadata(),
+					},
 				};
 			} catch (err: any) {
 				return {
@@ -274,6 +290,7 @@ export function registerSessionTools(pi: ExtensionAPI, deps: ToolDeps): void {
 				const harSummary = {
 					enabled: harState.enabled,
 					configuredAtContextCreation: harState.configuredAtContextCreation,
+					recordingActive: harState.recordingActive,
 					path: harState.path,
 					exportCount: harState.exportCount,
 					lastExportedPath: harState.lastExportedPath,

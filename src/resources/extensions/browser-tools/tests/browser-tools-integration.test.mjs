@@ -9,11 +9,13 @@
  * Uses Playwright Chromium for real page.evaluate() against HTML fixtures.
  */
 
-import { describe, it, before, after } from "node:test";
+import { describe, it, before, after, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -597,5 +599,84 @@ describe("form analysis", () => {
 
     assert.ok(result.error, "Should return error for missing form");
     assert.ok(result.error.includes("not found"));
+  });
+});
+
+// =========================================================================
+// 4. Session HAR — real Playwright recorder
+// =========================================================================
+
+/**
+ * The fake-context unit tests in har-session-flush.test.cjs pin the call
+ * ordering; these pin the Playwright semantics that ordering exists for.
+ * The original bug was invisible to any test that did not look at the disk:
+ * `browser.close()` alone leaves no HAR file behind.
+ */
+describe("session HAR recording", () => {
+  // ".js" specifiers, not ".ts": jiti keys its cache on the specifier, so
+  // "../state.ts" would be a second copy of the module that lifecycle — which
+  // imports "./state.js" — never writes to. In dist-test, where the compiled
+  // .js sits beside the .ts, they are genuinely different files.
+  const { ensureBrowser, closeBrowser } = jiti("../lifecycle.js");
+  const { flushSessionHar } = jiti("../har.js");
+  const { getHarState, setArtifactRootForCwd, resetAllState } = jiti("../state.js");
+
+  let harRoot;
+
+  // A refused connection still produces a HAR entry, so the recorder is
+  // exercised without binding a port or reaching the network. `data:` URLs
+  // are not requests and would record nothing.
+  const recordableUrl = (name) => `http://127.0.0.1:1/${name}`;
+  const visit = (harPage, name) => harPage.goto(recordableUrl(name)).catch(() => { /* refused by design */ });
+
+  const harUrls = (harPath) =>
+    JSON.parse(readFileSync(harPath, "utf8")).log.entries.map((entry) => entry.request.url);
+
+  // Each test gets its own artifact root: changing the root clears the cached
+  // session directory, so sessions cannot share a HAR file.
+  beforeEach(async () => {
+    await closeBrowser();
+    harRoot = mkdtempSync(join(tmpdir(), "har-integration-"));
+    setArtifactRootForCwd(harRoot);
+  });
+
+  afterEach(async () => {
+    await closeBrowser();
+    resetAllState();
+    rmSync(harRoot, { recursive: true, force: true });
+  });
+
+  it("materializes a HAR on disk mid-session and keeps recording", async () => {
+    const { page: harPage } = await ensureBrowser();
+    await visit(harPage, "first");
+
+    const flushed = await flushSessionHar();
+
+    assert.ok(flushed, "flushSessionHar must report a flush");
+    assert.ok(existsSync(flushed.path), "the session HAR must exist on disk mid-session");
+    assert.deepEqual(harUrls(flushed.path), [recordableUrl("first")]);
+    assert.equal(getHarState().recordingActive, true, "recording must continue after an export");
+
+    await visit(harPage, "second");
+    const second = await flushSessionHar();
+
+    assert.deepEqual(
+      harUrls(second.path),
+      [recordableUrl("first"), recordableUrl("second")],
+      "a later export must still include earlier traffic",
+    );
+    assert.equal(second.entries, 2);
+  });
+
+  it("leaves the session HAR on disk after closeBrowser", async () => {
+    const { page: harPage } = await ensureBrowser();
+    await visit(harPage, "closing");
+    const harPath = getHarState().path;
+    assert.ok(harPath, "HAR recording must be configured by ensureBrowser");
+
+    await closeBrowser();
+
+    assert.ok(existsSync(harPath), "closeBrowser must flush the HAR before tearing the context down");
+    assert.deepEqual(harUrls(harPath), [recordableUrl("closing")]);
   });
 });
