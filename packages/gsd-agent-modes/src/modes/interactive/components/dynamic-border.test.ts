@@ -73,7 +73,7 @@ describe("DynamicBorder spinner", () => {
 		const tui = makeTUI();
 		try {
 			border.startSpinner(tui as any, (s) => s);
-			const interval = (border as any).spinnerInterval as NodeJS.Timeout;
+			const interval = (border as any).animationInterval as NodeJS.Timeout;
 			assert.ok(interval, "startSpinner should create the animation interval");
 			assert.equal(
 				interval.hasRef(),
