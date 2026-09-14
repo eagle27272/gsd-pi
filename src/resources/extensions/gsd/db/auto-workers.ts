@@ -14,6 +14,9 @@
 // Single-host invariant: SQLite WAL coordination only works on local disk.
 // NFS / network filesystems break heartbeat semantics. Multi-host execution
 // needs a real coordinator (etcd, Postgres) — out of scope for Phase B.
+// The invariant is not enforced, though, so rows from another host do turn up
+// (shared home directory, relocated project). Liveness for those is decided by
+// heartbeat TTL, never by a local PID probe that cannot resolve them (#16).
 
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
@@ -162,6 +165,9 @@ export function markWorkerStopping(workerId: string): void {
 /**
  * Mark the active worker row for a specific PID/project root as stopping.
  * Used when we detect a dead PID from lock metadata before heartbeat expiry.
+ *
+ * Scoped to this host: the caller's evidence is a local PID probe, which says
+ * nothing about a same-numbered PID registered elsewhere (#16).
  */
 export function markWorkerStoppingByPid(
   projectRootRealpath: string,
@@ -175,10 +181,12 @@ export function markWorkerStoppingByPid(
       `UPDATE workers
        SET status = 'stopping'
        WHERE pid = :pid
+         AND host = :host
          AND project_root_realpath = :project_root
          AND status = 'active'`,
     ).run({
       ":pid": pid,
+      ":host": hostname(),
       ":project_root": projectRootRealpath,
     });
   });
@@ -237,10 +245,31 @@ export function autoWorkerHeartbeatTtlSeconds(): number {
   return HEARTBEAT_TTL_SECONDS;
 }
 
-function isWorkerProcessAlive(candidate: Pick<AutoWorkerRow, "host" | "pid">): boolean {
+/**
+ * True when `heartbeatAt` is a parseable timestamp inside the TTL window.
+ * Exported for crash-recovery.ts, which applies the same rule to the host
+ * field it now carries on LockData (#16).
+ */
+export function isHeartbeatFresh(heartbeatAt: string | undefined | null): boolean {
+  if (!heartbeatAt) return false;
+  const parsed = Date.parse(heartbeatAt);
+  if (!Number.isFinite(parsed)) return false;
+  return parsed >= Date.now() - HEARTBEAT_TTL_SECONDS * 1000;
+}
+
+/**
+ * A PID only identifies a process on the host that issued it, so a row from
+ * another host cannot be probed against our process table — a coincidental
+ * local PID would read as alive, and (worse) its absence would read as dead
+ * and authorize takeover of a live remote holder (#16). For those rows the
+ * heartbeat TTL is the only admissible evidence.
+ */
+function isWorkerProcessAlive(
+  candidate: Pick<AutoWorkerRow, "host" | "pid" | "last_heartbeat_at">,
+): boolean {
   const pid = candidate.pid;
   if (!Number.isInteger(pid) || pid <= 0) return false;
-  if (candidate.host !== hostname()) return false;
+  if (candidate.host !== hostname()) return isHeartbeatFresh(candidate.last_heartbeat_at);
   if (pid === process.pid) return true;
   try {
     process.kill(pid, 0);
@@ -251,13 +280,11 @@ function isWorkerProcessAlive(candidate: Pick<AutoWorkerRow, "host" | "pid">): b
   }
 }
 
-/** True when a worker still owns a fresh heartbeat and a live local process. */
+/** True when a worker still owns a fresh heartbeat and a live process. */
 export function isAutoWorkerLive(workerId: string): boolean {
   const worker = getAutoWorker(workerId);
   if (!worker || worker.status !== "active") return false;
-  const heartbeatAt = Date.parse(worker.last_heartbeat_at);
-  if (!Number.isFinite(heartbeatAt)) return false;
-  if (heartbeatAt < Date.now() - HEARTBEAT_TTL_SECONDS * 1000) return false;
+  if (!isHeartbeatFresh(worker.last_heartbeat_at)) return false;
   return isWorkerProcessAlive(worker);
 }
 

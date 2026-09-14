@@ -9,9 +9,9 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 
 import {
   openDatabase,
@@ -31,7 +31,9 @@ import {
   clearLock,
   clearStaleWorkerLock,
   isLockProcessAlive,
+  type LockData,
 } from "../crash-recovery.ts";
+import { effectiveLockFile } from "../session-lock.ts";
 import { normalizeRealPath } from "../paths.ts";
 import { writeUnitRuntimeRecord } from "../unit-runtime.ts";
 import { executeDomainOperation } from "../db/domain-operation.ts";
@@ -192,6 +194,104 @@ test("isLockProcessAlive returns false for a dead PID", () => {
     unitStartedAt: new Date().toISOString(),
   };
   assert.equal(isLockProcessAlive(lock), false);
+});
+
+// ─── Cross-host lock liveness (#16) ──────────────────────────────────────
+// LockData used to drop the worker row's `host`, so isLockProcessAlive
+// resolved a foreign PID against the local process table — a live remote
+// holder read as dead and takeover proceeded.
+
+const FOREIGN_HOST = `${hostname()}-not-this-box`;
+
+function foreignLock(overrides: Partial<LockData> = {}): LockData {
+  return {
+    pid: 99999,
+    host: FOREIGN_HOST,
+    startedAt: new Date().toISOString(),
+    lastHeartbeatAt: new Date().toISOString(),
+    unitType: "execute-task",
+    unitId: "M001/S01/T01",
+    unitStartedAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+test("#16: isLockProcessAlive treats a foreign-host lock with a fresh heartbeat as held", () => {
+  assert.equal(isLockProcessAlive(foreignLock()), true);
+});
+
+test("#16: isLockProcessAlive treats a foreign-host lock as dead once its heartbeat lapses", () => {
+  assert.equal(
+    isLockProcessAlive(foreignLock({ lastHeartbeatAt: "1970-01-01T00:00:00.000Z" })),
+    false,
+  );
+});
+
+test("#16: isLockProcessAlive treats a foreign-host lock with no heartbeat as held", () => {
+  // No admissible evidence either way — refuse to authorize takeover.
+  assert.equal(isLockProcessAlive(foreignLock({ lastHeartbeatAt: undefined })), true);
+});
+
+test("#16: isLockProcessAlive does not read our own PID as a foreign-host holder", () => {
+  assert.equal(
+    isLockProcessAlive(
+      foreignLock({ pid: process.pid, lastHeartbeatAt: "1970-01-01T00:00:00.000Z" }),
+    ),
+    false,
+  );
+});
+
+test("#16: isLockProcessAlive still probes the process table for a same-host lock", () => {
+  assert.equal(
+    isLockProcessAlive(
+      foreignLock({ host: hostname(), lastHeartbeatAt: "1970-01-01T00:00:00.000Z" }),
+    ),
+    false,
+  );
+  assert.equal(
+    isLockProcessAlive(foreignLock({ host: hostname(), pid: process.pid })),
+    true,
+  );
+});
+
+test("#16: readCrashLock carries the owning host and heartbeat off the worker row", (t) => {
+  const base = makeBase();
+  t.after(() => cleanup(base));
+  openDatabase(join(base, ".gsd", "gsd.db"));
+
+  const workerId = registerAutoWorker({ projectRootRealpath: normalizeRealPath(base) });
+  setWorkerPid(workerId, 99999);
+  expireWorker(workerId);
+
+  const lock = readCrashLock(base);
+  assert.ok(lock);
+  assert.equal(lock!.host, hostname());
+  assert.equal(lock!.lastHeartbeatAt, "1970-01-01T00:00:00.000Z");
+});
+
+test("#16: a live worker on another host is never surfaced as a crash lock", (t) => {
+  const base = makeBase();
+  t.after(() => cleanup(base));
+  openDatabase(join(base, ".gsd", "gsd.db"));
+
+  const workerId = registerAutoWorker({ projectRootRealpath: normalizeRealPath(base) });
+  _getAdapter()!.prepare(
+    `UPDATE workers SET host = :host, pid = 99999 WHERE worker_id = :w`,
+  ).run({ ":host": FOREIGN_HOST, ":w": workerId });
+
+  assert.equal(readCrashLock(base), null);
+});
+
+test("#16: writeLock records the local hostname on the legacy lock file", (t) => {
+  const base = makeBase();
+  t.after(() => cleanup(base));
+
+  writeLock(base, "execute-task", "M001/S01/T01");
+
+  const raw = JSON.parse(
+    readFileSync(join(base, ".gsd", effectiveLockFile()), "utf-8"),
+  ) as LockData;
+  assert.equal(raw.host, hostname());
 });
 
 test("writeLock stores the session_file in runtime_kv (worker scope)", (t) => {
