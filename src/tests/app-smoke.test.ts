@@ -143,20 +143,23 @@ test("checkNodeVersion rejects below-minimum versions and accepts at-or-above", 
 
   // Below minimum → not ok, surfaces the actual major
   const tooOld = checkNodeVersion("18.19.0", MIN_NODE_VERSION);
-  assert.strictEqual(tooOld.ok, false, "Node 18 must be rejected when min is 22+");
+  assert.strictEqual(tooOld.ok, false, "Node 18 must be rejected when min is 24+");
   if (tooOld.ok === false) {
     assert.strictEqual(tooOld.actualVersion, "18.19.0", "reports actual version from input");
   }
 
-  const belowMinor = checkNodeVersion("22.17.9", MIN_NODE_VERSION);
-  assert.strictEqual(belowMinor.ok, false, "Node 22 before the required sqlite API must be rejected");
+  const belowMajor = checkNodeVersion("22.23.0", MIN_NODE_VERSION);
+  assert.strictEqual(belowMajor.ok, false, "Node 22 is below the supported major and must be rejected");
+
+  const belowMinor = checkNodeVersion("24.19.9", MIN_NODE_VERSION);
+  assert.strictEqual(belowMinor.ok, false, "Node 24 before the required minor must be rejected");
 
   // Exactly minimum → ok
   const exactlyMin = checkNodeVersion(MIN_NODE_VERSION, MIN_NODE_VERSION);
   assert.strictEqual(exactlyMin.ok, true, "version equal to minimum must be accepted");
 
   // Above minimum → ok
-  const above = checkNodeVersion("24.0.0", MIN_NODE_VERSION);
+  const above = checkNodeVersion("24.21.0", MIN_NODE_VERSION);
   assert.strictEqual(above.ok, true, "version above minimum must be accepted");
 
   // Malformed version string is a precondition violation — must throw
