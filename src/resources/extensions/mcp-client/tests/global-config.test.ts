@@ -1,5 +1,5 @@
 /**
- * Regression test for #4757 — readConfigs() must also read the global
+ * Regression test for #4757 — readMcpServerConfigs() must also read the global
  * ~/.gsd/mcp.json (resolved as $GSD_HOME/mcp.json when GSD_HOME is set).
  *
  * Behaviour test against the exported getServerConfig — no source grep.
