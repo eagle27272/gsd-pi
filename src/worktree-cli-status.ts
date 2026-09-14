@@ -19,7 +19,7 @@ export interface WorktreeScanItem {
 export interface WorktreeStatusDependencies {
   diffWorktreeAll: (basePath: string, name: string, branch?: string) => WorktreeDiff
   diffWorktreeNumstat: (basePath: string, name: string, branch?: string) => WorktreeNumstat[]
-  nativeHasChanges: (path: string) => boolean
+  nativeWorkingTreeStatus: (path: string, opts?: { allowFailure?: boolean }) => string
   nativeDetectMainBranch: (basePath: string) => string
   nativeCommitCountBetween: (basePath: string, from: string, to: string) => number
   onDebugFailure?: (scope: string, error: unknown) => void
@@ -80,12 +80,19 @@ export function getWorktreeStatus(
     linesRemoved += s.removed
   }
 
+  // `uncommitted` also decides whether doMerge auto-commits before the squash
+  // merge, so an unreadable worktree must fail closed rather than merge as if
+  // it were clean. nativeHasChanges is unsuitable here: it caches its verdict
+  // for 10s and reports a failed status as clean.
   const exists = existsSync(wtPath)
   let uncommitted = false
-  try {
-    uncommitted = exists && deps.nativeHasChanges(wtPath)
-  } catch (error) {
-    deps.onDebugFailure?.('native worktree dirty check', error)
+  if (exists) {
+    try {
+      uncommitted = deps.nativeWorkingTreeStatus(wtPath, { allowFailure: false }).trim() !== ''
+    } catch (error) {
+      deps.onDebugFailure?.('native worktree dirty check', error)
+      uncommitted = true
+    }
   }
 
   let commits = 0

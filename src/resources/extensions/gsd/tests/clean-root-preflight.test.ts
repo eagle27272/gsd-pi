@@ -24,8 +24,9 @@ function createTempRepo(): string {
   run("git init", dir);
   run("git config user.email test@example.com", dir);
   run("git config user.name Test", dir);
-  // A developer's global ignore file may list .gsd, which would silently make
-  // `git add .` stage nothing and the commit below fail.
+  // These fixtures track .gsd/ on purpose. A developer's global ignore file may
+  // list .gsd, which would silently make `git add .` stage nothing and leave the
+  // results machine-dependent.
   run("git config core.excludesFile /dev/null", dir);
   writeFileSync(join(dir, "README.md"), "# test\n");
   mkdirSync(join(dir, ".gsd"), { recursive: true });
@@ -478,6 +479,30 @@ test("postflightPopStash requires manual recovery when an untracked stash path i
     assert.match(run("git status --porcelain", repo), /\?\? other-tests\.txt/, "partial restore must leave manual recovery visible");
     const stashList = run("git stash list", repo);
     assert.ok(preflight.stashMarker && stashList.includes(preflight.stashMarker), "stash must remain for manual recovery");
+  } finally {
+    try { rmSync(repo, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); } catch { /* ignore */ }
+  }
+});
+
+test("postflightPopStash restores user-authored .gsd artifacts instead of dropping them", () => {
+  const repo = createTempRepo();
+  try {
+    writeFileSync(join(repo, ".gsd", "ROADMAP.md"), "# Roadmap\n");
+    run("git add .gsd/ROADMAP.md", repo);
+    run('git commit -m "chore: add roadmap"', repo);
+
+    writeFileSync(join(repo, ".gsd", "ROADMAP.md"), "# Roadmap\n\n- my local note\n");
+    const preflight = preflightCleanRoot(repo, "M014", () => {});
+    assert.equal(preflight.stashPushed, true, "preflight must stash the roadmap edit");
+
+    const postflight = postflightPopStash(repo, "M014", preflight.stashMarker, () => {});
+    assert.equal(postflight.restored, true, "user-authored .gsd edits must be restored");
+    assert.equal(postflight.resolution, "applied", "restore must go through git stash apply");
+    assert.equal(
+      readFileSync(join(repo, ".gsd", "ROADMAP.md"), "utf-8").replace(/\r\n/g, "\n"),
+      "# Roadmap\n\n- my local note\n",
+      "user-authored roadmap edits must survive the merge",
+    );
   } finally {
     try { rmSync(repo, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); } catch { /* ignore */ }
   }

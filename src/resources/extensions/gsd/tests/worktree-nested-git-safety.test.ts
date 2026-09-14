@@ -56,11 +56,11 @@ test("#2616: findNestedGitDirs ignores .git files (worktree pointers)", (t) => {
   );
 });
 
-test("#2616: findNestedGitDirs skips excluded directories (node_modules, .gsd, .bg-shell, target)", (t) => {
+test("#2616: findNestedGitDirs skips excluded directories (node_modules, .bg-shell, target)", (t) => {
   const root = makeRoot(t);
 
   // All three of these contain a .git *directory*, but the scan must skip them.
-  for (const excluded of ["node_modules", ".gsd", ".bg-shell", "target"]) {
+  for (const excluded of ["node_modules", ".bg-shell", "target"]) {
     const inside = join(root, excluded, "vendored-pkg");
     mkdirSync(join(inside, ".git"), { recursive: true });
   }
@@ -70,6 +70,38 @@ test("#2616: findNestedGitDirs skips excluded directories (node_modules, .gsd, .
     found.length,
     0,
     `excluded directories must be skipped, got ${JSON.stringify(found)}`,
+  );
+});
+
+test("#2616: findNestedGitDirs detects a nested repo under .gsd", (t) => {
+  const root = makeRoot(t);
+
+  // .gsd holds user-authored artifacts too, so a repo scaffolded there is the
+  // same data-loss class as one at the worktree root.
+  const scaffolded = join(root, ".gsd", "milestones", "M001", "spike");
+  mkdirSync(join(scaffolded, ".git", "objects"), { recursive: true });
+
+  const found = findNestedGitDirs(root);
+  assert.ok(
+    found.includes(scaffolded),
+    `expected ${scaffolded} in findNestedGitDirs output, got ${JSON.stringify(found)}`,
+  );
+});
+
+test("#2616: findNestedGitDirs skips machine-owned .gsd subtrees", (t) => {
+  const root = makeRoot(t);
+
+  // Nested worktrees and runtime logs are GSD-owned; scanning them is wasted
+  // work and their contents are owned by another removal path.
+  for (const machineOwned of ["worktrees", "runtime", "activity", "audit", "forensics", "parallel", "journal", "quarantine"]) {
+    mkdirSync(join(root, ".gsd", machineOwned, "vendored-pkg", ".git"), { recursive: true });
+  }
+
+  const found = findNestedGitDirs(root);
+  assert.equal(
+    found.length,
+    0,
+    `machine-owned .gsd subtrees must be skipped, got ${JSON.stringify(found)}`,
   );
 });
 
