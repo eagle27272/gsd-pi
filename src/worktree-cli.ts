@@ -52,14 +52,18 @@ let _mergeExt: MergeModules | null = null
 interface ExtensionModules {
   createWorktree: (basePath: string, name: string) => { path: string; branch: string }
   listWorktrees: (basePath: string) => Array<{ name: string; path: string; branch: string }>
-  removeWorktree: (basePath: string, name: string, opts?: { deleteBranch?: boolean; branch?: string }) => void
+  removeWorktree: (
+    basePath: string,
+    name: string,
+    opts?: { deleteBranch?: boolean; branch?: string },
+  ) => { removed: boolean; quarantinePath: string | null }
   mergeWorktreeToMain: (basePath: string, name: string, commitMessage: string, branch?: string) => void
   diffWorktreeAll: (basePath: string, name: string, branch?: string) => WorktreeDiff
   diffWorktreeNumstat: (basePath: string, name: string, branch?: string) => Array<{ added: number; removed: number }>
   worktreeBranchName: (name: string) => string
   worktreePath: (basePath: string, name: string) => string
   runWorktreePostCreateHook: (basePath: string, wtPath: string) => string | null
-  nativeHasChanges: (path: string) => boolean
+  nativeWorkingTreeStatus: (path: string, opts?: { allowFailure?: boolean }) => string
   nativeDetectMainBranch: (basePath: string) => string
   nativeCommitCountBetween: (basePath: string, from: string, to: string) => number
   resolveWorktreeProjectRoot: (basePath: string) => string
@@ -86,7 +90,7 @@ interface WorktreePostCreateHookModule {
 }
 
 interface NativeGitBridgeModule {
-  nativeHasChanges: ExtensionModules['nativeHasChanges']
+  nativeWorkingTreeStatus: ExtensionModules['nativeWorkingTreeStatus']
   nativeDetectMainBranch: ExtensionModules['nativeDetectMainBranch']
   nativeCommitCountBetween: ExtensionModules['nativeCommitCountBetween']
 }
@@ -105,6 +109,16 @@ interface WorktreeRootModule {
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/** Tell the user where removal moved uncommitted work instead of deleting it. */
+function reportQuarantine(name: string, quarantinePath: string | null | undefined): void {
+  if (!quarantinePath) return
+  process.stderr.write(
+    chalk.yellow(`  ! Uncommitted work in ${chalk.bold(name)} was quarantined, not deleted:\n`) +
+      chalk.yellow(`    ${quarantinePath}\n`) +
+      chalk.dim('    Recover what you need (skip .git, .gsd and .gsd-quarantine.json), then delete it.\n'),
+  )
 }
 
 function logDebugFailure(scope: string, error: unknown): void {
@@ -131,7 +145,7 @@ async function loadExtensionModules(): Promise<ExtensionModules> {
     worktreeBranchName: wtMgr.worktreeBranchName,
     worktreePath: wtMgr.worktreePath,
     runWorktreePostCreateHook: hook.runWorktreePostCreateHook,
-    nativeHasChanges: gitBridge.nativeHasChanges,
+    nativeWorkingTreeStatus: gitBridge.nativeWorkingTreeStatus,
     nativeDetectMainBranch: gitBridge.nativeDetectMainBranch,
     nativeCommitCountBetween: gitBridge.nativeCommitCountBetween,
     resolveWorktreeProjectRoot: wtRoot.resolveWorktreeProjectRoot,
@@ -162,7 +176,7 @@ function worktreeStatusDependencies(ext: ExtensionModules): WorktreeStatusDepend
   return {
     diffWorktreeAll: ext.diffWorktreeAll,
     diffWorktreeNumstat: ext.diffWorktreeNumstat,
-    nativeHasChanges: ext.nativeHasChanges,
+    nativeWorkingTreeStatus: ext.nativeWorkingTreeStatus,
     nativeDetectMainBranch: ext.nativeDetectMainBranch,
     nativeCommitCountBetween: ext.nativeCommitCountBetween,
     onDebugFailure: logDebugFailure,
@@ -221,8 +235,9 @@ async function doMerge(ext: ExtensionModules, basePath: string, name: string): P
   if (status.filesChanged === 0 && !status.uncommitted) {
     process.stderr.write(chalk.dim(`Worktree "${name}" has no changes to merge.\n`))
     // Clean up empty worktree
-    ext.removeWorktree(basePath, name, { deleteBranch: true, branch: wt.branch })
+    const removal = ext.removeWorktree(basePath, name, { deleteBranch: true, branch: wt.branch })
     process.stderr.write(chalk.green(`Removed empty worktree ${chalk.bold(name)}.\n`))
+    reportQuarantine(name, removal.quarantinePath)
     return
   }
 
@@ -244,9 +259,10 @@ async function doMerge(ext: ExtensionModules, basePath: string, name: string): P
 
   try {
     ext.mergeWorktreeToMain(basePath, name, commitMessage, wt.branch)
-    ext.removeWorktree(basePath, name, { deleteBranch: true, branch: wt.branch })
+    const removal = ext.removeWorktree(basePath, name, { deleteBranch: true, branch: wt.branch })
     process.stderr.write(chalk.green(`✓ Merged and cleaned up ${chalk.bold(name)}\n`))
     process.stderr.write(chalk.dim(`  commit: ${commitMessage}\n`))
+    reportQuarantine(name, removal.quarantinePath)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     process.stderr.write(chalk.red(`✗ Merge failed: ${msg}\n`))
@@ -271,8 +287,13 @@ async function handleClean(basePath: string): Promise<void> {
     const status = getWorktreeStatus(ext, basePath, wt.name, wt.path, wt.branch)
     if (status.filesChanged === 0 && !status.uncommitted) {
       try {
-        ext.removeWorktree(basePath, wt.name, { deleteBranch: true, branch: wt.branch })
+        const removal = ext.removeWorktree(basePath, wt.name, { deleteBranch: true, branch: wt.branch })
+        if (!removal.removed) {
+          process.stderr.write(chalk.yellow(`  ─ Kept ${chalk.bold(wt.name)} (removal aborted to preserve uncommitted changes)\n`))
+          continue
+        }
         process.stderr.write(chalk.green(`  ✓ Removed ${chalk.bold(wt.name)} (clean)\n`))
+        reportQuarantine(wt.name, removal.quarantinePath)
         cleaned++
       } catch (error) {
         process.stderr.write(chalk.yellow(`  ✗ Failed to remove ${wt.name}: ${toErrorMessage(error)}\n`))
@@ -312,8 +333,14 @@ async function handleRemove(basePath: string, args: string[]): Promise<void> {
     }
   }
 
-  ext.removeWorktree(basePath, name, { deleteBranch: true, branch: wt.branch })
+  const removal = ext.removeWorktree(basePath, name, { deleteBranch: true, branch: wt.branch })
+  if (!removal.removed) {
+    process.stderr.write(chalk.yellow(`⚠ Worktree removal aborted for ${chalk.bold(name)} to preserve uncommitted changes.\n`))
+    process.stderr.write(chalk.dim('  Manual quarantine recovery may be needed before retrying removal.\n'))
+    process.exit(1)
+  }
   process.stderr.write(chalk.green(`✓ Removed worktree ${chalk.bold(name)}\n`))
+  reportQuarantine(name, removal.quarantinePath)
 }
 
 // ─── Subcommand: status (default when no args) ─────────────────────────────

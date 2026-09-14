@@ -66,7 +66,7 @@ describe("assertMilestoneWorktreeCleanBeforeTeardown", () => {
     assert.equal(dirtyChecks, 0, "dirty state on another branch must not block cleanup");
   });
 
-  test("fails open when dirty status cannot be read", () => {
+  test("aborts teardown when dirty status cannot be read", () => {
     _setPreTeardownSafetyDepsForTests({
       existsSync: () => true,
       nativeGetCurrentBranch: () => "milestone/M002",
@@ -75,10 +75,80 @@ describe("assertMilestoneWorktreeCleanBeforeTeardown", () => {
       },
     });
 
+    assert.throws(
+      () => assertMilestoneWorktreeCleanBeforeTeardown({
+        milestoneBranch: "milestone/M002",
+        previousCwd: "/tmp/milestone-worktree",
+        worktreeCwd: "/tmp/milestone-worktree",
+      }),
+      (err: unknown) => err instanceof GSDError
+        && /could not be verified/.test(err.message)
+        && /status unavailable/.test(err.message),
+    );
+  });
+
+  test("reads dirty status strictly so a failed git status is not seen as clean", () => {
+    const allowFailureFlags: Array<boolean | undefined> = [];
+    _setPreTeardownSafetyDepsForTests({
+      existsSync: () => true,
+      nativeGetCurrentBranch: () => "milestone/M002",
+      nativeWorkingTreeStatus: (_path, opts) => {
+        allowFailureFlags.push(opts?.allowFailure);
+        return "";
+      },
+    });
+
     assert.doesNotThrow(() => assertMilestoneWorktreeCleanBeforeTeardown({
       milestoneBranch: "milestone/M002",
       previousCwd: "/tmp/milestone-worktree",
       worktreeCwd: "/tmp/milestone-worktree",
     }));
+    assert.deepEqual(
+      allowFailureFlags,
+      [false],
+      "the guard must opt out of the empty-string-on-failure fallback",
+    );
+  });
+
+  test("aborts teardown on uncommitted work when the branch cannot be detected", () => {
+    _setPreTeardownSafetyDepsForTests({
+      existsSync: () => true,
+      nativeGetCurrentBranch: () => {
+        throw new Error("branch detect failed");
+      },
+      nativeWorkingTreeStatus: () => " M src/index.ts",
+      chdir: () => {},
+    });
+
+    assert.throws(
+      () => assertMilestoneWorktreeCleanBeforeTeardown({
+        milestoneBranch: "milestone/M002",
+        previousCwd: "/tmp/main",
+        worktreeCwd: "/tmp/milestone-worktree",
+      }),
+      (err: unknown) => err instanceof GSDError
+        && /still has uncommitted changes/.test(err.message),
+    );
+  });
+
+  test("still aborts when restoring the previous cwd fails", () => {
+    _setPreTeardownSafetyDepsForTests({
+      existsSync: () => true,
+      nativeGetCurrentBranch: () => "milestone/M002",
+      nativeWorkingTreeStatus: () => " M src/index.ts",
+      chdir: () => {
+        throw new Error("previous cwd is gone");
+      },
+    });
+
+    assert.throws(
+      () => assertMilestoneWorktreeCleanBeforeTeardown({
+        milestoneBranch: "milestone/M002",
+        previousCwd: "/tmp/deleted-cwd",
+        worktreeCwd: "/tmp/milestone-worktree",
+      }),
+      (err: unknown) => err instanceof GSDError
+        && /still has uncommitted changes/.test(err.message),
+    );
   });
 });

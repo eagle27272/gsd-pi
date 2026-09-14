@@ -110,10 +110,19 @@ export function teardownAutoWorktree(
     //    milestone worktree for restart/re-entry).
     let worktreeRemoved = preserveWorktree;
     if (!preserveWorktree) {
-      worktreeRemoved = removeWorktree(originalBasePath, milestoneId, {
+      const removal = removeWorktree(originalBasePath, milestoneId, {
         branch,
         deleteBranch: !preserveBranch,
       });
+      worktreeRemoved = removal.removed;
+      if (removal.quarantinePath) {
+        logWarning(
+          "reconcile",
+          `Uncommitted work in ${milestoneId} was quarantined at ${removal.quarantinePath} before teardown. ` +
+            `Recover the files you need from there before deleting it.`,
+          { worktree: milestoneId, path: removal.quarantinePath },
+        );
+      }
       if (!worktreeRemoved) {
         logWarning(
           "worktree",
