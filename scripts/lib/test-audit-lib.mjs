@@ -129,6 +129,17 @@ export function collectTestFiles(root) {
   return files.sort();
 }
 
+// ci-fast-gates.sh names scripts/__tests__/*.{mjs,cjs,ts} explicitly, and those
+// globs are one level deep. Classifying the whole directory as wired would hide
+// any file the runner cannot reach, so mirror the glob set here instead.
+const SCRIPT_FAST_GATE_EXTENSIONS = ['.test.mjs', '.test.cjs', '.test.ts'];
+
+function classifyScriptRunner(testPath) {
+  const rest = testPath.slice('scripts/__tests__/'.length);
+  if (rest.includes('/')) return 'unwired';
+  return SCRIPT_FAST_GATE_EXTENSIONS.some((ext) => rest.endsWith(ext)) ? 'scripts-fast-gates' : 'unwired';
+}
+
 // scripts/compile-tests.mjs mirrors packages/<pkg>/src into dist-test and
 // explicitly deletes dist-test/packages/<pkg>/test; run-package-tests.cjs then
 // globs only dist-test/packages/<pkg>/src. So `src` is the sole package path
@@ -145,7 +156,7 @@ function classifyPackageRunner(testPath) {
 export function classifyRunner(testPath) {
   if (testPath.startsWith('tests/e2e/')) return 'e2e';
   if (testPath.startsWith('tests/smoke/') || testPath.startsWith('tests/live')) return 'release-pipeline';
-  if (testPath.startsWith('scripts/__tests__/')) return 'scripts-fast-gates';
+  if (testPath.startsWith('scripts/__tests__/')) return classifyScriptRunner(testPath);
   if (testPath.startsWith('web/')) {
     return 'ui-sparse-manual';
   }
