@@ -1,21 +1,27 @@
 #!/usr/bin/env node
 /**
- * vendor-pi.cjs — sync vendored @gsd/pi-* packages from earendil-works/pi.
+ * vendor-pi.cjs — one-shot sync of the vendored @gsd/pi-* packages from earendil-works/pi.
  *
  * Usage:
- *   node scripts/vendor-pi.cjs [--ref v0.75.5] [--dry-run]
+ *   node scripts/vendor-pi.cjs [--ref v0.75.5] [--checkout-only] [--skip-checkout] [--dry-run]
  *
  * Prerequisites:
  *   - git available on PATH
  *   - ADR-010 clean seam complete (GSD code in gsd-agent-core / gsd-agent-modes)
  *
- * The script clones or updates a shallow checkout under .cache/pi-upstream, copies
- * the four upstream package directories into packages/pi-*, and preserves GSD
- * package.json name/scope fields.
+ * This is the only vendoring script that talks to the upstream remote, so it is
+ * the only one that takes --ref. It refreshes .cache/pi-upstream at that ref
+ * (default: pinnedRef in pi-upstream.json), then runs the post-vendor pipeline
+ * below. The pipeline scripts read whatever .cache/pi-upstream already holds and
+ * accept no arguments; use --checkout-only to stage a ref before running them by
+ * hand (docs/dev/pi-upstream.md, "Upgrade workflow" step 2).
+ *
+ * pi-coding-agent is deliberately not copied wholesale: vendor-pi-coding-agent-core.cjs
+ * syncs only src/core and src/utils and restores the seam files around them.
  */
 'use strict'
 
-const { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, cpSync, readdirSync } = require('fs')
+const { existsSync, mkdirSync, readFileSync } = require('fs')
 const { join, resolve, dirname } = require('path')
 const { execFileSync } = require('child_process')
 
@@ -23,25 +29,41 @@ const REPO_ROOT = resolve(__dirname, '..')
 const UPSTREAM_CONFIG_PATH = join(__dirname, 'pi-upstream.json')
 const CACHE_DIR = join(REPO_ROOT, '.cache', 'pi-upstream')
 
+const PIPELINE = [
+  ['vendor-pi-deps.cjs', 'pi-agent-core, pi-ai, pi-tui + import/package.json/tsconfig normalization'],
+  ['vendor-pi-coding-agent-core.cjs', 'pi-coding-agent src/core + src/utils, seam files preserved'],
+  ['apply-seam.cjs', 'post-vendor deletes, import rewrites, index trim, boundary verify'],
+]
+
+function fail(message) {
+  process.stderr.write(`ERROR: ${message}\n`)
+  process.exit(1)
+}
+
 function loadConfig() {
   return JSON.parse(readFileSync(UPSTREAM_CONFIG_PATH, 'utf8'))
 }
 
 function parseArgs(argv) {
-  const opts = { dryRun: false, ref: null }
+  const opts = { dryRun: false, ref: null, checkoutOnly: false, skipCheckout: false }
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--dry-run') opts.dryRun = true
-    else if (argv[i] === '--ref' && argv[i + 1]) opts.ref = argv[++i]
+    const arg = argv[i]
+    if (arg === '--dry-run') opts.dryRun = true
+    else if (arg === '--checkout-only') opts.checkoutOnly = true
+    else if (arg === '--skip-checkout') opts.skipCheckout = true
+    else if (arg === '--ref') {
+      if (!argv[i + 1]) fail('--ref requires a value, e.g. --ref v0.75.5')
+      opts.ref = argv[++i]
+    } else fail(`Unknown argument: ${arg}`)
+  }
+  if (opts.checkoutOnly && opts.skipCheckout) {
+    fail('--checkout-only and --skip-checkout are mutually exclusive')
   }
   return opts
 }
 
 function run(command, args, cwd) {
   execFileSync(command, args, { cwd, stdio: 'inherit' })
-}
-
-function runCapture(command, args, cwd) {
-  return execFileSync(command, args, { cwd, encoding: 'utf8' }).trim()
 }
 
 function ensureUpstreamCheckout(repoUrl, ref) {
@@ -51,79 +73,45 @@ function ensureUpstreamCheckout(repoUrl, ref) {
     return
   }
 
-  run('git', ['fetch', '--depth', '1', 'origin'], CACHE_DIR)
-  run('git', ['checkout', ref], CACHE_DIR)
-  run('git', ['pull', '--depth', '1', 'origin'], CACHE_DIR)
+  // Fetch the requested ref by name: a shallow clone pinned to another tag has
+  // no refspec that would bring it in, so a bare `git fetch` leaves the cache
+  // on the old ref and `git checkout <ref>` fails.
+  run('git', ['fetch', '--depth', '1', 'origin', ref], CACHE_DIR)
+  run('git', ['checkout', '--detach', 'FETCH_HEAD'], CACHE_DIR)
 }
 
-function preserveGsdPackageJson(targetDir, upstreamPkgJson) {
-  const gsdPkgPath = join(targetDir, 'package.json')
-  let gsdFields = {}
-  if (existsSync(gsdPkgPath)) {
-    const existing = JSON.parse(readFileSync(gsdPkgPath, 'utf8'))
-    gsdFields = {
-      name: existing.name,
-      version: existing.version,
-      description: existing.description,
-      gsd: existing.gsd,
-      piConfig: existing.piConfig,
-    }
+function runPipeline(dryRun) {
+  for (const [script, purpose] of PIPELINE) {
+    process.stderr.write(`${dryRun ? '[dry-run] ' : ''}node scripts/${script}  # ${purpose}\n`)
+    if (!dryRun) run(process.execPath, [join(__dirname, script)], REPO_ROOT)
   }
-
-  const merged = { ...upstreamPkgJson, ...gsdFields }
-  // Drop upstream-only publish fields that would confuse GSD packaging
-  delete merged.publishConfig
-  return merged
-}
-
-function copyPackage(upstreamSubdir, targetSubdir, gsdPackageName, dryRun) {
-  const src = join(CACHE_DIR, upstreamSubdir)
-  const dest = join(REPO_ROOT, targetSubdir)
-
-  if (!existsSync(src)) {
-    throw new Error(`Upstream package not found: ${src}`)
-  }
-
-  process.stderr.write(`${dryRun ? '[dry-run] ' : ''}Copy ${upstreamSubdir} → ${targetSubdir}\n`)
-
-  if (dryRun) return
-
-  rmSync(dest, { recursive: true, force: true })
-  cpSync(src, dest, { recursive: true })
-
-  const upstreamPkg = JSON.parse(readFileSync(join(dest, 'package.json'), 'utf8'))
-  const merged = preserveGsdPackageJson(dest, upstreamPkg)
-  if (gsdPackageName) merged.name = gsdPackageName
-  writeFileSync(join(dest, 'package.json'), JSON.stringify(merged, null, 2) + '\n')
 }
 
 function main() {
-  const config = loadConfig()
   const opts = parseArgs(process.argv.slice(2))
+  const config = loadConfig()
   const ref = opts.ref || config.pinnedRef
 
-  if (!ref) {
-    process.stderr.write('ERROR: No upstream ref. Set pinnedRef in scripts/pi-upstream.json or pass --ref\n')
-    process.exit(1)
+  if (opts.skipCheckout) {
+    if (!existsSync(CACHE_DIR)) {
+      fail('--skip-checkout needs a populated .cache/pi-upstream; run with --ref first')
+    }
+  } else {
+    if (!ref) fail('No upstream ref. Set pinnedRef in scripts/pi-upstream.json or pass --ref')
+    process.stderr.write(`${opts.dryRun ? '[dry-run] ' : ''}Vendoring earendil-works/pi @ ${ref}\n`)
+    if (!opts.dryRun) ensureUpstreamCheckout(config.repository, ref)
   }
 
-  for (const protectedPath of config.protectedPaths || []) {
-    const full = join(REPO_ROOT, protectedPath)
-    if (!existsSync(full)) continue
-    // protected paths must exist and not be overwritten — they live outside pi-* vendor dirs
+  if (opts.checkoutOnly) {
+    process.stderr.write('checkout-only: .cache/pi-upstream staged, pipeline skipped.\n')
+    return
   }
 
-  process.stderr.write(`Vendoring earendil-works/pi @ ${ref}\n`)
-  if (!opts.dryRun) {
-    ensureUpstreamCheckout(config.repository, ref)
-  }
+  runPipeline(opts.dryRun)
 
-  for (const [upstreamPath, targetPath] of Object.entries(config.packageMap)) {
-    const gsdName = config.gsdPackageNames?.[upstreamPath]
-    copyPackage(upstreamPath, targetPath, gsdName, opts.dryRun)
-  }
-
-  process.stderr.write('Done. Run npm run build and fix errors in @gsd/agent-core and @gsd/agent-modes only.\n')
+  process.stderr.write(
+    'Done. Next: reconcile the patchAllowlist shims and verify — docs/dev/pi-upstream.md, "Upgrade workflow" steps 3 onward.\n',
+  )
 }
 
 main()

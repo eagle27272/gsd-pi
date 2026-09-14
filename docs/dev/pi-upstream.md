@@ -61,12 +61,29 @@ Smoke tests exercise CLI `--help` and `--version` only; they do not require API 
    ```bash
    node scripts/vendor-pi.cjs --ref vX.Y.Z
    ```
-   Or stepwise:
+   `vendor-pi.cjs` is the only vendoring script that talks to the upstream remote, so it is
+   the only one that takes `--ref`. It refreshes `.cache/pi-upstream` at that ref (default:
+   `pinnedRef` in `scripts/pi-upstream.json`), then runs the three post-vendor steps in order.
+
+   | Flag | Effect |
+   |---|---|
+   | `--ref vX.Y.Z` | Upstream tag/branch to check out. Defaults to `pinnedRef`. |
+   | `--checkout-only` | Refresh `.cache/pi-upstream` and stop, for driving the steps by hand. |
+   | `--skip-checkout` | Run the steps against whatever is already staged in `.cache/pi-upstream`. |
+   | `--dry-run` | Print the ref and the steps without cloning or running anything. |
+
+   The three steps take **no arguments** — they read whatever `.cache/pi-upstream` already
+   contains. To run them individually, stage the ref first:
    ```bash
-   node scripts/vendor-pi-deps.cjs --ref vX.Y.Z          # pi-ai, pi-agent-core, pi-tui
-   node scripts/vendor-pi-coding-agent-core.cjs --ref vX.Y.Z
-   node scripts/apply-seam.cjs                           # post-vendor deletes, import rewrites, boundary verify
+   node scripts/vendor-pi.cjs --ref vX.Y.Z --checkout-only  # refresh .cache/pi-upstream only
+   node scripts/vendor-pi-deps.cjs               # pi-ai, pi-agent-core, pi-tui + import/package.json/tsconfig normalization
+   node scripts/vendor-pi-coding-agent-core.cjs  # pi-coding-agent src/core + src/utils, seam files preserved
+   node scripts/apply-seam.cjs                   # post-vendor deletes, import rewrites, index trim, boundary verify
    ```
+   `packages/coding-agent` is never copied wholesale: `vendor-pi-coding-agent-core.cjs` syncs
+   only `src/core` and `src/utils` and restores the seam files around them, so the allowlisted
+   patches under `packages/pi-coding-agent/src` survive the copy.
+
    Seam config: `scripts/pi-seam.json` (forbidden paths, protected files, import rewrites, theme/tool fixes).
 3. **Reconcile GSD shims** — re-apply every path in `patchAllowlist`. Prefer **incremental shims** over restoring entire pre-vendor GSD files (HEAD restore of `model-registry.ts` / `settings-manager.ts` broke v0.75.5 compat in Phase 2).
 4. **Normalize package.json** — preserve `@gsd/pi-*` names, `gsd.linkable`, workspace `tsc` build scripts, and subpath exports (`./*` → `./dist/*`).
