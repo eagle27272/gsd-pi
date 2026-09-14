@@ -5,6 +5,8 @@
 import { Container, Spacer, Text, type Component, type TUI } from "@gsd/pi-tui";
 import type { ExtensionUIContext, ExtensionUIDialogOptions, ExtensionWidgetOptions } from "@gsd/pi-coding-agent/core/extensions/index.js";
 import { setupExtensionShortcuts } from "./interactive-extension-tools.js";
+import { hideExtensionEditor, hideExtensionInput, hideExtensionSelector } from "./interactive-extension-dialogs.js";
+import { createDefaultCommandContextActions } from "../shared/command-context-actions.js";
 export { getRegisteredToolDefinition, formatWebSearchResult } from "./interactive-extension-tools.js";
 import { FooterDataProvider, type ReadonlyFooterDataProvider } from "@gsd/pi-coding-agent/core/footer-data-provider.js";
 import { setRegisteredThemes, setTheme, Theme, theme } from "@gsd/pi-coding-agent/theme/theme.js";
@@ -26,7 +28,7 @@ export async function initExtensions(host: InteractiveModeDelegateHost): Promise
 			await host.session.bindExtensions({
 				uiContext,
 				commandContextActions: {
-					waitForIdle: () => host.session.agent.waitForIdle(),
+					...createDefaultCommandContextActions(host.session),
 					newSession: async (options) => {
 						if (host.loadingAnimation) {
 							host.loadingAnimation.stop();
