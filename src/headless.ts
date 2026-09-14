@@ -41,6 +41,7 @@ import {
   EXIT_BLOCKED,
   EXIT_CANCELLED,
   mapStatusToExitCode,
+  negotiateV2Protocol,
 } from './headless-events.js'
 
 import type { OutputFormat, HeadlessJsonResult } from './headless-types.js'
@@ -1011,11 +1012,15 @@ async function runHeadlessOnce(options: HeadlessOptions, restartCount: number): 
     process.exit(1)
   }
 
-  // v2 protocol negotiation — attempt init for structured completion events
-  try {
-    await client.init({ clientId: 'gsd-headless' })
-  } catch {
-    process.stderr.write('[headless] Warning: v2 init failed, falling back to v1 string-matching\n')
+  // v2 protocol negotiation — structured completion events are mandatory, so a
+  // refused init ends the run rather than degrading to an exit code that cannot
+  // express failure. See negotiateV2Protocol. (#109)
+  const negotiation = await negotiateV2Protocol(client)
+  if (negotiation.error) {
+    process.stderr.write(`[headless] Error: ${negotiation.error}\n`)
+    await client.stop()
+    if (timeoutTimer) clearTimeout(timeoutTimer)
+    process.exit(1)
   }
 
   clientStarted = true

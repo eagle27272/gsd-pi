@@ -45,6 +45,21 @@ test("classifyRunner reports unreached package test directories as unwired", () 
   assert.equal(classifyRunner("packages/mcp-server/test/readers.test.ts"), "unwired");
 });
 
+// ci-fast-gates.sh globs scripts/__tests__/*.{mjs,cjs,ts} one level deep, so an
+// extension or a nesting level outside that set is unrun even though the
+// directory as a whole is wired.
+test("classifyRunner maps only the extensions ci-fast-gates globs to scripts-fast-gates", () => {
+  assert.equal(classifyRunner("scripts/__tests__/policy.test.mjs"), "scripts-fast-gates");
+  assert.equal(classifyRunner("scripts/__tests__/policy.test.cjs"), "scripts-fast-gates");
+  assert.equal(classifyRunner("scripts/__tests__/policy.test.ts"), "scripts-fast-gates");
+});
+
+test("classifyRunner reports script tests the fast-gates globs miss as unwired", () => {
+  assert.equal(classifyRunner("scripts/__tests__/policy.test.js"), "unwired");
+  assert.equal(classifyRunner("scripts/__tests__/policy.test.tsx"), "unwired");
+  assert.equal(classifyRunner("scripts/__tests__/nested/policy.test.mjs"), "unwired");
+});
+
 test("verify-merge is reachable but outside the default npm test", () => {
   assert.equal(isInNpmTest("verify-merge"), false);
   assert.equal(isReachableTest("verify-merge"), true);

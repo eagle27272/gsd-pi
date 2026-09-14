@@ -176,7 +176,7 @@ export async function getRunningModels(): Promise<OllamaPsResponse> {
 /**
  * Pull a model with streaming progress.
  * Calls onProgress for each progress update.
- * Returns when the pull is complete.
+ * Returns when the pull is complete, throws when it fails.
  */
 export async function pullModel(
 	name: string,
@@ -200,6 +200,9 @@ export async function pullModel(
 	}
 
 	for await (const progress of parseNDJsonStream<OllamaPullProgress>(response.body, signal)) {
+		if (progress.error) {
+			throw new Error(`Ollama /api/pull failed: ${progress.error}`);
+		}
 		onProgress?.(progress);
 	}
 }

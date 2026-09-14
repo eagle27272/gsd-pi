@@ -50,6 +50,13 @@ node scripts/audit-test-confidence.mjs --strict
 echo "── script policy tests ──"
 node --test "scripts/__tests__/*.mjs" "scripts/__tests__/*.cjs"
 
+# TypeScript script tests import .ts sources, so they need the strip-types
+# loader the other suites use. Kept a separate invocation so the loader cannot
+# change how the .mjs/.cjs suites above resolve their imports.
+echo "── script policy tests (typescript) ──"
+node --import ./src/resources/extensions/gsd/tests/resolve-ts.mjs --experimental-strip-types \
+  --test "scripts/__tests__/*.test.ts"
+
 echo "── test gap strict (unwired) ──"
 node scripts/audit-test-gaps.mjs --strict-unwired
 

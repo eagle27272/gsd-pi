@@ -61,16 +61,33 @@ Smoke tests exercise CLI `--help` and `--version` only; they do not require API 
    ```bash
    node scripts/vendor-pi.cjs --ref vX.Y.Z
    ```
-   Or stepwise:
+   `vendor-pi.cjs` is the only vendoring script that talks to the upstream remote, so it is
+   the only one that takes `--ref`. It refreshes `.cache/pi-upstream` at that ref (default:
+   `pinnedRef` in `scripts/pi-upstream.json`), then runs the three post-vendor steps in order.
+
+   | Flag | Effect |
+   |---|---|
+   | `--ref vX.Y.Z` | Upstream tag/branch to check out. Defaults to `pinnedRef`. |
+   | `--checkout-only` | Refresh `.cache/pi-upstream` and stop, for driving the steps by hand. |
+   | `--skip-checkout` | Run the steps against whatever is already staged in `.cache/pi-upstream`. |
+   | `--dry-run` | Print the ref and the steps without cloning or running anything. |
+
+   The three steps take **no arguments** — they read whatever `.cache/pi-upstream` already
+   contains. To run them individually, stage the ref first:
    ```bash
-   node scripts/vendor-pi-deps.cjs --ref vX.Y.Z          # pi-ai, pi-agent-core, pi-tui
-   node scripts/vendor-pi-coding-agent-core.cjs --ref vX.Y.Z
-   node scripts/apply-seam.cjs                           # post-vendor deletes, import rewrites, boundary verify
+   node scripts/vendor-pi.cjs --ref vX.Y.Z --checkout-only  # refresh .cache/pi-upstream only
+   node scripts/vendor-pi-deps.cjs               # pi-ai, pi-agent-core, pi-tui + import/package.json/tsconfig normalization
+   node scripts/vendor-pi-coding-agent-core.cjs  # pi-coding-agent src/core + src/utils, seam files preserved
+   node scripts/apply-seam.cjs                   # post-vendor deletes, import rewrites, index trim, boundary verify
    ```
+   `packages/coding-agent` is never copied wholesale: `vendor-pi-coding-agent-core.cjs` syncs
+   only `src/core` and `src/utils` and restores the seam files around them, so the allowlisted
+   patches under `packages/pi-coding-agent/src` survive the copy.
+
    Seam config: `scripts/pi-seam.json` (forbidden paths, protected files, import rewrites, theme/tool fixes).
 3. **Reconcile GSD shims** — re-apply every path in `patchAllowlist`. Prefer **incremental shims** over restoring entire pre-vendor GSD files (HEAD restore of `model-registry.ts` / `settings-manager.ts` broke v0.75.5 compat in Phase 2).
 4. **Normalize package.json** — preserve `@gsd/pi-*` names, `gsd.linkable`, workspace `tsc` build scripts, and subpath exports (`./*` → `./dist/*`).
-5. **Fix import extensions** — GSD uses Node16 `.js` suffix imports; upstream may use `.ts` for `tsgo`. Bulk-fix or adopt upstream `tsconfig.build.json` if switching compilers.
+5. **Fix import extensions** — GSD uses Node16 `.js` suffix imports; upstream may use `.ts` for `tsgo`. Bulk-fix, or pull upstream's `tsconfig.build.json` from the pinned ref if switching compilers — it is not kept in the tree. `scripts/restore-pi-tsconfig.cjs` deletes every vendored `tsconfig.build.json` and `tsconfig.examples.json` on each sync: they extend a `tsconfig.base.json` GSD does not have, and leaving them would let anyone who creates that filename silently activate upstream's options against diverged packages (#82).
 6. **Merge dependency deltas** — upstream may rename packages (`typebox` vs `@sinclair/typebox`). Merge without dropping `@gsd/native` shims.
 7. **Build GSD layers** — errors should surface in `@gsd/agent-core` and `@gsd/agent-modes`, not in vendored pi-* except documented shims.
 8. **Session event migration** (pi ≥ 0.65): use `session_start` + `reason` instead of deprecated `session_switch` / `session_fork` / `session_directory`.

@@ -584,18 +584,36 @@ describe('derive-state-db', async () => {
   // ─── Test 8: Pre-planning — milestone exists, no roadmap, no slices ───
   test('derive-state-db: pre-planning via DB', async () => {
     const base = createFixtureBase();
+    const contextContent = '# M001: First\n\nSome context.';
     try {
-      // Create milestone dir on disk with a CONTEXT file (not a ghost)
-      writeFile(base, 'phases/01-m001/01-CONTEXT.md', '# M001: First\n\nSome context.');
+      // The disk file is only the projection; readiness comes from the
+      // artifacts row (see "missing context resolves milestone directory once").
+      writeFile(base, 'phases/01-m001/01-CONTEXT.md', contextContent);
 
-
-      // Now open DB, populate hierarchy
       openDatabase(':memory:');
       insertMilestone({ id: 'M001', title: 'First', status: 'active' });
+      insertArtifactRow('phases/01-m001/01-CONTEXT.md', contextContent, {
+        artifact_type: 'CONTEXT',
+        milestone_id: 'M001',
+      });
 
       invalidateStateCache();
-      await deriveStateFromDb(base);
+      const dbState = await deriveStateFromDb(base);
 
+      // Settled CONTEXT and no slices: pre-planning. Not needs-discussion —
+      // that requires CONTEXT-DRAFT — and not blocked, since nothing is queued
+      // behind an unmet dependency.
+      assert.deepStrictEqual(dbState.phase, 'pre-planning', 'preplan-db: phase is pre-planning');
+      assert.deepStrictEqual(dbState.activeMilestone?.id, 'M001', 'preplan-db: activeMilestone is M001');
+      assert.deepStrictEqual(dbState.activeSlice, null, 'preplan-db: activeSlice is null');
+      assert.deepStrictEqual(dbState.activeTask, null, 'preplan-db: activeTask is null');
+      assert.deepStrictEqual(dbState.nextAction, 'Plan milestone M001.', 'preplan-db: nextAction plans M001');
+      assert.deepStrictEqual(dbState.blockers, [], 'preplan-db: no blockers');
+      assert.deepStrictEqual(dbState.registry.length, 1, 'preplan-db: registry has 1 entry');
+      assert.deepStrictEqual(dbState.registry[0]?.status, 'active', 'preplan-db: M001 is active');
+      assert.deepStrictEqual(dbState.progress?.milestones, { done: 0, total: 1 }, 'preplan-db: 0 of 1 milestones done');
+      assert.deepStrictEqual(dbState.progress?.slices, undefined, 'preplan-db: no slice progress before planning');
+      assert.deepStrictEqual(dbState.progress?.tasks, undefined, 'preplan-db: no task progress before planning');
 
       closeDatabase();
     } finally {

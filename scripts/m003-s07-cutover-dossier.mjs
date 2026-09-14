@@ -810,7 +810,7 @@ function requireExactGate(rawGate, expected, label) {
 function normalizeNoCutover(rawNoCutover) {
   const noCutover = requireRecord(rawNoCutover, "No-cutover gate");
   return {
-    structural: requireExactGate(noCutover.structural, 8, "No-cutover structural gate"),
+    structural: requireExactGate(noCutover.structural, 7, "No-cutover structural gate"),
     behavioral: requireExactGate(
       noCutover.behavioral,
       COMPATIBILITY_IDS.length,

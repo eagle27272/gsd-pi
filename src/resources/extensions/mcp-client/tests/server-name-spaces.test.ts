@@ -22,7 +22,7 @@ import { tmpdir } from "node:os";
 
 import { getServerConfig } from "../index.js";
 
-// readConfigs() anchors to process.cwd() — run each test in a sandbox dir
+// readMcpServerConfigs() anchors to process.cwd() — run each test in a sandbox dir
 // with a purpose-built .mcp.json so the extension reads our fixture, not
 // whatever .mcp.json happens to live in the current working directory.
 let sandboxDir: string;

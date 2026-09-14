@@ -22,7 +22,6 @@ let nativeModule: {
     slices: Array<{ id: string; title: string; risk: string; depends: string[]; done: boolean; demo: string }>;
     boundaryMap: Array<{ fromSlice: string; toSlice: string; produces: string; consumes: string }>;
   };
-  scanGsdTree: (directory: string) => Array<{ path: string; name: string; isDir: boolean }>;
   parseJsonlTail: (filePath: string, maxBytes?: number, maxEntries?: number) => { entries: string; count: number; truncated: boolean };
   parsePlanFile: (content: string) => NativePlanResult;
   parseSummaryFile: (content: string) => NativeSummaryResult;
@@ -143,24 +142,6 @@ export function nativeBatchParseGsdFiles(directory: string): BatchParsedFile[] |
  */
 export function isNativeParserAvailable(): boolean {
   return loadNative() !== null;
-}
-
-// ─── Tree Scanning ────────────────────────────────────────────────────────────
-
-export interface GsdTreeEntry {
-  path: string;
-  name: string;
-  isDir: boolean;
-}
-
-/**
- * Native-backed directory tree scan of a .gsd/ directory.
- * Returns a flat list of all entries, or null if native module unavailable.
- */
-export function nativeScanGsdTree(directory: string): GsdTreeEntry[] | null {
-  const native = loadNative();
-  if (!native) return null;
-  return native.scanGsdTree(directory);
 }
 
 // ─── JSONL Parsing ────────────────────────────────────────────────────────────

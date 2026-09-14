@@ -1,13 +1,24 @@
 #!/usr/bin/env node
-/** Restore GSD tsc tsconfig.json for vendored pi packages (upstream uses tsconfig.build.json). */
+/** Restore GSD tsc tsconfig.json for vendored pi packages, dropping upstream's stale build configs. */
 'use strict'
 
-const { writeFileSync, existsSync } = require('fs')
+const { writeFileSync, existsSync, rmSync } = require('fs')
 const { join } = require('path')
 const { execSync } = require('child_process')
 
 const ROOT = join(__dirname, '..')
 const PACKAGES = ['pi-agent-core', 'pi-ai', 'pi-tui']
+
+// Upstream ships these extending a tsconfig.base.json GSD does not have. Left in place they are a
+// trap: creating that filename at the root would silently activate upstream's options against
+// packages that have since diverged. GSD builds via tsconfig.json, so drop them. See #82.
+const STALE_VENDORED_CONFIGS = [
+  ['pi-agent-core', 'tsconfig.build.json'],
+  ['pi-ai', 'tsconfig.build.json'],
+  ['pi-tui', 'tsconfig.build.json'],
+  ['pi-coding-agent', 'tsconfig.build.json'],
+  ['pi-coding-agent', 'tsconfig.examples.json'],
+]
 
 const TSCONFIG = {
   compilerOptions: {
@@ -50,9 +61,13 @@ for (const pkg of PACKAGES) {
     /* use default */
   }
   writeFileSync(dest, JSON.stringify(config, null, 2) + '\n')
-  if (existsSync(join(ROOT, 'packages', pkg, 'tsconfig.build.json'))) {
-    process.stderr.write(`restore-pi-tsconfig: ${pkg} (kept tsconfig.build.json)\n`)
-  }
+}
+
+for (const [pkg, file] of STALE_VENDORED_CONFIGS) {
+  const path = join(ROOT, 'packages', pkg, file)
+  if (!existsSync(path)) continue
+  rmSync(path)
+  process.stderr.write(`restore-pi-tsconfig: ${pkg} (removed vendored ${file})\n`)
 }
 
 process.stderr.write('restore-pi-tsconfig: done\n')

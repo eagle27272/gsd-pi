@@ -17,8 +17,8 @@ import {
 } from "./m003-s07-cutover-dossier.mjs";
 import {
   REPO_ROOT as NO_CUTOVER_ROOT,
-  runSemanticShadowNoCutoverGate,
-} from "./semantic-shadow-no-cutover-gate.mjs";
+  runLifecycleShadowNoCutoverGate,
+} from "./lifecycle-shadow-no-cutover-gate.mjs";
 import {
   REPO_ROOT as AUTHORITY_BASELINE_ROOT,
   runWorkflowAuthorityBaseline,
@@ -376,7 +376,7 @@ export async function collectM003S07DossierInput(
     throw new Error("Capstone evidence source revision does not match the current local source");
   }
   const snapshot = readCanonicalSnapshot(databasePath);
-  const noCutover = await (dependencies.runNoCutover ?? runSemanticShadowNoCutoverGate)();
+  const noCutover = await (dependencies.runNoCutover ?? runLifecycleShadowNoCutoverGate)();
   const authorityBaseline = await (dependencies.runAuthorityBaseline ?? runWorkflowAuthorityBaseline)();
   const input = {
     recommendation: "NO_GO",
