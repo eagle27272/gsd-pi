@@ -247,7 +247,7 @@ source ~/.zshrc
 **Common causes:**
 - Missing workspace packages — fixed in a recent release
 - `postinstall` hangs on Linux (Playwright `--with-deps` triggering sudo) — fixed in a recent release
-- Node.js version too old — requires ≥ 22.18.0
+- Node.js version too old — requires ≥ 24.20.0
 - `ETARGET: No matching version found` / `notarget` — the `@opengsd/gsd-pi` package has not been published to the npm registry yet for the requested version (see below)
 
 **If you see `ETARGET` or `notarget` (package not found on npm):**
@@ -271,7 +271,7 @@ Options:
    pnpm run build
    npm install -g .
    ```
-   Requires Node.js ≥ 22.18.0 and pnpm. If `pnpm` is not installed: `npm install -g pnpm`.
+   Requires Node.js ≥ 24.20.0 and pnpm. If `pnpm` is not installed: `npm install -g pnpm`.
 
 ### Provider errors during auto mode
 
