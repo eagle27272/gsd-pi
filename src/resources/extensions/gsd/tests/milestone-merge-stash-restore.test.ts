@@ -30,7 +30,7 @@ interface CallLog {
   stopAutoOptions: Array<{ preserveCompletedMilestoneBranch?: boolean; preserveCloseoutTranscript?: boolean } | undefined>;
   pauseAutoCalls: Array<string | undefined>;
   notifyCalls: Array<{ message: string; level: string }>;
-  milestoneMergedInPhases: boolean;
+  milestoneMergedInPhasesFor: string | null;
 }
 
 function buildIc(opts: {
@@ -46,17 +46,17 @@ function buildIc(opts: {
     stopAutoOptions: [],
     pauseAutoCalls: [],
     notifyCalls: [],
-    milestoneMergedInPhases: false,
+    milestoneMergedInPhasesFor: null,
   };
 
   const session = {
     basePath: "/tmp/proj",
     originalBasePath: "/tmp/proj",
-    get milestoneMergedInPhases() {
-      return log.milestoneMergedInPhases;
+    get milestoneMergedInPhasesFor() {
+      return log.milestoneMergedInPhasesFor;
     },
-    set milestoneMergedInPhases(v: boolean) {
-      log.milestoneMergedInPhases = v;
+    set milestoneMergedInPhasesFor(v: string | null) {
+      log.milestoneMergedInPhasesFor = v;
     },
   };
 
@@ -280,6 +280,9 @@ async function withProjectionBackedProject<T>(
       git(basePath, ["init"], "ignore");
       git(basePath, ["config", "user.email", "test@example.invalid"]);
       git(basePath, ["config", "user.name", "Test"]);
+      // A developer's global ignore file may list .gsd, which would silently make
+      // `git add .gsd` stage nothing and the commit below fail.
+      git(basePath, ["config", "core.excludesFile", "/dev/null"]);
       git(basePath, ["add", ".gsd"]);
       git(basePath, ["commit", "-m", "initial projections"], "ignore");
     }
@@ -332,7 +335,7 @@ test("happy path: merge succeeds and stash is popped", async () => {
   assert.equal(log.mergeCalls, 1);
   assert.equal(log.postflightCalls, 1, "postflight pop must run on success");
   assert.equal(log.stopAutoCalls.length, 0, "no stopAuto on happy path");
-  assert.equal(log.milestoneMergedInPhases, true, "merge flag set");
+  assert.equal(log.milestoneMergedInPhasesFor, "M002", "merge flag set for the merged milestone");
 });
 
 test("regression #5538-followup: postflight pop runs even when mergeAndExit throws non-conflict error", async () => {
@@ -363,8 +366,8 @@ test("regression #5538-followup: postflight pop runs even when mergeAndExit thro
   assert.equal(log.pauseAutoCalls.length, 1);
   assert.match(log.pauseAutoCalls[0] ?? "", /Merge error on milestone M002/);
   assert.equal(
-    log.milestoneMergedInPhases,
-    false,
+    log.milestoneMergedInPhasesFor,
+    null,
     "merge flag must NOT be set when merge throws",
   );
 });
@@ -413,7 +416,7 @@ test("clean tree: no stash to pop, merge succeeds, no pop attempted", async () =
 
   assert.equal(result, null);
   assert.equal(log.postflightCalls, 0, "no pop when nothing was stashed");
-  assert.equal(log.milestoneMergedInPhases, true);
+  assert.equal(log.milestoneMergedInPhasesFor, "M002");
 });
 
 test("dirty overlap: preflight stops before merge and postflight restore", async () => {
@@ -526,7 +529,7 @@ test("already-merged milestone skips guarded merge to terminate duplicate closeo
     mergeBehavior: "succeed",
     postflightResult: POP_OK,
   });
-  log.milestoneMergedInPhases = true;
+  log.milestoneMergedInPhasesFor = "M002";
 
   const result = await _runMilestoneMergeOnceWithStashRestore(ic, "M002");
 
@@ -538,6 +541,28 @@ test("already-merged milestone skips guarded merge to terminate duplicate closeo
     0,
     "already-merged guard must not re-trigger stash restore",
   );
+});
+
+test("#7: merging M001 must not suppress the next milestone's merge in the same session", async () => {
+  const { ic, log } = buildIc({
+    preflightResult: STASH_PUSHED,
+    mergeBehavior: "succeed",
+    postflightResult: POP_OK,
+  });
+
+  const first = await _runMilestoneMergeOnceWithStashRestore(ic, "M001");
+  assert.equal(first, null);
+  assert.equal(log.mergeCalls, 1, "M001 merges on the first milestone transition");
+  assert.equal(log.milestoneMergedInPhasesFor, "M001");
+
+  const second = await _runMilestoneMergeOnceWithStashRestore(ic, "M002");
+  assert.equal(second, null);
+  assert.equal(
+    log.mergeCalls,
+    2,
+    "M002's merge must still run — the guard is scoped to the milestone it merged",
+  );
+  assert.equal(log.milestoneMergedInPhasesFor, "M002");
 });
 
 
@@ -679,6 +704,9 @@ test("failed pre-merge ignored snapshot still suppresses rebuild over restored i
       git(basePath, ["init"], "ignore");
       git(basePath, ["config", "user.email", "test@example.invalid"]);
       git(basePath, ["config", "user.name", "Test"]);
+      // Only the repo-local .gitignore written below may ignore .gsd here; a
+      // developer's global ignore file must not also affect this fixture.
+      git(basePath, ["config", "core.excludesFile", "/dev/null"]);
       writeFileSync(join(basePath, ".gitignore"), ".gsd\n", "utf8");
       git(basePath, ["add", ".gitignore"]);
       git(basePath, ["commit", "-m", "ignore gsd projections"], "ignore");
@@ -923,8 +951,8 @@ test("merge succeeds but stash pop needs manual recovery -> postflight-stash-res
   });
   assert.equal(log.postflightCalls, 1);
   assert.equal(
-    log.milestoneMergedInPhases,
-    true,
+    log.milestoneMergedInPhasesFor,
+    "M002",
     "successful merge must set the flag before postflight recovery stops auto-mode",
   );
   assert.equal(log.stopAutoCalls.length, 1);

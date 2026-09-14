@@ -16,6 +16,7 @@ import { loadPrompt, inlineTemplate } from "./prompt-loader.js";
 import {
   resolveMilestoneFile, resolveMilestonePath, resolveSliceFile, resolveSlicePath,
   resolveTasksDir, resolveTaskFiles, resolveTaskFile,
+  resolveTaskSummariesLocation, taskSummaryBelongsToSlice,
   taskIdFromTaskFileName,
   relMilestoneFile, relSliceFile, relSlicePath, relMilestonePath,
   relTaskFile, resolveGsdRootFile, relGsdRootFile, resolveRuntimeFile, targetMilestoneFile,
@@ -1550,36 +1551,6 @@ export function extractSliceExecutionExcerpt(content: string | null, relPath: st
 
 // ─── Prior Task Summaries ──────────────────────────────────────────────────
 
-/** Resolve where task SUMMARY files live (legacy tasks/ subdir or flat-phase phase dir). */
-function resolveTaskSummariesLocation(
-  base: string, mid: string, sid: string,
-): { dir: string; relPrefix: string } | null {
-  const slicePath = resolveSlicePath(base, mid, sid);
-  if (!slicePath) return null;
-  const sRel = relSlicePath(base, mid, sid);
-  // Only a real slices/<SID>/ subdir keeps its summaries under tasks/. In
-  // flat-phase the slice path IS the phase dir, where a tasks/ subdir may hold
-  // auxiliary artifacts only — resolveTaskFile writes summaries at the phase
-  // root, so reading from tasks/ there would find nothing (#1208).
-  if (slicePath !== resolveMilestonePath(base, mid)) {
-    const tDir = resolveTasksDir(base, mid, sid);
-    if (tDir) return { dir: tDir, relPrefix: `${sRel}/tasks` };
-  }
-  return { dir: slicePath, relPrefix: sRel };
-}
-
-function summaryFileBelongsToSlice(
-  fileName: string,
-  base: string,
-  mid: string,
-  sid: string,
-): boolean {
-  const tid = taskIdFromTaskFileName(fileName, "SUMMARY");
-  if (!tid) return false;
-  const resolved = resolveTaskFile(base, mid, sid, tid, "SUMMARY");
-  return resolved !== null && basename(resolved) === fileName;
-}
-
 export async function getPriorTaskSummaryPaths(
   mid: string, sid: string, currentTid: string, base: string,
 ): Promise<string[]> {
@@ -1591,7 +1562,7 @@ export async function getPriorTaskSummaryPaths(
 
   return summaryFiles
     .filter(f => {
-      if (!summaryFileBelongsToSlice(f, base, mid, sid)) return false;
+      if (!taskSummaryBelongsToSlice(f, base, mid, sid)) return false;
       const tid = taskIdFromTaskFileName(f, "SUMMARY");
       if (!tid) return false;
       const num = parseInt(tid.replace(/^T/, ""), 10);
@@ -1627,7 +1598,7 @@ export async function getDependencyTaskSummaryPaths(
 
   return summaryFiles
     .filter((f) => {
-      if (!summaryFileBelongsToSlice(f, base, mid, sid)) return false;
+      if (!taskSummaryBelongsToSlice(f, base, mid, sid)) return false;
       const tid = taskIdFromTaskFileName(f, "SUMMARY");
       if (!tid) return false;
       return depSet.has(tid);
@@ -3269,7 +3240,7 @@ export async function buildCompleteSlicePrompt(
           return null;
         }
         const summaryFiles = resolveTaskFiles(loc.dir, "SUMMARY")
-          .filter((file) => summaryFileBelongsToSlice(file, base, mid, sid))
+          .filter((file) => taskSummaryBelongsToSlice(file, base, mid, sid))
           .sort();
         const blocks: string[] = [];
         for (const file of summaryFiles) {
@@ -3873,7 +3844,7 @@ export async function buildReplanSlicePrompt(
   const summaryLoc = resolveTaskSummariesLocation(base, mid, sid);
   if (summaryLoc) {
     const summaryFiles = resolveTaskFiles(summaryLoc.dir, "SUMMARY")
-      .filter((file) => summaryFileBelongsToSlice(file, base, mid, sid))
+      .filter((file) => taskSummaryBelongsToSlice(file, base, mid, sid))
       .sort();
     for (const file of summaryFiles) {
       const absPath = join(summaryLoc.dir, file);

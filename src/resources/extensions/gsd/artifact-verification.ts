@@ -18,11 +18,11 @@ import { getErrorMessage } from "./error-utils.js";
 import { logWarning, logError } from "./workflow-logger.js";
 import { isClosedStatus } from "./status-guards.js";
 import {
-  resolveSlicePath,
   resolveSliceFile,
-  resolveTasksDir,
   resolveTaskFiles,
   resolveTaskFile,
+  resolveTaskSummariesLocation,
+  taskSummaryBelongsToSlice,
   relSliceFile,
   clearPathCache,
   resolveGsdRootFile,
@@ -298,14 +298,15 @@ export function verifyExpectedArtifact(
     if (blockerPath && existsSync(blockerPath)) {
       logWarning("recovery", `reactive-execute blocker is diagnostic only for ${unitId}: ${blockerPath}`);
     }
-    const slicePath = resolveSlicePath(base, mid, sid);
-    if (!slicePath) return false;
-
     const plusIdx = batchPart.indexOf("+");
     if (plusIdx === -1) {
-      const tDir = resolveTasksDir(base, mid, sid) ?? slicePath;
-      const summaryFiles = resolveTaskFiles(tDir, "SUMMARY");
-      return summaryFiles.length > 0;
+      // No explicit batch: any summary this slice produced counts. The
+      // flat-phase dir is shared with every sibling slice, so an unfiltered
+      // listing would pass S02 on S01's evidence (#5).
+      const loc = resolveTaskSummariesLocation(base, mid, sid);
+      if (!loc) return false;
+      return resolveTaskFiles(loc.dir, "SUMMARY")
+        .some((f) => taskSummaryBelongsToSlice(f, base, mid, sid));
     }
 
     const batchIds = batchPart.slice(plusIdx + 1).split(",").filter(Boolean);

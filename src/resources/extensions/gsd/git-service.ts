@@ -1084,7 +1084,7 @@ export class GitServiceImpl {
         if (branch) {
           const remoteBranch = `origin/${branch}`;
           // merge-base --is-ancestor exits 0 if HEAD~1 is ancestor of remote
-          gitCapture(this.basePath, ["merge-base", "--is-ancestor", "HEAD~1", remoteBranch]);
+          runGit(this.basePath, ["merge-base", "--is-ancestor", "HEAD~1", remoteBranch]);
           // If we get here, newest snapshot IS reachable from remote — already pushed
           return;
         }
@@ -1093,7 +1093,7 @@ export class GitServiceImpl {
       }
 
       // Save HEAD SHA so we can restore if the re-commit fails
-      const savedHead = gitCapture(this.basePath, ["rev-parse", "HEAD"]);
+      const savedHead = runGit(this.basePath, ["rev-parse", "HEAD"]);
 
       nativeResetSoft(this.basePath, resetTarget);
 

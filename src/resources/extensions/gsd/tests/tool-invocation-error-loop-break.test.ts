@@ -16,6 +16,9 @@
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { AutoSession } from "../auto/session.ts";
 
 // ─── AutoSession.lastToolInvocationError field ───────────────────────────
@@ -165,13 +168,20 @@ describe("#2883: isToolInvocationError classification", () => {
     assert.equal(isToolInvocationError("Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: Package subpath './x' is not defined"), true);
   });
 
-  test("detects raw write-gate CONTEXT failures for non-GSD write tools", () => {
-    resetWriteGateState(process.cwd());
+  test("detects raw write-gate CONTEXT failures for non-GSD write tools", (t) => {
+    // Own the write-gate basePath: the snapshot is a file under
+    // <basePath>/.gsd/runtime/, and test files run as separate processes that
+    // share one cwd (the repo root). On a cwd basePath a peer that verified
+    // M001 would leak in through the disk reconcile and unblock this write.
+    const base = realpathSync(mkdtempSync(join(tmpdir(), "gsd-tool-invocation-gate-")));
+    t.after(() => rmSync(base, { recursive: true, force: true }));
+    resetWriteGateState(base);
     const result = shouldBlockContextWrite(
       "write",
       "/tmp/project/.gsd/milestones/M001/M001-CONTEXT.md",
       "M001",
       false,
+      base,
     );
 
     assert.equal(result.block, true);
