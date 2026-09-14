@@ -203,3 +203,91 @@ test("registerExecTools exposes gsd_uat_exec intent as recoverable string schema
   assert.match(intentSchema.description, /uat-artifact-check/);
   assert.match(intentSchema.description, /artifact/);
 });
+
+// ─── UAT exec policy ─────────────────────────────────────────────────────
+
+/** Run a script through the UAT policy and report whether it was blocked. */
+async function uatPolicyVerdict(script: string): Promise<"blocked" | "allowed"> {
+  const result = await executeUatExec(
+    {
+      milestoneId: "M001",
+      sliceId: "S01",
+      checkId: "UAT-PRE",
+      intent: "artifact",
+      runtime: "bash",
+      script,
+    },
+    {
+      baseDir: "/tmp/gsd-uat-policy-test",
+      preferences: null,
+      run: async (request) => makeExecResult(request),
+    },
+  );
+  return result.details?.error === "uat_exec_policy_block" ? "blocked" : "allowed";
+}
+
+test("UAT policy blocks recursive-force rm in every flag spelling", async () => {
+  const destructive = [
+    "rm -rf build",
+    "rm -fr build",
+    "rm -f -r build",
+    "rm -r -f build",
+    "rm --recursive --force build",
+    "rm --force --recursive build",
+    "rm -r --force build",
+    "rm -Rf build",
+    "npm test && rm -fr dist",
+  ];
+  for (const script of destructive) {
+    assert.equal(await uatPolicyVerdict(script), "blocked", `should block: ${script}`);
+  }
+});
+
+test("UAT policy blocks dependency mutation behind leading options", async () => {
+  for (const script of ["npm install foo", "npm --prefix . install", "pnpm -w add lodash"]) {
+    assert.equal(await uatPolicyVerdict(script), "blocked", `should block: ${script}`);
+  }
+});
+
+test("UAT policy blocks credential reads through any path form or reader", async () => {
+  const leaks = [
+    "cat .env",
+    "cat ./.env",
+    "cat ../.env",
+    "cat ./.env.production",
+    'cat "$(pwd)/.env"',
+    "cat $HOME/.aws/credentials",
+    "less .env",
+    "head -20 .env",
+    "grep KEY .env",
+    "env",
+    "printenv",
+  ];
+  for (const script of leaks) {
+    assert.equal(await uatPolicyVerdict(script), "blocked", `should block: ${script}`);
+  }
+});
+
+test("UAT policy allows benign scripts that merely contain an env token", async () => {
+  const benign = [
+    "docker run --env FOO img",
+    "ls env",
+    "find . -name env -type d",
+    "npm test",
+    "pnpm run build",
+    "node --test",
+    "echo environment",
+    "rm -f stale.log",
+  ];
+  for (const script of benign) {
+    assert.equal(await uatPolicyVerdict(script), "allowed", `should allow: ${script}`);
+  }
+});
+
+test("UAT policy blocks credential files consumed without a reader command", async () => {
+  // The previous over-broad `\benv\b` rule caught these by accident; narrowing it
+  // to the executable position must not reopen them.
+  for (const script of [". .env", "read KEY < .env", "source ./.env.local"]) {
+    assert.equal(await uatPolicyVerdict(script), "blocked", `should block: ${script}`);
+  }
+});
