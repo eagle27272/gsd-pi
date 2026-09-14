@@ -125,6 +125,8 @@ export interface TraceSessionState {
 export interface HarState {
 	enabled: boolean;
 	configuredAtContextCreation: boolean;
+	/** True while a Playwright HAR recorder is running and can be stopped to flush to disk. */
+	recordingActive: boolean;
 	path: string | null;
 	exportCount: number;
 	lastExportedPath: string | null;
@@ -298,6 +300,7 @@ export function setActiveTraceSession(t: TraceSessionState | null): void { _acti
 const DEFAULT_HAR_STATE: HarState = {
 	enabled: false,
 	configuredAtContextCreation: false,
+	recordingActive: false,
 	path: null,
 	exportCount: 0,
 	lastExportedPath: null,
@@ -352,6 +355,9 @@ export interface ToolDeps {
 		contextOptions?: BrowserContextOptions
 	) => Promise<{ browser: Browser; context: BrowserContext; page: Page }>;
 	closeBrowser: () => Promise<void>;
+	flushSessionHar: (
+		options?: { resume?: boolean }
+	) => Promise<{ path: string; entries: number } | null>;
 	getActivePage: () => Page;
 	getActiveTarget: () => Page | Frame;
 	getActivePageOrNull: () => Page | null;

@@ -75,6 +75,7 @@ async function registerLegacyBrowserTools(pi: ExtensionAPI): Promise<void> {
         ensureBrowser: lifecycle.ensureBrowser,
         createBrowserSession: lifecycle.createBrowserSession,
         closeBrowser: lifecycle.closeBrowser,
+        flushSessionHar: lifecycle.flushSessionHar,
         getActivePage: lifecycle.getActivePage,
         getActiveTarget: lifecycle.getActiveTarget,
         getActivePageOrNull: lifecycle.getActivePageOrNull,
