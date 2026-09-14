@@ -545,6 +545,39 @@ test("enterMilestone returns ok:false reason:invalid-milestone-id on path traver
   }
 });
 
+test("enterMilestone returns ok:false reason:invalid-milestone-id on an empty id", () => {
+  const s = makeSession();
+  const deps = makeDeps();
+  const ctx = makeCtx();
+  const lifecycle = new WorktreeLifecycle(s, deps);
+
+  const empty = lifecycle.enterMilestone("", ctx);
+
+  assert.equal(empty.ok, false);
+  if (!empty.ok) {
+    assert.equal(empty.reason, "invalid-milestone-id");
+    // The rejection reason has to name the empty case too — an id of "" trips
+    // no separator and no traversal, so the old wording described the wrong defect.
+    assert.match(String(empty.cause), /empty/);
+  }
+});
+
+test("enterMilestone returns ok:false reason:invalid-milestone-id on a bare dot id", () => {
+  const s = makeSession();
+  const deps = makeDeps();
+  const ctx = makeCtx();
+  const lifecycle = new WorktreeLifecycle(s, deps);
+
+  // "." trips no separator and no traversal, but resolves the milestone
+  // worktree path to the worktrees container itself.
+  const dot = lifecycle.enterMilestone(".", ctx);
+
+  assert.equal(dot.ok, false);
+  if (!dot.ok) {
+    assert.equal(dot.reason, "invalid-milestone-id");
+  }
+});
+
 // ─── exitMilestone — typed-result contract ────────────────────────────────────
 //
 // The delegation-shape tests that lived here were retired in slice 7 / step

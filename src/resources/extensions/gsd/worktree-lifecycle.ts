@@ -81,7 +81,10 @@ import {
 } from "./auto-worktree-entry.js";
 import { getAutoWorktreePath } from "./auto-worktree-path-resolution.js";
 import { teardownAutoWorktree } from "./auto-worktree-teardown.js";
-import { inspectUncommittedWorktreeState } from "./worktree-manager.js";
+import {
+  inspectUncommittedWorktreeState,
+  isValidWorktreeIdentifier,
+} from "./worktree-manager.js";
 import { resolveRoadmapForMilestoneMerge } from "./milestone-merge-roadmap.js";
 import type { MilestoneMergeTransactionRunner } from "./milestone-merge-transaction.js";
 import {
@@ -399,13 +402,9 @@ export interface MergeStandaloneResult {
 
 // ─── Validation ──────────────────────────────────────────────────────────
 
-function isValidMilestoneId(milestoneId: string): boolean {
-  return !/[\/\\]|\.\./.test(milestoneId);
-}
-
 function invalidMilestoneIdError(milestoneId: string): Error {
   return new Error(
-    `Invalid milestoneId: ${milestoneId} — contains path separators or traversal`,
+    `Invalid milestoneId: ${milestoneId} — empty, or contains path separators or traversal`,
   );
 }
 
@@ -615,10 +614,10 @@ function lifecycleLoadPreferences(
 /**
  * Throwing variant used by the merge/exit paths that surface failures via
  * the typed `ExitResult` (callers wrap the throw → cause). The enter path
- * uses `isValidMilestoneId` + the typed result directly.
+ * uses `isValidWorktreeIdentifier` + the typed result directly.
  */
 function validateMilestoneId(milestoneId: string): void {
-  if (!isValidMilestoneId(milestoneId)) {
+  if (!isValidWorktreeIdentifier(milestoneId)) {
     throw invalidMilestoneIdError(milestoneId);
   }
 }
@@ -654,7 +653,7 @@ export function _enterMilestoneCore(
   ctx: NotifyCtx,
   opts: { modeOverride?: "worktree" | "branch" } = {},
 ): EnterResult {
-  if (!isValidMilestoneId(milestoneId)) {
+  if (!isValidWorktreeIdentifier(milestoneId)) {
     debugLog("WorktreeLifecycle", {
       action: "enterMilestone",
       milestoneId,
