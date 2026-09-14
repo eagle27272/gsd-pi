@@ -367,13 +367,18 @@ describe("mergeWorktreeToMain", () => {
   beforeEach(() => {
     base = makeBaseRepo();
     wtPath = worktreePath(base, "M900");
+    // Production always gitignores the worktree container; without it a
+    // preserved worktree shows up as untracked noise in `git status`.
+    writeFileSync(join(base, ".gitignore"), ".gsd-worktrees/\n", "utf-8");
+    run("git add .gitignore", base);
+    run('git commit -m "chore: ignore worktree container"', base);
     mkdirSync(join(base, ".gsd-worktrees"), { recursive: true });
     run(`git worktree add -b milestone/M900 "${wtPath}"`, base);
   });
 
   afterEach(() => { rmSync(base, { recursive: true, force: true }); });
 
-  test("cleans failed milestone squash state and deletes orphan branch", () => {
+  test("cleans failed milestone squash state but preserves the conflicted worktree and branch", () => {
     writeFileSync(join(wtPath, "README.md"), "# Milestone change\n", "utf-8");
     run("git add README.md", wtPath);
     run('git commit -m "feat: milestone change"', wtPath);
@@ -388,10 +393,15 @@ describe("mergeWorktreeToMain", () => {
     );
 
     assert.equal(run("git status --porcelain", base), "", "failed squash cleanup should leave main clean");
-    assert.ok(!existsSync(wtPath), "failed milestone worktree should be removed");
+    assert.ok(existsSync(wtPath), "conflicted milestone worktree must survive so conflicts can be resolved in it");
     assert.ok(
-      !run("git branch", base).includes("milestone/M900"),
-      "failed milestone branch should be deleted after worktree removal",
+      run("git branch", base).includes("milestone/M900"),
+      "conflicted milestone branch must survive as the only ref to the committed work",
+    );
+    assert.equal(
+      run('git log -1 --format=%s milestone/M900', base),
+      "feat: milestone change",
+      "committed milestone work must remain reachable",
     );
   });
 });
