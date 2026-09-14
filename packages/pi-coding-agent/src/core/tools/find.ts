@@ -7,6 +7,7 @@ import { type Static, Type } from "typebox";
 import { keyHint } from "../tool-ui/keybinding-hints.js";
 import { ensureTool } from "../../utils/tools-manager.js";
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.js";
+import { killChildWithEscalation } from "./kill-child.js";
 import { pathExists, resolveToCwd } from "./path-utils.js";
 import { getTextOutput, invalidArgText, shortenPath, str } from "./render-utils.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
@@ -14,6 +15,11 @@ import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateHead } fr
 
 function toPosixPath(value: string): string {
 	return value.split(path.sep).join("/");
+}
+
+/** Relativize an fd/glob result against the search root, leaving already-relative results alone. */
+function relativizeToSearchPath(value: string, searchPath: string): string {
+	return path.isAbsolute(value) ? path.relative(searchPath, value) : value;
 }
 
 const findSchema = Type.Object({
@@ -182,10 +188,7 @@ export function createFindToolDefinition(
 							}
 
 							// Relativize paths against the search root for stable output.
-							const relativized = results.map((p) => {
-								if (p.startsWith(searchPath)) return toPosixPath(p.slice(searchPath.length + 1));
-								return toPosixPath(path.relative(searchPath, p));
-							});
+							const relativized = results.map((p) => toPosixPath(relativizeToSearchPath(p, searchPath)));
 							const resultLimitReached = relativized.length >= effectiveLimit;
 							const rawOutput = relativized.join("\n");
 							const truncation = truncateHead(rawOutput, { maxLines: Number.MAX_SAFE_INTEGER });
@@ -252,14 +255,15 @@ export function createFindToolDefinition(
 						let stderr = "";
 						const lines: string[] = [];
 
+						let cancelEscalation: (() => void) | undefined;
 						stopChild = () => {
-							if (!child.killed) {
-								child.kill();
-							}
+							if (child.killed) return;
+							cancelEscalation = killChildWithEscalation(child);
 						};
 
 						const cleanup = () => {
 							rl.close();
+							cancelEscalation?.();
 						};
 
 						child.stderr?.on("data", (chunk) => {
@@ -282,12 +286,12 @@ export function createFindToolDefinition(
 								return;
 							}
 							const output = lines.join("\n");
+							// A listing collected from a run that ended badly — fd killed mid-traversal,
+							// say — is a prefix of the real one. Resolving it hides that from the caller.
 							if (code !== 0) {
 								const errorMsg = stderr.trim() || `fd exited with code ${code}`;
-								if (!output) {
-									settle(() => reject(new Error(errorMsg)));
-									return;
-								}
+								settle(() => reject(new Error(errorMsg)));
+								return;
 							}
 							if (!output) {
 								settle(() =>
@@ -304,12 +308,7 @@ export function createFindToolDefinition(
 								const line = rawLine.replace(/\r$/, "").trim();
 								if (!line) continue;
 								const hadTrailingSlash = line.endsWith("/") || line.endsWith("\\");
-								let relativePath = line;
-								if (line.startsWith(searchPath)) {
-									relativePath = line.slice(searchPath.length + 1);
-								} else {
-									relativePath = path.relative(searchPath, line);
-								}
+								let relativePath = relativizeToSearchPath(line, searchPath);
 								if (hadTrailingSlash && !relativePath.endsWith("/")) relativePath += "/";
 								relativized.push(toPosixPath(relativePath));
 							}

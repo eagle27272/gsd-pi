@@ -68,6 +68,11 @@ export interface OllamaPullProgress {
 	digest?: string;
 	total?: number;
 	completed?: number;
+	/**
+	 * Set instead of `status` when the pull fails. Ollama reports pull failures
+	 * in-stream under HTTP 200, so this is the only signal that it went wrong.
+	 */
+	error?: string;
 }
 
 // ─── /api/version ───────────────────────────────────────────────────────────
