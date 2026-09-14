@@ -1,5 +1,6 @@
 import type { AgentMessage } from "@gsd/pi-agent-core";
 import type { Message, TextContent } from "@gsd/pi-ai";
+import { createHash } from "crypto";
 import {
 	closeSync,
 	existsSync,
@@ -8,6 +9,8 @@ import {
 	readdirSync,
 	readFileSync,
 	readSync,
+	renameSync,
+	rmdirSync,
 	statSync,
 } from "fs";
 import { readdir, readFile, stat } from "fs/promises";
@@ -24,15 +27,62 @@ import {
 	type SessionMessageEntry,
 } from "./session-manager-types.js";
 
+/**
+ * Flatten a cwd into a filename-safe, human-readable fragment.
+ *
+ * Lossy on purpose: separators collapse to hyphens, so `/a/foo-bar` and
+ * `/a/foo/bar` produce the same fragment. Callers must disambiguate.
+ */
+function readableCwdFragment(resolvedCwd: string): string {
+	return resolvedCwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-");
+}
+
+/** Directory name used before session dirs carried a cwd hash. */
+function legacySessionDirName(resolvedCwd: string): string {
+	return `--${readableCwdFragment(resolvedCwd)}--`;
+}
+
+function sessionDirName(resolvedCwd: string): string {
+	const digest = createHash("sha256").update(resolvedCwd).digest("hex").slice(0, 8);
+	return `${legacySessionDirName(resolvedCwd)}${digest}`;
+}
+
 export function getDefaultSessionDir(cwd: string, agentDir: string = getDefaultAgentDir()): string {
 	const resolvedCwd = resolvePath(cwd);
 	const resolvedAgentDir = resolvePath(agentDir);
-	const safePath = `--${resolvedCwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
-	const sessionDir = join(resolvedAgentDir, "sessions", safePath);
+	const sessionsRoot = join(resolvedAgentDir, "sessions");
+	const sessionDir = join(sessionsRoot, sessionDirName(resolvedCwd));
 	if (!existsSync(sessionDir)) {
 		mkdirSync(sessionDir, { recursive: true });
+		adoptLegacySessionDir(join(sessionsRoot, legacySessionDirName(resolvedCwd)), sessionDir, resolvedCwd);
 	}
 	return sessionDir;
+}
+
+/**
+ * Move sessions belonging to `resolvedCwd` out of the pre-hash directory.
+ *
+ * The pre-hash naming scheme could map several project directories onto one
+ * name, so a file is claimed only when the cwd recorded in its header says it
+ * belongs here. Files whose header is missing or unreadable were never listable
+ * to begin with and are left where they are.
+ */
+function adoptLegacySessionDir(legacyDir: string, sessionDir: string, resolvedCwd: string): void {
+	if (legacyDir === sessionDir || !existsSync(legacyDir)) return;
+
+	try {
+		for (const file of readdirSync(legacyDir)) {
+			if (!file.endsWith(".jsonl")) continue;
+			const header = readSessionHeader(join(legacyDir, file));
+			if (typeof header?.cwd !== "string" || resolvePath(header.cwd) !== resolvedCwd) continue;
+			renameSync(join(legacyDir, file), join(sessionDir, file));
+		}
+		if (readdirSync(legacyDir).length === 0) {
+			rmdirSync(legacyDir);
+		}
+	} catch {
+		// Leave the legacy directory untouched; the new directory is still usable.
+	}
 }
 
 export function loadEntriesFromFile(filePath: string): FileEntry[] {
@@ -62,19 +112,44 @@ export function loadEntriesFromFile(filePath: string): FileEntry[] {
 	return entries;
 }
 
-function isValidSessionFile(filePath: string): boolean {
+const HEADER_CHUNK_BYTES = 4096;
+const MAX_HEADER_BYTES = 1024 * 1024;
+
+/** Read the first line of a file without loading the whole thing. */
+function readFirstLine(filePath: string): string | null {
+	let fd: number | undefined;
 	try {
-		const fd = openSync(filePath, "r");
-		const buffer = Buffer.alloc(512);
-		const bytesRead = readSync(fd, buffer, 0, 512, 0);
-		closeSync(fd);
-		const firstLine = buffer.toString("utf8", 0, bytesRead).split("\n")[0];
-		if (!firstLine) return false;
-		const header = JSON.parse(firstLine);
-		return header.type === "session" && typeof header.id === "string";
+		fd = openSync(filePath, "r");
+		const chunk = Buffer.alloc(HEADER_CHUNK_BYTES);
+		let read = Buffer.alloc(0);
+		while (read.length < MAX_HEADER_BYTES) {
+			const bytesRead = readSync(fd, chunk, 0, HEADER_CHUNK_BYTES, read.length);
+			if (bytesRead === 0) break;
+			read = Buffer.concat([read, chunk.subarray(0, bytesRead)]);
+			const newlineIndex = read.indexOf(0x0a);
+			if (newlineIndex !== -1) return read.toString("utf8", 0, newlineIndex);
+		}
+		return read.length > 0 ? read.toString("utf8") : null;
 	} catch {
-		return false;
+		return null;
+	} finally {
+		if (fd !== undefined) closeSync(fd);
 	}
+}
+
+function readSessionHeader(filePath: string): SessionHeader | null {
+	const firstLine = readFirstLine(filePath);
+	if (!firstLine) return null;
+	try {
+		const header = JSON.parse(firstLine) as SessionHeader;
+		return header.type === "session" && typeof header.id === "string" ? header : null;
+	} catch {
+		return null;
+	}
+}
+
+function isValidSessionFile(filePath: string): boolean {
+	return readSessionHeader(filePath) !== null;
 }
 
 export function findMostRecentSession(sessionDir: string): string | null {
@@ -163,7 +238,7 @@ async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 
 		if (entries.length === 0) return null;
 		const header = entries[0];
-		if (header.type !== "session") return null;
+		if (header.type !== "session" || typeof header.id !== "string") return null;
 
 		const stats = await stat(filePath);
 		let messageCount = 0;
