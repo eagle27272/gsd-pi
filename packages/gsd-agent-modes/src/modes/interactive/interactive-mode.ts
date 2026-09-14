@@ -473,8 +473,6 @@ export class InteractiveMode {
 	}
 
 	// Delegates (Phase E2 extracted modules)
-	private formatDisplayPath(p: string): string { return resourceDisplay.formatDisplayPath(this, p); }
-	private getShortPath(fullPath: string, source: string): string { return resourceDisplay.getShortPath(this, fullPath, source); }
 	private showLoadedResources(options?: Parameters<typeof resourceDisplay.showLoadedResources>[1]): void { resourceDisplay.showLoadedResources(this, options); }
 
 	private async initExtensions(): Promise<void> { return extensionSystem.initExtensions(this); }
@@ -493,12 +491,9 @@ export class InteractiveMode {
 	private clearExtensionTerminalInputListeners(): void { extensionSystem.clearExtensionTerminalInputListeners(this); }
 	private createExtensionUIContext() { return extensionSystem.createExtensionUIContext(this); }
 	private showExtensionSelector(title: string, options: string[], opts?: import("@gsd/pi-coding-agent/core/extensions/index.js").ExtensionUIDialogOptions): Promise<string | undefined> { return extensionSystem.showExtensionSelector(this, title, options, opts); }
-	private hideExtensionSelector(): void { extensionSystem.hideExtensionSelector(this); }
 	private showExtensionConfirm(title: string, message: string, opts?: import("@gsd/pi-coding-agent/core/extensions/index.js").ExtensionUIDialogOptions): Promise<boolean> { return extensionSystem.showExtensionConfirm(this, title, message, opts); }
 	private showExtensionInput(title: string, placeholder?: string, opts?: import("@gsd/pi-coding-agent/core/extensions/index.js").ExtensionUIDialogOptions): Promise<string | undefined> { return extensionSystem.showExtensionInput(this, title, placeholder, opts); }
-	private hideExtensionInput(): void { extensionSystem.hideExtensionInput(this); }
 	private showExtensionEditor(title: string, prefill?: string): Promise<string | undefined> { return extensionSystem.showExtensionEditor(this, title, prefill); }
-	private hideExtensionEditor(): void { extensionSystem.hideExtensionEditor(this); }
 	private setCustomEditorComponent(factory: Parameters<typeof extensionSystem.setCustomEditorComponent>[1]): void { extensionSystem.setCustomEditorComponent(this, factory); }
 	private showExtensionNotify(message: string, type?: import("./interactive-notify-render.js").ExtensionNotifyType): void { extensionSystem.showExtensionNotify(this, message, type); }
 	private showExtensionCustom<T>(factory: Parameters<typeof extensionSystem.showExtensionCustom<T>>[1], options?: Parameters<typeof extensionSystem.showExtensionCustom<T>>[2]): Promise<T> { return extensionSystem.showExtensionCustom(this, factory, options); }
@@ -508,8 +503,6 @@ export class InteractiveMode {
 	private handleClipboardImagePaste(): Promise<void> { return keyHandlers.handleClipboardImagePaste(this); }
 	private handlePastedImagePath(filePath: string): void { keyHandlers.handlePastedImagePath(this, filePath); }
 	private getSlashCommandContext() { return inputRouter.getSlashCommandContext(this); }
-	private getAllQueuedMessages() { return inputRouter.getAllQueuedMessages(this); }
-	private clearAllQueues() { return inputRouter.clearAllQueues(this); }
 	private updatePendingMessagesDisplay(): void { inputRouter.updatePendingMessagesDisplay(this); }
 	private restoreQueuedMessagesToEditor(options?: Parameters<typeof inputRouter.restoreQueuedMessagesToEditor>[1]): number { return inputRouter.restoreQueuedMessagesToEditor(this, options); }
 	private queueCompactionMessage(text: string, mode: "steer" | "followUp"): void { inputRouter.queueCompactionMessage(this, text, mode); }
@@ -519,16 +512,10 @@ export class InteractiveMode {
 	private flushPendingBashComponents(): void { inputRouter.flushPendingBashComponents(this); }
 	private updateTerminalTitle(): void { modeInit.updateTerminalTitle(this); }
 
-	private getUserMessageText(message: import("@gsd/pi-ai").Message): string { return chatRender.getUserMessageText(this, message); }
 	private showStatus(message: string, options?: { append?: boolean }): void { chatRender.showStatus(this, message, options); }
 	private addMessageToChat(message: import("@gsd/pi-agent-core").AgentMessage, options?: { populateHistory?: boolean }): void { chatRender.addMessageToChat(this, message, options); }
-	private trimChatHistory(): void { chatRender.trimChatHistory(this); }
-	private renderSessionContext(sessionContext: import("@gsd/pi-coding-agent/core/session-manager.js").SessionContext, options?: Parameters<typeof chatRender.renderSessionContext>[2]): void { chatRender.renderSessionContext(this, sessionContext, options); }
 	private rebuildChatFromMessages(): void { chatRender.rebuildChatFromMessages(this); }
-	private populatePinnedFromMessages(messages: import("@gsd/pi-agent-core").AgentMessage[]): void { chatRender.populatePinnedFromMessages(this, messages); }
 
-	private handleCtrlC(): void { keyHandlers.handleCtrlC(this); }
-	private handleCtrlD(): void { keyHandlers.handleCtrlD(this); }
 	private isShuttingDown = false;
 	private async shutdown(): Promise<void> { return keyHandlers.shutdown(this); }
 	private async checkShutdownRequested(): Promise<void> { return keyHandlers.checkShutdownRequested(this); }
@@ -565,8 +552,6 @@ export class InteractiveMode {
 	private showSelector(create: Parameters<typeof selectors.showSelector>[1]): void { selectors.showSelector(this, create); }
 	private showSettingsSelector(): void { selectors.showSettingsSelector(this); }
 	private async handleModelCommand(searchTerm?: string): Promise<void> { return selectors.handleModelCommand(this, searchTerm); }
-	private async findExactModelMatch(searchTerm: string) { return selectors.findExactModelMatch(this, searchTerm); }
-	private async getModelCandidates() { return selectors.getModelCandidates(this); }
 	private async updateAvailableProviderCount(): Promise<void> { return selectors.updateAvailableProviderCount(this); }
 	private showModelSelector(initialSearchInput?: string): void { selectors.showModelSelector(this, initialSearchInput); }
 	private async showModelsSelector(): Promise<void> { return selectors.showModelsSelector(this); }

@@ -1,6 +1,5 @@
 import type {
 	Agent,
-	AgentEvent,
 	AgentMessage,
 	AgentState,
 	AgentTool,
@@ -15,7 +14,6 @@ import type {
 	ExtensionErrorListener,
 	ExtensionRunner,
 	ExtensionUIContext,
-	InputSource,
 	ReplacedSessionContext,
 	ShutdownHandler,
 	ToolDefinition,
@@ -25,17 +23,15 @@ import type { BashExecutionMessage, CustomMessage } from "@gsd/pi-coding-agent/c
 import type { ModelRegistry } from "@gsd/pi-coding-agent/core/model-registry.js";
 import type { PromptTemplate } from "@gsd/pi-coding-agent/core/prompt-templates.js";
 import type { ResourceLoader } from "@gsd/pi-coding-agent/core/resource-loader.js";
-import type { BranchSummaryEntry, SessionManager } from "@gsd/pi-coding-agent/core/session-manager.js";
+import type { SessionManager } from "@gsd/pi-coding-agent/core/session-manager.js";
 import type { SettingsManager } from "@gsd/pi-coding-agent/core/settings-manager.js";
 import type { BuildSystemPromptOptions } from "../system-prompt.js";
 import type { BashOperations } from "@gsd/pi-coding-agent/core/tools/bash.js";
 import type {
 	AgentSessionEvent,
 	AgentSessionEventListener,
-	ExtensionBindings,
 	ModelCycleResult,
 	PromptOptions,
-	SessionStats,
 	ToolDefinitionEntry,
 } from "./agent-session-types.js";
 import type { SessionStartEvent } from "@gsd/pi-coding-agent/core/extensions/index.js";

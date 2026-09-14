@@ -3,7 +3,6 @@
 // Verifies that identical consecutive tool calls are detected and blocked
 // after exceeding the threshold, and that the guard resets properly.
 
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   checkToolCallLoop,
@@ -175,7 +174,7 @@ console.log('\n── Loop guard: nested key order is normalized ──');
   resetToolCallLoopGuard();
 
   checkToolCallLoop('tool', { outer: { b: 2, a: 1 } });
-  const result = checkToolCallLoop('tool', { outer: { a: 1, b: 2 } });
+  checkToolCallLoop('tool', { outer: { a: 1, b: 2 } });
   assert.deepStrictEqual(getToolCallLoopCount(), 2, 'Same nested args in different key order should match');
 }
 

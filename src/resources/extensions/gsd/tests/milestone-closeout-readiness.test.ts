@@ -392,7 +392,7 @@ test("readiness blocks a newer active Milestone Attempt", () => {
 
 test("readiness blocks a newer settled Milestone Attempt without a later validation", () => {
   makeFixture();
-  const recorded = recordCanonicalValidation();
+  recordCanonicalValidation();
   const attemptId = prepareNewerAttempt();
   const settled = execute("attempt.settle", (context) => {
     const adapter = _getAdapter()!;

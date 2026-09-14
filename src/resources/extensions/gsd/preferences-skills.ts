@@ -13,7 +13,6 @@ import { gsdHome } from "./gsd-home.js";
 
 import type {
   GSDPreferences,
-  SkillDiscoveryMode,
   SkillResolution,
   SkillResolutionReport,
 } from "./preferences-types.js";

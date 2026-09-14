@@ -41,7 +41,7 @@ import { clearPathCache, normalizeRealPath, relMilestoneFile, relSliceFile, relS
 import { saveFile, clearParseCache } from "../files.js";
 import { removeProjectionFileSync } from "../atomic-write.js";
 import { hostname } from "node:os";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import { GSDError, GSD_IO_ERROR } from "../errors.js";
 import type { CompleteMilestoneParams } from "./complete-milestone.js";
 import { handleCompleteMilestone } from "./complete-milestone.js";
@@ -91,7 +91,7 @@ import { flushWorkflowProjections } from "../projection-flush.js";
 import { loadEffectiveGSDPreferences } from "../preferences.js";
 import { parseProject } from "../schemas/parsers.js";
 import { autoSession, getAutoRuntimeSnapshot, isAutoActive } from "../auto-runtime-state.js";
-import { renderPlanCheckboxes, renderPlanFromDb, writeTaskSummaryProjection } from "../markdown-renderer.js";
+import { renderPlanCheckboxes, writeTaskSummaryProjection } from "../markdown-renderer.js";
 import { readUnitHarnessAbort, type UnitHarnessAbortRecord } from "../unit-runtime.js";
 import {
   prepareUatRun,

@@ -13,8 +13,6 @@ import { NamespacedResolver } from '../namespaced-resolver.js';
 import {
 	analyzeCollisions,
 	doctorReport,
-	type ClassifiedDiagnostic,
-	type DoctorReport,
 } from '../collision-diagnostics.js';
 
 describe('collision-diagnostics', () => {

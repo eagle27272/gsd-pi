@@ -8,10 +8,7 @@ import { join } from "node:path";
 import { afterEach, test } from "node:test";
 
 import { resolveDispatch } from "../auto-dispatch.ts";
-import { registerAutoWorker } from "../db/auto-workers.ts";
 import { executeDomainOperation } from "../db/domain-operation.ts";
-import { claimMilestoneLease } from "../db/milestone-leases.ts";
-import { markFailed, recordDispatchClaim } from "../db/unit-dispatches.ts";
 import {
   adoptOrTransitionLifecycle,
   readDomainOperationFence,

@@ -40,8 +40,6 @@ import { readUnitRuntimeRecord } from "../unit-runtime.js";
 import { ModelPolicyDispatchBlockedError } from "../auto-model-selection.js";
 import {
   closeDatabase,
-  getTask,
-  insertAssessment,
   insertMilestone,
   insertSlice,
   insertTask,

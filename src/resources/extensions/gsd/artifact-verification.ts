@@ -16,7 +16,6 @@ import { refreshWorkflowDatabaseFromDisk } from "./db-workspace.js";
 import { isValidationTerminal } from "./state.js";
 import { getErrorMessage } from "./error-utils.js";
 import { logWarning, logError } from "./workflow-logger.js";
-import { isClosedStatus } from "./status-guards.js";
 import {
   resolveSliceFile,
   resolveTaskFiles,

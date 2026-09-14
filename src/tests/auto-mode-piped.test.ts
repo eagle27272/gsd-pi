@@ -50,6 +50,10 @@ const modules = new Map([
     export function getLoadedSkills() { return [] }
     export function getToolCompatibility() { return {} }
     export function importExtensionModule() { return {} }
+    export function installDetachedChildReaper() {
+      process.stderr.write('REAPER_INSTALLED\\\\n')
+      return () => {}
+    }
     export function isToolCallEventType() { return false }
     export function parseFrontmatter() { return {} }
     export function setAllowedCommandPrefixes() {}
@@ -170,6 +174,17 @@ export async function load(url, context, nextLoad) {
   const headlessArgv = JSON.parse(markerLine.slice('AUTO_REDIRECT_ARGV '.length)) as string[]
   assert.deepEqual(headlessArgv.slice(2), ['headless', '--model', 'test-model', 'auto'])
   assert.match(result.stderr, /AUTO_REDIRECT_RUN /)
+
+  // `gsd auto`/`gsd quick` run bash tools and exit without ever reaching the
+  // interactive setup, so the detached-child reaper has to be installed before
+  // the headless dispatch — otherwise a detached child outlives the host and can
+  // strand .git/index.lock. Ordering, not mere presence, is what matters here.
+  const reaperIndex = result.stderr.indexOf('REAPER_INSTALLED')
+  assert.notEqual(reaperIndex, -1, `reaper was never installed:\n${result.stderr}`)
+  assert.ok(
+    reaperIndex < result.stderr.indexOf('AUTO_REDIRECT_ARGV '),
+    `reaper must be installed before headless dispatch:\n${result.stderr}`,
+  )
 
   const quickRegisterLoader = registerLoader.replace(
     "Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: false })",

@@ -244,8 +244,6 @@ export async function handleExport(args: string, ctx: ExtensionCommandContext, b
         const paths: string[] = [];
 
         for (const ms of targets) {
-          const msSlicesDone = ms.slices.filter(sl => sl.done).length;
-          const msSlicesTotal = ms.slices.length;
 
           // Accumulate project-wide progress up to and including this milestone
           const msIdx = data.milestones.indexOf(ms);

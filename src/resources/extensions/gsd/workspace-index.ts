@@ -1,17 +1,15 @@
-import { join } from "node:path";
 
 import { loadFile } from "./files.js";
 import { isDbAvailable, getMilestoneSlices, getSliceTasks } from "./gsd-db.js";
 import {
   resolveMilestoneFile,
   resolveSliceFile,
-  resolveSlicePath,
   resolveTaskFile,
   resolveTasksDir,
 } from "./paths.js";
 import { deriveState } from "./state.js";
 import { extractVerdict } from "./verdict-parser.js";
-import { milestoneIdSort, findMilestoneIds } from "./guided-flow.js";
+import { findMilestoneIds } from "./guided-flow.js";
 import type { RiskLevel } from "./types.js";
 import { getSliceBranchName, detectWorktreeName } from "./worktree.js";
 
@@ -123,7 +121,7 @@ export interface IndexWorkspaceOptions {
   validate?: boolean;
 }
 
-export async function indexWorkspace(basePath: string, opts: IndexWorkspaceOptions = {}): Promise<GSDWorkspaceIndex> {
+export async function indexWorkspace(basePath: string, _opts: IndexWorkspaceOptions = {}): Promise<GSDWorkspaceIndex> {
   const milestoneIds = findMilestoneIds(basePath);
   const milestones: WorkspaceMilestoneTarget[] = [];
 

@@ -7,8 +7,11 @@
  */
 
 import {
-  mkdtempSync, mkdirSync, writeFileSync, rmSync,
-  existsSync, readFileSync,
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+  existsSync,
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";

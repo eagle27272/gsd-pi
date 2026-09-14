@@ -12,7 +12,6 @@ import {
   type ArtifactKey,
   type ContextModePolicy,
   type SkillsPolicy,
-  type UnitContextManifest,
 } from "../unit-context-manifest.ts";
 import { resolveSkillManifest } from "../skill-manifest.ts";
 import {

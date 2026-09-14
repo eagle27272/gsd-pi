@@ -10,7 +10,7 @@
 import { readdirSync, existsSync, realpathSync, statSync, Dirent } from "node:fs";
 import { basename, join, dirname, isAbsolute as isAbsolutePath, normalize, relative, resolve } from "node:path";
 import { homedir } from "node:os";
-import { nativeScanGsdTree, type GsdTreeEntry } from "./native-parser-bridge.js";
+import { type GsdTreeEntry } from "./native-parser-bridge.js";
 import { DIR_CACHE_MAX } from "./constants.js";
 import { gsdHome } from "./gsd-home.js";
 import { normalizeRealPath } from "./real-path.js";
@@ -39,27 +39,6 @@ const dirListCache = new Map<string, string[]>();
 
 let nativeTreeCache: Map<string, GsdTreeEntry[]> | null = null;
 let nativeTreeBase: string | null = null;
-
-function getNativeTree(gsdDir: string): Map<string, GsdTreeEntry[]> | null {
-  if (nativeTreeCache && nativeTreeBase === gsdDir) return nativeTreeCache;
-
-  const entries = nativeScanGsdTree(gsdDir);
-  if (!entries) return null;
-
-  // Build a map of parent directory -> entries
-  const tree = new Map<string, GsdTreeEntry[]>();
-  for (const entry of entries) {
-    const parts = entry.path.split('/');
-    const parentPath = parts.slice(0, -1).join('/');
-    const parentKey = parentPath || '.';
-    if (!tree.has(parentKey)) tree.set(parentKey, []);
-    tree.get(parentKey)!.push(entry);
-  }
-
-  nativeTreeCache = tree;
-  nativeTreeBase = gsdDir;
-  return tree;
-}
 
 /**
  * Convert a native tree lookup into a relative key for the tree map.
@@ -919,7 +898,7 @@ export function relMilestoneFile(
  *   Only consulted when no phase directory exists on disk yet.
  */
 export function relSlicePath(
-  basePath: string, milestoneId: string, sliceId: string, milestoneTitle?: string
+  basePath: string, milestoneId: string, _sliceId: string, milestoneTitle?: string
 ): string {
   // Flat-phase: plans are files inside the phase dir, no slices/ subdir.
   return relMilestonePath(basePath, milestoneId, milestoneTitle);

@@ -55,7 +55,7 @@ function makeStep(overrides: Partial<GraphStep> & { id: string }): GraphStep {
 // ─── writeGraph + readGraph round-trip ───────────────────────────────────
 
 describe("writeGraph + readGraph round-trip", () => {
-  it("preserves all fields including parentStepId and dependsOn", (t) => {
+  it("preserves all fields including parentStepId and dependsOn", (_t) => {
     const dir = makeTmpDir();
     try {
       const graph = makeGraph([
@@ -88,7 +88,7 @@ describe("writeGraph + readGraph round-trip", () => {
     }
   });
 
-  it("preserves startedAt and finishedAt fields", (t) => {
+  it("preserves startedAt and finishedAt fields", (_t) => {
     const dir = makeTmpDir();
     try {
       const graph = makeGraph([
@@ -109,7 +109,7 @@ describe("writeGraph + readGraph round-trip", () => {
     }
   });
 
-  it("creates directory if it does not exist", (t) => {
+  it("creates directory if it does not exist", (_t) => {
     const base = makeTmpDir();
     const nested = join(base, "sub", "dir");
     try {
@@ -174,7 +174,7 @@ describe("readGraph error paths", () => {
 // ─── getNextPendingStep ──────────────────────────────────────────────────
 
 describe("getNextPendingStep", () => {
-  it("returns first step with all deps complete", (t) => {
+  it("returns first step with all deps complete", (_t) => {
     const graph = makeGraph([
       makeStep({ id: "a", status: "complete" }),
       makeStep({ id: "b", dependsOn: ["a"] }),
@@ -185,7 +185,7 @@ describe("getNextPendingStep", () => {
     assert.equal(next?.id, "b");
   });
 
-  it("skips steps with incomplete deps", (t) => {
+  it("skips steps with incomplete deps", (_t) => {
     const graph = makeGraph([
       makeStep({ id: "a" }),
       makeStep({ id: "b", dependsOn: ["a"] }),
@@ -196,7 +196,7 @@ describe("getNextPendingStep", () => {
     assert.equal(next?.id, "a");
   });
 
-  it("returns null when all steps are complete", (t) => {
+  it("returns null when all steps are complete", (_t) => {
     const graph = makeGraph([
       makeStep({ id: "a", status: "complete" }),
       makeStep({ id: "b", status: "complete" }),
@@ -205,7 +205,7 @@ describe("getNextPendingStep", () => {
     assert.equal(getNextPendingStep(graph), null);
   });
 
-  it("returns null when all pending steps are blocked", (t) => {
+  it("returns null when all pending steps are blocked", (_t) => {
     const graph = makeGraph([
       makeStep({ id: "a", status: "active" }), // not complete
       makeStep({ id: "b", dependsOn: ["a"] }),  // blocked
@@ -214,7 +214,7 @@ describe("getNextPendingStep", () => {
     assert.equal(getNextPendingStep(graph), null);
   });
 
-  it("returns first pending step with no deps when root steps exist", (t) => {
+  it("returns first pending step with no deps when root steps exist", (_t) => {
     const graph = makeGraph([
       makeStep({ id: "a" }),
       makeStep({ id: "b" }),
@@ -224,7 +224,7 @@ describe("getNextPendingStep", () => {
     assert.equal(next?.id, "a");
   });
 
-  it("skips expanded steps", (t) => {
+  it("skips expanded steps", (_t) => {
     const graph = makeGraph([
       makeStep({ id: "a", status: "expanded" }),
       makeStep({ id: "b" }),
@@ -234,7 +234,7 @@ describe("getNextPendingStep", () => {
     assert.equal(next?.id, "b");
   });
 
-  it("treats expanded dependencies as satisfied", (t) => {
+  it("treats expanded dependencies as satisfied", (_t) => {
     const graph = makeGraph([
       makeStep({ id: "iter", status: "expanded" }),
       makeStep({ id: "after", dependsOn: ["iter"] }),
@@ -248,7 +248,7 @@ describe("getNextPendingStep", () => {
 // ─── markStepComplete ────────────────────────────────────────────────────
 
 describe("markStepComplete", () => {
-  it("returns new graph with step status 'complete' (original unchanged)", (t) => {
+  it("returns new graph with step status 'complete' (original unchanged)", (_t) => {
     const original = makeGraph([
       makeStep({ id: "a" }),
       makeStep({ id: "b" }),
@@ -267,7 +267,7 @@ describe("markStepComplete", () => {
     assert.equal(updated.steps[1].status, "pending");
   });
 
-  it("sets finishedAt timestamp", (t) => {
+  it("sets finishedAt timestamp", (_t) => {
     const graph = makeGraph([makeStep({ id: "a" })]);
     const updated = markStepComplete(graph, "a");
     assert.ok(updated.steps[0].finishedAt);
@@ -275,7 +275,7 @@ describe("markStepComplete", () => {
     assert.ok(!isNaN(Date.parse(updated.steps[0].finishedAt!)));
   });
 
-  it("throws for unknown step ID", (t) => {
+  it("throws for unknown step ID", (_t) => {
     const graph = makeGraph([makeStep({ id: "a" })]);
     assert.throws(
       () => markStepComplete(graph, "nonexistent"),
@@ -287,7 +287,7 @@ describe("markStepComplete", () => {
     );
   });
 
-  it("preserves metadata in returned graph", (t) => {
+  it("preserves metadata in returned graph", (_t) => {
     const graph = makeGraph([makeStep({ id: "a" })], "my-workflow");
     const updated = markStepComplete(graph, "a");
     assert.equal(updated.metadata.name, "my-workflow");
@@ -298,7 +298,7 @@ describe("markStepComplete", () => {
 // ─── expandIteration ─────────────────────────────────────────────────────
 
 describe("expandIteration", () => {
-  it("creates instance steps with correct IDs (stepId--001, stepId--002)", (t) => {
+  it("creates instance steps with correct IDs (stepId--001, stepId--002)", (_t) => {
     const graph = makeGraph([
       makeStep({ id: "iter-step", title: "Process items" }),
       makeStep({ id: "final", dependsOn: ["iter-step"] }),
@@ -320,7 +320,7 @@ describe("expandIteration", () => {
     assert.equal(expanded.steps[3].id, "iter-step--003");
   });
 
-  it("marks parent step as 'expanded'", (t) => {
+  it("marks parent step as 'expanded'", (_t) => {
     const graph = makeGraph([
       makeStep({ id: "iter", title: "Iterate" }),
     ]);
@@ -329,7 +329,7 @@ describe("expandIteration", () => {
     assert.equal(expanded.steps[0].status, "expanded");
   });
 
-  it("instance steps have correct titles, prompts, parentStepId, and deps", (t) => {
+  it("instance steps have correct titles, prompts, parentStepId, and deps", (_t) => {
     const graph = makeGraph([
       makeStep({ id: "pre", status: "complete" }),
       makeStep({ id: "iter", title: "Process", dependsOn: ["pre"] }),
@@ -355,7 +355,7 @@ describe("expandIteration", () => {
     assert.equal(inst2.parentStepId, "iter");
   });
 
-  it("rewrites downstream deps from parent ID to all instance IDs", (t) => {
+  it("rewrites downstream deps from parent ID to all instance IDs", (_t) => {
     const graph = makeGraph([
       makeStep({ id: "iter", title: "Iterate" }),
       makeStep({ id: "after", dependsOn: ["iter"] }),
@@ -373,7 +373,7 @@ describe("expandIteration", () => {
     assert.deepStrictEqual(afterStep.dependsOn, ["iter--001", "iter--002"]);
   });
 
-  it("preserves steps that don't depend on the parent", (t) => {
+  it("preserves steps that don't depend on the parent", (_t) => {
     const graph = makeGraph([
       makeStep({ id: "unrelated" }),
       makeStep({ id: "iter", title: "Iterate" }),
@@ -385,7 +385,7 @@ describe("expandIteration", () => {
     assert.deepStrictEqual(unrelated.dependsOn, []);
   });
 
-  it("throws for non-pending parent step", (t) => {
+  it("throws for non-pending parent step", (_t) => {
     const graph = makeGraph([
       makeStep({ id: "iter", status: "complete" }),
     ]);
@@ -400,7 +400,7 @@ describe("expandIteration", () => {
     );
   });
 
-  it("throws for unknown step ID", (t) => {
+  it("throws for unknown step ID", (_t) => {
     const graph = makeGraph([makeStep({ id: "a" })]);
     assert.throws(
       () => expandIteration(graph, "nonexistent", ["a"], "{{item}}"),
@@ -412,7 +412,7 @@ describe("expandIteration", () => {
     );
   });
 
-  it("does not mutate the input graph", (t) => {
+  it("does not mutate the input graph", (_t) => {
     const graph = makeGraph([
       makeStep({ id: "iter", title: "Iterate" }),
       makeStep({ id: "after", dependsOn: ["iter"] }),
@@ -433,7 +433,7 @@ describe("expandIteration", () => {
 // ─── initializeGraph ─────────────────────────────────────────────────────
 
 describe("initializeGraph", () => {
-  it("converts a valid 3-step definition to graph with all pending steps", (t) => {
+  it("converts a valid 3-step definition to graph with all pending steps", (_t) => {
     const def: WorkflowDefinition = {
       version: 1,
       name: "test-workflow",
@@ -473,7 +473,7 @@ describe("initializeGraph", () => {
 // ─── Atomic write safety ─────────────────────────────────────────────────
 
 describe("atomic write safety", () => {
-  it("final file exists and .tmp file does not exist after write", (t) => {
+  it("final file exists and .tmp file does not exist after write", (_t) => {
     const dir = makeTmpDir();
     try {
       const graph = makeGraph([makeStep({ id: "s1" })]);
@@ -486,7 +486,7 @@ describe("atomic write safety", () => {
     }
   });
 
-  it("YAML content is valid and parseable", (t) => {
+  it("YAML content is valid and parseable", (_t) => {
     const dir = makeTmpDir();
     try {
       const graph = makeGraph([makeStep({ id: "s1" })]);
@@ -507,7 +507,7 @@ describe("atomic write safety", () => {
 // ─── YAML snake_case / camelCase boundary ────────────────────────────────
 
 describe("YAML snake_case / camelCase boundary", () => {
-  it("writes snake_case to disk and reads back as camelCase", (t) => {
+  it("writes snake_case to disk and reads back as camelCase", (_t) => {
     const dir = makeTmpDir();
     try {
       const graph = makeGraph([
@@ -541,7 +541,7 @@ describe("YAML snake_case / camelCase boundary", () => {
     }
   });
 
-  it("omits optional fields from YAML when undefined", (t) => {
+  it("omits optional fields from YAML when undefined", (_t) => {
     const dir = makeTmpDir();
     try {
       const graph = makeGraph([
@@ -565,7 +565,7 @@ describe("YAML snake_case / camelCase boundary", () => {
 // ─── Edge cases ──────────────────────────────────────────────────────────
 
 describe("edge cases", () => {
-  it("handles empty items array in expandIteration", (t) => {
+  it("handles empty items array in expandIteration", (_t) => {
     const graph = makeGraph([
       makeStep({ id: "iter" }),
     ]);
@@ -576,7 +576,7 @@ describe("edge cases", () => {
     assert.equal(expanded.steps[0].status, "expanded");
   });
 
-  it("handles graph with single step", (t) => {
+  it("handles graph with single step", (_t) => {
     const graph = makeGraph([makeStep({ id: "only" })]);
     const next = getNextPendingStep(graph);
     assert.equal(next?.id, "only");
@@ -585,7 +585,7 @@ describe("edge cases", () => {
     assert.equal(getNextPendingStep(completed), null);
   });
 
-  it("initializeGraph handles steps with empty requires", (t) => {
+  it("initializeGraph handles steps with empty requires", (_t) => {
     const def: WorkflowDefinition = {
       version: 1,
       name: "empty-requires",

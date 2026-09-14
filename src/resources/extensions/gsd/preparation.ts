@@ -7,14 +7,12 @@
  * Pure functions, zero UI dependencies (except for runPreparation orchestrator).
  */
 
-import { readdirSync, readFileSync, statSync, openSync, readSync, closeSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readdirSync, openSync, readSync, closeSync } from "node:fs";
+import { join } from "node:path";
 import { readdirSync as readdirSyncNode } from "node:fs";
 import {
   detectProjectSignals,
   scanProjectFiles,
-  PROJECT_FILES,
-  type ProjectSignals,
 } from "./detection.js";
 import { loadFile } from "./files.js";
 
@@ -238,19 +236,15 @@ const UNIVERSAL_SOURCE_EXTENSIONS = [
 // ─── Pattern Detection Regexes ──────────────────────────────────────────────────
 
 /** Async/await usage patterns. */
-const ASYNC_AWAIT_RE = /\basync\s+function\b|\basync\s*\(|\bawait\s+/g;
 
 /** Callback-style patterns (common patterns like done, callback, cb). */
 const CALLBACK_RE = /\b(callback|cb|done)\s*\(|\bfunction\s*\([^)]*\bfunction\b/g;
 
 /** Promise patterns (.then, .catch, new Promise). */
-const PROMISE_RE = /\.then\s*\(|\.catch\s*\(|\bnew\s+Promise\s*\(/g;
 
 /** Try/catch patterns. */
-const TRY_CATCH_RE = /\btry\s*\{[\s\S]*?\bcatch\s*\(/g;
 
 /** Error-first callback patterns. */
-const ERROR_CALLBACK_RE = /\bif\s*\(\s*(err|error)\s*\)|\(err(or)?\s*,/g;
 
 /** Result type patterns (Rust-style, fp-ts, etc.). */
 const RESULT_TYPE_RE = /\bResult<|\bEither<|\bisOk\(|\bisErr\(|\b(Ok|Err)\(/g;
@@ -1199,7 +1193,6 @@ export function formatPriorContextBrief(brief: PriorContextBrief): string {
 // ─── Ecosystem Research ─────────────────────────────────────────────────────────
 
 /** Maximum characters for the ecosystem brief. */
-const MAX_ECOSYSTEM_BRIEF_CHARS = 4000;
 
 /**
  * Research the ecosystem for best practices and known issues.

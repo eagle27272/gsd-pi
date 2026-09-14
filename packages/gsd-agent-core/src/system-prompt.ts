@@ -10,7 +10,12 @@ export interface BuildSystemPromptOptions {
 	customPrompt?: string;
 	/** Tools to include in prompt. Default: [read, bash, edit, write] */
 	selectedTools?: string[];
-	/** Optional one-line tool snippets keyed by tool name. */
+	/**
+	 * Optional one-line tool snippets keyed by tool name.
+	 * Accepted for backward compatibility but not rendered: per-tool
+	 * descriptions are stripped from the prompt to cut payload size, and the
+	 * model receives them through the API tool definitions instead.
+	 */
 	toolSnippets?: Record<string, string>;
 	/** Additional guideline bullets appended to the default system prompt guidelines. */
 	promptGuidelines?: string[];
@@ -29,7 +34,6 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 	const {
 		customPrompt,
 		selectedTools,
-		toolSnippets,
 		promptGuidelines,
 		appendSystemPrompt,
 		cwd,

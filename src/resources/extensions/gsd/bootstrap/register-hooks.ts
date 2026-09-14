@@ -74,7 +74,6 @@ import {
   messageHasPendingAskUserQuestionsTool,
   shouldPauseForQuestion,
 } from "../consent-question.js";
-import { resolveSkillManifest } from "../skill-manifest.js";
 import { applyUnitSkillVisibility, unitHasSkillManifest } from "../skill-scope.js";
 import { getGuidedUnitContext } from "../guided-unit-context.js";
 import { registerPlanMilestoneSchemaRecovery } from "./plan-milestone-schema-recovery.js";

@@ -274,6 +274,7 @@ export { formatDimensionNote, type ResizedImage, resizeImage } from "./utils/ima
 export {
 	getShellConfig,
 	sanitizeCommand,
+	installDetachedChildReaper,
 	killProcessTree,
 	SIGKILL_GRACE_MS,
 	HARD_DEADLINE_MS,

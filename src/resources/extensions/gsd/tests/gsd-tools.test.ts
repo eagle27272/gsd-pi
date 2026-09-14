@@ -15,7 +15,6 @@ import {
   upsertRequirement,
   getRequirementById,
   _getAdapter,
-  insertArtifact,
 } from '../gsd-db.ts';
 import {
   saveDecisionToDb,

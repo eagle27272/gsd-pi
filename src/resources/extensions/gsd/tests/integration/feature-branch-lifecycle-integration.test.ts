@@ -15,8 +15,12 @@ import assert from 'node:assert/strict';
  */
 
 import {
-  mkdtempSync, mkdirSync, writeFileSync, rmSync,
-  existsSync, realpathSync, readFileSync,
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+  existsSync,
+  realpathSync,
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -24,9 +28,9 @@ import { execSync } from "node:child_process";
 
 import { createAutoWorktree } from "../../auto-worktree-creation.ts";
 import { mergeMilestoneToMain } from "../../auto-worktree-merge.ts";
-import { captureIntegrationBranch, getSliceBranchName } from "../../worktree.ts";
+import { getSliceBranchName } from "../../worktree.ts";
 import { writeIntegrationBranch, readIntegrationBranch } from "../../git-service.ts";
-import { nextMilestoneId, generateMilestoneSuffix } from "../../guided-flow.ts";
+import { nextMilestoneId } from "../../guided-flow.ts";
 import { seedMergeReadyMilestone } from "../merge-ready-fixture.ts";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

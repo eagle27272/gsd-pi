@@ -16,7 +16,6 @@ import {
   completeMilestoneHierarchy,
   MilestoneLifecycleValidationError,
   reopenMilestoneHierarchy,
-  type MilestoneCompletionHierarchyResult,
 } from "./db/writers/milestone-lifecycle.js";
 import type { ExecutionInvocation } from "./execution-invocation.js";
 import {

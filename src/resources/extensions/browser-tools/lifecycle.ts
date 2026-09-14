@@ -38,7 +38,6 @@ import {
 	setHarState,
 	resetAllState,
 	HAR_FILENAME,
-	type ConsoleEntry,
 	type NetworkEntry,
 } from "./state.js";
 import {

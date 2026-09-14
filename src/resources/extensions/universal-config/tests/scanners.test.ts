@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { SCANNERS } from "../scanners.ts";
 import { TOOLS } from "../tools.ts";
-import type { ToolInfo, DiscoveredItem } from "../types.ts";
+import type { ToolInfo } from "../types.ts";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

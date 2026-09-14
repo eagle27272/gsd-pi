@@ -10,7 +10,6 @@ import { execFile } from "node:child_process";
 import { resolve } from "node:path";
 import { GSDError, GSD_PARSE_ERROR } from "./errors.js";
 import { gitNoPromptEnv } from "./git-constants.js";
-import { gitCapture } from "./git-exec.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -30,11 +29,6 @@ export interface RecentFilesOptions {
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 const GIT_TIMEOUT_MS = 5000;
-
-/** Synchronous git — used where sequential control flow is required (fallback paths). */
-function gitSync(args: string[], cwd: string): string {
-  return gitCapture(cwd, args, { timeout: GIT_TIMEOUT_MS });
-}
 
 /** Async git — returns stdout on success, empty string on any error. */
 function gitAsync(args: string[], cwd: string): Promise<string> {

@@ -20,7 +20,7 @@ import {
 import { readIntegrationBranch } from "../git-service.ts";
 import { _resetHasChangesCache } from "../native-git-bridge.ts";
 import { _clearGsdRootCache } from "../paths.ts";
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 

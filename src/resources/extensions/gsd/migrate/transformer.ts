@@ -14,7 +14,6 @@ import type {
   PlanningPlan,
   PlanningSummary,
   PlanningRoadmapEntry,
-  PlanningRoadmapMilestone,
   PlanningResearch,
   PlanningRequirement,
   PlanningMilestone,
@@ -25,7 +24,6 @@ import type {
   GSDRequirement,
   GSDSliceSummaryData,
   GSDTaskSummaryData,
-  GSDBoundaryEntry,
 } from './types.js';
 import { parseOldRequirements } from './parsers.js';
 

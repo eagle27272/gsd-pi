@@ -16,12 +16,10 @@ import { join } from "node:path";
 import { createRequire } from "node:module";
 import { buildMilestoneFileName, canonicalPhaseDirName, gsdRoot, milestonesDir, resolveMilestonePath, resolveSliceFile, targetSliceFile } from "./paths.js";
 import { MILESTONE_ID_RE } from "./milestone-ids.js";
-import type { Classification, CaptureEntry } from "./captures.js";
+import type { CaptureEntry } from "./captures.js";
 import {
-  loadPendingCaptures,
   loadAllCaptures,
   loadActionableCaptures,
-  markCaptureResolved,
   markCaptureExecuted,
   stampCaptureMilestone,
 } from "./captures.js";

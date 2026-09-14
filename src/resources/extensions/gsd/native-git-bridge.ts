@@ -5,7 +5,7 @@
 // Both READ and WRITE operations are native — push operations stay on the git
 // CLI because git2 credential handling is too complex.
 
-import { existsSync, readFileSync, unlinkSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { GSDError, GSD_GIT_ERROR } from "./errors.js";
 import { getErrorMessage } from "./error-utils.js";

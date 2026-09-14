@@ -12,7 +12,6 @@ import {
   type ApiKeyCredential,
   type OAuthCredential,
 } from "@gsd/pi-coding-agent/core/auth-storage.js";
-import { getEnvApiKey } from "@gsd/pi-ai";
 import { existsSync, statSync, chmodSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { mkdirSync } from "node:fs";

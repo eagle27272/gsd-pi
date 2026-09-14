@@ -14,23 +14,15 @@ import type {
   GsdProgressState,
   ReadonlyFooterDataProvider,
   Theme,
-  ThemeColor,
 } from "@gsd/pi-coding-agent";
 import type { GSDState } from "./types.js";
-import { getActiveHook } from "./post-unit-hooks.js";
-import { filterUnitsForMilestone, getLedger, getProjectTotals } from "./metrics.js";
+import { filterUnitsForMilestone, getLedger } from "./metrics.js";
 import { getErrorMessage } from "./error-utils.js";
 import { nativeIsRepo } from "./native-git-bridge.js";
-import {
-  resolveMilestoneFile,
-  resolveSliceFile,
-} from "./paths.js";
 import { isDbAvailable, getMilestoneSlices, getSliceTasks } from "./gsd-db.js";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { truncateToWidth, visibleWidth } from "@gsd/pi-tui";
-import { makeUI } from "../shared/tui.js";
-import { GLYPH, INDENT } from "../shared/mod.js";
-import { padRightVisible, renderPlainOutcome, renderProgressBar, rightAlign, wrapVisibleText } from "./tui/render-kit.js";
+import { renderPlainOutcome, wrapVisibleText } from "./tui/render-kit.js";
 import { computeProgressScore } from "./progress-score.js";
 import {
   getGlobalGSDPreferencesPath,
@@ -42,13 +34,10 @@ import {
   type RtkSessionSavings,
 } from "../shared/rtk-session-stats.js";
 import { logWarning } from "./workflow-logger.js";
-import { formattedShortcutPair } from "./shortcut-defs.js";
 import { readUnitRuntimeRecord, type AutoUnitRuntimeRecord } from "./unit-runtime.js";
 import { describeMilestoneReadinessPhase } from "./milestone-readiness.js";
 import type { ToolSurfaceSnapshot } from "./tool-surface-snapshot.js";
 import { gitCapture } from "./git-exec.js";
-
-const ACTIVE_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
 
 // ─── UAT Slice Extraction ─────────────────────────────────────────────────────
 
@@ -206,33 +195,6 @@ export function formatToolSurfaceSnapshot(snapshot: ToolSurfaceSnapshot | null |
   return `${label}: ${counts.join(" / ")}`;
 }
 
-function peekNext(unitType: string, state: GSDState): string {
-  // Show active hook info in progress display
-  const activeHookState = getActiveHook();
-  if (activeHookState) {
-    return `hook: ${activeHookState.hookName} (cycle ${activeHookState.cycle})`;
-  }
-
-  const sid = state.activeSlice?.id ?? "";
-  if (unitType.startsWith("hook/")) return `continue ${sid}`;
-  switch (unitType) {
-    case "discuss-milestone": return "research or plan milestone";
-    case "discuss-slice": return "plan slice";
-    case "research-milestone": return "plan milestone roadmap";
-    case "plan-milestone": return "plan or execute first slice";
-    case "research-slice": return `plan ${sid}`;
-    case "plan-slice": return "execute first task";
-    case "refine-slice": return "execute first task";
-    case "execute-task": return `continue ${sid}`;
-    case "complete-slice": return "reassess roadmap";
-    case "replan-slice": return `re-execute ${sid}`;
-    case "rewrite-docs": return "continue execution";
-    case "reassess-roadmap": return "advance to next slice";
-    case "run-uat": return "reassess roadmap";
-    default: return "";
-  }
-}
-
 /**
  * Describe what the next unit will be, based on current state.
  */
@@ -320,40 +282,6 @@ export function shouldRenderRoadmapProgress(
   return !!progress && progress.total > 0;
 }
 
-function widgetGridLabel(theme: Theme, text: string, color: ThemeColor = "borderAccent"): string {
-  return theme.fg(color, theme.bold(text.toUpperCase()));
-}
-
-function widgetGridColumn(content: string, width: number): string {
-  return padRightVisible(truncateToWidth(content, width, "…"), width);
-}
-
-function widgetGridColumns(theme: Theme, width: number, parts: string[]): string {
-  if (parts.length === 0) return "";
-  const gap = theme.fg("dim", " │ ");
-  const gapWidth = visibleWidth(gap) * (parts.length - 1);
-  const available = Math.max(parts.length * 8, width - gapWidth);
-  const base = Math.floor(available / parts.length);
-  let remaining = available - base * parts.length;
-  const columns = parts.map((part) => {
-    const columnWidth = base + (remaining > 0 ? 1 : 0);
-    remaining--;
-    return widgetGridColumn(part, columnWidth);
-  });
-  return truncateToWidth(columns.join(gap), width, "…");
-}
-
-function formatSmallWidgetSpend(): string {
-  const ledger = getLedger();
-  if (!ledger || ledger.units.length === 0) return "--";
-
-  const totals = getProjectTotals(ledger.units);
-  const parts: string[] = [];
-  if (totals.tokens.total > 0) parts.push(formatWidgetTokens(totals.tokens.total));
-  if (totals.cost > 0) parts.push(`$${totals.cost.toFixed(2)}`);
-  return parts.length > 0 ? parts.join(" · ") : "--";
-}
-
 // ─── ETA Estimation ──────────────────────────────────────────────────────────
 
 /**
@@ -417,7 +345,7 @@ let cachedSliceProgress: {
   taskDetails: CachedTaskDetail[] | null;
 } | null = null;
 
-export function updateSliceProgressCache(base: string, mid: string, activeSid?: string): void {
+export function updateSliceProgressCache(_base: string, mid: string, activeSid?: string): void {
   try {
     // Normalize slices: prefer DB, fall back to parser
     type NormSlice = { id: string; done: boolean; title: string };
@@ -706,7 +634,7 @@ export function updateProgressWidget(
   unitId: string,
   state: GSDState,
   accessors: WidgetStateAccessors,
-  tierBadge?: string,
+  _tierBadge?: string,
 ): void {
   if (!ctx.hasUI) return;
 
@@ -729,7 +657,6 @@ export function updateProgressWidget(
   }
 
   const verb = unitVerb(unitType);
-  const phaseLabel = unitPhaseLabel(unitType);
   const mid = state.activeMilestone;
   const isHook = unitType.startsWith("hook/");
 
@@ -1015,7 +942,7 @@ type TaskRef = NonNullable<GSDState["activeTask"]>;
 
 function buildGsdProgressPayload(
   accessors: WidgetStateAccessors,
-  unitType: string,
+  _unitType: string,
   unitId: string,
   mid: MilestoneRef | null | undefined,
   slice: SliceRef | null | undefined,

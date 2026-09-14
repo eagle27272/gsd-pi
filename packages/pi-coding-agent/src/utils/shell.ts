@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { constants as osConstants } from "node:os";
 import { delimiter } from "node:path";
 import { spawn, spawnSync } from "child_process";
 import { getBinDir } from "../config.js";
@@ -227,6 +228,61 @@ export function killTrackedDetachedChildren(): void {
 		killProcessTree(pid);
 	}
 	trackedDetachedChildPids.clear();
+}
+
+/**
+ * Signals whose default action terminates the host and therefore strand tracked
+ * detached children.
+ *
+ * SIGINT is deliberately absent. In the TUI, raw mode disables ISIG, so Ctrl-C
+ * arrives as a 0x03 byte and never raises SIGINT at all; and handleCtrlZ
+ * installs a temporary ignore-SIGINT listener specifically so Ctrl-C cannot kill
+ * a Ctrl-Z-suspended host, which a re-raising handler here would defeat.
+ */
+const REAPED_SIGNALS = ["SIGHUP", "SIGTERM"] as const;
+
+let activeReaperUninstall: (() => void) | undefined;
+
+/**
+ * Drain the tracked detached children when the host is terminated by SIGHUP
+ * (terminal or SSH closed) or SIGTERM (`kill`, supervisor stop), then let the
+ * host die with that signal's normal semantics.
+ *
+ * Installing this is the HOST's decision, never the library's — importing this
+ * module must not mutate process-global signal state. Call it once from the app
+ * entry point. Repeat calls are no-ops that return the same uninstall function.
+ */
+export function installDetachedChildReaper(): () => void {
+	if (activeReaperUninstall) return activeReaperUninstall;
+
+	const registered: Array<readonly [(typeof REAPED_SIGNALS)[number], () => void]> = [];
+
+	function uninstall(): void {
+		if (activeReaperUninstall !== uninstall) return;
+		activeReaperUninstall = undefined;
+		for (const [signal, handler] of registered) process.off(signal, handler);
+	}
+
+	for (const signal of REAPED_SIGNALS) {
+		const handler = () => {
+			// Drop our own listeners first: while ANY listener for `signal` remains,
+			// Node keeps its OS-level handler installed and the re-raise below is
+			// queued as a JS callback instead of terminating the host.
+			uninstall();
+			killTrackedDetachedChildren();
+			process.kill(process.pid, signal);
+			// Reached only when a listener other than ours is still registered for
+			// `signal` — bg-shell installs non-exiting SIGTERM cleanup, which swallows
+			// the re-raise. Exit with the status a signal death would have produced so
+			// the parent shell still reports termination rather than hanging.
+			process.exit(128 + osConstants.signals[signal]);
+		};
+		registered.push([signal, handler]);
+		process.on(signal, handler);
+	}
+
+	activeReaperUninstall = uninstall;
+	return uninstall;
 }
 
 /**

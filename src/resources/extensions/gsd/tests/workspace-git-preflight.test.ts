@@ -50,7 +50,7 @@ function seedProductConflict(base: string): void {
   }
 }
 
-function installCountingGitShim(binDir: string, logPath: string): void {
+function installCountingGitShim(binDir: string, _logPath: string): void {
   const posixShim = join(binDir, "git");
   writeFileSync(
     posixShim,

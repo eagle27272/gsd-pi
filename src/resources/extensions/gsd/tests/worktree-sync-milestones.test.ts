@@ -533,7 +533,7 @@ describe('worktree-sync-milestones', async () => {
       writeFileSync(join(wtBase, '.gsd', 'PROJECT.md'), '# Project\nMilestones: M001-M007');
 
       // Sync with milestoneId = M006 (the completing milestone — skipped by sync)
-      const { synced } = syncWorktreeStateBack(mainBase, wtBase, 'M006-589wvh');
+      syncWorktreeStateBack(mainBase, wtBase, 'M006-589wvh');
 
       // M006 is the current milestone being merged — it should be SKIPPED (#3641)
       // Its files are already in the milestone branch and would conflict with squash merge.

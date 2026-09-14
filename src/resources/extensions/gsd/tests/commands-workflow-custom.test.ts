@@ -12,7 +12,6 @@ import {
   rmSync,
   mkdirSync,
   writeFileSync,
-  existsSync,
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -89,12 +88,6 @@ steps:
     prompt: Do step 1
     requires: []
     produces: []
-`;
-
-const INVALID_DEF = `
-version: 2
-name: bad-workflow
-steps: []
 `;
 
 // ─── Catalog Registration ────────────────────────────────────────────────

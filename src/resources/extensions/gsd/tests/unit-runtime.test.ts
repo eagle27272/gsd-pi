@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -13,7 +13,6 @@ import {
 } from "../unit-runtime.ts";
 import { closeDatabase, insertMilestone, insertSlice, insertTask, openDatabase } from "../gsd-db.ts";
 import { clearPathCache } from '../paths.ts';
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 const base = mkdtempSync(join(tmpdir(), "gsd-unit-runtime-test-"));

@@ -8,7 +8,7 @@
 import type { Frame, Page } from "playwright";
 import { constrainScreenshot } from "./screenshot-constraints.js";
 export { constrainScreenshot, __setSharpForTesting } from "./screenshot-constraints.js";
-import type { CompactPageState, CompactSelectorState } from "./state.js";
+import type { CompactPageState } from "./state.js";
 import { formatCompactStateSummary } from "./utils.js";
 
 // Override via environment variables:

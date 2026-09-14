@@ -2,7 +2,7 @@
 // File Purpose: Closeout git failure discovery, retry, and manual resolution helpers.
 
 import { existsSync, realpathSync } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 
 import { runTurnGitAction, type TurnGitActionMode, type TurnGitActionResult } from "./git-service.js";
 import { _getAdapter, upsertTurnGitTransaction } from "./gsd-db.js";

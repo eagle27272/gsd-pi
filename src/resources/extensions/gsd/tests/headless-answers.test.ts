@@ -23,7 +23,7 @@ function makeTempDir(prefix: string): string {
 // loadAndValidateAnswerFile
 // ---------------------------------------------------------------------------
 
-test('loadAndValidateAnswerFile — valid file', (t) => {
+test('loadAndValidateAnswerFile — valid file', (_t) => {
   const tmp = makeTempDir('answers-valid');
   try {
     const data = {
@@ -43,7 +43,7 @@ test('loadAndValidateAnswerFile — valid file', (t) => {
   }
 });
 
-test('loadAndValidateAnswerFile — invalid JSON', (t) => {
+test('loadAndValidateAnswerFile — invalid JSON', (_t) => {
   const tmp = makeTempDir('answers-bad-json');
   try {
     const filePath = join(tmp, 'answers.json');
@@ -58,7 +58,7 @@ test('loadAndValidateAnswerFile — invalid JSON', (t) => {
   }
 });
 
-test('loadAndValidateAnswerFile — wrong types (non-string question value)', (t) => {
+test('loadAndValidateAnswerFile — wrong types (non-string question value)', (_t) => {
   const tmp = makeTempDir('answers-bad-q');
   try {
     const filePath = join(tmp, 'answers.json');
@@ -73,7 +73,7 @@ test('loadAndValidateAnswerFile — wrong types (non-string question value)', (t
   }
 });
 
-test('loadAndValidateAnswerFile — wrong types (non-string secret value)', (t) => {
+test('loadAndValidateAnswerFile — wrong types (non-string secret value)', (_t) => {
   const tmp = makeTempDir('answers-bad-secret');
   try {
     const filePath = join(tmp, 'answers.json');
@@ -116,7 +116,7 @@ function makeSelectEvent(
   };
 }
 
-test('observeEvent stores metadata', (t) => {
+test('observeEvent stores metadata', (_t) => {
   const injector = new AnswerInjector({});
 
   injector.observeEvent(makeToolExecutionStart([{
@@ -140,7 +140,7 @@ test('observeEvent stores metadata', (t) => {
   assert.strictEqual(injector.getStats().questionsDefaulted, 1);
 });
 
-test('observeEvent stores metadata for MCP-scoped ask_user_questions', (t) => {
+test('observeEvent stores metadata for MCP-scoped ask_user_questions', (_t) => {
   const injector = new AnswerInjector({ questions: { deploy_target: 'GCP' } });
 
   injector.observeEvent(makeToolExecutionStart([{
@@ -159,7 +159,7 @@ test('observeEvent stores metadata for MCP-scoped ask_user_questions', (t) => {
   assert.strictEqual(captured.length, 1);
 });
 
-test('tryHandle matches by question ID — single select', (t) => {
+test('tryHandle matches by question ID — single select', (_t) => {
   const injector = new AnswerInjector({ questions: { deploy_target: 'GCP' } });
 
   injector.observeEvent(makeToolExecutionStart([{
@@ -183,7 +183,7 @@ test('tryHandle matches by question ID — single select', (t) => {
   assert.strictEqual(injector.getStats().questionsAnswered, 1);
 });
 
-test('tryHandle matches dynamic approval-gate question aliases', (t) => {
+test('tryHandle matches dynamic approval-gate question aliases', (_t) => {
   const injector = new AnswerInjector({
     questions: { depth_verification_M001: 'Yes, you got it (Recommended)' },
   });
@@ -246,7 +246,7 @@ test('tryHandle unknown question deferred — first_option timeout', (t) => {
   assert.strictEqual(injector.getStats().questionsDefaulted, 1);
 });
 
-test('tryHandle multi-select', (t) => {
+test('tryHandle multi-select', (_t) => {
   const injector = new AnswerInjector({ questions: { features: ['auth', 'payments'] } });
 
   injector.observeEvent(makeToolExecutionStart([{
@@ -276,7 +276,7 @@ test('tryHandle multi-select', (t) => {
   assert.strictEqual(injector.getStats().questionsAnswered, 1);
 });
 
-test('tryHandle answer not in options — first_option strategy returns false', (t) => {
+test('tryHandle answer not in options — first_option strategy returns false', (_t) => {
   const injector = new AnswerInjector({ questions: { deploy_target: 'Azure' } });
 
   injector.observeEvent(makeToolExecutionStart([{
@@ -298,7 +298,7 @@ test('tryHandle answer not in options — first_option strategy returns false', 
   assert.strictEqual(injector.getStats().questionsAnswered, 0);
 });
 
-test('tryHandle deferred resolution — observeEvent after tryHandle', async (t) => {
+test('tryHandle deferred resolution — observeEvent after tryHandle', async (_t) => {
   const injector = new AnswerInjector({ questions: { deploy_target: 'GCP' } });
 
   const captured: string[] = [];
@@ -330,7 +330,7 @@ test('tryHandle deferred resolution — observeEvent after tryHandle', async (t)
 // AnswerInjector — getSecretEnvVars
 // ---------------------------------------------------------------------------
 
-test('getSecretEnvVars returns secrets map', (t) => {
+test('getSecretEnvVars returns secrets map', (_t) => {
   const secrets = { API_KEY: 'sk-123', DB_URL: 'db-local-fixture' };
   const injector = new AnswerInjector({ secrets });
 
@@ -341,7 +341,7 @@ test('getSecretEnvVars returns secrets map', (t) => {
 // AnswerInjector — getUnusedWarnings
 // ---------------------------------------------------------------------------
 
-test('getUnusedWarnings reports unused question IDs and secret keys', (t) => {
+test('getUnusedWarnings reports unused question IDs and secret keys', (_t) => {
   const injector = new AnswerInjector({
     questions: { q1: 'val1', q2: 'val2' },
     secrets: { KEY1: 'v1' },
@@ -372,7 +372,7 @@ test('getUnusedWarnings reports unused question IDs and secret keys', (t) => {
 // AnswerInjector — defaults.strategy cancel
 // ---------------------------------------------------------------------------
 
-test('defaults.strategy cancel — sends cancelled response', (t) => {
+test('defaults.strategy cancel — sends cancelled response', (_t) => {
   const injector = new AnswerInjector({ defaults: { strategy: 'cancel' } });
 
   injector.observeEvent(makeToolExecutionStart([{

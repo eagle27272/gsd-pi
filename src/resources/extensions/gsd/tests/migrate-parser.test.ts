@@ -8,9 +8,7 @@ import { tmpdir } from 'node:os';
 
 import { parsePlanningDirectory } from '../migrate/parser.ts';
 import { validatePlanningDirectory } from '../migrate/validator.ts';
-
-import type { PlanningProject, ValidationResult } from '../migrate/types.ts';
-import { describe, test, beforeEach, afterEach } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 // ─── Fixture Helpers ───────────────────────────────────────────────────────
@@ -23,14 +21,6 @@ function createPlanningDir(base: string): string {
   const dir = join(base, '.planning');
   mkdirSync(dir, { recursive: true });
   return dir;
-}
-
-function writeFile(dir: string, ...pathParts: string[]): (content: string) => void {
-  return (content: string) => {
-    const filePath = join(dir, ...pathParts);
-    mkdirSync(join(filePath, '..'), { recursive: true });
-    writeFileSync(filePath, content);
-  };
 }
 
 function cleanup(base: string): void {

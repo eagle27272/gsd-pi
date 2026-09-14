@@ -324,7 +324,7 @@ export function isBareClaudeCodeStreamAbortPlaceholder(lastMsg: unknown): boolea
  */
 export function _handleSessionSwitchAgentEnd(
   lastMsg: unknown,
-  resolveCancelled: (ctx: ErrorContext) => boolean,
+  _resolveCancelled: (ctx: ErrorContext) => boolean,
 ): void {
   if (!lastMsg || typeof lastMsg !== "object") return;
   const m = lastMsg as { stopReason?: unknown; errorMessage?: unknown; content?: unknown };

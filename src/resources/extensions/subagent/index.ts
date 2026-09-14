@@ -28,7 +28,6 @@ import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.js";
 import { isChildProcessRunning, resolveSubagentExitCode } from "./child-exit.js";
 import {
 	type IsolationEnvironment,
-	type IsolationMode,
 	type MergeResult,
 	applyIsolationDelta,
 	createIsolation,
@@ -37,7 +36,6 @@ import {
 import { registerWorker, updateWorker } from "./worker-registry.js";
 import { emitJournalEvent } from "../gsd/journal.js";
 import {
-	buildSubagentProcessArgs,
 	createSubagentLaunchPlan,
 	isSubagentChildProcess,
 	resolveSubagentProjectRoot,

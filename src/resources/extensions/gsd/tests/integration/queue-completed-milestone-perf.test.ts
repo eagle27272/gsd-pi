@@ -19,7 +19,7 @@ import { buildExistingMilestonesContext } from "../../guided-flow-queue.ts";
 import type { GSDState, MilestoneRegistryEntry } from "../../types.ts";
 import { createTestContext } from "../test-helpers.ts";
 
-const { assertTrue, assertEq, report } = createTestContext();
+const { assertTrue, report } = createTestContext();
 
 // ─── Fixture: project with many completed milestones ─────────────────────
 
@@ -96,7 +96,6 @@ console.log("\n=== Queue completed milestone performance (#2379) ===");
 const context = await buildExistingMilestonesContext(tmpBase, allMilestoneIds, state);
 
 // Active and pending milestones SHOULD have full context loaded
-const activeMid = `M${String(COMPLETED_COUNT + 1).padStart(3, "0")}`;
 assertTrue(
   context.includes("Currently in progress"),
   "Active milestone context content should be loaded",

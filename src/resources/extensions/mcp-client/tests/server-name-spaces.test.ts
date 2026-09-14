@@ -15,7 +15,7 @@
 
 import test, { before, after } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync, unlinkSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";

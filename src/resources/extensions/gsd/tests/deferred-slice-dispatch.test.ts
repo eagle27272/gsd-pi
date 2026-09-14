@@ -27,9 +27,6 @@ import {
   isDbAvailable,
   insertMilestone,
   insertSlice,
-  insertTask,
-  insertArtifact,
-  updateSliceStatus,
 } from "../gsd-db.ts";
 import { isDeferredStatus } from "../status-guards.ts";
 

@@ -16,7 +16,6 @@ import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 
 import {
-  persistState,
   resetOrchestrator,
   refreshWorkerStatuses,
   isParallelActive,

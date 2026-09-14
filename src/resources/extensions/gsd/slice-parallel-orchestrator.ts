@@ -30,13 +30,11 @@ import { isAbsolute, join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gsdRoot } from "./paths.js";
 import { createWorktree, worktreePath, removeWorktree } from "./worktree-manager.js";
-import { autoWorktreeBranch } from "./auto-worktree-branch-lifecycle.js";
 import { syncGsdStateToWorktreeByScope } from "./auto-worktree-sync.js";
 import { runWorktreePostCreateHook } from "./worktree-post-create-hook.js";
 import { createWorkspace, scopeMilestone } from "./workspace.js";
 import {
   writeSessionStatus,
-  removeSessionStatus,
 } from "./session-status-io.js";
 import { hasFileConflict } from "./slice-parallel-conflict.js";
 import { getErrorMessage } from "./error-utils.js";

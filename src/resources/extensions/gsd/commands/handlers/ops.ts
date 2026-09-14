@@ -2,7 +2,6 @@
 // File Purpose: Handles operational /gsd subcommands.
 import type { ExtensionAPI, ExtensionCommandContext } from "@gsd/pi-coding-agent";
 
-import { enableDebug } from "../../debug-logger.js";
 import { dispatchDirectPhase } from "../../auto-direct-dispatch.js";
 import { handleConfig } from "../../commands-config.js";
 import { handleDoctor, handleCapture, handleKnowledge, handleRunHook, handleSkillHealth, handleSteer, handleTriage, handleUpdate } from "../../commands-handlers.js";

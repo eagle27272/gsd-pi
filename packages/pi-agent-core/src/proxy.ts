@@ -354,6 +354,7 @@ function processProxyEvent(
 
 		default: {
 			const _exhaustiveCheck: never = proxyEvent;
+			void _exhaustiveCheck;
 			console.warn(`Unhandled proxy event type: ${(proxyEvent as any).type}`);
 			return undefined;
 		}

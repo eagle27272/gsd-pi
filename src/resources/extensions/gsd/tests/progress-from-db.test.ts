@@ -28,7 +28,7 @@ import {
   type WorkflowAuthorityFixture,
 } from "./workflow-authority-fixture.ts";
 
-function seedSecondMilestone(fixture: WorkflowAuthorityFixture): void {
+function seedSecondMilestone(_fixture: WorkflowAuthorityFixture): void {
   insertMilestone({ id: "M002", title: "Later milestone", status: "pending" });
   insertSlice({
     id: "S03",

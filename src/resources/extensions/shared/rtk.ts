@@ -2,7 +2,6 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
-  GSD_RTK_DISABLED_ENV,
   GSD_RTK_PATH_ENV,
   RTK_TELEMETRY_DISABLED_ENV,
   getManagedRtkDir,

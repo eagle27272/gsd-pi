@@ -1,4 +1,4 @@
-import type { AgentMessage, ThinkingLevel } from "@gsd/pi-agent-core";
+import type { AgentMessage } from "@gsd/pi-agent-core";
 import type { AssistantMessage, ImageContent, TextContent } from "@gsd/pi-ai";
 import { isContextOverflow } from "@gsd/pi-ai";
 import { formatNoApiKeyFoundMessage, formatNoModelSelectedMessage } from "@gsd/pi-coding-agent/core/auth-guidance.js";
@@ -68,7 +68,7 @@ export class AgentSessionPromptModule {
 
 	async prompt(text: string, options?: PromptOptions): Promise<void> {
 		const source = options?.source ?? "interactive";
-		const latency = this.host.beginTurnLatency({ source, trigger: "session.prompt" });
+		this.host.beginTurnLatency({ source, trigger: "session.prompt" });
 		let latencyStatus: "completed" | "queued" | "handled" | "error" = "completed";
 		const expandPromptTemplates = options?.expandPromptTemplates ?? true;
 		const preflightResult = options?.preflightResult;
