@@ -512,11 +512,17 @@ export type SignalAutoLockPidResult =
  *
  * The lock only records `pid` + `startedAt`; between write and read that PID
  * can be recycled by an unrelated process. Mirrors the killPid() policy above:
- * refuse to signal unless the live process's start time is no later than the
- * recorded one (within STALE_PID_START_SKEW_MS) and its cwd is rooted in the
- * project directory. An unknown cwd is tolerated (start time is the primary
- * identity); an unparseable `startedAt` invalidates the lock — a foreign or
- * corrupt lock must not authorize a signal.
+ * refuse to signal unless the pid passes isSafePid (so pid 1 — init, whose boot
+ * start time never looks stale and whose cwd reads as null for a non-root
+ * caller — can never be the target), the live process's start time is no later
+ * than the recorded one (within STALE_PID_START_SKEW_MS), and its cwd is rooted
+ * in the project directory. An unknown cwd is tolerated (start time is the
+ * primary identity); an unparseable `startedAt` invalidates the lock — a foreign
+ * or corrupt lock must not authorize a signal.
+ *
+ * killPid()'s isMcpServerCommand() check deliberately does *not* carry over:
+ * auto.lock records the auto-mode process, not an MCP server, so that predicate
+ * would reject every legitimate lock.
  */
 export function signalAutoLockPid(
   lock: unknown,
@@ -525,7 +531,7 @@ export function signalAutoLockPid(
 ): SignalAutoLockPidResult {
   if (!lock || typeof lock !== 'object') return 'invalid-lock';
   const { pid, startedAt } = lock as { pid?: unknown; startedAt?: unknown };
-  if (typeof pid !== 'number' || !Number.isInteger(pid) || pid <= 0) return 'invalid-lock';
+  if (!isSafePid(pid)) return 'invalid-lock';
   const recordedMs = typeof startedAt === 'string' ? Date.parse(startedAt) : NaN;
   if (!Number.isFinite(recordedMs)) return 'invalid-lock';
 

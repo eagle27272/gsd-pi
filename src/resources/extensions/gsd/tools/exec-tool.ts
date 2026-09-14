@@ -203,17 +203,117 @@ function normalizeUatIntent(value: unknown): UatExecIntent | ToolExecutionResult
   return paramError(`invalid intent "${value}" — must be one of: ${UAT_EXEC_INTENTS.join(", ")}`);
 }
 
+const PACKAGE_MANAGER_EXECUTABLES = /^(?:npm|pnpm|yarn|bun)(?:\.(?:cmd|bat|exe))?$/;
+const MUTATING_PACKAGE_SUBCOMMANDS = new Set(["i", "install", "add", "remove", "update", "upgrade"]);
+const MUTATING_GIT_SUBCOMMANDS = new Set([
+  "add", "commit", "push", "reset", "checkout", "switch",
+  "merge", "rebase", "clean", "rm", "mv", "tag", "branch",
+]);
+
+/** Options that consume the next token, so it is not the subcommand. */
+const VALUE_TAKING_FLAGS = new Set([
+  "-c", "-C", "--git-dir", "--work-tree", "--prefix", "--registry", "--cwd", "--dir",
+]);
+
+/** Credential-bearing paths, in any spelling a shell can reach them by. */
+const CREDENTIAL_PATH =
+  /(?:^|[\s"'`=(/])\.(?:env(?:\.[\w.-]+)?|netrc|npmrc|pypirc|git-credentials)\b|\.(?:aws\/credentials|ssh\/id_(?:rsa|dsa|ecdsa|ed25519)|docker\/config\.json|kube\/config)\b/i;
+
+/** Commands that would emit a credential file's contents somewhere the agent can see. */
+const CREDENTIAL_READERS =
+  /\b(?:cat|bat|less|more|head|tail|tac|nl|grep|egrep|fgrep|rg|ag|awk|sed|strings|xxd|od|base64|tee|cp|mv|source)\b/i;
+
+/**
+ * A credential file can also be consumed without naming a reader — `. .env`
+ * dot-sources it and `read x < .env` redirects it onto stdin.
+ */
+function consumesCredentialFile(statement: string, executable: string): boolean {
+  if (!CREDENTIAL_PATH.test(statement)) return false;
+  return CREDENTIAL_READERS.test(statement) || executable === "." || /<[^<]/.test(statement);
+}
+
+type ShellInvocation = { executable: string; args: string[] };
+
+function parseShellInvocation(statement: string): ShellInvocation | null {
+  const tokens = statement.trim().match(/"[^"]*"|'[^']*'|\S+/g);
+  if (!tokens) return null;
+  const unquote = (token: string) => token.replace(/^["']|["']$/g, "");
+  const executable = unquote(tokens[0]).split(/[\\/]/).pop()?.toLowerCase() ?? "";
+  return { executable, args: tokens.slice(1).map(unquote) };
+}
+
+/**
+ * First positional argument, skipping options and the values they consume.
+ * Without the skip, `npm --prefix . install` reads as subcommand ".".
+ */
+function resolveSubcommand(args: string[]): string | null {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (!arg.startsWith("-")) return arg.toLowerCase();
+    if (VALUE_TAKING_FLAGS.has(arg)) i++;
+  }
+  return null;
+}
+
+/**
+ * `rm` is destructive only with recursion *and* force, but those can be spelled
+ * `-rf`, `-fr`, `-f -r`, or `--recursive --force` — a single ordered regex misses
+ * every form but the first.
+ */
+function isRecursiveForceRemove({ executable, args }: ShellInvocation): boolean {
+  if (!/^rm(?:\.exe)?$/.test(executable)) return false;
+  let recursive = false;
+  let force = false;
+  for (const arg of args) {
+    if (arg === "--recursive") recursive = true;
+    else if (arg === "--force") force = true;
+    else if (/^-[^-]/.test(arg)) {
+      if (/[rR]/.test(arg)) recursive = true;
+      if (/f/.test(arg)) force = true;
+    }
+  }
+  return recursive && force;
+}
+
+/**
+ * Keep the UAT evidence trail clean: no dependency installs, git mutations,
+ * destructive cleanup, or credential dumps while a check is being recorded.
+ *
+ * This is workflow discipline, not a security boundary — the same extension
+ * registers an unrestricted `gsd_exec` against the identical sandbox. Rules are
+ * matched per shell statement so that a leading option cannot hide a subcommand.
+ */
 function rejectUatScript(script: string): string | null {
-  const patterns: Array<{ re: RegExp; reason: string }> = [
-    { re: /\b(?:npm|pnpm|yarn|bun)\s+(?:i|install|add|remove|update|upgrade)\b/i, reason: "package dependency mutation is not allowed during UAT" },
-    { re: /\b(?:pip|pip3|python\s+-m\s+pip)\s+install\b/i, reason: "package dependency mutation is not allowed during UAT" },
-    { re: /\bgit\s+(?:add|commit|push|reset|checkout|switch|merge|rebase|clean|rm|mv|tag|branch)\b/i, reason: "git mutations are not allowed during UAT" },
-    { re: /\brm\s+-[^\n\r;|&]*r[^\n\r;|&]*f\b/i, reason: "destructive filesystem cleanup is not allowed during UAT" },
-    { re: /\b(?:env|printenv)\b(?:\s|$)/i, reason: "dumping environment variables is not allowed during UAT" },
-    { re: /\bcat\s+\.env(?:\b|\.|$)/i, reason: "reading credential files is not allowed during UAT" },
-  ];
-  for (const pattern of patterns) {
-    if (pattern.re.test(script)) return pattern.reason;
+  for (const statement of script.split(/&&|\|\||[;|\n]/)) {
+    if (statement.trim().length === 0) continue;
+    const invocation = parseShellInvocation(statement);
+    if (!invocation) continue;
+    const { executable, args } = invocation;
+    const subcommand = resolveSubcommand(args);
+
+    if (PACKAGE_MANAGER_EXECUTABLES.test(executable) && subcommand && MUTATING_PACKAGE_SUBCOMMANDS.has(subcommand)) {
+      return "package dependency mutation is not allowed during UAT";
+    }
+    if (/^pip3?(?:\.exe)?$/.test(executable) && subcommand === "install") {
+      return "package dependency mutation is not allowed during UAT";
+    }
+    if (/^python3?(?:\.exe)?$/.test(executable) && args.includes("pip") && args.includes("install")) {
+      return "package dependency mutation is not allowed during UAT";
+    }
+    if (/^git(?:\.exe)?$/.test(executable) && subcommand && MUTATING_GIT_SUBCOMMANDS.has(subcommand)) {
+      return "git mutations are not allowed during UAT";
+    }
+    if (isRecursiveForceRemove(invocation)) {
+      return "destructive filesystem cleanup is not allowed during UAT";
+    }
+    // Only as the command being run: a bare `env` token is legitimate in
+    // `docker run --env FOO` or `ls env`.
+    if (/^(?:env|printenv)(?:\.exe)?$/.test(executable)) {
+      return "dumping environment variables is not allowed during UAT";
+    }
+    if (consumesCredentialFile(statement, executable)) {
+      return "reading credential files is not allowed during UAT";
+    }
   }
   return null;
 }

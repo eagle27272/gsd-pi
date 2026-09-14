@@ -833,7 +833,21 @@ describe('signalAutoLockPid', () => {
 
   test('reports already-dead when the recorded pid is gone', () => {
     const { opts } = probes({ alive: false });
-    assert.equal(signalAutoLockPid(lock(1, new Date().toISOString()), '/tmp/project', opts), 'already-dead');
+    assert.equal(signalAutoLockPid(lock(7, new Date().toISOString()), '/tmp/project', opts), 'already-dead');
+  });
+
+  // PID 1 is init: getProcessStartTime(1) returns boot time so it never looks
+  // stale, and getProcessCwd(1) returns null for a non-root reader, which the
+  // cwd check tolerates. killPid() already refuses it via the shared isSafePid;
+  // this path must not be the one place that lets it through.
+  test('refuses to signal pid 1 even when every other probe would pass', () => {
+    const recorded = Date.now() - 1_000;
+    const { opts, signals } = probes({ startMs: recorded, cwd: null });
+    assert.equal(
+      signalAutoLockPid(lock(1, new Date(recorded).toISOString()), '/tmp/project', opts),
+      'invalid-lock',
+    );
+    assert.deepEqual(signals, [], 'pid 1 must never be signalled, not even a liveness probe');
   });
 
   test('refuses to signal a recycled pid whose start time is after the lock', () => {
