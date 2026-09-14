@@ -48,52 +48,19 @@ function dialogContentWidth(width: number): number {
 	return width < 4 ? Math.max(1, width) : Math.max(1, width - 4);
 }
 
-function shellEscapeSingle(value: string): string {
-	return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
-function isSafeEnvVarKey(key: string): boolean {
-	return /^[A-Za-z_][A-Za-z0-9_]*$/.test(key);
-}
-
-function isSupportedDeploymentEnvironment(env: string): boolean {
-	return env === "development" || env === "preview" || env === "production";
-}
-
-function hydrateProcessEnv(key: string, value: string): void {
-	// Make newly collected secrets immediately visible to the current session.
-	// Some extensions read process.env directly and do not reload .env on every call.
-	process.env[key] = value;
-}
-
-async function writeEnvKey(filePath: string, key: string, value: string): Promise<void> {
-	if (typeof value !== "string") {
-		throw new TypeError(`writeEnvKey expects a string value for key "${key}", got ${typeof value}`);
-	}
-	let content = "";
-	try {
-		content = await readFile(filePath, "utf8");
-	} catch {
-		content = "";
-	}
-	const escaped = value.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/\r/g, "");
-	const line = `${key}=${escaped}`;
-	const regex = new RegExp(`^${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=.*$`, "m");
-	if (regex.test(content)) {
-		content = content.replace(regex, line);
-	} else {
-		if (content.length > 0 && !content.endsWith("\n")) content += "\n";
-		content += `${line}\n`;
-	}
-	await writeFile(filePath, content, "utf8");
-}
-
 // ─── Exported utilities ───────────────────────────────────────────────────────
 
 // Re-export from env-utils.ts so existing consumers still work.
 // The implementation lives in env-utils.ts to avoid pulling @gsd/pi-tui
-// into modules that only need env-checking (e.g. files.ts during reports).
-import { checkExistingEnvKeys } from "./gsd/env-utils.js";
+// into modules that only need env handling (e.g. files.ts during reports).
+import {
+	checkExistingEnvKeys,
+	isSafeEnvVarKey,
+	isSecuritySensitiveEnvKey,
+	isSupportedDeploymentEnvironment,
+	resolveProjectEnvFilePath,
+	writeEnvKey,
+} from "./gsd/env-utils.js";
 export { checkExistingEnvKeys };
 
 /**
@@ -333,16 +300,31 @@ export async function showSecretsSummary(
 // ─── Destination Write Helper ─────────────────────────────────────────────────
 
 /**
+ * Reject keys that must never come from a tool call: malformed names (a
+ * newline in a key injects a second pair into the .env file) and keys that
+ * steer our own runtime. Returns an error message, or null when the key is ok.
+ */
+function rejectUnwritableKey(key: string): string | null {
+	if (!isSafeEnvVarKey(key)) {
+		return `${key}: invalid environment variable name`;
+	}
+	if (isSecuritySensitiveEnvKey(key)) {
+		return `${key}: refusing to set agent runtime variable via secure_env_collect`;
+	}
+	return null;
+}
+
+/**
  * Apply collected secrets to the target destination.
  * Dotenv writes are handled directly; vercel/convex require pi.exec.
  */
-async function applySecrets(
+export async function applySecrets(
 	provided: Array<{ key: string; value: string }>,
 	destination: "dotenv" | "vercel" | "convex",
 	opts: {
 		envFilePath: string;
 		environment?: string;
-		exec?: (cmd: string, args: string[]) => Promise<{ code: number; stderr: string }>;
+		exec?: (cmd: string, args: string[], opts?: { stdin?: string }) => Promise<{ code: number; stderr: string }>;
 	},
 ): Promise<{ applied: string[]; errors: string[] }> {
 	const applied: string[] = [];
@@ -350,10 +332,18 @@ async function applySecrets(
 
 	if (destination === "dotenv") {
 		for (const { key, value } of provided) {
+			const rejection = rejectUnwritableKey(key);
+			if (rejection) {
+				errors.push(rejection);
+				continue;
+			}
 			try {
 				await writeEnvKey(opts.envFilePath, key, value);
 				applied.push(key);
-				hydrateProcessEnv(key, value);
+				// Hydrate process.env so the current session sees the new value.
+				// Sensitive keys are excluded above so a malicious caller cannot
+				// swap our module-loading or sandbox configuration mid-session.
+				process.env[key] = value;
 			} catch (err: any) {
 				errors.push(`${key}: ${err.message}`);
 			}
@@ -367,22 +357,24 @@ async function applySecrets(
 			return { applied, errors };
 		}
 		for (const { key, value } of provided) {
-			if (!isSafeEnvVarKey(key)) {
-				errors.push(`${key}: invalid environment variable name`);
+			const rejection = rejectUnwritableKey(key);
+			if (rejection) {
+				errors.push(rejection);
 				continue;
 			}
-			const cmd = destination === "vercel"
-				? `printf %s ${shellEscapeSingle(value)} | vercel env add ${key} ${env}`
-				: "";
 			try {
+				// The value goes over stdin, never as an argv element or inside a
+				// shell command line — both are world-readable through `ps`.
 				const result = destination === "vercel"
-					? await opts.exec("sh", ["-c", cmd])
-					: await opts.exec("npx", ["convex", "env", "set", key, value]);
+					? await opts.exec("vercel", ["env", "add", key, env], { stdin: value })
+					: await opts.exec("npx", ["convex", "env", "set", key], { stdin: value });
 				if (result.code !== 0) {
 					errors.push(`${key}: ${result.stderr.slice(0, 200)}`);
 				} else {
 					applied.push(key);
-					hydrateProcessEnv(key, value);
+					// Do NOT hydrate process.env after pushing to a remote destination:
+					// no in-process reader needs a freshly-pushed remote secret, and
+					// every spawned child would inherit the plaintext value.
 				}
 			} catch (err: any) {
 				errors.push(`${key}: ${err.message}`);
@@ -474,7 +466,7 @@ export async function collectSecretsFromManifest(
 	// (j) Apply collected values to destination
 	const provided = collected.filter((c) => c.value != null) as Array<{ key: string; value: string }>;
 	const { applied } = await applySecrets(provided, destination, {
-		envFilePath: resolve(ctx.cwd, ".env"),
+		envFilePath: resolveProjectEnvFilePath(ctx.cwd, ".env"),
 	});
 
 	const skipped = [
@@ -511,7 +503,10 @@ export default function secureEnv(pi: ExtensionAPI) {
 			], { description: "Where to write the collected secrets" })),
 			keys: Type.Array(
 				Type.Object({
-					key: Type.String({ description: "Env var name, e.g. OPENAI_API_KEY" }),
+					key: Type.String({
+						description: "Env var name, e.g. OPENAI_API_KEY",
+						pattern: "^[A-Za-z_][A-Za-z0-9_]*$",
+					}),
 					hint: Type.Optional(Type.String({ description: "Format hint shown to user, e.g. 'starts with sk-'" })),
 					required: Type.Optional(Type.Boolean()),
 					guidance: Type.Optional(Type.Array(Type.String(), { description: "Step-by-step guidance for finding this key" })),
@@ -537,6 +532,19 @@ export default function secureEnv(pi: ExtensionAPI) {
 				};
 			}
 
+			// Contain the write target before prompting — no point collecting a
+			// secret we are going to refuse to write.
+			let envFilePath: string;
+			try {
+				envFilePath = resolveProjectEnvFilePath(ctx.cwd, params.envFilePath ?? ".env");
+			} catch (err: any) {
+				return {
+					content: [{ type: "text", text: `Error: ${err.message}` }],
+					isError: true,
+					details: undefined as unknown,
+				};
+			}
+
 			// Auto-detect destination when not provided
 			const destinationAutoDetected = params.destination == null;
 			const destination = params.destination ?? detectDestination(ctx.cwd);
@@ -555,9 +563,9 @@ export default function secureEnv(pi: ExtensionAPI) {
 
 			// Apply to destination via shared helper
 			const { applied, errors } = await applySecrets(provided, destination, {
-				envFilePath: resolve(ctx.cwd, params.envFilePath ?? ".env"),
+				envFilePath,
 				environment: params.environment,
-				exec: (cmd, args) => pi.exec(cmd, args),
+				exec: (cmd, args, execOpts) => pi.exec(cmd, args, execOpts),
 			});
 
 			const details: ToolResultDetails = {
