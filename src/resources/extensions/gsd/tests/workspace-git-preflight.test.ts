@@ -6,7 +6,6 @@ import assert from "node:assert/strict";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 
-import { GIT_NO_PROMPT_ENV } from "../git-constants.js";
 import { probeGitConflictState } from "../git-conflict-state.js";
 import { ensureWorkspaceGitReadyForPath } from "../workspace-git-preflight.js";
 import { isWorkspaceGitAllowedCommand } from "../workspace-git-guard.js";
@@ -98,17 +97,15 @@ test("ensureWorkspaceGitReadyForPath caches clean target probes briefly", async 
   const binDir = makeTempDir("gsd-ws-git-shim-");
   const logPath = join(binDir, "git.log");
   const originalProcessPath = process.env.PATH;
-  const originalEnvPath = GIT_NO_PROMPT_ENV.PATH;
-  const originalEnvGitLog = GIT_NO_PROMPT_ENV.GSD_GIT_LOG;
-  const originalEnvRealPath = GIT_NO_PROMPT_ENV.GSD_REAL_PATH;
+  const originalEnvGitLog = process.env.GSD_GIT_LOG;
+  const originalEnvRealPath = process.env.GSD_REAL_PATH;
 
   try {
     installCountingGitShim(binDir, logPath);
     const shimmedPath = `${binDir}${delimiter}${originalProcessPath ?? ""}`;
     process.env.PATH = shimmedPath;
-    GIT_NO_PROMPT_ENV.PATH = shimmedPath;
-    GIT_NO_PROMPT_ENV.GSD_GIT_LOG = logPath;
-    GIT_NO_PROMPT_ENV.GSD_REAL_PATH = originalProcessPath ?? "";
+    process.env.GSD_GIT_LOG = logPath;
+    process.env.GSD_REAL_PATH = originalProcessPath ?? "";
 
     const first = await ensureWorkspaceGitReadyForPath(base);
     assert.equal(first.ok, true);
@@ -125,12 +122,10 @@ test("ensureWorkspaceGitReadyForPath caches clean target probes briefly", async 
   } finally {
     if (originalProcessPath === undefined) delete process.env.PATH;
     else process.env.PATH = originalProcessPath;
-    if (originalEnvPath === undefined) delete GIT_NO_PROMPT_ENV.PATH;
-    else GIT_NO_PROMPT_ENV.PATH = originalEnvPath;
-    if (originalEnvGitLog === undefined) delete GIT_NO_PROMPT_ENV.GSD_GIT_LOG;
-    else GIT_NO_PROMPT_ENV.GSD_GIT_LOG = originalEnvGitLog;
-    if (originalEnvRealPath === undefined) delete GIT_NO_PROMPT_ENV.GSD_REAL_PATH;
-    else GIT_NO_PROMPT_ENV.GSD_REAL_PATH = originalEnvRealPath;
+    if (originalEnvGitLog === undefined) delete process.env.GSD_GIT_LOG;
+    else process.env.GSD_GIT_LOG = originalEnvGitLog;
+    if (originalEnvRealPath === undefined) delete process.env.GSD_REAL_PATH;
+    else process.env.GSD_REAL_PATH = originalEnvRealPath;
     cleanup(binDir);
     cleanup(base);
   }
@@ -141,17 +136,15 @@ test("ensureWorkspaceGitReadyForPath detects merge state that appears after a cl
   const binDir = makeTempDir("gsd-ws-git-shim2-");
   const logPath = join(binDir, "git2.log");
   const originalProcessPath = process.env.PATH;
-  const originalEnvPath = GIT_NO_PROMPT_ENV.PATH;
-  const originalEnvGitLog = GIT_NO_PROMPT_ENV.GSD_GIT_LOG;
-  const originalEnvRealPath = GIT_NO_PROMPT_ENV.GSD_REAL_PATH;
+  const originalEnvGitLog = process.env.GSD_GIT_LOG;
+  const originalEnvRealPath = process.env.GSD_REAL_PATH;
 
   try {
     installCountingGitShim(binDir, logPath);
     const shimmedPath = `${binDir}${delimiter}${originalProcessPath ?? ""}`;
     process.env.PATH = shimmedPath;
-    GIT_NO_PROMPT_ENV.PATH = shimmedPath;
-    GIT_NO_PROMPT_ENV.GSD_GIT_LOG = logPath;
-    GIT_NO_PROMPT_ENV.GSD_REAL_PATH = originalProcessPath ?? "";
+    process.env.GSD_GIT_LOG = logPath;
+    process.env.GSD_REAL_PATH = originalProcessPath ?? "";
 
     // First call — repo is clean, cache is populated.
     const first = await ensureWorkspaceGitReadyForPath(base);
@@ -172,12 +165,10 @@ test("ensureWorkspaceGitReadyForPath detects merge state that appears after a cl
   } finally {
     if (originalProcessPath === undefined) delete process.env.PATH;
     else process.env.PATH = originalProcessPath;
-    if (originalEnvPath === undefined) delete GIT_NO_PROMPT_ENV.PATH;
-    else GIT_NO_PROMPT_ENV.PATH = originalEnvPath;
-    if (originalEnvGitLog === undefined) delete GIT_NO_PROMPT_ENV.GSD_GIT_LOG;
-    else GIT_NO_PROMPT_ENV.GSD_GIT_LOG = originalEnvGitLog;
-    if (originalEnvRealPath === undefined) delete GIT_NO_PROMPT_ENV.GSD_REAL_PATH;
-    else GIT_NO_PROMPT_ENV.GSD_REAL_PATH = originalEnvRealPath;
+    if (originalEnvGitLog === undefined) delete process.env.GSD_GIT_LOG;
+    else process.env.GSD_GIT_LOG = originalEnvGitLog;
+    if (originalEnvRealPath === undefined) delete process.env.GSD_REAL_PATH;
+    else process.env.GSD_REAL_PATH = originalEnvRealPath;
     cleanup(binDir);
     cleanup(base);
   }

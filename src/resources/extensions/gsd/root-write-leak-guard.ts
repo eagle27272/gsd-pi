@@ -1,11 +1,11 @@
 // Project/App: gsd-pi
 // File Purpose: Detect project-root file writes during isolated milestone worktree units.
 
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { GSD_RUNTIME_PATTERNS } from "./gitignore.js";
+import { gitCapture } from "./git-exec.js";
 
 const MAX_SYNC_FINGERPRINT_BYTES = 1_500_000_000;
 const ROOT_RUNTIME_PATH_PREFIXES = Array.from(
@@ -53,11 +53,7 @@ export function captureRootDirtySnapshot(rootPath: string): RootDirtySnapshot {
   const snapshot: RootDirtySnapshot = new Map();
   let status = "";
   try {
-    status = execFileSync("git", ["status", "--porcelain", "--untracked-files=all"], {
-      cwd: rootPath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    });
+    status = gitCapture(rootPath, ["status", "--porcelain", "--untracked-files=all"], { trim: false });
   } catch {
     return snapshot;
   }

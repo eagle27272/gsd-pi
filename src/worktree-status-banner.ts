@@ -1,8 +1,8 @@
 // GSD worktree startup banner
-import { execFileSync } from 'node:child_process'
 import { existsSync, realpathSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
 import { bannerLines, name, warn } from './cli-style.js'
+import { gitCapture } from './resources/extensions/gsd/git-exec.js'
 import { worktreesDirs } from './resources/extensions/gsd/worktree-placement.js'
 
 interface WorktreeEntry {
@@ -25,16 +25,7 @@ function normalizePath(path: string): string {
 }
 
 function gitExec(basePath: string, args: string[]): string {
-  try {
-    return execFileSync('git', args, {
-      cwd: basePath,
-      stdio: ['ignore', 'pipe', 'ignore'],
-      encoding: 'utf-8',
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'Never' },
-    }).trim()
-  } catch {
-    return ''
-  }
+  return gitCapture(basePath, args, { allowFailure: true })
 }
 
 function parseWorktreeList(output: string): WorktreeEntry[] {
@@ -115,11 +106,7 @@ function detectMainBranch(basePath: string): string {
 
 function branchHasChanges(basePath: string, mainBranch: string, branch: string): boolean {
   try {
-    execFileSync('git', ['diff', '--quiet', mainBranch, branch], {
-      cwd: basePath,
-      stdio: ['ignore', 'ignore', 'ignore'],
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'Never' },
-    })
+    gitCapture(basePath, ['diff', '--quiet', mainBranch, branch])
     return false
   } catch {
     return true

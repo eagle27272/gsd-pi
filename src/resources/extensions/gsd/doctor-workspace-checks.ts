@@ -1,12 +1,11 @@
 import { existsSync, realpathSync } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 
-import { GIT_NO_PROMPT_ENV } from "./git-constants.js";
 import { createRepositoryRegistryFromPreferences } from "./repository-registry.js";
 
 import type { DoctorIssue } from "./doctor-types.js";
 import type { GSDPreferences } from "./preferences.js";
+import { gitCapture } from "./git-exec.js";
 
 /**
  * Resolve the git working-tree root for a path, or null if it is not a repo.
@@ -15,12 +14,7 @@ import type { GSDPreferences } from "./preferences.js";
  */
 function resolveGitToplevel(cwd: string): string | null {
   try {
-    const out = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-    }).trim();
+    const out = gitCapture(cwd, ["rev-parse", "--show-toplevel"]);
     return out ? resolve(out) : null;
   } catch {
     return null;

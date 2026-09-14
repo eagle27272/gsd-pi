@@ -6,7 +6,8 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { GIT_NO_PROMPT_ENV } from "../gsd/git-constants.js";
+import { gitNoPromptEnv } from "../gsd/git-constants.js";
+import { gitCapture } from "../gsd/git-exec.js";
 
 // ─── Result Type ────────────────────────────────────────────────────────────
 
@@ -356,7 +357,7 @@ export function ghPushBranch(cwd: string, branch: string, setUpstream = true): G
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 30_000,
-      env: GIT_NO_PROMPT_ENV,
+      env: gitNoPromptEnv(),
     });
     return ok(undefined);
   } catch (err) {
@@ -366,13 +367,7 @@ export function ghPushBranch(cwd: string, branch: string, setUpstream = true): G
 
 export function ghCreateBranch(cwd: string, branch: string, from: string): GhResult<void> {
   try {
-    execFileSync("git", ["branch", branch, from], {
-      cwd,
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: 10_000,
-      env: GIT_NO_PROMPT_ENV,
-    });
+    gitCapture(cwd, ["branch", branch, from], { timeout: 10_000 });
     return ok(undefined);
   } catch (err) {
     return fail(err instanceof Error ? err.message : String(err));

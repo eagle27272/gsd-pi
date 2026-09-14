@@ -1,12 +1,11 @@
 // Project/App: gsd-pi
 // File Purpose: Repository registry seam for parent workspace multi-repo resolution.
 
-import { execFileSync } from "node:child_process";
 import { isAbsolute, relative, resolve } from "node:path";
 import { extractPlanningPathReference } from "./pre-execution-checks.js";
 import type { GSDPreferences, WorkspacePreferences, WorkspaceRepositoryPreference } from "./preferences-types.js";
-import { GIT_NO_PROMPT_ENV } from "./git-constants.js";
 import { resolveGsdPathContract } from "./paths.js";
+import { gitCapture } from "./git-exec.js";
 
 export interface RegisteredRepository {
   id: string;
@@ -102,12 +101,7 @@ function resolveRepositoryRoot(
 
 function resolveGitWorkingTreeRoot(basePath: string): string | null {
   try {
-    const root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-      env: GIT_NO_PROMPT_ENV,
-    }).trim();
+    const root = gitCapture(basePath, ["rev-parse", "--show-toplevel"]);
     return root ? resolve(root) : null;
   } catch {
     return null;

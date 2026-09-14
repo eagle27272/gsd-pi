@@ -27,7 +27,6 @@ import {
 } from "./paths.js";
 import { isDbAvailable, getMilestoneSlices, getSliceTasks } from "./gsd-db.js";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { truncateToWidth, visibleWidth } from "@gsd/pi-tui";
 import { makeUI } from "../shared/tui.js";
 import { GLYPH, INDENT } from "../shared/mod.js";
@@ -47,6 +46,7 @@ import { formattedShortcutPair } from "./shortcut-defs.js";
 import { readUnitRuntimeRecord, type AutoUnitRuntimeRecord } from "./unit-runtime.js";
 import { describeMilestoneReadinessPhase } from "./milestone-readiness.js";
 import type { ToolSurfaceSnapshot } from "./tool-surface-snapshot.js";
+import { gitCapture } from "./git-exec.js";
 
 const ACTIVE_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
 
@@ -482,21 +482,12 @@ function refreshLastCommit(basePath: string): void {
       return;
     }
     try {
-      execFileSync("git", ["rev-parse", "--verify", "HEAD"], {
-        cwd: basePath,
-        stdio: ["pipe", "pipe", "pipe"],
-        timeout: 3000,
-      });
+      gitCapture(basePath, ["rev-parse", "--verify", "HEAD"], { timeout: 3000 });
     } catch {
       cachedLastCommit = null;
       return;
     }
-    const raw = execFileSync("git", ["log", "-1", "--format=%cr|%s"], {
-      cwd: basePath,
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
-      timeout: 3000,
-    }).trim();
+    const raw = gitCapture(basePath, ["log", "-1", "--format=%cr|%s"], { timeout: 3000 });
     const sep = raw.indexOf("|");
     if (sep > 0) {
       cachedLastCommit = {

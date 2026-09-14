@@ -4,14 +4,13 @@
 // the actual worktree HEAD. Detached worktree commits can otherwise sit beyond
 // the branch ref and be silently omitted from the integration merge.
 
-import { execFileSync } from "node:child_process";
-
 import { debugLog } from "./debug-logger.js";
 import { GSDError, GSD_GIT_ERROR } from "./errors.js";
 import {
   nativeIsAncestor,
   nativeUpdateRef,
 } from "./native-git-bridge.js";
+import { gitCapture } from "./git-exec.js";
 
 export type MilestoneBranchHeadReconciliationResult =
   | { checked: false; updated: false; reason: "not-worktree" | "lookup-failed" }
@@ -75,9 +74,5 @@ export function reconcileMilestoneBranchHead(
 }
 
 function gitRevParse(cwd: string, ref: string): string {
-  return execFileSync("git", ["rev-parse", ref], {
-    cwd,
-    stdio: ["ignore", "pipe", "pipe"],
-    encoding: "utf-8",
-  }).trim();
+  return gitCapture(cwd, ["rev-parse", ref]);
 }

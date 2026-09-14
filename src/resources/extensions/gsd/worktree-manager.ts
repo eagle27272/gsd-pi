@@ -20,7 +20,6 @@
  */
 
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { join, resolve, sep } from "node:path";
 import { GSDError, GSD_PARSE_ERROR, GSD_STALE_STATE, GSD_LOCK_HELD, GSD_GIT_ERROR, GSD_MERGE_CONFLICT } from "./errors.js";
 import { logError, logWarning } from "./workflow-logger.js";
@@ -52,6 +51,7 @@ import {
 } from "./worktree-root.js";
 import { MILESTONE_ID_RE } from "./milestone-ids.js";
 import { canonicalWorktreesDir, worktreePathFor, worktreesDirs } from "./worktree-placement.js";
+import { gitCapture } from "./git-exec.js";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -96,11 +96,7 @@ function cleanupFailedSquashMergeState(basePath: string): void {
     logWarning("worktree", `merge abort skipped: ${(e as Error).message}`);
   }
   try {
-    execFileSync("git", ["reset", "--merge"], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    });
+    gitCapture(basePath, ["reset", "--merge"]);
   } catch (e) {
     logWarning("worktree", `failed squash merge reset failed: ${(e as Error).message}`);
   }
@@ -229,11 +225,7 @@ function isRegisteredGitWorktreeAtPath(basePath: string, wtPath: string): boolea
 
 export function inspectUncommittedWorktreeState(wtPath: string): { dirty: boolean; status: string } {
   try {
-    const status = execFileSync(
-      "git",
-      ["status", "--porcelain=v1", "--untracked-files=all"],
-      { cwd: wtPath, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" },
-    ).trimEnd();
+    const status = gitCapture(wtPath, ["status", "--porcelain=v1", "--untracked-files=all"], { trim: false }).trimEnd();
     return { dirty: status.length > 0, status };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -948,10 +940,7 @@ export function removeWorktree(
   const gitmodulesPath = join(resolvedWtPath, ".gitmodules");
   if (existsSync(gitmodulesPath)) {
     try {
-      const submoduleStatus = execFileSync(
-        "git", ["submodule", "status"], 
-        { cwd: resolvedWtPath, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" },
-      ).trim();
+      const submoduleStatus = gitCapture(resolvedWtPath, ["submodule", "status"]);
       // Lines starting with '+' indicate uncommitted submodule changes
       hasSubmoduleChanges = submoduleStatus.split("\n").some(
         (line: string) => line.startsWith("+") || line.startsWith("-"),
@@ -966,18 +955,9 @@ export function removeWorktree(
         // (Issue #4980 HIGH-11)
         const rescueBranch = `gsd/submodule-rescue/${name}-${Date.now()}`;
         try {
-          execFileSync(
-            "git", ["add", "-A"],
-            { cwd: resolvedWtPath, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" },
-          );
-          execFileSync(
-            "git", ["commit", "-m", `gsd: rescue submodule changes from worktree ${name}`, "--allow-empty"],
-            { cwd: resolvedWtPath, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" },
-          );
-          execFileSync(
-            "git", ["branch", rescueBranch, "HEAD"],
-            { cwd: resolvedWtPath, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" },
-          );
+          gitCapture(resolvedWtPath, ["add", "-A"]);
+          gitCapture(resolvedWtPath, ["commit", "-m", `gsd: rescue submodule changes from worktree ${name}`, "--allow-empty"]);
+          gitCapture(resolvedWtPath, ["branch", rescueBranch, "HEAD"]);
           logWarning(
             "reconcile",
             `Saved uncommitted submodule changes to rescue branch ${rescueBranch}`,

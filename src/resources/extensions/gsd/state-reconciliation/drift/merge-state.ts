@@ -5,7 +5,6 @@
 //   - MERGE_HEAD / SQUASH_MSG reconciliation with auto-resolve of .gsd/
 //     conflicts (#530, #2542)
 
-import { execFileSync } from "node:child_process";
 import { existsSync, unlinkSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 
@@ -24,6 +23,7 @@ import type { GSDState } from "../../types.js";
 import { logError, logWarning } from "../../workflow-logger.js";
 import { isGsdWorktreePath } from "../../worktree-root.js";
 import type { DriftContext, DriftHandler, DriftRecord } from "../types.js";
+import { gitCapture } from "../../git-exec.js";
 
 export type MergeReconcileResult = "clean" | "reconciled" | "blocked";
 
@@ -43,11 +43,7 @@ const MERGE_STATE_FILES = [
 
 function resolveGitPath(basePath: string, gitPath: string): string {
   try {
-    const resolvedPath = execFileSync("git", ["rev-parse", "--git-path", gitPath], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    }).trim();
+    const resolvedPath = gitCapture(basePath, ["rev-parse", "--git-path", gitPath]);
 
     if (resolvedPath.length > 0) {
       return isAbsolute(resolvedPath) ? resolvedPath : resolve(basePath, resolvedPath);
@@ -64,11 +60,7 @@ function resolveGitPath(basePath: string, gitPath: string): string {
 
 function hasWorktreeOrIndexChanges(basePath: string): boolean | null {
   try {
-    return execFileSync("git", ["status", "--porcelain"], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    }).trim().length > 0;
+    return gitCapture(basePath, ["status", "--porcelain"]).length > 0;
   } catch (err) {
     logWarning("recovery", `git status failed: ${getErrorMessage(err)}`);
     return null;
@@ -95,11 +87,7 @@ function removeMergeStateFiles(basePath: string): string[] {
 
 function resolveGitDir(basePath: string): string {
   try {
-    const gitDir = execFileSync("git", ["rev-parse", "--git-dir"], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    }).trim();
+    const gitDir = gitCapture(basePath, ["rev-parse", "--git-dir"]);
 
     if (gitDir.length > 0) {
       return isAbsolute(gitDir) ? gitDir : resolve(basePath, gitDir);
@@ -189,11 +177,7 @@ function reconcileOtherInProgressGitOps(
       indicators: [resolveGitPath(basePath, "CHERRY_PICK_HEAD")],
       abort: () => {
         try {
-          execFileSync("git", ["cherry-pick", "--abort"], {
-            cwd: basePath,
-            stdio: ["ignore", "pipe", "pipe"],
-            encoding: "utf-8",
-          });
+          gitCapture(basePath, ["cherry-pick", "--abort"]);
         } catch (err) {
           throw new Error(`cherry-pick --abort failed: ${getErrorMessage(err)}`);
         }
@@ -204,11 +188,7 @@ function reconcileOtherInProgressGitOps(
       indicators: [resolveGitPath(basePath, "REVERT_HEAD")],
       abort: () => {
         try {
-          execFileSync("git", ["revert", "--abort"], {
-            cwd: basePath,
-            stdio: ["ignore", "pipe", "pipe"],
-            encoding: "utf-8",
-          });
+          gitCapture(basePath, ["revert", "--abort"]);
         } catch (err) {
           throw new Error(`revert --abort failed: ${getErrorMessage(err)}`);
         }

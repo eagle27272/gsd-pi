@@ -3,12 +3,14 @@
  * context for the AI agent. Uses git diff/status to discover changes, then
  * provides ranking utilities for context-window budget allocation.
  *
- * Standalone module: only imports node:child_process and node:path.
+ * Leaf module: depends only on node builtins and the git/error leaves.
  */
 
-import { execFileSync, execFile } from "node:child_process";
+import { execFile } from "node:child_process";
 import { resolve } from "node:path";
 import { GSDError, GSD_PARSE_ERROR } from "./errors.js";
+import { gitNoPromptEnv } from "./git-constants.js";
+import { gitCapture } from "./git-exec.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -27,15 +29,11 @@ export interface RecentFilesOptions {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const EXEC_OPTS = {
-  encoding: "utf-8" as const,
-  timeout: 5000,
-  stdio: ["pipe", "pipe", "pipe"] as ["pipe", "pipe", "pipe"],
-};
+const GIT_TIMEOUT_MS = 5000;
 
 /** Synchronous git — used where sequential control flow is required (fallback paths). */
 function gitSync(args: string[], cwd: string): string {
-  return execFileSync("git", args, { ...EXEC_OPTS, cwd }).trim();
+  return gitCapture(cwd, args, { timeout: GIT_TIMEOUT_MS });
 }
 
 /** Async git — returns stdout on success, empty string on any error. */
@@ -44,7 +42,7 @@ function gitAsync(args: string[], cwd: string): Promise<string> {
     execFile(
       "git",
       args,
-      { encoding: "utf-8", timeout: 5000, cwd },
+      { encoding: "utf-8", timeout: GIT_TIMEOUT_MS, cwd, env: gitNoPromptEnv() },
       (err, stdout) => resolve(err ? "" : stdout.trim()),
     );
   });
