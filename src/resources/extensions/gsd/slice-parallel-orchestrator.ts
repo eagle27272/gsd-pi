@@ -29,7 +29,13 @@ import {
 import { isAbsolute, join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gsdRoot } from "./paths.js";
-import { createWorktree, worktreePath, removeWorktree } from "./worktree-manager.js";
+import {
+  createWorktree,
+  isInsideWorktreesDir,
+  isValidWorktreeIdentifier,
+  worktreePath,
+  removeWorktree,
+} from "./worktree-manager.js";
 import { syncGsdStateToWorktreeByScope } from "./auto-worktree-sync.js";
 import { runWorktreePostCreateHook } from "./worktree-post-create-hook.js";
 import { createWorkspace, scopeMilestone } from "./workspace.js";
@@ -148,12 +154,31 @@ async function waitForStartupGrace(pid: number, graceMs: number): Promise<boolea
   return isWorkerPidAlive(pid);
 }
 
-function createSliceWorktree(basePath: string, milestoneId: string, sliceId: string): string {
+export function createSliceWorktree(basePath: string, milestoneId: string, sliceId: string): string {
+  // Both ids come from the planner DB and are interpolated straight into the
+  // worktree name below, so a `../` in either steers the rmSync out of the
+  // worktrees container. createWorktree's own name check runs too late — it is
+  // reached only after the delete.
+  if (!isValidWorktreeIdentifier(milestoneId)) {
+    throw new Error(`Invalid milestoneId: ${milestoneId} — contains path separators or traversal`);
+  }
+  if (!isValidWorktreeIdentifier(sliceId)) {
+    throw new Error(`Invalid sliceId: ${sliceId} — contains path separators or traversal`);
+  }
+
   const wtBranch = `slice/${milestoneId}/${sliceId}`;
   const wtName = `${milestoneId}-${sliceId}`;
   const wtPath = worktreePath(basePath, wtName);
 
   if (existsSync(wtPath) && !isValidSliceWorktreePath(basePath, wtPath)) {
+    // isValidSliceWorktreePath is a legitimacy test used in the negative — it
+    // widens the delete rather than narrowing it, and says nothing about
+    // location. Containment is the gate that makes the rmSync safe (#21).
+    if (!isInsideWorktreesDir(basePath, wtPath)) {
+      throw new Error(
+        `refusing to remove ${wtPath}: outside the GSD worktrees container for ${basePath}`,
+      );
+    }
     rmSync(wtPath, { recursive: true, force: true });
   }
   if (!existsSync(wtPath)) {

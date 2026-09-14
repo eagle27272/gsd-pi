@@ -4,7 +4,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -472,11 +472,126 @@ describe("workflow MCP tools", () => {
       writeFileSync(join(worktree, ".git"), "gitdir: /tmp/fake-git-dir\n");
     }
     try {
+      // Re-validating the worktree base hands back its realpath, matching what
+      // parseWorkflowArgs already returns for the non-worktree branch.
       assert.equal(await resolveRecoveryActionProjectDir(
         base,
         "recovery-action-2",
         async (_projectDir, actionId) => actionId === "recovery-action-2" ? "M002-second" : null,
-      ), second);
+      ), realpathSync(second));
+    } finally {
+      cleanup(base);
+    }
+  });
+
+  // #21: milestoneId is joined onto the worktree container and the result
+  // *replaces* the validated projectRoot. A traversing value that happens to
+  // land on another live checkout redirects every subsequent workflow write
+  // into that repo's .gsd.
+  it("refuses a traversing milestoneId that lands on another checkout", async () => {
+    const base = makeTmpBase();
+    const sibling = join(tmpdir(), `gsd-mcp-other-repo-${randomUUID()}`);
+    mkdirSync(join(base, ".gsd-worktrees"), { recursive: true });
+    mkdirSync(sibling, { recursive: true });
+    writeFileSync(join(sibling, ".git"), "gitdir: /tmp/fake-git-dir\n");
+    try {
+      assert.equal(await resolveRecoveryActionProjectDir(
+        base,
+        "recovery-action-1",
+        async () => `../../${basename(sibling)}`,
+      ), base);
+    } finally {
+      rmSync(sibling, { recursive: true, force: true });
+      cleanup(base);
+    }
+  });
+
+  it("keeps gsd_summary_save writes in the project for a traversing milestone_id", () => {
+    const base = makeTmpBase();
+    const sibling = join(tmpdir(), `gsd-mcp-other-repo-${randomUUID()}`);
+    mkdirSync(join(base, ".gsd-worktrees"), { recursive: true });
+    mkdirSync(sibling, { recursive: true });
+    writeFileSync(join(sibling, ".git"), "gitdir: /tmp/fake-git-dir\n");
+    try {
+      const parsed = _parseWorkflowArgsForTest(_summarySaveSchemaForTest, {
+        projectDir: base,
+        milestone_id: `../../${basename(sibling)}`,
+        artifact_type: "CONTEXT-DRAFT",
+        content: "# x",
+      });
+      assert.equal(parsed.projectDir, realpathSync(base));
+    } finally {
+      rmSync(sibling, { recursive: true, force: true });
+      cleanup(base);
+    }
+  });
+
+  // validateProjectDir only enforces containment when GSD_WORKFLOW_PROJECT_ROOT
+  // is set, and the standalone server often runs without it. A symlinked
+  // container entry is then a well-formed id whose path still leaves the
+  // project, so the containment check has to stand on its own.
+  it("refuses a container entry that symlinks outside the project", () => {
+    const base = makeTmpBase();
+    const sibling = join(tmpdir(), `gsd-mcp-other-repo-${randomUUID()}`);
+    const priorRoot = process.env.GSD_WORKFLOW_PROJECT_ROOT;
+    delete process.env.GSD_WORKFLOW_PROJECT_ROOT;
+    mkdirSync(join(base, ".gsd-worktrees"), { recursive: true });
+    mkdirSync(sibling, { recursive: true });
+    writeFileSync(join(sibling, ".git"), "gitdir: /tmp/fake-git-dir\n");
+    symlinkSync(sibling, join(base, ".gsd-worktrees", "M001"));
+    try {
+      const parsed = _parseWorkflowArgsForTest(_summarySaveSchemaForTest, {
+        projectDir: base,
+        milestone_id: "M001",
+        artifact_type: "CONTEXT-DRAFT",
+        content: "# x",
+      });
+      assert.equal(parsed.projectDir, realpathSync(base));
+    } finally {
+      if (priorRoot === undefined) delete process.env.GSD_WORKFLOW_PROJECT_ROOT;
+      else process.env.GSD_WORKFLOW_PROJECT_ROOT = priorRoot;
+      rmSync(sibling, { recursive: true, force: true });
+      cleanup(base);
+    }
+  });
+
+  // The no-milestone-id fallback reaches the same sink and needs the same gate.
+  it("refuses a sole-worktree fallback that symlinks outside the project", () => {
+    const base = makeTmpBase();
+    const sibling = join(tmpdir(), `gsd-mcp-other-repo-${randomUUID()}`);
+    const priorRoot = process.env.GSD_WORKFLOW_PROJECT_ROOT;
+    delete process.env.GSD_WORKFLOW_PROJECT_ROOT;
+    mkdirSync(join(base, ".gsd-worktrees"), { recursive: true });
+    mkdirSync(sibling, { recursive: true });
+    writeFileSync(join(sibling, ".git"), "gitdir: /tmp/fake-git-dir\n");
+    symlinkSync(sibling, join(base, ".gsd-worktrees", "M001"));
+    try {
+      const parsed = _parseWorkflowArgsForTest(_summarySaveSchemaForTest, {
+        projectDir: base,
+        artifact_type: "PROJECT",
+        content: "# x",
+      });
+      assert.equal(parsed.projectDir, realpathSync(base));
+    } finally {
+      if (priorRoot === undefined) delete process.env.GSD_WORKFLOW_PROJECT_ROOT;
+      else process.env.GSD_WORKFLOW_PROJECT_ROOT = priorRoot;
+      rmSync(sibling, { recursive: true, force: true });
+      cleanup(base);
+    }
+  });
+
+  it("still routes to a real worktree when the sole-worktree fallback fires", () => {
+    const base = makeTmpBase();
+    const worktree = join(base, ".gsd-worktrees", "M001");
+    mkdirSync(worktree, { recursive: true });
+    writeFileSync(join(worktree, ".git"), "gitdir: /tmp/fake-git-dir\n");
+    try {
+      const parsed = _parseWorkflowArgsForTest(_summarySaveSchemaForTest, {
+        projectDir: base,
+        artifact_type: "PROJECT",
+        content: "# x",
+      });
+      assert.equal(parsed.projectDir, realpathSync(worktree));
     } finally {
       cleanup(base);
     }

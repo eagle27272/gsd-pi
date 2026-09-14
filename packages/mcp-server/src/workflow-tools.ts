@@ -7,7 +7,7 @@
 
 import { existsSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
 import {
@@ -637,18 +637,51 @@ function worktreeContainers(projectRoot: string): string[] {
   return [join(projectRoot, ".gsd-worktrees"), join(projectRoot, ".gsd", "worktrees")];
 }
 
+/**
+ * Gate for a worktree path that is about to replace the validated projectRoot.
+ * Returns the normalized path, or null when it is not genuinely inside one of
+ * this project's worktree containers.
+ *
+ * Boundary twin of `isInsideWorktreesDir` in
+ * src/resources/extensions/gsd/worktree-manager.ts — the MCP server cannot
+ * statically import the extension tree. Keep the two in sync.
+ *
+ * `validateProjectDir` is not sufficient on its own here: it enforces
+ * containment only when GSD_WORKFLOW_PROJECT_ROOT is set, and the standalone
+ * server is routinely launched without it. Both sides are realpath'd so a
+ * symlinked container entry cannot redirect writes into another checkout,
+ * while the external-state layout — where `.gsd` itself is a symlink into
+ * ~/.gsd/projects/<hash>/ — still resolves as contained (#21).
+ */
+function containedWorktreeBasePath(projectRoot: string, wtPath: string): string | null {
+  const resolved = safeRealpath(wtPath);
+  const contained = worktreeContainers(projectRoot).some((container) => {
+    const root = safeRealpath(container);
+    return resolved === root || resolved.startsWith(root + sep);
+  });
+  if (!contained) return null;
+  return validateProjectDir(resolved);
+}
+
 function resolveActiveWorktreeBasePath(
   projectRoot: string,
   milestoneId: string | null,
 ): string | null {
-  if (!milestoneId) return null;
+  // The id is joined onto a container and the result replaces an already
+  // validated projectRoot, so a traversing value that lands on another live
+  // checkout redirects every later workflow write into that repo (#21). The
+  // artifact-id alphabet has no separators and no `..`, so a milestone id that
+  // clears it can only ever name a direct child of the container.
+  if (!milestoneId || !isArtifactId(milestoneId)) return null;
   for (const container of worktreeContainers(projectRoot)) {
     const wtPath = join(container, milestoneId);
     if (!existsSync(wtPath)) continue;
     // Sanity check: a real git worktree has a `.git` file with a gitdir pointer.
     // Bare directories without it shouldn't hijack the write path.
     if (!existsSync(join(wtPath, ".git"))) continue;
-    return wtPath;
+    // The replacement inherits none of projectRoot's trust.
+    const contained = containedWorktreeBasePath(projectRoot, wtPath);
+    if (contained) return contained;
   }
   return null;
 }
@@ -675,7 +708,9 @@ function resolveSoleActiveWorktree(projectRoot: string): string | null {
     );
   }
   if (live.length !== 1) return null;
-  return live[0];
+  // Same sink as resolveActiveWorktreeBasePath, so the same gate applies — a
+  // symlinked entry here redirects writes just as effectively (#21).
+  return containedWorktreeBasePath(projectRoot, live[0]);
 }
 
 async function bridgeRecoveryActionMilestoneId(
@@ -2353,6 +2388,11 @@ export const _sliceCompleteSchemaForTest = sliceCompleteSchema;
  */
 const ARTIFACT_ID_PATTERN = /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/;
 const ARTIFACT_ID_MAX_LENGTH = 64;
+
+/** The same alphabet applied outside a zod schema — see resolveActiveWorktreeBasePath. */
+function isArtifactId(value: string): boolean {
+  return value.length <= ARTIFACT_ID_MAX_LENGTH && ARTIFACT_ID_PATTERN.test(value);
+}
 
 function artifactIdParam(description: string) {
   return z.string()
