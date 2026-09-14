@@ -651,7 +651,7 @@ console.log('\n=== complete-task: escalation write failure preserves completion 
 
   // A directory at the artifact path makes the final atomic rename fail while
   // leaving the earlier SUMMARY and PLAN writes available.
-  fs.mkdirSync(path.join(path.dirname(planPath), 'T01-ESCALATION.json'));
+  fs.mkdirSync(path.join(path.dirname(planPath), 'S01-T01-ESCALATION.json'));
   const result = await withWorkingDirectory(basePath, () => handleCompleteTask({
     ...makeValidParams(),
     blockerDiscovered: true,

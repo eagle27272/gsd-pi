@@ -9,7 +9,7 @@
  * `resetAllState()` (called by closeBrowser).
  */
 
-import type { Browser, BrowserContext, Frame, Page } from "playwright";
+import type { Browser, BrowserContext, BrowserContextOptions, Frame, Page } from "playwright";
 import path from "node:path";
 import {
 	createActionTimeline,
@@ -337,6 +337,9 @@ export function resetAllState(): void {
 export interface ToolDeps {
 	// Lifecycle
 	ensureBrowser: () => Promise<{ browser: Browser; context: BrowserContext; page: Page }>;
+	createBrowserSession: (
+		contextOptions?: BrowserContextOptions
+	) => Promise<{ browser: Browser; context: BrowserContext; page: Page }>;
 	closeBrowser: () => Promise<void>;
 	getActivePage: () => Page;
 	getActiveTarget: () => Page | Frame;

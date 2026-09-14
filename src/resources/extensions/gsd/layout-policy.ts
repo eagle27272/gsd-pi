@@ -21,6 +21,33 @@ function pad(n: number, width = 2): string {
   return String(n).padStart(width, "0");
 }
 
+const PATH_SEPARATOR_RE = /[/\\]/;
+
+/**
+ * Reject an id that cannot safely become one component of an artifact file
+ * name. Ids reach these builders straight from tool arguments, and a name
+ * built from `../..` traverses out of the project once a caller `join`s it
+ * onto the phase directory (#9). Guarding at the point of interpolation covers
+ * every derived path at once instead of trusting each downstream write sink.
+ */
+export function assertSafePathSegment(value: string, label: string): string {
+  const unsafe =
+    value === "" ||
+    value !== value.trim() ||
+    value === "." ||
+    value === ".." ||
+    value.includes("\0") ||
+    PATH_SEPARATOR_RE.test(value);
+  if (unsafe) {
+    throw new Error(
+      `${label} ${JSON.stringify(value)} is not a valid path segment: ` +
+      `artifact-name ids may not be empty, padded with whitespace, "." or "..", ` +
+      `or contain a path separator or NUL.`,
+    );
+  }
+  return value;
+}
+
 /**
  * Phase directory name: `NN-slug` (e.g. "01-foundation").
  * Matches gsd-core's `phases/NN-name/` convention.
@@ -93,6 +120,7 @@ export function slicePlanSegment(sliceId: string): string {
  * (e.g. "01-01-PLAN.md" for S01, "01-R01-PLAN.md" for R01).
  */
 export function slicePlanFileName(phaseNum: number, sliceId: string, suffix: string): string {
+  assertSafePathSegment(sliceId, "slice id");
   return `${pad(phaseNum)}-${slicePlanSegment(sliceId)}-${suffix}.md`;
 }
 

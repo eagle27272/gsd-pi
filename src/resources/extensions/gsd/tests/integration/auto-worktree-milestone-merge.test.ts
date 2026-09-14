@@ -66,6 +66,9 @@ function createTempRepoWithExternalGsd(): { repo: string; externalState: string 
   run("git init", repo);
   run("git config user.email test@test.com", repo);
   run("git config user.name Test", repo);
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add .` stage nothing and the commit below fail.
+  run("git config core.excludesFile /dev/null", repo);
 
   mkdirSync(join(externalState, "worktrees"), { recursive: true });
   symlinkSync(externalState, join(repo, ".gsd"));
@@ -401,6 +404,9 @@ describe("auto-worktree-milestone-merge", { timeout: 300_000 }, () => {
     run("git init -b master", dir);
     run("git config user.email test@test.com", dir);
     run("git config user.name Test", dir);
+    // A developer's global ignore file may list .gsd, which would silently make
+    // `git add .` stage nothing and the commit below fail.
+    run("git config core.excludesFile /dev/null", dir);
     writeFileSync(join(dir, "README.md"), "# master-branch repo\n");
     mkdirSync(join(dir, ".gsd"), { recursive: true });
     writeFileSync(join(dir, ".gsd", "STATE.md"), "# State\n");

@@ -72,6 +72,9 @@ function createFeatureBranchRepo(featureBranch: string): string {
   run("git init", dir);
   run("git config user.email test@test.com", dir);
   run("git config user.name Test", dir);
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add .` stage nothing and the commit below fail.
+  run("git config core.excludesFile /dev/null", dir);
 
   // Initial commit on main
   writeFileSync(join(dir, "README.md"), "# project\n");

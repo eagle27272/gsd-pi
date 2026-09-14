@@ -500,8 +500,6 @@ function unitActivityMentionsTool(basePath: string, unitType: string, unitId: st
   return false;
 }
 
-export const _hasRoadmapReassessmentArtifactForTest = hasRoadmapReassessmentArtifact;
-
 function hasReassessmentEvidence(s: AutoSession, milestoneId: string): boolean {
   if (!s.currentUnit) return false;
   const toolName = "gsd_reassess_roadmap";

@@ -2,8 +2,8 @@
 // Provides high-performance git operations backed by libgit2 via the Rust native module.
 // Falls back to execFileSync git commands when the native module is unavailable.
 //
-// Both READ and WRITE operations are native — push operations remain as
-// execFileSync calls because git2 credential handling is too complex.
+// Both READ and WRITE operations are native — push operations stay on the git
+// CLI because git2 credential handling is too complex.
 
 import { execFileSync } from "node:child_process";
 import type { ExecFileSyncOptionsWithStringEncoding } from "node:child_process";
@@ -405,7 +405,11 @@ export function nativeIsRepo(basePath: string): boolean {
     return native.gitIsRepo(basePath);
   }
   try {
-    execFileSync("git", ["rev-parse", "--git-dir"], { cwd: basePath, stdio: "pipe" });
+    execFileSync("git", ["rev-parse", "--git-dir"], {
+      cwd: basePath,
+      stdio: "pipe",
+      env: GIT_NO_PROMPT_ENV,
+    });
     return true;
   } catch {
     return false;
@@ -1071,6 +1075,7 @@ export function nativeCheckoutBranch(basePath: string, branch: string): void {
     cwd: basePath,
     stdio: ["ignore", "pipe", "pipe"],
     encoding: "utf-8",
+    env: GIT_NO_PROMPT_ENV,
   });
 }
 
@@ -1234,7 +1239,11 @@ export function nativeResetHard(basePath: string): void {
     native.gitResetHard(basePath);
     return;
   }
-  execFileSync("git", ["reset", "--hard", "HEAD"], { cwd: basePath, stdio: "pipe" });
+  execFileSync("git", ["reset", "--hard", "HEAD"], {
+    cwd: basePath,
+    stdio: "pipe",
+    env: GIT_NO_PROMPT_ENV,
+  });
 }
 
 /**

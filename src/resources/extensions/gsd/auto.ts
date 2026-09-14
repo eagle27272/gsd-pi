@@ -266,6 +266,9 @@ void initTokenCounter().catch((err) => {
 
 // ─── Session State ─────────────────────────────────────────────────────────
 
+import {
+  hasMergedMilestoneInPhases,
+} from "./auto/session.js";
 import type {
   AutoSession,
 } from "./auto/session.js";
@@ -1647,7 +1650,7 @@ export async function stopAuto(
       reason: normalizedReason,
       rawReason,
       milestoneId: s.currentMilestoneId ?? undefined,
-      milestoneMerged: s.milestoneMergedInPhases === true,
+      milestoneMerged: hasMergedMilestoneInPhases(s, s.currentMilestoneId),
       isolationMode: getIsolationMode(telemetryBase),
       worktreeActive: isInAutoWorktree(s.basePath),
     });
@@ -1721,7 +1724,7 @@ export async function stopAuto(
         s.currentMilestoneId,
         s.basePath,
       );
-      if (stopMilestoneId && !s.milestoneMergedInPhases) {
+      if (stopMilestoneId && !hasMergedMilestoneInPhases(s, stopMilestoneId)) {
         const notifyCtx = ctx
           ? { notify: ctx.ui.notify.bind(ctx.ui) }
           : { notify: () => {} };
@@ -1766,7 +1769,7 @@ export async function stopAuto(
         const exitAction = _selectStopAutoWorktreeExit({
           currentMilestoneId: stopMilestoneId,
           milestoneComplete,
-          milestoneMergedInPhases: s.milestoneMergedInPhases,
+          milestoneMergedInPhases: hasMergedMilestoneInPhases(s, stopMilestoneId),
           preserveCompletedMilestoneBranch: options.preserveCompletedMilestoneBranch,
         });
 

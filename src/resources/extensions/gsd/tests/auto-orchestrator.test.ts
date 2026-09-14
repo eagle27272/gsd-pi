@@ -621,7 +621,7 @@ test("advance() merges a completed milestone worktree before all-complete stop",
   f.session.basePath = worktreePath;
   f.session.originalBasePath = f.base;
   f.session.currentMilestoneId = "M001";
-  f.session.milestoneMergedInPhases = false;
+  f.session.milestoneMergedInPhasesFor = null;
 
   const result = await f.orchestrator.advance();
 
@@ -630,11 +630,50 @@ test("advance() merges a completed milestone worktree before all-complete stop",
   assert.equal(result.reason, "All milestones complete");
   assert.equal(result.terminalOutcome?.code, "all-complete");
   assert.equal(f.orchestrator.getStatus().phase, "stopped");
-  assert.equal(f.session.milestoneMergedInPhases, true);
+  assert.equal(f.session.milestoneMergedInPhasesFor, "M001");
   assert.deepEqual(f.session.milestoneSettlement, { ok: true, reason: "settled" });
   const names = f.journalNames();
   assert.ok(names.includes("advance-stopped"));
   assert.ok(!names.includes("advance-blocked"));
+});
+
+test("#7: an earlier milestone's merge does not suppress this milestone's settlement merge", async (t) => {
+  const f = makeFixture({ complete: true, noTask: true });
+  t.after(() => f.cleanup());
+
+  insertAssessment({
+    path: "phases/01-m001/01-VALIDATION.md",
+    milestoneId: "M001",
+    status: "pass",
+    scope: "milestone-validation",
+    fullContent: "verdict: pass",
+  });
+  insertGateRow({
+    milestoneId: "M001",
+    sliceId: "S01",
+    gateId: "Q3",
+    scope: "slice",
+    status: "pending",
+  });
+
+  const worktreePath = join(f.base, ".gsd", "worktrees", "M001");
+  mkdirSync(join(f.base, ".gsd", "worktrees"), { recursive: true });
+  execFileSync("git", ["worktree", "add", "-b", "milestone/M001", worktreePath], { cwd: f.base, stdio: "ignore" });
+  mkdirSync(join(worktreePath, ".gsd", "phases", "01-m001"), { recursive: true });
+  writeFileSync(join(worktreePath, ".gsd", "phases", "01-m001", "01-SUMMARY.md"), "# Milestone Summary\n");
+  f.session.basePath = worktreePath;
+  f.session.originalBasePath = f.base;
+  f.session.currentMilestoneId = "M001";
+  // A milestone merged earlier in this same auto run. As a session-wide
+  // boolean this made evaluateAllCompleteSettlement report "settled", so
+  // mergePendingCompleteMilestone never ran and M001 stayed stranded.
+  f.session.milestoneMergedInPhasesFor = "M000";
+
+  const result = await f.orchestrator.advance();
+
+  assert.equal(result.kind, "stopped");
+  assert.equal(f.session.milestoneMergedInPhasesFor, "M001");
+  assert.deepEqual(f.session.milestoneSettlement, { ok: true, reason: "settled" });
 });
 
 test("advance() stopped clears previous activeUnit and resets idempotent lock", async (t) => {

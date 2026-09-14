@@ -41,7 +41,8 @@ import { clearPathCache, normalizeRealPath, relMilestoneFile, relSliceFile, relS
 import { saveFile, clearParseCache } from "../files.js";
 import { removeProjectionFileSync } from "../atomic-write.js";
 import { hostname } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
+import { GSDError, GSD_IO_ERROR } from "../errors.js";
 import type { CompleteMilestoneParams } from "./complete-milestone.js";
 import { handleCompleteMilestone } from "./complete-milestone.js";
 import { handleCompleteTask, resolveTaskSummaryPath, type CompleteTaskResult } from "./complete-task.js";
@@ -443,7 +444,21 @@ async function mirrorArtifactToActiveWorktreeProjection(
   if (!contract.worktreeGsd) return;
   if (contract.worktreeGsd === contract.projectGsd) return;
 
-  const fullPath = join(contract.worktreeGsd, relativePath);
+  // The relative path is derived from tool-supplied ids, and this is a write
+  // sink — so containment is enforced here rather than assumed from whichever
+  // builder produced it, matching the guards in db-writer (#9). This sits
+  // outside the catch on purpose: `required` exists to tolerate a transient IO
+  // failure on a best-effort mirror, not to swallow an attempt to escape the
+  // projection root.
+  const fullPath = resolve(contract.worktreeGsd, relativePath);
+  const rel = relative(contract.worktreeGsd, fullPath);
+  if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) {
+    throw new GSDError(
+      GSD_IO_ERROR,
+      `worktree projection mirror path escapes the worktree projection root: ${relativePath}`,
+    );
+  }
+
   try {
     await saveFile(fullPath, content);
     clearPathCache();
@@ -456,6 +471,8 @@ async function mirrorArtifactToActiveWorktreeProjection(
     if (required) throw err;
   }
 }
+
+export const _mirrorArtifactToActiveWorktreeProjectionForTest = mirrorArtifactToActiveWorktreeProjection;
 
 export async function executeSummarySave(
   params: SummarySaveParams,

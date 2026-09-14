@@ -177,6 +177,9 @@ function makeCompleteMilestoneRecoveryProject(): string {
   runGit(base, ["init", "-b", "main"]);
   runGit(base, ["config", "user.email", "test@example.com"]);
   runGit(base, ["config", "user.name", "Test User"]);
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add` of .gsd fixtures stage nothing and the commits below fail.
+  runGit(base, ["config", "core.excludesFile", "/dev/null"]);
   writeFileSync(join(base, "README.md"), "# base\n");
   runGit(base, ["add", "README.md"]);
   runGit(base, ["commit", "-m", "init"]);
@@ -728,6 +731,9 @@ test("refreshRecoveryDbForArtifact closes complete-milestone DB row when artifac
   runGit(base, ["init", "-b", "main"]);
   runGit(base, ["config", "user.email", "test@example.com"]);
   runGit(base, ["config", "user.name", "Test User"]);
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add` of .gsd fixtures stage nothing and the commits below fail.
+  runGit(base, ["config", "core.excludesFile", "/dev/null"]);
   runGit(base, ["checkout", "-b", "milestone/M001"]);
   writeFileSync(join(base, "feature.ts"), "export const shipped = true;\n");
   runGit(base, ["add", "feature.ts"]);
@@ -957,6 +963,9 @@ test("refreshRecoveryDbForArtifact fails closed for complete-milestone without i
   runGit(base, ["init", "-b", "main"]);
   runGit(base, ["config", "user.email", "test@example.com"]);
   runGit(base, ["config", "user.name", "Test User"]);
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add` of .gsd fixtures stage nothing and the commits below fail.
+  runGit(base, ["config", "core.excludesFile", "/dev/null"]);
   runGit(base, ["add", ".gsd"]);
   runGit(base, ["commit", "-m", "chore: gsd artifacts only"]);
 
@@ -1476,6 +1485,9 @@ function makeGitBase(): string {
   execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: base, stdio: "ignore" });
   execFileSync("git", ["config", "user.name", "Test"], { cwd: base, stdio: "ignore" });
   execFileSync("git", ["config", "gc.auto", "0"], { cwd: base, stdio: "ignore" });
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add` of .gsd fixtures stage nothing and the commits below fail.
+  execFileSync("git", ["config", "core.excludesFile", "/dev/null"], { cwd: base, stdio: "ignore" });
   // Create initial commit so HEAD exists
   writeFileSync(join(base, ".gitkeep"), "");
   execFileSync("git", ["add", "."], { cwd: base, stdio: "ignore" });
@@ -2536,6 +2548,37 @@ test("#1343: writeReactiveExecuteBlocker uses slice-qualified summaries in flat-
     assert.equal(getTask("M001", "S02", "T03")?.status, "pending");
   } finally {
     closeDatabase();
+    cleanup(base);
+  }
+});
+
+test("#5: reactive-execute verification ignores a sibling slice's summary in flat-phase", () => {
+  const base = join(tmpdir(), `gsd-test-${randomUUID()}`);
+  try {
+    // Flat-phase: S01 and S02 share the phase dir and reuse task id T03.
+    // Only S01 wrote a summary.
+    const phaseDir = join(base, ".gsd", "phases", "01-m001");
+    mkdirSync(phaseDir, { recursive: true });
+    writeFileSync(join(phaseDir, "01-01-PLAN.md"), "# S01: First\n", "utf-8");
+    writeFileSync(join(phaseDir, "01-02-PLAN.md"), "# S02: Second\n", "utf-8");
+    writeFileSync(join(phaseDir, "S01-T03-SUMMARY.md"), "# S01 T03 Summary\n", "utf-8");
+
+    assert.equal(
+      verifyExpectedArtifact("reactive-execute", "M001/S01/reactive", base),
+      true,
+      "S01 wrote S01-T03-SUMMARY.md, so its own batch has evidence",
+    );
+    assert.equal(
+      verifyExpectedArtifact("reactive-execute", "M001/S02/reactive", base),
+      false,
+      "the sibling S01-T03-SUMMARY.md is not S02's evidence",
+    );
+    assert.equal(
+      verifyExpectedArtifact("reactive-execute", "M001/S99/reactive", base),
+      false,
+      "a slice that produced nothing never verifies off another slice's files",
+    );
+  } finally {
     cleanup(base);
   }
 });

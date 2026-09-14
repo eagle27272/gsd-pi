@@ -49,7 +49,6 @@ import {
   diagnoseWorktreeIntegrityFailure,
   writeReactiveExecuteBlocker,
 } from "./auto-recovery.js";
-import { hasRoadmapReassessmentArtifact } from "./auto-artifact-paths.js";
 import { regenerateIfMissing } from "./workflow-projections.js";
 import { WorktreeStateProjection } from "./worktree-state-projection.js";
 import { createWorkspace, scopeMilestone } from "./workspace.js";
@@ -88,7 +87,10 @@ import {
 import { crossReferenceEvidence, type ClaimedEvidence } from "./safety/evidence-cross-ref.js";
 import { validateContent } from "./safety/content-validator.js";
 import { resolveSafetyHarnessConfig } from "./safety/safety-harness.js";
-import { resolveExpectedArtifactPath as resolveArtifactForContent } from "./auto-artifact-paths.js";
+import {
+  hasRoadmapReassessmentArtifact,
+  resolveExpectedArtifactPath as resolveArtifactForContent,
+} from "./auto-artifact-paths.js";
 import { getIsolationMode, loadEffectiveGSDPreferences, type GSDPreferences } from "./preferences.js";
 import { getSliceTasks } from "./gsd-db.js";
 import { runPreExecutionChecks, type PreExecutionResult } from "./pre-execution-checks.js";

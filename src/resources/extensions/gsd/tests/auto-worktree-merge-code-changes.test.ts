@@ -27,6 +27,9 @@ function createRepo(t: { after: (fn: () => void) => void }): string {
   git(root, ["init"]);
   git(root, ["config", "user.email", "test@example.com"]);
   git(root, ["config", "user.name", "Test User"]);
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add .` stage nothing and the commits below fail.
+  git(root, ["config", "core.excludesFile", "/dev/null"]);
   writeFileSync(join(root, "README.md"), "# test\n");
   git(root, ["add", "."]);
   git(root, ["commit", "-m", "init"]);

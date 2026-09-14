@@ -3052,7 +3052,7 @@ test("autoLoop marks transition merge complete before postflight recovery stop",
     stopAuto: async (_ctx, _pi, reason) => {
       deps.callLog.push("stopAuto");
       stopReason = reason ?? "";
-      if (!s.milestoneMergedInPhases) {
+      if (s.milestoneMergedInPhasesFor !== "M001") {
         deps.lifecycle.exitMilestone(
           "M001",
           { merge: true },
@@ -3065,7 +3065,7 @@ test("autoLoop marks transition merge complete before postflight recovery stop",
   await autoLoop(ctx, pi, s, deps);
 
   assert.equal(stopReason, "Post-merge stash restore failed for milestone M001");
-  assert.equal(s.milestoneMergedInPhases, true);
+  assert.equal(s.milestoneMergedInPhasesFor, "M001");
   assert.equal(mergeCalls, 1, "postflight recovery stop must not re-run an already completed transition merge");
 });
 

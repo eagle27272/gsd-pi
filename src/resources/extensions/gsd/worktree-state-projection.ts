@@ -328,10 +328,13 @@ export function _finalizeProjectionForMergeImpl(
   const mainDb = contract.projectDb;
   if (existsSync(wtLocalDb) && existsSync(mainDb)) {
     try {
+      // The push must stay after the call: reconcileWorktreeDb throws on a
+      // failed merge, and reporting "synced" for one would hide the loss (#6).
       reconcileWorktreeDb(mainDb, wtLocalDb);
       synced.push("gsd.db (pre-upgrade reconcile)");
     } catch (err) {
-      // Non-fatal — file sync below is the fallback
+      // Non-fatal here — teardown re-runs the reconcile and blocks worktree
+      // removal if it fails again, so the worktree DB is never dropped.
       logError(
         "worktree",
         `DB reconciliation failed: ${err instanceof Error ? err.message : String(err)}`,

@@ -14,6 +14,7 @@ import {
   resolveMilestonePath,
   resolveSlicePath,
   resolveTasksDir,
+  taskJsonArtifactPath,
 } from "./paths.js";
 import { atomicWriteSync } from "./atomic-write.js";
 import {
@@ -34,24 +35,25 @@ import { logWarning } from "./workflow-logger.js";
 
 /**
  * Canonical escalation artifact path, parallel to T##-SUMMARY.md:
- *   .gsd/milestones/{M}/slices/{S}/tasks/{T}-ESCALATION.json
+ *   slices/{S}/tasks/{T}-ESCALATION.json      — slice owns the directory
+ *   phases/{NN-slug}/{S}-{T}-ESCALATION.json  — flat-phase, directory is shared
  */
 export function escalationArtifactPath(
   basePath: string, milestoneId: string, sliceId: string, taskId: string,
 ): string | null {
-  const tDir = resolveTasksDir(basePath, milestoneId, sliceId);
-  if (tDir) return join(tDir, `${taskId}-ESCALATION.json`);
   const milestoneDir = resolveMilestonePath(basePath, milestoneId);
   const sliceDir = resolveSlicePath(basePath, milestoneId, sliceId);
   if (!milestoneDir || !sliceDir) return null;
+  // Flat-phase slices all resolve to the same phase dir — and to the same
+  // optional tasks/ subdir — so a bare T##- name there lets two slices reusing
+  // a task id overwrite each other (#5).
+  const sliceOwnsDir = sliceDir !== milestoneDir;
   // The first Task artifact in a slices/<SID>/ slice may arrive before tasks/
   // exists. The atomic writer creates the directory after the path has been
   // committed.
-  if (sliceDir !== milestoneDir) {
-    return join(sliceDir, "tasks", `${taskId}-ESCALATION.json`);
-  }
-  // Flat-phase: tasks live in plan files; escalation artifacts sit in the phase dir.
-  return join(sliceDir, `${taskId}-ESCALATION.json`);
+  const dir = resolveTasksDir(basePath, milestoneId, sliceId)
+    ?? (sliceOwnsDir ? join(sliceDir, "tasks") : sliceDir);
+  return taskJsonArtifactPath(dir, sliceOwnsDir ? null : sliceId, taskId, "ESCALATION");
 }
 
 // ─── Artifact I/O ─────────────────────────────────────────────────────────
