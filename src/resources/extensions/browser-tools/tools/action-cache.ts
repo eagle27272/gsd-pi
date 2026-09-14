@@ -1,10 +1,15 @@
 import type { ExtensionAPI } from "@gsd/pi-coding-agent";
+import type { Frame, Page } from "playwright";
 import { Type } from "@sinclair/typebox";
 import type { ToolDeps } from "../state.js";
+import { getPageRegistry } from "../state.js";
+import { getActiveFrameContext } from "../utils.js";
 
 /**
  * Action caching — cache semantic intent → selector mappings to skip LLM inference on repeat visits.
- * Internal optimization that hooks into browser_find_best / browser_act.
+ *
+ * Agent-driven only: the cache is populated and read via explicit browser_action_cache
+ * put/get calls. No other tool writes to or reads from it.
  */
 
 interface CacheEntry {
@@ -49,7 +54,10 @@ export function registerActionCacheTools(pi: ExtensionAPI, deps: ToolDeps): void
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 			try {
 				const { page: p } = await deps.ensureBrowser();
+				const target = deps.getActiveTarget();
 				const url = p.url();
+				const pageId = getPageRegistry().activePageId;
+				const frameContext = getActiveFrameContext();
 
 				switch (params.action) {
 					case "stats": {
@@ -83,8 +91,8 @@ export function registerActionCacheTools(pi: ExtensionAPI, deps: ToolDeps): void
 							};
 						}
 
-						const domHash = await computeDomHash(p);
-						const key = buildCacheKey(url, domHash, params.intent);
+						const domHash = await computeDomHash(target);
+						const key = buildCacheKey({ url, domHash, intent: params.intent, pageId, frameContext });
 						const entry = cache.get(key);
 
 						if (!entry) {
@@ -95,7 +103,7 @@ export function registerActionCacheTools(pi: ExtensionAPI, deps: ToolDeps): void
 						}
 
 						// Validate the cached selector still exists
-						const exists = await p.locator(entry.selector).first().isVisible().catch(() => false);
+						const exists = await target.locator(entry.selector).first().isVisible().catch(() => false);
 						if (!exists) {
 							cache.delete(key);
 							return {
@@ -123,8 +131,8 @@ export function registerActionCacheTools(pi: ExtensionAPI, deps: ToolDeps): void
 							};
 						}
 
-						const domHash = await computeDomHash(p);
-						const key = buildCacheKey(url, domHash, params.intent);
+						const domHash = await computeDomHash(target);
+						const key = buildCacheKey({ url, domHash, intent: params.intent, pageId, frameContext });
 
 						// Evict oldest entries if at capacity
 						if (cache.size >= MAX_CACHE_SIZE && !cache.has(key)) {
@@ -179,31 +187,45 @@ export function registerActionCacheTools(pi: ExtensionAPI, deps: ToolDeps): void
 	});
 }
 
-function buildCacheKey(url: string, domHash: string, intent: string): string {
-	// Normalize URL — strip hash and query params for broader matching
-	let normalized: string;
-	try {
-		const u = new URL(url);
-		normalized = `${u.origin}${u.pathname}`;
-	} catch {
-		normalized = url;
-	}
-	return `${normalized}|${domHash}|${intent}`;
+export interface CacheKeyParts {
+	url: string;
+	domHash: string;
+	intent: string;
+	pageId: number | null;
+	frameContext: string | undefined;
 }
 
-async function computeDomHash(page: any): Promise<string> {
+/**
+ * A cached selector is only valid for the exact document it was resolved against,
+ * so the key carries the tab, the frame and the whole URL. Dropping any of them
+ * lets one page's selector be served for another's DOM.
+ */
+export function buildCacheKey({ url, domHash, intent, pageId, frameContext }: CacheKeyParts): string {
+	// The fragment stays in the key: under a hash router #/orders/1 and #/orders/2
+	// are different views, and a plain anchor only costs a miss.
+	return `${pageId ?? "?"}|${frameContext ?? ""}|${url}|${domHash}|${intent}`;
+}
+
+/**
+ * Order- and content-sensitive hash of the target's DOM. A tag histogram is not
+ * enough: re-rendering [Delete, Save] where [Save, Delete] was leaves it identical
+ * while every cached selector now points at the wrong control.
+ */
+export async function computeDomHash(target: Page | Frame): Promise<string> {
 	try {
-		return await page.evaluate(() => {
-			// Structural hash based on element count + tag distribution
-			const tags = new Map<string, number>();
-			const all = document.querySelectorAll("*");
-			for (const el of all) {
-				const tag = el.tagName;
-				tags.set(tag, (tags.get(tag) ?? 0) + 1);
+		return await target.evaluate(() => {
+			const parts: string[] = [];
+			for (const el of document.querySelectorAll("*")) {
+				const directText = Array.from(el.childNodes)
+					.filter((n) => n.nodeType === 3)
+					.map((n) => n.textContent ?? "")
+					.join("")
+					.trim()
+					.replace(/\s+/g, " ")
+					.slice(0, 32);
+				parts.push(`${el.tagName}${el.id ? `#${el.id}` : ""}:${directText}`);
 			}
-			const entries = [...tags.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-			const str = entries.map(([t, c]) => `${t}:${c}`).join("|");
-			// Simple hash
+			const str = parts.join("|");
 			let h = 5381;
 			for (let i = 0; i < str.length; i++) {
 				h = ((h << 5) - h + str.charCodeAt(i)) | 0;

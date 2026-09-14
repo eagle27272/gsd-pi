@@ -434,6 +434,16 @@ interface AssertionState {
 }
 
 export function evaluateAssertionChecks({ checks, state }: { checks: AssertionCheckInput[]; state: AssertionState }): AssertionEvaluation {
+  // An empty check list verifies nothing, so it must not be reported as a pass.
+  if (checks.length === 0) {
+    return {
+      verified: false,
+      checks: [],
+      summary: "NO CHECKS (nothing was verified)",
+      agentHint: "Provide at least one assertion check — an empty checks list verifies nothing.",
+    };
+  }
+
   const results: AssertionCheckResult[] = [];
   const selectorStates = state.selectorStates ?? {};
   const consoleEntries = state.consoleEntries ?? [];

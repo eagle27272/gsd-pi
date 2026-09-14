@@ -6,14 +6,15 @@ import {
 } from "../core.js";
 import type { ToolDeps, RefNode } from "../state.js";
 import {
-	getActiveFrame,
 	getCurrentRefMap,
 	setCurrentRefMap,
 	getRefVersion,
 	setRefVersion,
 	getRefMetadata,
 	setRefMetadata,
+	setRefSnapshotFrame,
 } from "../state.js";
+import { clampElementLimit, getActiveFrameContext, getActiveSubFrame, validateRefForAction } from "../utils.js";
 
 export function registerRefTools(pi: ExtensionAPI, deps: ToolDeps): void {
 	// -------------------------------------------------------------------------
@@ -37,7 +38,7 @@ export function registerRefTools(pi: ExtensionAPI, deps: ToolDeps): void {
 			),
 			limit: Type.Optional(
 				Type.Number({
-					description: "Maximum number of elements to include (default: 40).",
+					description: "Maximum number of elements to include (default: 40, max: 200).",
 				})
 			),
 			mode: Type.Optional(
@@ -66,7 +67,7 @@ export function registerRefTools(pi: ExtensionAPI, deps: ToolDeps): void {
 				}
 
 				const interactiveOnly = params.interactiveOnly !== false;
-				const limit = Math.max(1, Math.min(200, Math.floor(params.limit ?? 40)));
+				const limit = clampElementLimit(params.limit, 40);
 				const rawNodes = await deps.buildRefSnapshot(target, {
 					selector: params.selector,
 					interactiveOnly,
@@ -82,8 +83,7 @@ export function registerRefTools(pi: ExtensionAPI, deps: ToolDeps): void {
 					nextMap[ref] = { ref, ...rawNodes[i] };
 				}
 				setCurrentRefMap(nextMap);
-				const activeFrame = getActiveFrame();
-				const frameCtx = activeFrame ? (activeFrame.name() || activeFrame.url()) : undefined;
+				setRefSnapshotFrame(getActiveSubFrame());
 				setRefMetadata({
 					url: p.url(),
 					timestamp: Date.now(),
@@ -91,7 +91,7 @@ export function registerRefTools(pi: ExtensionAPI, deps: ToolDeps): void {
 					interactiveOnly,
 					limit,
 					version: newVersion,
-					frameContext: frameCtx,
+					frameContext: getActiveFrameContext(),
 					mode,
 				});
 
@@ -213,39 +213,15 @@ export function registerRefTools(pi: ExtensionAPI, deps: ToolDeps): void {
 			try {
 				const { page: p } = await deps.ensureBrowser();
 				const target = deps.getActiveTarget();
-				const refMetadata = getRefMetadata();
-				const refVersion = getRefVersion();
-				if (parsedRef.version === null) {
+				const guard = validateRefForAction(parsedRef, p.url());
+				if (!guard.ok) {
 					return {
-						content: [{ type: "text", text: `Unversioned ref ${requestedRef} is ambiguous. Use a versioned ref (e.g. @v${refMetadata?.version ?? refVersion}:e1) from browser_snapshot_refs.` }],
-						details: { error: "ref_unversioned", ref: requestedRef, metadata: refMetadata },
+						content: [{ type: "text", text: guard.text }],
+						details: guard.details,
 						isError: true,
 					};
 				}
-				if (refMetadata && parsedRef.version !== refMetadata.version) {
-					return {
-						content: [{ type: "text", text: deps.staleRefGuidance(requestedRef, `snapshot version mismatch (have v${refMetadata.version})`) }],
-						details: { error: "ref_stale", ref: requestedRef, expectedVersion: refMetadata.version, receivedVersion: parsedRef.version },
-						isError: true,
-					};
-				}
-				const currentRefMap = getCurrentRefMap();
-				const ref = parsedRef.key;
-				const node = currentRefMap[ref];
-				if (!node) {
-					return {
-						content: [{ type: "text", text: deps.staleRefGuidance(requestedRef, "ref not found") }],
-						details: { error: "ref_not_found", ref: requestedRef, metadata: refMetadata },
-						isError: true,
-					};
-				}
-				if (refMetadata?.url && refMetadata.url !== p.url()) {
-					return {
-						content: [{ type: "text", text: deps.staleRefGuidance(requestedRef, "URL changed since snapshot") }],
-						details: { error: "ref_stale", ref: requestedRef, snapshotUrl: refMetadata.url, currentUrl: p.url() },
-						isError: true,
-					};
-				}
+				const { node, versionedRef } = guard;
 
 				const resolved = await deps.resolveRefTarget(target, node);
 				if (!resolved.ok) {
@@ -286,7 +262,6 @@ export function registerRefTools(pi: ExtensionAPI, deps: ToolDeps): void {
 
 				const summary = deps.formatCompactStateSummary(afterState);
 				const jsErrors = deps.getRecentErrors(p.url());
-				const versionedRef = deps.formatVersionedRef(refMetadata?.version ?? refVersion, node.ref);
 				return {
 					content: [{
 						type: "text",
@@ -330,39 +305,15 @@ export function registerRefTools(pi: ExtensionAPI, deps: ToolDeps): void {
 			try {
 				const { page: p } = await deps.ensureBrowser();
 				const target = deps.getActiveTarget();
-				const refMetadata = getRefMetadata();
-				const refVersion = getRefVersion();
-				if (parsedRef.version === null) {
+				const guard = validateRefForAction(parsedRef, p.url());
+				if (!guard.ok) {
 					return {
-						content: [{ type: "text", text: `Unversioned ref ${requestedRef} is ambiguous. Use a versioned ref (e.g. @v${refMetadata?.version ?? refVersion}:e1) from browser_snapshot_refs.` }],
-						details: { error: "ref_unversioned", ref: requestedRef, metadata: refMetadata },
+						content: [{ type: "text", text: guard.text }],
+						details: guard.details,
 						isError: true,
 					};
 				}
-				if (refMetadata && parsedRef.version !== refMetadata.version) {
-					return {
-						content: [{ type: "text", text: deps.staleRefGuidance(requestedRef, `snapshot version mismatch (have v${refMetadata.version})`) }],
-						details: { error: "ref_stale", ref: requestedRef, expectedVersion: refMetadata.version, receivedVersion: parsedRef.version },
-						isError: true,
-					};
-				}
-				const currentRefMap = getCurrentRefMap();
-				const ref = parsedRef.key;
-				const node = currentRefMap[ref];
-				if (!node) {
-					return {
-						content: [{ type: "text", text: deps.staleRefGuidance(requestedRef, "ref not found") }],
-						details: { error: "ref_not_found", ref: requestedRef, metadata: refMetadata },
-						isError: true,
-					};
-				}
-				if (refMetadata?.url && refMetadata.url !== p.url()) {
-					return {
-						content: [{ type: "text", text: deps.staleRefGuidance(requestedRef, "URL changed since snapshot") }],
-						details: { error: "ref_stale", ref: requestedRef, snapshotUrl: refMetadata.url, currentUrl: p.url() },
-						isError: true,
-					};
-				}
+				const { node, versionedRef } = guard;
 
 				const resolved = await deps.resolveRefTarget(target, node);
 				if (!resolved.ok) {
@@ -380,7 +331,6 @@ export function registerRefTools(pi: ExtensionAPI, deps: ToolDeps): void {
 				const afterState = await deps.captureCompactPageState(p, { includeBodyText: false, target });
 				const summary = deps.formatCompactStateSummary(afterState);
 				const jsErrors = deps.getRecentErrors(p.url());
-				const versionedRef = deps.formatVersionedRef(refMetadata?.version ?? refVersion, node.ref);
 				return {
 					content: [{
 						type: "text",
@@ -434,39 +384,15 @@ export function registerRefTools(pi: ExtensionAPI, deps: ToolDeps): void {
 			try {
 				const { page: p } = await deps.ensureBrowser();
 				const target = deps.getActiveTarget();
-				const refMetadata = getRefMetadata();
-				const refVersion = getRefVersion();
-				if (parsedRef.version === null) {
+				const guard = validateRefForAction(parsedRef, p.url());
+				if (!guard.ok) {
 					return {
-						content: [{ type: "text", text: `Unversioned ref ${requestedRef} is ambiguous. Use a versioned ref (e.g. @v${refMetadata?.version ?? refVersion}:e1) from browser_snapshot_refs.` }],
-						details: { error: "ref_unversioned", ref: requestedRef, metadata: refMetadata },
+						content: [{ type: "text", text: guard.text }],
+						details: guard.details,
 						isError: true,
 					};
 				}
-				if (refMetadata && parsedRef.version !== refMetadata.version) {
-					return {
-						content: [{ type: "text", text: deps.staleRefGuidance(requestedRef, `snapshot version mismatch (have v${refMetadata.version})`) }],
-						details: { error: "ref_stale", ref: requestedRef, expectedVersion: refMetadata.version, receivedVersion: parsedRef.version },
-						isError: true,
-					};
-				}
-				const currentRefMap = getCurrentRefMap();
-				const ref = parsedRef.key;
-				const node = currentRefMap[ref];
-				if (!node) {
-					return {
-						content: [{ type: "text", text: deps.staleRefGuidance(requestedRef, "ref not found") }],
-						details: { error: "ref_not_found", ref: requestedRef, metadata: refMetadata },
-						isError: true,
-					};
-				}
-				if (refMetadata?.url && refMetadata.url !== p.url()) {
-					return {
-						content: [{ type: "text", text: deps.staleRefGuidance(requestedRef, "URL changed since snapshot") }],
-						details: { error: "ref_stale", ref: requestedRef, snapshotUrl: refMetadata.url, currentUrl: p.url() },
-						isError: true,
-					};
-				}
+				const { node, versionedRef } = guard;
 
 				const resolved = await deps.resolveRefTarget(target, node);
 				if (!resolved.ok) {
@@ -483,7 +409,7 @@ export function registerRefTools(pi: ExtensionAPI, deps: ToolDeps): void {
 				if (params.slowly) {
 					await locator.click({ timeout: 8000 });
 					if (params.clearFirst) {
-						await p.keyboard.press("Control+A");
+						await p.keyboard.press("ControlOrMeta+A");
 						await p.keyboard.press("Delete");
 					}
 					await p.keyboard.type(params.text);
@@ -500,9 +426,12 @@ export function registerRefTools(pi: ExtensionAPI, deps: ToolDeps): void {
 
 				const filledValue = await deps.readInputLikeValue(target, resolved.selector);
 				const afterUrl = p.url();
+				// Slow typing without clearFirst appends, so only an exact-replace fill can
+				// require value_equals_expected — otherwise a half-cleared field reads as PASS.
+				const expectExactValue = !params.slowly || !!params.clearFirst;
 				const verification = deps.verificationFromChecks(
 					[
-						{ name: "value_equals_expected", passed: filledValue === params.text, value: filledValue, expected: params.text },
+						{ name: "value_equals_expected", passed: filledValue === params.text, value: filledValue, expected: params.text, critical: expectExactValue },
 						{ name: "value_contains_expected", passed: typeof filledValue === "string" && filledValue.includes(params.text), value: filledValue, expected: params.text },
 						{ name: "url_changed_after_submit", passed: !!params.submit && afterUrl !== beforeUrl, value: afterUrl, expected: `!= ${beforeUrl}` },
 					],
@@ -512,7 +441,6 @@ export function registerRefTools(pi: ExtensionAPI, deps: ToolDeps): void {
 				const afterState = await deps.captureCompactPageState(p, { includeBodyText: true, target });
 				const summary = deps.formatCompactStateSummary(afterState);
 				const jsErrors = deps.getRecentErrors(p.url());
-				const versionedRef = deps.formatVersionedRef(refMetadata?.version ?? refVersion, node.ref);
 				return {
 					content: [{
 						type: "text",
