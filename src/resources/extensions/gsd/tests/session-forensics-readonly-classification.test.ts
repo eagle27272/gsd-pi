@@ -68,3 +68,57 @@ test("classifyTraceProgress rejects script-eval gsd_exec command", () => {
   const result = classifyTraceProgress(trace);
   assert.equal(result.isReadOnlyReconnaissanceOnly, false);
 });
+
+function classifiesAsReadOnly(command: string): boolean {
+  return classifyTraceProgress(
+    traceWithToolCalls([{ name: "gsd_exec", input: { command }, isError: false }]),
+  ).isReadOnlyReconnaissanceOnly;
+}
+
+test("destructive arguments under a read-only command head are not reconnaissance (#17)", () => {
+  // Every one of these passed: the head matched a read-only verb and the rest
+  // of the line fell through the permissive `[\w\s./:@,+-]*` tail.
+  for (const command of [
+    "git branch -D main",
+    "git branch --delete feature",
+    "git branch -m old new",
+    "git remote remove origin",
+    "git remote set-url origin git@example.com:x/y.git",
+    "git remote add upstream git@example.com:x/y.git",
+    "find /tmp -type f -delete",
+    "find . -name '*.ts' -exec rm {} +",
+    "npm audit fix",
+    "npm install left-pad",
+  ]) {
+    assert.equal(classifiesAsReadOnly(command), false, `must not classify as read-only: ${command}`);
+  }
+});
+
+test("genuinely read-only reconnaissance still classifies as such", () => {
+  for (const command of [
+    "git status",
+    "git log --oneline -20",
+    "git diff --stat HEAD~1",
+    "git branch",
+    "git branch -a",
+    "git branch --show-current",
+    "git remote -v",
+    "git remote show origin",
+    "git remote get-url origin",
+    "git rev-parse HEAD",
+    "git ls-files src",
+    "find . -name '*.ts'",
+    "npm audit",
+    "npm ls --depth 0",
+    "npm view react version",
+    "rg -n TODO src",
+    "grep -ric todo src",
+    "cat package.json",
+    "tail -n 50 log.txt",
+    "node --version",
+    "python3 --version",
+    "env",
+  ]) {
+    assert.equal(classifiesAsReadOnly(command), true, `must classify as read-only: ${command}`);
+  }
+});
