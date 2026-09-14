@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { Container } from "@gsd/pi-tui";
 import { SettingsManager } from "@gsd/pi-coding-agent/core/settings-manager.js";
-import { dispatchSlashCommand, type SlashCommandContext } from "./slash-command-handlers.js";
+import { dispatchSlashCommand, spawnCapture, type SlashCommandContext } from "./slash-command-handlers.js";
 
 function makeContext(settingsManager = SettingsManager.inMemory()): SlashCommandContext {
 	const statuses: string[] = [];
@@ -91,5 +91,30 @@ describe("dispatchSlashCommand /tui", () => {
 		assert.equal(handled, true);
 		assert.equal(settingsManager.getAdaptiveMode(), "workflow");
 		assert.match(ctx._testWarnings[0], /Usage: \/tui mode/);
+	});
+});
+
+describe("spawnCapture", () => {
+	it("resolves with an error instead of crashing when the binary is missing", async () => {
+		const result = await spawnCapture("gsd-definitely-not-a-real-binary", ["--version"]);
+
+		assert.equal(result.code, null);
+		assert.ok(result.error, "expected a spawn error to be reported");
+		assert.equal((result.error as NodeJS.ErrnoException).code, "ENOENT");
+	});
+
+	it("captures stdout and the exit code of a successful command", async () => {
+		const result = await spawnCapture(process.execPath, ["-e", "process.stdout.write('hi')"]);
+
+		assert.equal(result.code, 0);
+		assert.equal(result.stdout, "hi");
+		assert.equal(result.error, undefined);
+	});
+
+	it("captures stderr and a non-zero exit code", async () => {
+		const result = await spawnCapture(process.execPath, ["-e", "process.stderr.write('boom');process.exit(3)"]);
+
+		assert.equal(result.code, 3);
+		assert.equal(result.stderr, "boom");
 	});
 });

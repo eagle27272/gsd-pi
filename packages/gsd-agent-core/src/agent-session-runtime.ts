@@ -311,13 +311,16 @@ export class AgentSessionRuntime {
 			return { cancelled: false, selectedText };
 		}
 
+		// The in-memory manager is shared with the outgoing session, so it must not be
+		// re-pointed until teardown has run: `session_shutdown` handlers read the
+		// conversation through it, and `dispose()` cleans up by its session id.
 		const sessionManager = this.session.sessionManager;
+		await this.teardownCurrent("fork", sessionManager.getSessionFile());
 		if (!targetLeafId) {
-			sessionManager.newSession({ parentSession: this.session.sessionFile });
+			sessionManager.newSession({ parentSession: previousSessionFile });
 		} else {
 			sessionManager.createBranchedSession(targetLeafId);
 		}
-		await this.teardownCurrent("fork", sessionManager.getSessionFile());
 		this.apply(
 			await this.createRuntime({
 				cwd: this.cwd,

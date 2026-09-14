@@ -35,8 +35,10 @@ export class AgentSessionCompactionModule {
 	}
 
 	async compact(customInstructions?: string): Promise<CompactionResult> {
-		this.host.disconnectFromAgent();
+		// Settle the turn before unsubscribing, so the message the agent finalizes
+		// during the abort is still persisted by the event handler.
 		await this.host.abort();
+		this.host.disconnectFromAgent();
 		this.host._compactionAbortController = new AbortController();
 		this.host.emit({ type: "compaction_start", reason: "manual" });
 
@@ -115,15 +117,17 @@ export class AgentSessionCompactionModule {
 				throw new Error("Compaction cancelled");
 			}
 
-			this.host.sessionManager.appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromExtension);
-			const newEntries = this.host.sessionManager.getEntries();
+			const compactionEntryId = this.host.sessionManager.appendCompaction(
+				summary,
+				firstKeptEntryId,
+				tokensBefore,
+				details,
+				fromExtension,
+			);
 			const sessionContext = this.host.sessionManager.buildSessionContext();
 			this.host.agent.state.messages = sessionContext.messages;
 
-			// Get the saved compaction entry for the extension event
-			const savedCompactionEntry = newEntries.find((e) => e.type === "compaction" && e.summary === summary) as
-				| CompactionEntry
-				| undefined;
+			const savedCompactionEntry = this.host.sessionManager.getEntry(compactionEntryId) as CompactionEntry | undefined;
 
 			if (this.host._extensionRunner && savedCompactionEntry) {
 				await this.host._extensionRunner.emit({
@@ -376,15 +380,17 @@ export class AgentSessionCompactionModule {
 				return false;
 			}
 
-			this.host.sessionManager.appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromExtension);
-			const newEntries = this.host.sessionManager.getEntries();
+			const compactionEntryId = this.host.sessionManager.appendCompaction(
+				summary,
+				firstKeptEntryId,
+				tokensBefore,
+				details,
+				fromExtension,
+			);
 			const sessionContext = this.host.sessionManager.buildSessionContext();
 			this.host.agent.state.messages = sessionContext.messages;
 
-			// Get the saved compaction entry for the extension event
-			const savedCompactionEntry = newEntries.find((e) => e.type === "compaction" && e.summary === summary) as
-				| CompactionEntry
-				| undefined;
+			const savedCompactionEntry = this.host.sessionManager.getEntry(compactionEntryId) as CompactionEntry | undefined;
 
 			if (this.host._extensionRunner && savedCompactionEntry) {
 				await this.host._extensionRunner.emit({
