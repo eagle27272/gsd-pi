@@ -14,6 +14,7 @@ import {
   getClosedSliceIds,
   getLatestAssessmentByScope,
   getMilestoneSlices,
+  getSliceTasks,
   isDbAvailable,
 } from "./gsd-db.js";
 import { isClosedStatus } from "./status-guards.js";
@@ -50,6 +51,21 @@ const COMPLETE_MILESTONE_DB_SETTLE_MS = 1500;
 const COMPLETE_MILESTONE_DB_SETTLE_POLL_MS = 100;
 
 /**
+ * True when any slice or task under the milestone is still open.
+ *
+ * `isClosedStatus` treats `cancelled` and `skipped` as closed, so a milestone
+ * row can read terminal while its slices and tasks are mid-flight. Git cleanup
+ * force-deletes branches, so it must see the whole tree, not just the
+ * milestone row (#11).
+ */
+function hasOpenMilestoneWork(milestoneId: string): boolean {
+  return getMilestoneSlices(milestoneId).some((slice) =>
+    !isClosedStatus(slice.status) ||
+    getSliceTasks(milestoneId, slice.id).some((task) => !isClosedStatus(task.status)),
+  );
+}
+
+/**
  * True when a milestone is terminal for git cleanup (orphaned worktrees, stale branches).
  * DB-authoritative (ADR-017): closed status, or validation-pass with all slices closed.
  * When the DB is unavailable we cannot make this decision and conservatively
@@ -67,7 +83,9 @@ export async function isCompletedMilestoneTerminal(
 
   const lifecycleStatus = readMilestoneLifecycleStatus(milestoneId);
   if (lifecycleStatus) {
-    if (lifecycleStatus === "completed" || lifecycleStatus === "cancelled") return true;
+    if (lifecycleStatus === "completed" || lifecycleStatus === "cancelled") {
+      return !hasOpenMilestoneWork(milestoneId);
+    }
     const artifactBasePath = resolveCanonicalMilestoneRoot(basePath, milestoneId);
     const source = captureMilestoneVerificationSourceRevision(
       artifactBasePath,
@@ -78,14 +96,18 @@ export async function isCompletedMilestoneTerminal(
       sourceRevision: source.sourceRevision,
     }).authorized) return false;
   } else {
-    if (isClosedStatus(milestone.status)) return true;
+    if (isClosedStatus(milestone.status)) {
+      return !hasOpenMilestoneWork(milestoneId);
+    }
     const validation = getLatestAssessmentByScope(milestoneId, "milestone-validation");
     if (validation?.status !== "pass") return false;
   }
 
+  // No explicit closeout record — slice and task closure is the only evidence,
+  // so an empty slice set proves nothing.
   const slices = getMilestoneSlices(milestoneId);
   if (slices.length === 0) return false;
-  return slices.every((slice) => isClosedStatus(slice.status));
+  return !hasOpenMilestoneWork(milestoneId);
 }
 
 /** Write a missing milestone SUMMARY projection when canonical DB closeout already settled. */
