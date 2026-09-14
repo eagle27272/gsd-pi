@@ -485,6 +485,47 @@ export async function mergeDeltaPatches(
 	}
 }
 
+/** The parts of a subagent run result that a delta merge reads and writes. */
+export interface IsolationDeltaTarget {
+	exitCode: number;
+	stderr: string;
+	stopReason?: string;
+	errorMessage?: string;
+	mergeResult?: MergeResult;
+}
+
+/**
+ * Capture an isolated subagent's changes and merge them back into `targetCwd`.
+ *
+ * Merging is gated on the agent having succeeded. A failing subagent still leaves
+ * edits in its worktree — half-applied refactors, broken syntax, debug scaffolding
+ * — and the runner returns those results normally rather than throwing, so without
+ * this gate a failed agent's diff lands in the live repo indistinguishably from a
+ * successful one's.
+ *
+ * A merge failure is promoted onto the result so the caller reports the run as
+ * failed rather than silently losing the work.
+ */
+export async function applyIsolationDelta(
+	isolation: IsolationEnvironment | null,
+	targetCwd: string,
+	result: IsolationDeltaTarget,
+): Promise<void> {
+	if (!isolation || result.exitCode !== 0) return;
+
+	const patches = await isolation.captureDelta();
+	if (patches.length === 0) return;
+
+	const mergeResult = await mergeDeltaPatches(targetCwd, patches);
+	result.mergeResult = mergeResult;
+	if (!mergeResult.success) {
+		result.exitCode = 1;
+		result.stopReason = "error";
+		result.errorMessage = `Patch merge failed: ${mergeResult.error || "unknown error"}`;
+		result.stderr = result.stderr || result.errorMessage;
+	}
+}
+
 // ============================================================================
 // Settings reader (reads directly from settings file)
 // ============================================================================

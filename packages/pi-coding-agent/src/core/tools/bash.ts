@@ -45,7 +45,9 @@ export interface BashOperations {
 	 * @param command The command to execute
 	 * @param cwd Working directory
 	 * @param options Execution options
-	 * @returns Promise resolving to exit code (null if killed)
+	 * @returns Exit code, or a null code plus the terminating `signal` when the
+	 *          command was killed rather than exited. A non-null signal is always
+	 *          a failure, even though the code is null.
 	 */
 	exec: (
 		command: string,
@@ -56,7 +58,7 @@ export interface BashOperations {
 			timeout?: number;
 			env?: NodeJS.ProcessEnv;
 		},
-	) => Promise<{ exitCode: number | null }>;
+	) => Promise<{ exitCode: number | null; signal?: NodeJS.Signals | null }>;
 }
 
 /**
@@ -149,7 +151,7 @@ export function createLocalBashOperations(options?: {
 				}
 				// Race the real termination against the hard deadline. Promise.race ensures
 				// the deadline and the real `close` cannot double-resolve the caller.
-				const exitPromise = waitForChildProcess(child).then((code) => ({ forceKilled: false as const, code }));
+				const exitPromise = waitForChildProcess(child).then((exit) => ({ forceKilled: false as const, ...exit }));
 				const raceResult = await Promise.race([exitPromise, hardDeadlinePromise]);
 				if (raceResult.forceKilled) {
 					// Child never closed (D-state symptom). Stop tracking and force-resolve
@@ -163,7 +165,7 @@ export function createLocalBashOperations(options?: {
 				if (timedOut) {
 					throw new Error(`timeout:${timeout}`);
 				}
-				return { exitCode: raceResult.code };
+				return { exitCode: raceResult.code, signal: raceResult.signal };
 			} finally {
 				if (child.pid) untrackDetachedChildPid(child.pid);
 				if (timeoutHandle) clearTimeout(timeoutHandle);
@@ -420,6 +422,7 @@ export function createBashToolDefinition(
 
 			try {
 				let exitCode: number | null;
+				let exitSignal: NodeJS.Signals | null = null;
 				try {
 					const result = await ops.exec(spawnContext.command, spawnContext.cwd, {
 						onData: handleData,
@@ -428,6 +431,7 @@ export function createBashToolDefinition(
 						env: spawnContext.env,
 					});
 					exitCode = result.exitCode;
+					exitSignal = result.signal ?? null;
 				} catch (err) {
 					const snapshot = await finishOutput();
 					const { text } = formatOutput(snapshot, "");
@@ -450,6 +454,12 @@ export function createBashToolDefinition(
 
 				const snapshot = await finishOutput();
 				const { text: outputText, details } = formatOutput(snapshot);
+				// A signal-terminated command has a null exit code. Timeout, abort and the
+				// hard deadline were already thrown above, so reaching here with a signal
+				// means an external killer (OOM, `kill -9`, a supervisor) ended the command.
+				if (exitSignal !== null) {
+					throw new Error(appendStatus(outputText, `Command killed by signal ${exitSignal}`));
+				}
 				if (exitCode !== 0 && exitCode !== null) {
 					throw new Error(appendStatus(outputText, `Command exited with code ${exitCode}`));
 				}
