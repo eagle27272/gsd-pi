@@ -9,10 +9,11 @@ import { resolveMilestoneFile } from "./paths.js";
 import { isCompletedMilestoneTerminal } from "./milestone-closeout.js";
 import { deriveState } from "./state.js";
 import { isClosedStatus } from "./status-guards.js";
-import { allWorktreesDirs, createWorktree, listWorktrees, resolveGitDir } from "./worktree-manager.js";
+import { allWorktreesDirs, createWorktree, listWorktrees, removeWorktree, resolveGitDir } from "./worktree-manager.js";
 import { abortAndReset } from "./git-self-heal.js";
 import { RUNTIME_EXCLUSION_PATHS, resolveMilestoneIntegrationBranch, writeIntegrationBranch } from "./git-service.js";
-import { nativeIsRepo, nativeWorktreeList, nativeWorktreeRemove, nativeBranchList, nativeBranchDelete, nativeLsFiles, nativeRmCached, nativeHasChanges, nativeLastCommitEpoch, nativeGetCurrentBranch, nativeAddTracked, nativeCommit, nativeIsCurrentUnbornBranch } from "./native-git-bridge.js";
+import { nativeIsRepo, nativeWorktreeList, nativeWorktreeRemove, nativeBranchList, nativeBranchListMerged, nativeBranchDelete, nativeDetectMainBranch, nativeLsFiles, nativeRmCached, nativeHasChanges, nativeLastCommitEpoch, nativeGetCurrentBranch, nativeAddTracked, nativeCommit, nativeIsCurrentUnbornBranch } from "./native-git-bridge.js";
+import { SLICE_BRANCH_RE } from "./branch-patterns.js";
 import { getAllWorktreeHealth } from "./worktree-health.js";
 import { loadEffectiveGSDPreferences } from "./preferences.js";
 import { listUnmergedGitPaths, probeGitConflictState, reconcileGitConflictsOnSignal } from "./git-conflict-state.js";
@@ -38,6 +39,22 @@ function isDoctorArtifactOnly(dirPath: string): boolean {
     return false;
   } catch {
     return false;
+  }
+}
+
+/**
+ * True when the worktree holds `.gsd/` state a remove-and-recreate would
+ * destroy. `hasProjectContentOnDisk` deliberately ignores `.gsd` segments and
+ * `.gsd/` is gitignored, so neither it nor `git status` can see uncommitted
+ * planning work — this is a direct disk read (#11).
+ */
+function hasWorktreeGsdState(dirPath: string): boolean {
+  const gsdDir = join(dirPath, ".gsd");
+  if (!existsSync(gsdDir)) return false;
+  try {
+    return readdirSync(gsdDir).some(entry => entry !== "doctor-history.jsonl");
+  } catch {
+    return true;
   }
 }
 
@@ -153,7 +170,6 @@ export async function checkGitHealth(
   fixesApplied: string[],
   shouldFix: (code: DoctorIssueCode) => boolean,
   isolationMode: "none" | "worktree" | "branch" = "none",
-  dryRun = false,
 ): Promise<void> {
   // Degrade gracefully if not a git repo
   if (!nativeIsRepo(basePath)) {
@@ -182,7 +198,11 @@ export async function checkGitHealth(
   // so only genuinely-manual conflicts remain. This also clears stale
   // merge-state markers (e.g. MERGE_HEAD) in the same pass when auto-resolve
   // empties the unmerged set (#849).
-  if (unmergedPaths.length > 0 && !dryRun) {
+  //
+  // Reconciliation stages files and can hard-reset, so it needs the same
+  // consent gate as every other fix — read-only doctor callers must not
+  // mutate the index (#11).
+  if (unmergedPaths.length > 0 && shouldFix("unresolved_git_conflicts")) {
     try {
       const reconcileFixes = reconcileGitConflictsOnSignal(basePath, probeGitConflictState(basePath));
       if (reconcileFixes.length > 0) {
@@ -217,16 +237,23 @@ export async function checkGitHealth(
         : false;
 
       if (!isComplete && !hasProjectContentOnDisk(wt.path) && hasProjectContentOnDisk(basePath)) {
+        const holdsGsdState = hasWorktreeGsdState(wt.path);
         issues.push({
           severity: "error",
           code: "worktree_empty_with_project_content",
           scope: "milestone",
           unitId: milestoneId,
-          message: `Worktree ${wt.path} has no project content, but project root ${basePath} does. Run doctor --fix to recreate the worktree.`,
-          fixable: true,
+          message: holdsGsdState
+            ? `Worktree ${wt.path} has no project content, but project root ${basePath} does. It holds uncommitted .gsd/ state, so doctor --fix will not recreate it — move that state out first.`
+            : `Worktree ${wt.path} has no project content, but project root ${basePath} does. Run doctor --fix to recreate the worktree.`,
+          fixable: !holdsGsdState,
         });
 
-        if (shouldFix("worktree_empty_with_project_content")) {
+        if (shouldFix("worktree_empty_with_project_content") && holdsGsdState) {
+          fixesApplied.push(
+            `skipped recreating empty worktree ${wt.path} — it holds uncommitted .gsd/ state`,
+          );
+        } else if (shouldFix("worktree_empty_with_project_content")) {
           try {
             nativeWorktreeRemove(basePath, wt.path, true);
             const recreated = createWorktree(basePath, milestoneId, {
@@ -278,7 +305,8 @@ export async function checkGitHealth(
           } catch {
             cwd = basePath;
           }
-          if (isSameOrNestedPath(cwd, wt.path)) {
+          const relocated = isSameOrNestedPath(cwd, wt.path);
+          if (relocated) {
             try {
               process.chdir(basePath);
             } catch {
@@ -287,10 +315,32 @@ export async function checkGitHealth(
             }
           }
           try {
-            nativeWorktreeRemove(basePath, wt.path, true);
-            fixesApplied.push(`removed orphaned worktree ${wt.path}`);
+            // removeWorktree() quarantines uncommitted work, rescues submodule
+            // and nested-.git state, and refuses paths outside the worktrees
+            // dir. A closed roadmap status alone is not evidence the tree is
+            // safe to force-delete — `cancelled` and `skipped` count as closed
+            // (#11). deleteBranch stays false: the branch is the recovery
+            // handle for anything the worktree held.
+            const removed = removeWorktree(basePath, wt.name, {
+              deleteBranch: false,
+              branch: wt.branch,
+            });
+            fixesApplied.push(
+              removed
+                ? `removed orphaned worktree ${wt.path}`
+                : `preserved orphaned worktree ${wt.path} (uncommitted work could not be quarantined)`,
+            );
           } catch {
             fixesApplied.push(`failed to remove worktree ${wt.path}`);
+          } finally {
+            // Leaving the process relocated silently changes process.cwd() for
+            // every later check. Only restore when the original directory
+            // survived the removal (#11).
+            if (relocated && existsSync(cwd)) {
+              try {
+                process.chdir(cwd);
+              } catch { /* original cwd is gone — stay at basePath */ }
+            }
           }
         }
       }
@@ -428,22 +478,35 @@ export async function checkGitHealth(
   }
 
   // ── Legacy slice branches ──────────────────────────────────────────────
+  // Only `gsd/[worktree/]M001/S01` is a legacy slice branch. The `gsd/*/*`
+  // glob also matches live branches this check must never delete:
+  // `gsd/quick/*` task branches, `gsd/<template>/<slug>` workflow-template
+  // branches, and `gsd/submodule-rescue/*` — the sole copy of rescued
+  // uncommitted submodule work (#11).
   try {
     const branchList = nativeBranchList(basePath, "gsd/*/*")
-      .filter((branch) => !branch.startsWith("gsd/quick/"));
+      .filter((branch) => SLICE_BRANCH_RE.test(branch));
     if (branchList.length > 0) {
+      // An unmerged legacy branch is the only reference to its commits, so it
+      // is reported but never deleted (#11).
+      const mergedBranches = new Set(
+        nativeBranchListMerged(basePath, nativeDetectMainBranch(basePath)),
+      );
+      const deletable = branchList.filter((branch) => mergedBranches.has(branch));
+      const unmergedCount = branchList.length - deletable.length;
+
       issues.push({
         severity: "info",
         code: "legacy_slice_branches",
         scope: "project",
         unitId: "project",
-        message: `${branchList.length} legacy slice branch(es) found: ${branchList.slice(0, 3).join(", ")}${branchList.length > 3 ? "..." : ""}. These are no longer used (branchless architecture).`,
-        fixable: true,
+        message: `${branchList.length} legacy slice branch(es) found: ${branchList.slice(0, 3).join(", ")}${branchList.length > 3 ? "..." : ""}. These are no longer used (branchless architecture).${unmergedCount > 0 ? ` ${unmergedCount} are unmerged and will be kept.` : ""}`,
+        fixable: deletable.length > 0,
       });
 
       if (shouldFix("legacy_slice_branches")) {
         let deleted = 0;
-        for (const branch of branchList) {
+        for (const branch of deletable) {
           try {
             nativeBranchDelete(basePath, branch, true);
             deleted++;
@@ -512,25 +575,29 @@ export async function checkGitHealth(
   // that is no longer registered with git. These orphaned dirs cause
   // "already exists" errors when re-creating the same worktree name.
   try {
-    for (const wtDir of allWorktreesDirs(basePath)) {
-      if (!existsSync(wtDir)) continue;
-      // Resolve symlinks and normalize separators so that symlinked .gsd
-      // paths (e.g. ~/.gsd/projects/<hash>/worktrees/…) match the paths
-      // returned by `git worktree list`.
-      const normalizePath = (p: string): string => {
-        try { p = realpathSync(p); } catch { /* path may not exist */ }
-        return p.replaceAll("\\", "/");
-      };
-      const registeredPaths = new Set(
-        nativeWorktreeList(basePath).map(entry => normalizePath(entry.path)),
-      );
-      for (const entry of readdirSync(wtDir)) {
-        const fullPath = join(wtDir, entry);
-        try {
-          if (!statSync(fullPath).isDirectory()) continue;
-        } catch { continue; }
-        const normalizedFullPath = normalizePath(fullPath);
-        if (!registeredPaths.has(normalizedFullPath)) {
+    // Resolve symlinks and normalize separators so that symlinked .gsd
+    // paths (e.g. ~/.gsd/projects/<hash>/worktrees/…) match the paths
+    // returned by `git worktree list`.
+    const normalizePath = (p: string): string => {
+      try { p = realpathSync(p); } catch { /* path may not exist */ }
+      return p.replaceAll("\\", "/");
+    };
+    const registeredPaths = new Set(
+      nativeWorktreeList(basePath).map(entry => normalizePath(entry.path)),
+    );
+    // A successful listing always contains the main worktree. An empty set
+    // means the query failed — the CLI fallback returns [] on any non-zero
+    // exit — and treating that as "nothing is registered" would rm -rf every
+    // worktree directory, dirty ones included (#11).
+    if (registeredPaths.size > 0) {
+      for (const wtDir of allWorktreesDirs(basePath)) {
+        if (!existsSync(wtDir)) continue;
+        for (const entry of readdirSync(wtDir)) {
+          const fullPath = join(wtDir, entry);
+          try {
+            if (!statSync(fullPath).isDirectory()) continue;
+          } catch { continue; }
+          if (registeredPaths.has(normalizePath(fullPath))) continue;
           // Skip directories that only contain doctor artifacts (.gsd/doctor-history.jsonl).
           // appendDoctorHistory() can recreate these dirs during the audit itself,
           // causing a circular false positive (#3105 Bug 1).
