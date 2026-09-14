@@ -10,7 +10,6 @@
 import { readdirSync, existsSync, realpathSync, statSync, Dirent } from "node:fs";
 import { basename, join, dirname, isAbsolute as isAbsolutePath, normalize, relative, resolve } from "node:path";
 import { homedir } from "node:os";
-import { type GsdTreeEntry } from "./native-parser-bridge.js";
 import { DIR_CACHE_MAX } from "./constants.js";
 import { gsdHome } from "./gsd-home.js";
 import { normalizeRealPath } from "./real-path.js";
@@ -33,58 +32,9 @@ export { canonicalPhaseDirName };
 const dirEntryCache = new Map<string, Dirent[]>();
 const dirListCache = new Map<string, string[]>();
 
-// ─── Native Tree Cache ────────────────────────────────────────────────────────
-// When the native module is available, scan the entire .gsd/ tree in one call
-// and serve directory listings from memory instead of individual readdirSync calls.
-
-let nativeTreeCache: Map<string, GsdTreeEntry[]> | null = null;
-let nativeTreeBase: string | null = null;
-
-/**
- * Convert a native tree lookup into a relative key for the tree map.
- * Returns the relative path from the gsdDir, or null if the path isn't under gsdDir.
- */
-function nativeTreeKey(dirPath: string, gsdDir: string): string | null {
-  if (!dirPath.startsWith(gsdDir)) return null;
-  const rel = dirPath.slice(gsdDir.length).replace(/^\//, '');
-  return rel || '.';
-}
-
 function cachedReaddirWithTypes(dirPath: string): Dirent[] {
   const cached = dirEntryCache.get(dirPath);
   if (cached) return cached;
-
-  // Try native tree cache for paths under .gsd/
-  if (nativeTreeBase) {
-    const key = nativeTreeKey(dirPath, nativeTreeBase);
-    if (key && nativeTreeCache) {
-      const treeEntries = nativeTreeCache.get(key);
-      if (treeEntries) {
-        // Synthesize Dirent-like objects from native tree entries
-        const dirents = treeEntries.map(e => {
-          const d = Object.create(Dirent.prototype) as Dirent;
-          Object.assign(d, {
-            name: e.name,
-            parentPath: dirPath,
-            path: dirPath,
-          });
-          // Override the type check methods
-          const isDir = e.isDir;
-          d.isDirectory = () => isDir;
-          d.isFile = () => !isDir;
-          d.isSymbolicLink = () => false;
-          d.isBlockDevice = () => false;
-          d.isCharacterDevice = () => false;
-          d.isFIFO = () => false;
-          d.isSocket = () => false;
-          return d;
-        });
-        if (dirEntryCache.size >= DIR_CACHE_MAX) dirEntryCache.clear();
-        dirEntryCache.set(dirPath, dirents);
-        return dirents;
-      }
-    }
-  }
 
   const entries = readdirSync(dirPath, { withFileTypes: true });
   if (dirEntryCache.size >= DIR_CACHE_MAX) dirEntryCache.clear();
@@ -95,20 +45,6 @@ function cachedReaddirWithTypes(dirPath: string): Dirent[] {
 function cachedReaddir(dirPath: string): string[] {
   const cached = dirListCache.get(dirPath);
   if (cached) return cached;
-
-  // Try native tree cache for paths under .gsd/
-  if (nativeTreeBase) {
-    const key = nativeTreeKey(dirPath, nativeTreeBase);
-    if (key && nativeTreeCache) {
-      const treeEntries = nativeTreeCache.get(key);
-      if (treeEntries) {
-        const names = treeEntries.map(e => e.name);
-        if (dirListCache.size >= DIR_CACHE_MAX) dirListCache.clear();
-        dirListCache.set(dirPath, names);
-        return names;
-      }
-    }
-  }
 
   const entries = readdirSync(dirPath);
   if (dirListCache.size >= DIR_CACHE_MAX) dirListCache.clear();
@@ -138,8 +74,6 @@ function isExistingFile(path: string): boolean {
 export function clearPathCache(): void {
   dirEntryCache.clear();
   dirListCache.clear();
-  nativeTreeCache = null;
-  nativeTreeBase = null;
 }
 
 // ─── Name Builders ─────────────────────────────────────────────────────────
