@@ -1,5 +1,11 @@
 /**
- * Host surface for extracted interactive-mode delegate modules.
- * Uses a permissive type so private InteractiveMode fields remain encapsulated.
+ * Host surface for the interactive-mode delegate modules.
+ *
+ * Derived from the class rather than restated as an interface, so the contract
+ * cannot drift from what InteractiveMode actually exposes. The import is
+ * type-only and erased at emit, so the delegate -> host -> mode cycle carries
+ * no runtime edge.
  */
-export type InteractiveModeDelegateHost = any;
+import type { InteractiveMode } from "./interactive-mode.js";
+
+export type InteractiveModeDelegateHost = InteractiveMode;

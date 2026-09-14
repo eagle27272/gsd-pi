@@ -95,87 +95,87 @@ export interface InteractiveModeOptions {
 }
 
 export class InteractiveMode {
-	private session: AgentSession;
-	private ui: TUI;
-	private chatContainer: Container;
-	private pendingMessagesContainer: Container;
-	private gsdStatusWidget: GsdStatusWidget;
-	private gsdStatusExpanded: boolean | undefined = undefined;
-	private gsdProgressState: import("@gsd/pi-coding-agent/core/extensions/extension-upstream-types.js").GsdProgressState | undefined;
-	private gsdProgressDispose?: () => void;
-	private statusContainer: Container;
-	private pinnedMessageContainer: Container;
-	private blockingErrorContainer: Container;
-	private defaultEditor: CustomEditor;
-	private editor: EditorComponent;
-	private autocompleteProvider: CombinedAutocompleteProvider | undefined;
-	private editorContainer: Container;
-	private footer: FooterComponent;
-	private footerDataProvider: FooterDataProvider;
-	private keybindings: KeybindingsManager;
-	private version: string;
-	private isInitialized = false;
-	private onInputCallback?: (text: string) => void;
-	private loadingAnimation: Loader | undefined = undefined;
-	private activityLoader: Loader | undefined = undefined;
-	private pendingWorkingMessage: string | null | undefined = undefined;
-	private readonly defaultWorkingMessage = "Working...";
-	private lastBlockingError: string | undefined = undefined;
+	session: AgentSession;
+	ui: TUI;
+	chatContainer: Container;
+	pendingMessagesContainer: Container;
+	gsdStatusWidget: GsdStatusWidget;
+	gsdStatusExpanded: boolean | undefined = undefined;
+	gsdProgressState: import("@gsd/pi-coding-agent/core/extensions/extension-upstream-types.js").GsdProgressState | undefined;
+	gsdProgressDispose?: () => void;
+	statusContainer: Container;
+	pinnedMessageContainer: Container;
+	blockingErrorContainer: Container;
+	defaultEditor: CustomEditor;
+	editor: EditorComponent;
+	autocompleteProvider: CombinedAutocompleteProvider | undefined;
+	editorContainer: Container;
+	footer: FooterComponent;
+	footerDataProvider: FooterDataProvider;
+	keybindings: KeybindingsManager;
+	version: string;
+	isInitialized = false;
+	onInputCallback?: (text: string) => void;
+	loadingAnimation: Loader | undefined = undefined;
+	activityLoader: Loader | undefined = undefined;
+	pendingWorkingMessage: string | null | undefined = undefined;
+	readonly defaultWorkingMessage = "Working...";
+	lastBlockingError: string | undefined = undefined;
 
-	private lastSigintTime = 0;
-	private lastEscapeTime = 0;
-	private changelogMarkdown: string | undefined = undefined;
-	private startupHeaderDismissed = false;
+	lastSigintTime = 0;
+	lastEscapeTime = 0;
+	changelogMarkdown: string | undefined = undefined;
+	startupHeaderDismissed = false;
 
-	private lastStatusSpacer: Spacer | undefined = undefined;
-	private lastStatusText: Text | undefined = undefined;
+	lastStatusSpacer: Spacer | undefined = undefined;
+	lastStatusText: Text | undefined = undefined;
 
-	private streamingComponent: AssistantMessageComponent | undefined = undefined;
-	private streamingMessage: import("@gsd/pi-ai").AssistantMessage | undefined = undefined;
+	streamingComponent: AssistantMessageComponent | undefined = undefined;
+	streamingMessage: import("@gsd/pi-ai").AssistantMessage | undefined = undefined;
 
-	private pendingTools = new Map<string, ToolExecutionComponent>();
-	private toolOutputExpanded = DEFAULT_TOOL_OUTPUT_EXPANDED;
-	private pendingImages: ImageContent[] = [];
-	private hideThinkingBlock = false;
-	private skillCommands = new Map<string, string>();
+	pendingTools = new Map<string, ToolExecutionComponent>();
+	toolOutputExpanded = DEFAULT_TOOL_OUTPUT_EXPANDED;
+	pendingImages: ImageContent[] = [];
+	hideThinkingBlock = false;
+	skillCommands = new Map<string, string>();
 	private unsubscribe?: () => void;
 	private _branchChangeUnsub?: () => void;
 	private _themeChangeUnsub?: () => void;
-	private markdownThemeCache?: MarkdownTheme;
-	private markdownThemeCacheIndent?: string;
-	private isBashMode = false;
-	private contextualTips = new ContextualTips();
-	private bashComponent: BashExecutionComponent | undefined = undefined;
-	private pendingBashComponents: BashExecutionComponent[] = [];
-	private autoCompactionLoader: Loader | undefined = undefined;
-	private autoCompactionEscapeHandler?: () => void;
-	private retryLoader: Loader | undefined = undefined;
-	private retryEscapeHandler?: () => void;
-	private compactionQueuedMessages: CompactionQueuedMessage[] = [];
-	private shutdownRequested = false;
-	private extensionSelector: ExtensionSelectorComponent | undefined = undefined;
-	private extensionInput: ExtensionInputComponent | undefined = undefined;
-	private extensionEditor: ExtensionEditorComponent | undefined = undefined;
-	private extensionTerminalInputUnsubscribers = new Set<() => void>();
-	private stdinErrorHandler: ((err: Error) => void) | undefined = undefined;
-	private extensionWidgetsAbove = new Map<string, import("@gsd/pi-tui").Component & { dispose?(): void }>();
-	private extensionWidgetsBelow = new Map<string, import("@gsd/pi-tui").Component & { dispose?(): void }>();
+	markdownThemeCache?: MarkdownTheme;
+	markdownThemeCacheIndent?: string;
+	isBashMode = false;
+	contextualTips = new ContextualTips();
+	bashComponent: BashExecutionComponent | undefined = undefined;
+	pendingBashComponents: BashExecutionComponent[] = [];
+	autoCompactionLoader: Loader | undefined = undefined;
+	autoCompactionEscapeHandler?: () => void;
+	retryLoader: Loader | undefined = undefined;
+	retryEscapeHandler?: () => void;
+	compactionQueuedMessages: CompactionQueuedMessage[] = [];
+	shutdownRequested = false;
+	extensionSelector: ExtensionSelectorComponent | undefined = undefined;
+	extensionInput: ExtensionInputComponent | undefined = undefined;
+	extensionEditor: ExtensionEditorComponent | undefined = undefined;
+	extensionTerminalInputUnsubscribers = new Set<() => void>();
+	stdinErrorHandler: ((err: Error) => void) | undefined = undefined;
+	extensionWidgetsAbove = new Map<string, import("@gsd/pi-tui").Component & { dispose?(): void }>();
+	extensionWidgetsBelow = new Map<string, import("@gsd/pi-tui").Component & { dispose?(): void }>();
 	private readonly uiState = createInteractiveModeUiState();
 	transcriptState: TranscriptState = createInitialTranscriptState();
-	private widgetContainerAbove!: Container;
-	private widgetContainerBelow!: Container;
-	private customFooter: (import("@gsd/pi-tui").Component & { dispose?(): void }) | undefined = undefined;
-	private headerContainer: Container;
-	private builtInHeader: import("@gsd/pi-tui").Component | undefined = undefined;
-	private customHeader: (import("@gsd/pi-tui").Component & { dispose?(): void }) | undefined = undefined;
+	widgetContainerAbove!: Container;
+	widgetContainerBelow!: Container;
+	customFooter: (import("@gsd/pi-tui").Component & { dispose?(): void }) | undefined = undefined;
+	headerContainer: Container;
+	builtInHeader: import("@gsd/pi-tui").Component | undefined = undefined;
+	customHeader: (import("@gsd/pi-tui").Component & { dispose?(): void }) | undefined = undefined;
 
-	private get agent() {
+	get agent() {
 		return this.session.agent;
 	}
-	private get sessionManager() {
+	get sessionManager() {
 		return this.session.sessionManager;
 	}
-	private get settingsManager() {
+	get settingsManager() {
 		return this.session.settingsManager;
 	}
 
@@ -185,7 +185,7 @@ export class InteractiveMode {
 
 	constructor(
 		session: AgentSession,
-		private options: InteractiveModeOptions = {},
+		public options: InteractiveModeOptions = {},
 	) {
 		this.session = session;
 		this.version = VERSION;
@@ -238,7 +238,7 @@ export class InteractiveMode {
 		initTheme(this.settingsManager.getTheme(), true);
 	}
 
-	private setupAutocomplete(): void {
+	setupAutocomplete(): void {
 		inputRouter.setupAutocomplete(this);
 	}
 
@@ -364,12 +364,12 @@ export class InteractiveMode {
 		return getMarkdownThemeWithSettingsModule(this);
 	}
 
-	private clearMarkdownThemeCache(): void {
+	clearMarkdownThemeCache(): void {
 		clearMarkdownThemeCache(this);
 	}
 
 	private setupEditorSubmitHandler(): void {
-		setupEditorSubmitHandlerController(this as any);
+		setupEditorSubmitHandlerController(this);
 	}
 
 	private subscribeToAgent(): void {
@@ -381,7 +381,7 @@ export class InteractiveMode {
 
 	private async handleEvent(event: AgentSessionEvent): Promise<void> {
 		this.transcriptState = applyAgentEventToTranscript(this.transcriptState, event);
-		await handleAgentEvent(this as any, event);
+		await handleAgentEvent(this, event);
 	}
 
 	clearEditor(): void {
@@ -473,60 +473,60 @@ export class InteractiveMode {
 	}
 
 	// Delegates (Phase E2 extracted modules)
-	private showLoadedResources(options?: Parameters<typeof resourceDisplay.showLoadedResources>[1]): void { resourceDisplay.showLoadedResources(this, options); }
+	showLoadedResources(options?: Parameters<typeof resourceDisplay.showLoadedResources>[1]): void { resourceDisplay.showLoadedResources(this, options); }
 
 	private async initExtensions(): Promise<void> { return extensionSystem.initExtensions(this); }
-	private getRegisteredToolDefinition(toolName: string) { return extensionSystem.getRegisteredToolDefinition(this, toolName); }
-	private formatWebSearchResult(content: unknown): string { return extensionSystem.formatWebSearchResult(this, content); }
-	private setupExtensionShortcuts(extensionRunner: ExtensionRunner): void { extensionSystem.setupExtensionShortcuts(this, extensionRunner); }
-	private setExtensionStatus(key: string, text: string | undefined): void { extensionSystem.setExtensionStatus(this, key, text); }
-	private setGsdProgress(state: Parameters<typeof extensionSystem.setGsdProgress>[1], dispose?: () => void): void { extensionSystem.setGsdProgress(this, state, dispose); }
-	private setExtensionWidget(key: string, content: Parameters<typeof extensionSystem.setExtensionWidget>[2], options?: Parameters<typeof extensionSystem.setExtensionWidget>[3]): void { extensionSystem.setExtensionWidget(this, key, content, options); }
+	getRegisteredToolDefinition(toolName: string) { return extensionSystem.getRegisteredToolDefinition(this, toolName); }
+	formatWebSearchResult(content: unknown): string { return extensionSystem.formatWebSearchResult(this, content); }
+	setupExtensionShortcuts(extensionRunner: ExtensionRunner): void { extensionSystem.setupExtensionShortcuts(this, extensionRunner); }
+	setExtensionStatus(key: string, text: string | undefined): void { extensionSystem.setExtensionStatus(this, key, text); }
+	setGsdProgress(state: Parameters<typeof extensionSystem.setGsdProgress>[1], dispose?: () => void): void { extensionSystem.setGsdProgress(this, state, dispose); }
+	setExtensionWidget(key: string, content: Parameters<typeof extensionSystem.setExtensionWidget>[2], options?: Parameters<typeof extensionSystem.setExtensionWidget>[3]): void { extensionSystem.setExtensionWidget(this, key, content, options); }
 	private clearExtensionWidgets(): void { extensionSystem.clearExtensionWidgets(this); }
-	private resetExtensionUI(): void { extensionSystem.resetExtensionUI(this); }
+	resetExtensionUI(): void { extensionSystem.resetExtensionUI(this); }
 	private renderWidgets(): void { extensionSystem.renderWidgets(this); }
-	private setExtensionFooter(factory: Parameters<typeof extensionSystem.setExtensionFooter>[1]): void { extensionSystem.setExtensionFooter(this, factory); }
-	private setExtensionHeader(factory: Parameters<typeof extensionSystem.setExtensionHeader>[1]): void { extensionSystem.setExtensionHeader(this, factory); }
-	private addExtensionTerminalInputListener(handler: Parameters<typeof extensionSystem.addExtensionTerminalInputListener>[1]): () => void { return extensionSystem.addExtensionTerminalInputListener(this, handler); }
-	private clearExtensionTerminalInputListeners(): void { extensionSystem.clearExtensionTerminalInputListeners(this); }
-	private createExtensionUIContext() { return extensionSystem.createExtensionUIContext(this); }
-	private showExtensionSelector(title: string, options: string[], opts?: import("@gsd/pi-coding-agent/core/extensions/index.js").ExtensionUIDialogOptions): Promise<string | undefined> { return extensionSystem.showExtensionSelector(this, title, options, opts); }
-	private showExtensionConfirm(title: string, message: string, opts?: import("@gsd/pi-coding-agent/core/extensions/index.js").ExtensionUIDialogOptions): Promise<boolean> { return extensionSystem.showExtensionConfirm(this, title, message, opts); }
-	private showExtensionInput(title: string, placeholder?: string, opts?: import("@gsd/pi-coding-agent/core/extensions/index.js").ExtensionUIDialogOptions): Promise<string | undefined> { return extensionSystem.showExtensionInput(this, title, placeholder, opts); }
-	private showExtensionEditor(title: string, prefill?: string): Promise<string | undefined> { return extensionSystem.showExtensionEditor(this, title, prefill); }
-	private setCustomEditorComponent(factory: Parameters<typeof extensionSystem.setCustomEditorComponent>[1]): void { extensionSystem.setCustomEditorComponent(this, factory); }
-	private showExtensionNotify(message: string, type?: import("./interactive-notify-render.js").ExtensionNotifyType): void { extensionSystem.showExtensionNotify(this, message, type); }
-	private showExtensionCustom<T>(factory: Parameters<typeof extensionSystem.showExtensionCustom<T>>[1], options?: Parameters<typeof extensionSystem.showExtensionCustom<T>>[2]): Promise<T> { return extensionSystem.showExtensionCustom(this, factory, options); }
-	private showExtensionError(extensionPath: string, error: string, stack?: string): void { extensionSystem.showExtensionError(this, extensionPath, error, stack); }
+	setExtensionFooter(factory: Parameters<typeof extensionSystem.setExtensionFooter>[1]): void { extensionSystem.setExtensionFooter(this, factory); }
+	setExtensionHeader(factory: Parameters<typeof extensionSystem.setExtensionHeader>[1]): void { extensionSystem.setExtensionHeader(this, factory); }
+	addExtensionTerminalInputListener(handler: Parameters<typeof extensionSystem.addExtensionTerminalInputListener>[1]): () => void { return extensionSystem.addExtensionTerminalInputListener(this, handler); }
+	clearExtensionTerminalInputListeners(): void { extensionSystem.clearExtensionTerminalInputListeners(this); }
+	createExtensionUIContext() { return extensionSystem.createExtensionUIContext(this); }
+	showExtensionSelector(title: string, options: string[], opts?: import("@gsd/pi-coding-agent/core/extensions/index.js").ExtensionUIDialogOptions): Promise<string | undefined> { return extensionSystem.showExtensionSelector(this, title, options, opts); }
+	showExtensionConfirm(title: string, message: string, opts?: import("@gsd/pi-coding-agent/core/extensions/index.js").ExtensionUIDialogOptions): Promise<boolean> { return extensionSystem.showExtensionConfirm(this, title, message, opts); }
+	showExtensionInput(title: string, placeholder?: string, opts?: import("@gsd/pi-coding-agent/core/extensions/index.js").ExtensionUIDialogOptions): Promise<string | undefined> { return extensionSystem.showExtensionInput(this, title, placeholder, opts); }
+	showExtensionEditor(title: string, prefill?: string): Promise<string | undefined> { return extensionSystem.showExtensionEditor(this, title, prefill); }
+	setCustomEditorComponent(factory: Parameters<typeof extensionSystem.setCustomEditorComponent>[1]): void { extensionSystem.setCustomEditorComponent(this, factory); }
+	showExtensionNotify(message: string, type?: import("./interactive-notify-render.js").ExtensionNotifyType): void { extensionSystem.showExtensionNotify(this, message, type); }
+	showExtensionCustom<T>(factory: Parameters<typeof extensionSystem.showExtensionCustom<T>>[1], options?: Parameters<typeof extensionSystem.showExtensionCustom<T>>[2]): Promise<T> { return extensionSystem.showExtensionCustom(this, factory, options); }
+	showExtensionError(extensionPath: string, error: string, stack?: string): void { extensionSystem.showExtensionError(this, extensionPath, error, stack); }
 
 	private setupKeyHandlers(): void { keyHandlers.setupKeyHandlers(this); }
-	private handleClipboardImagePaste(): Promise<void> { return keyHandlers.handleClipboardImagePaste(this); }
-	private handlePastedImagePath(filePath: string): void { keyHandlers.handlePastedImagePath(this, filePath); }
-	private getSlashCommandContext() { return inputRouter.getSlashCommandContext(this); }
-	private updatePendingMessagesDisplay(): void { inputRouter.updatePendingMessagesDisplay(this); }
-	private restoreQueuedMessagesToEditor(options?: Parameters<typeof inputRouter.restoreQueuedMessagesToEditor>[1]): number { return inputRouter.restoreQueuedMessagesToEditor(this, options); }
-	private queueCompactionMessage(text: string, mode: "steer" | "followUp"): void { inputRouter.queueCompactionMessage(this, text, mode); }
-	private isExtensionCommand(text: string): boolean { return inputRouter.isExtensionCommand(this, text); }
-	private isKnownSlashCommand(text: string): boolean { return inputRouter.isKnownSlashCommand(this, text); }
-	private async flushCompactionQueue(options?: Parameters<typeof inputRouter.flushCompactionQueue>[1]): Promise<void> { return inputRouter.flushCompactionQueue(this, options); }
-	private flushPendingBashComponents(): void { inputRouter.flushPendingBashComponents(this); }
-	private updateTerminalTitle(): void { modeInit.updateTerminalTitle(this); }
+	handleClipboardImagePaste(): Promise<void> { return keyHandlers.handleClipboardImagePaste(this); }
+	handlePastedImagePath(filePath: string): void { keyHandlers.handlePastedImagePath(this, filePath); }
+	getSlashCommandContext() { return inputRouter.getSlashCommandContext(this); }
+	updatePendingMessagesDisplay(): void { inputRouter.updatePendingMessagesDisplay(this); }
+	restoreQueuedMessagesToEditor(options?: Parameters<typeof inputRouter.restoreQueuedMessagesToEditor>[1]): number { return inputRouter.restoreQueuedMessagesToEditor(this, options); }
+	queueCompactionMessage(text: string, mode: "steer" | "followUp"): void { inputRouter.queueCompactionMessage(this, text, mode); }
+	isExtensionCommand(text: string): boolean { return inputRouter.isExtensionCommand(this, text); }
+	isKnownSlashCommand(text: string): boolean { return inputRouter.isKnownSlashCommand(this, text); }
+	async flushCompactionQueue(options?: Parameters<typeof inputRouter.flushCompactionQueue>[1]): Promise<void> { return inputRouter.flushCompactionQueue(this, options); }
+	flushPendingBashComponents(): void { inputRouter.flushPendingBashComponents(this); }
+	updateTerminalTitle(): void { modeInit.updateTerminalTitle(this); }
 
-	private showStatus(message: string, options?: { append?: boolean }): void { chatRender.showStatus(this, message, options); }
-	private addMessageToChat(message: import("@gsd/pi-agent-core").AgentMessage, options?: { populateHistory?: boolean }): void { chatRender.addMessageToChat(this, message, options); }
-	private rebuildChatFromMessages(): void { chatRender.rebuildChatFromMessages(this); }
+	showStatus(message: string, options?: { append?: boolean }): void { chatRender.showStatus(this, message, options); }
+	addMessageToChat(message: import("@gsd/pi-agent-core").AgentMessage, options?: { populateHistory?: boolean }): void { chatRender.addMessageToChat(this, message, options); }
+	rebuildChatFromMessages(): void { chatRender.rebuildChatFromMessages(this); }
 
-	private isShuttingDown = false;
-	private async shutdown(): Promise<void> { return keyHandlers.shutdown(this); }
-	private async checkShutdownRequested(): Promise<void> { return keyHandlers.checkShutdownRequested(this); }
-	private handleCtrlZ(): void { keyHandlers.handleCtrlZ(this); }
-	private async handleFollowUp(): Promise<void> { return keyHandlers.handleFollowUp(this); }
-	private handleDequeue(): void { keyHandlers.handleDequeue(this); }
-	private updateEditorBorderColor(): void { keyHandlers.updateEditorBorderColor(this); }
-	private cycleThinkingLevel(): void { keyHandlers.cycleThinkingLevel(this); }
-	private async cycleModel(direction: "forward" | "backward"): Promise<void> { return keyHandlers.cycleModel(this, direction); }
-	private toggleToolOutputExpansion(): void { keyHandlers.toggleToolOutputExpansion(this); }
-	private setToolsExpanded(expanded: boolean): void { keyHandlers.setToolsExpanded(this, expanded); }
+	isShuttingDown = false;
+	async shutdown(): Promise<void> { return keyHandlers.shutdown(this); }
+	async checkShutdownRequested(): Promise<void> { return keyHandlers.checkShutdownRequested(this); }
+	handleCtrlZ(): void { keyHandlers.handleCtrlZ(this); }
+	async handleFollowUp(): Promise<void> { return keyHandlers.handleFollowUp(this); }
+	handleDequeue(): void { keyHandlers.handleDequeue(this); }
+	updateEditorBorderColor(): void { keyHandlers.updateEditorBorderColor(this); }
+	cycleThinkingLevel(): void { keyHandlers.cycleThinkingLevel(this); }
+	async cycleModel(direction: "forward" | "backward"): Promise<void> { return keyHandlers.cycleModel(this, direction); }
+	toggleToolOutputExpansion(): void { keyHandlers.toggleToolOutputExpansion(this); }
+	setToolsExpanded(expanded: boolean): void { keyHandlers.setToolsExpanded(this, expanded); }
 	toggleGsdStatusWidget(): void {
 		// Compute the effective expansion so the toggle always visually flips:
 		// undefined = use widgetMode default, otherwise use the explicit value.
@@ -538,7 +538,7 @@ export class InteractiveMode {
 		this.footer.invalidate();
 		this.ui.requestRender();
 	}
-	private setToolRailAnimation(enabled: boolean): void {
+	setToolRailAnimation(enabled: boolean): void {
 		this.settingsManager.setToolRailAnimation(enabled);
 		setRailAnimationEnabled(enabled);
 		for (const child of this.chatContainer.children) {
@@ -546,28 +546,28 @@ export class InteractiveMode {
 		}
 		this.ui.requestRender();
 	}
-	private toggleThinkingBlockVisibility(): void { keyHandlers.toggleThinkingBlockVisibility(this); }
-	private openExternalEditor(): void { keyHandlers.openExternalEditor(this); }
+	toggleThinkingBlockVisibility(): void { keyHandlers.toggleThinkingBlockVisibility(this); }
+	openExternalEditor(): void { keyHandlers.openExternalEditor(this); }
 
-	private showSelector(create: Parameters<typeof selectors.showSelector>[1]): void { selectors.showSelector(this, create); }
-	private showSettingsSelector(): void { selectors.showSettingsSelector(this); }
-	private async handleModelCommand(searchTerm?: string): Promise<void> { return selectors.handleModelCommand(this, searchTerm); }
-	private async updateAvailableProviderCount(): Promise<void> { return selectors.updateAvailableProviderCount(this); }
-	private showModelSelector(initialSearchInput?: string): void { selectors.showModelSelector(this, initialSearchInput); }
-	private async showModelsSelector(): Promise<void> { return selectors.showModelsSelector(this); }
-	private showUserMessageSelector(): void { selectors.showUserMessageSelector(this); }
-	private showTreeSelector(initialSelectedId?: string): void { selectors.showTreeSelector(this, initialSelectedId); }
-	private showSessionSelector(): void { selectors.showSessionSelector(this); }
-	private async handleResumeSession(sessionPath: string): Promise<void> { return selectors.handleResumeSession(this, sessionPath); }
-	private showProviderManager(): void { selectors.showProviderManager(this); }
-	private async showOAuthSelector(mode: "login" | "logout"): Promise<void> { return selectors.showOAuthSelector(this, mode); }
-	private async showLoginDialog(providerId: string): Promise<void> { return selectors.showLoginDialog(this, providerId); }
+	showSelector(create: Parameters<typeof selectors.showSelector>[1]): void { selectors.showSelector(this, create); }
+	showSettingsSelector(): void { selectors.showSettingsSelector(this); }
+	async handleModelCommand(searchTerm?: string): Promise<void> { return selectors.handleModelCommand(this, searchTerm); }
+	async updateAvailableProviderCount(): Promise<void> { return selectors.updateAvailableProviderCount(this); }
+	showModelSelector(initialSearchInput?: string): void { selectors.showModelSelector(this, initialSearchInput); }
+	async showModelsSelector(): Promise<void> { return selectors.showModelsSelector(this); }
+	showUserMessageSelector(): void { selectors.showUserMessageSelector(this); }
+	showTreeSelector(initialSelectedId?: string): void { selectors.showTreeSelector(this, initialSelectedId); }
+	showSessionSelector(): void { selectors.showSessionSelector(this); }
+	async handleResumeSession(sessionPath: string): Promise<void> { return selectors.handleResumeSession(this, sessionPath); }
+	showProviderManager(): void { selectors.showProviderManager(this); }
+	async showOAuthSelector(mode: "login" | "logout"): Promise<void> { return selectors.showOAuthSelector(this, mode); }
+	async showLoginDialog(providerId: string): Promise<void> { return selectors.showLoginDialog(this, providerId); }
 
-	private async handleReloadCommand(): Promise<void> { return commandHandlers.handleReloadCommand(this); }
-	private async handleClearCommand(): Promise<void> { return commandHandlers.handleClearCommand(this); }
-	private handleDebugCommand(): void { commandHandlers.handleDebugCommand(this); }
-	private handleDaxnuts(): void { commandHandlers.handleDaxnuts(this); }
-	private checkDaxnutsEasterEgg(model: { provider: string; id: string }): void { commandHandlers.checkDaxnutsEasterEgg(this, model); }
-	private async handleBashCommand(command: string, excludeFromContext?: boolean, displayCommand?: string, loginShell?: boolean): Promise<void> { return commandHandlers.handleBashCommand(this, command, excludeFromContext, displayCommand, loginShell); }
-	private async executeCompaction(customInstructions?: string, isAuto?: boolean) { return commandHandlers.executeCompaction(this, customInstructions, isAuto); }
+	async handleReloadCommand(): Promise<void> { return commandHandlers.handleReloadCommand(this); }
+	async handleClearCommand(): Promise<void> { return commandHandlers.handleClearCommand(this); }
+	handleDebugCommand(): void { commandHandlers.handleDebugCommand(this); }
+	handleDaxnuts(): void { commandHandlers.handleDaxnuts(this); }
+	checkDaxnutsEasterEgg(model: { provider: string; id: string }): void { commandHandlers.checkDaxnutsEasterEgg(this, model); }
+	async handleBashCommand(command: string, excludeFromContext?: boolean, displayCommand?: string, loginShell?: boolean): Promise<void> { return commandHandlers.handleBashCommand(this, command, excludeFromContext, displayCommand, loginShell); }
+	async executeCompaction(customInstructions?: string, isAuto?: boolean) { return commandHandlers.executeCompaction(this, customInstructions, isAuto); }
 }
