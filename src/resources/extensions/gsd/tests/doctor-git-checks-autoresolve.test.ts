@@ -64,7 +64,7 @@ test("doctor auto-resolves safe .gsd/ conflicts and only blocks on manual paths"
   const base = makeRepoWithConflict();
   t.after(() => rmSync(base, { recursive: true, force: true }));
 
-  const report = await runGSDDoctor(base, { isolationMode: "none" });
+  const report = await runGSDDoctor(base, { fix: true, isolationMode: "none" });
 
   const conflictIssue = report.issues.find((issue) => issue.code === "unresolved_git_conflicts");
   assert.ok(conflictIssue, "manual conflict should still be reported");
@@ -103,7 +103,7 @@ test("doctor clears conflicts entirely when all unmerged paths are safe", async 
 
   tryGit(["merge", "feature"], base);
 
-  const report = await runGSDDoctor(base, { isolationMode: "none" });
+  const report = await runGSDDoctor(base, { fix: true, isolationMode: "none" });
 
   assert.ok(
     !report.issues.some((issue) => issue.code === "unresolved_git_conflicts"),
@@ -143,7 +143,7 @@ test("doctor --dry-run does not mutate git state when safe conflicts are present
   tryGit(["merge", "feature"], base);
 
   // dry-run must not mutate git state even when all conflicts are safe
-  const report = await runGSDDoctor(base, { dryRun: true, isolationMode: "none" });
+  const report = await runGSDDoctor(base, { fix: true, dryRun: true, isolationMode: "none" });
 
   // MERGE_HEAD must still exist — dry-run is read-only
   assert.ok(
@@ -154,5 +154,29 @@ test("doctor --dry-run does not mutate git state when safe conflicts are present
   assert.ok(
     report.issues.some((issue) => issue.code === "unresolved_git_conflicts"),
     "dry-run should still report the conflict without resolving it",
+  );
+});
+
+test("doctor without --fix does not touch the index when safe conflicts are present", async (t) => {
+  const base = makeRepoWithConflict();
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+
+  const report = await runGSDDoctor(base, { isolationMode: "none" });
+
+  assert.ok(
+    existsSync(join(base, ".git", "MERGE_HEAD")),
+    "a non-fix run must leave merge state intact",
+  );
+  const conflictIssue = report.issues.find((issue) => issue.code === "unresolved_git_conflicts");
+  assert.ok(conflictIssue, "the conflict should still be reported");
+  assert.match(
+    conflictIssue!.message,
+    /\.gsd\/STATE\.md/,
+    "the safe path must still be listed — a non-fix run must not have staged it",
+  );
+  assert.deepEqual(
+    report.fixesApplied.filter((fix) => fix.includes("auto-resolved")),
+    [],
+    "a non-fix run must not report auto-resolve fixes",
   );
 });

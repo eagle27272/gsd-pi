@@ -22,6 +22,7 @@ import {
   insertAssessment,
   insertMilestone,
   insertSlice,
+  insertTask,
   openDatabase,
   readDomainOperationFence,
 } from "../gsd-db.js";
@@ -287,6 +288,41 @@ test("isCompletedMilestoneTerminal accepts validation-pass with all slices close
   });
 
   assert.equal(await isCompletedMilestoneTerminal(base, "M008"), true);
+});
+
+test("isCompletedMilestoneTerminal rejects a cancelled milestone with open slices", async () => {
+  const base = mkdtempSync(join(tmpdir(), "gsd-terminal-cancelled-open-slice-"));
+  tmpDirs.push(base);
+  mkdirSync(join(base, ".gsd"), { recursive: true });
+  openDatabase(join(base, ".gsd", "gsd.db"));
+  insertMilestone({ id: "M009", title: "Cancelled", status: "cancelled" });
+  insertSlice({ id: "S01", milestoneId: "M009", title: "Open slice", status: "in_progress" });
+
+  assert.equal(await isCompletedMilestoneTerminal(base, "M009"), false);
+});
+
+test("isCompletedMilestoneTerminal rejects a closed milestone whose slices hide open tasks", async () => {
+  const base = mkdtempSync(join(tmpdir(), "gsd-terminal-open-task-"));
+  tmpDirs.push(base);
+  mkdirSync(join(base, ".gsd"), { recursive: true });
+  openDatabase(join(base, ".gsd", "gsd.db"));
+  insertMilestone({ id: "M010", title: "Done", status: "complete" });
+  insertSlice({ id: "S01", milestoneId: "M010", title: "Slice", status: "complete" });
+  insertTask({ id: "T01", sliceId: "S01", milestoneId: "M010", title: "Open task", status: "in_progress" });
+
+  assert.equal(await isCompletedMilestoneTerminal(base, "M010"), false);
+});
+
+test("isCompletedMilestoneTerminal accepts a closed milestone with all slices and tasks closed", async () => {
+  const base = mkdtempSync(join(tmpdir(), "gsd-terminal-all-closed-"));
+  tmpDirs.push(base);
+  mkdirSync(join(base, ".gsd"), { recursive: true });
+  openDatabase(join(base, ".gsd", "gsd.db"));
+  insertMilestone({ id: "M011", title: "Done", status: "complete" });
+  insertSlice({ id: "S01", milestoneId: "M011", title: "Slice", status: "complete" });
+  insertTask({ id: "T01", sliceId: "S01", milestoneId: "M011", title: "Task", status: "complete" });
+
+  assert.equal(await isCompletedMilestoneTerminal(base, "M011"), true);
 });
 
 test("evaluateCompleteMilestoneDispatch repairs missing SUMMARY when DB is closed", async () => {
