@@ -1,94 +1,253 @@
 // Project/App: gsd-pi
-// File Purpose: Regression coverage for vendor-pi.cjs dry-run previews and missing-upstream errors.
+// File Purpose: Git-fixture coverage for vendor-pi.cjs one-shot orchestration and --ref semantics.
 
-import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import test from "node:test";
+import assert from 'node:assert/strict';
+import { after, before, describe, test } from 'node:test';
+import { execFileSync, spawnSync } from 'node:child_process';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// vendor-pi.cjs anchors REPO_ROOT to resolve(__dirname, '..') and reads its
+// config from scripts/pi-upstream.json beside itself. Copying it into a tmpdir
+// therefore relocates the whole script wholesale, letting us point `repository`
+// at a local fixture remote and exercise the real git codepath offline. The
+// three pipeline steps are replaced by stubs that append their name to
+// pipeline.log, so these tests cover orchestration and argv handling only —
+// each step keeps its own coverage.
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const repoRoot = join(__dirname, "..", "..");
+const SOURCE_SCRIPT = resolve(__dirname, '..', 'vendor-pi.cjs');
+const PIPELINE_STEPS = ['vendor-pi-deps.cjs', 'vendor-pi-coding-agent-core.cjs', 'apply-seam.cjs'];
+const SEAM_SENTINEL = 'packages/pi-coding-agent/src/core/gsd-seam-types.ts';
 
-function stageScript(prefix, config) {
-  const root = mkdtempSync(join(tmpdir(), prefix));
-  mkdirSync(join(root, "scripts"), { recursive: true });
-  copyFileSync(join(repoRoot, "scripts", "vendor-pi.cjs"), join(root, "scripts", "vendor-pi.cjs"));
-  if (config) {
-    writeFileSync(join(root, "scripts", "pi-upstream.json"), `${JSON.stringify(config, null, 2)}\n`);
-  } else {
-    copyFileSync(join(repoRoot, "scripts", "pi-upstream.json"), join(root, "scripts", "pi-upstream.json"));
+function git(cwd, args) {
+  return execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
+}
+
+function configureRepo(repo) {
+  git(repo, ['config', '--local', 'user.email', 'fixture@example.test']);
+  git(repo, ['config', '--local', 'user.name', 'Fixture User']);
+  git(repo, ['config', '--local', 'commit.gpgsign', 'false']);
+  git(repo, ['config', '--local', 'tag.gpgsign', 'false']);
+  // A global core.excludesFile can hide fixture paths from `git add`.
+  git(repo, ['config', '--local', 'core.excludesFile', '/dev/null']);
+}
+
+let tmpRoot;
+let upstreamUrl;
+
+before(() => {
+  // realpath because macOS $TMPDIR is a /var/folders symlink to /private/var/folders,
+  // and a file:// clone URL must match the path git actually resolves.
+  tmpRoot = realpathSync(mkdtempSync(join(tmpdir(), 'vendor-pi-')));
+  const upstream = join(tmpRoot, 'upstream');
+  mkdirSync(join(upstream, 'packages', 'agent'), { recursive: true });
+  git(upstream, ['init', '-q', '-b', 'main']);
+  configureRepo(upstream);
+
+  for (const tag of ['v1.0.0', 'v2.0.0']) {
+    writeFileSync(join(upstream, 'packages', 'agent', 'MARKER'), `${tag}\n`);
+    git(upstream, ['add', '-A']);
+    git(upstream, ['commit', '-q', '-m', `release ${tag}`]);
+    git(upstream, ['tag', tag]);
   }
+
+  upstreamUrl = `file://${upstream}`;
+});
+
+after(() => {
+  if (tmpRoot) rmSync(tmpRoot, { recursive: true, force: true });
+});
+
+/** Build a throwaway repo root holding the real vendor-pi.cjs plus stubbed pipeline steps. */
+function makeFixtureRoot(configOverrides = {}, { failingStep } = {}) {
+  const root = realpathSync(mkdtempSync(join(tmpRoot, 'root-')));
+  mkdirSync(join(root, 'scripts'), { recursive: true });
+  copyFileSync(SOURCE_SCRIPT, join(root, 'scripts', 'vendor-pi.cjs'));
+
+  writeFileSync(
+    join(root, 'scripts', 'pi-upstream.json'),
+    `${JSON.stringify({ repository: upstreamUrl, pinnedRef: 'v1.0.0', ...configOverrides }, null, 2)}\n`,
+  );
+
+  for (const step of PIPELINE_STEPS) {
+    writeFileSync(
+      join(root, 'scripts', step),
+      `'use strict'\n` +
+        `require('fs').appendFileSync(require('path').join(__dirname, '..', 'pipeline.log'), ${JSON.stringify(`${step}\n`)})\n` +
+        (step === failingStep ? `process.stderr.write('stub failure\\n')\nprocess.exit(1)\n` : ''),
+    );
+  }
+
+  mkdirSync(dirname(join(root, SEAM_SENTINEL)), { recursive: true });
+  writeFileSync(join(root, SEAM_SENTINEL), 'export type GsdSeam = never\n');
+
   return root;
 }
 
 function runVendorPi(root, args) {
-  return spawnSync(process.execPath, [join(root, "scripts", "vendor-pi.cjs"), ...args], {
+  const result = spawnSync(process.execPath, [join(root, 'scripts', 'vendor-pi.cjs'), ...args], {
     cwd: root,
-    encoding: "utf8",
+    stdio: ['ignore', 'pipe', 'pipe'],
+    encoding: 'utf8',
   });
+  return { status: result.status ?? 1, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
 }
 
-test("vendor-pi --dry-run previews every mapped package without an upstream checkout", () => {
-  const root = stageScript("gsd-vendor-pi-dry-");
+function pipelineLog(root) {
+  const p = join(root, 'pipeline.log');
+  if (!existsSync(p)) return [];
+  return readFileSync(p, 'utf8').trim().split('\n').filter(Boolean);
+}
 
-  try {
-    const config = JSON.parse(readFileSync(join(root, "scripts", "pi-upstream.json"), "utf8"));
-    const result = runVendorPi(root, ["--dry-run"]);
+/** The fixture ships exactly one package dir; anything else means the run wrote to the tree. */
+function packageDirs(root) {
+  const p = join(root, 'packages');
+  return existsSync(p) ? readdirSync(p).sort() : [];
+}
 
-    assert.equal(result.status, 0, `expected clean exit, got ${result.status}:\n${result.stderr}`);
+function cachedMarker(root) {
+  const p = join(root, '.cache', 'pi-upstream', 'packages', 'agent', 'MARKER');
+  return existsSync(p) ? readFileSync(p, 'utf8').trim() : null;
+}
 
-    const planned = Object.entries(config.packageMap);
-    for (const [upstreamPath, targetPath] of planned) {
-      assert.ok(
-        result.stderr.includes(`[dry-run] Copy ${upstreamPath} → ${targetPath}`),
-        `missing plan line for ${upstreamPath}:\n${result.stderr}`,
-      );
-    }
-    assert.equal(result.stderr.match(/Copy .+ → .+/g)?.length, planned.length);
+describe('vendor-pi.cjs one-shot orchestration', () => {
+  test('checks out the ref and runs the documented pipeline in order', () => {
+    const root = makeFixtureRoot();
+    const result = runVendorPi(root, ['--ref', 'v2.0.0']);
 
-    assert.equal(existsSync(join(root, ".cache")), false, "dry run must not create an upstream checkout");
-    assert.equal(existsSync(join(root, "packages")), false, "dry run must not touch the working tree");
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("vendor-pi still fails when a real vendor run is missing an upstream package", () => {
-  const upstream = mkdtempSync(join(tmpdir(), "gsd-vendor-pi-upstream-"));
-  const git = (...args) =>
-    execFileSync("git", ["-c", "user.email=test@example.com", "-c", "user.name=test", ...args], {
-      cwd: upstream,
-      stdio: "pipe",
-    });
-
-  // packages/agent is deliberately absent so the first mapped package is missing upstream.
-  for (const dir of ["packages/ai", "packages/tui", "packages/coding-agent"]) {
-    mkdirSync(join(upstream, dir), { recursive: true });
-    writeFileSync(join(upstream, dir, "package.json"), `${JSON.stringify({ name: dir }, null, 2)}\n`);
-  }
-
-  git("init", "--quiet", "--initial-branch=main");
-  git("add", "--all");
-  git("commit", "--quiet", "-m", "fixture");
-
-  const baseConfig = JSON.parse(readFileSync(join(repoRoot, "scripts", "pi-upstream.json"), "utf8"));
-  const root = stageScript("gsd-vendor-pi-missing-", {
-    ...baseConfig,
-    repository: `file://${upstream}`,
-    pinnedRef: "main",
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(cachedMarker(root), 'v2.0.0');
+    assert.deepEqual(pipelineLog(root), PIPELINE_STEPS);
   });
 
-  try {
+  test('leaves seam-protected pi-coding-agent files to the pipeline steps', () => {
+    const root = makeFixtureRoot();
     const result = runVendorPi(root, []);
 
-    assert.equal(result.status, 1, `expected failure, got ${result.status}:\n${result.stderr}`);
-    assert.match(result.stderr, /Upstream package not found: .*packages\/agent/);
-    assert.equal(existsSync(join(root, "packages")), false, "nothing should be vendored before the error");
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(upstream, { recursive: true, force: true });
-  }
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(
+      readFileSync(join(root, SEAM_SENTINEL), 'utf8'),
+      'export type GsdSeam = never\n',
+      'vendor-pi.cjs must not copy packages/coding-agent over the seamed package itself',
+    );
+  });
+
+  test('falls back to pinnedRef when --ref is omitted', () => {
+    const root = makeFixtureRoot();
+    const result = runVendorPi(root, []);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(cachedMarker(root), 'v1.0.0');
+  });
+});
+
+describe('vendor-pi.cjs --ref semantics', () => {
+  test('re-targets an already-populated cache to a different ref', () => {
+    const root = makeFixtureRoot();
+
+    assert.equal(runVendorPi(root, ['--ref', 'v1.0.0', '--checkout-only']).status, 0);
+    assert.equal(cachedMarker(root), 'v1.0.0');
+
+    const second = runVendorPi(root, ['--ref', 'v2.0.0', '--checkout-only']);
+    assert.equal(second.status, 0, second.stderr);
+    assert.equal(cachedMarker(root), 'v2.0.0', 'a warm cache must follow --ref, not stay pinned');
+  });
+
+  test('--checkout-only stages the cache without running any pipeline step', () => {
+    const root = makeFixtureRoot();
+    const result = runVendorPi(root, ['--ref', 'v2.0.0', '--checkout-only']);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(cachedMarker(root), 'v2.0.0');
+    assert.deepEqual(pipelineLog(root), []);
+  });
+
+  test('--skip-checkout runs the pipeline against the existing cache', () => {
+    const root = makeFixtureRoot({ repository: 'file:///nonexistent-remote-must-not-be-used' });
+    mkdirSync(join(root, '.cache', 'pi-upstream', 'packages', 'agent'), { recursive: true });
+    writeFileSync(join(root, '.cache', 'pi-upstream', 'packages', 'agent', 'MARKER'), 'staged\n');
+
+    const result = runVendorPi(root, ['--skip-checkout']);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(cachedMarker(root), 'staged');
+    assert.deepEqual(pipelineLog(root), PIPELINE_STEPS);
+  });
+
+  test('--skip-checkout fails when nothing is staged', () => {
+    const root = makeFixtureRoot();
+    const result = runVendorPi(root, ['--skip-checkout']);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /\.cache\/pi-upstream/);
+    assert.deepEqual(pipelineLog(root), []);
+  });
+
+  test('--dry-run previews the pipeline without cloning, running steps, or touching the tree', () => {
+    const root = makeFixtureRoot();
+    const result = runVendorPi(root, ['--ref', 'v2.0.0', '--dry-run']);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /v2\.0\.0/);
+    for (const step of PIPELINE_STEPS) assert.match(result.stderr, new RegExp(step));
+    assert.equal(cachedMarker(root), null, 'dry run must not create an upstream checkout');
+    assert.deepEqual(pipelineLog(root), []);
+    assert.deepEqual(packageDirs(root), ['pi-coding-agent'], 'dry run must not touch the working tree');
+  });
+});
+
+describe('vendor-pi.cjs pipeline failure handling', () => {
+  test('aborts on the first failing step instead of running the rest', () => {
+    const root = makeFixtureRoot({}, { failingStep: 'vendor-pi-coding-agent-core.cjs' });
+    const result = runVendorPi(root, []);
+
+    assert.notEqual(result.status, 0, 'a failed step must not report success');
+    assert.match(result.stderr, /vendor-pi-coding-agent-core\.cjs failed/);
+    assert.deepEqual(
+      pipelineLog(root),
+      ['vendor-pi-deps.cjs', 'vendor-pi-coding-agent-core.cjs'],
+      'apply-seam.cjs must not run on top of a half-vendored tree',
+    );
+  });
+});
+
+describe('vendor-pi.cjs argv validation', () => {
+  test('rejects an unknown flag instead of silently ignoring it', () => {
+    const root = makeFixtureRoot();
+    const result = runVendorPi(root, ['--no-such-flag']);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /--no-such-flag/);
+    assert.equal(cachedMarker(root), null);
+  });
+
+  test('rejects --ref with no value', () => {
+    const root = makeFixtureRoot();
+    const result = runVendorPi(root, ['--ref']);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /--ref/);
+    assert.equal(cachedMarker(root), null);
+  });
+
+  test('rejects --checkout-only combined with --skip-checkout', () => {
+    const root = makeFixtureRoot();
+    const result = runVendorPi(root, ['--checkout-only', '--skip-checkout']);
+
+    assert.notEqual(result.status, 0);
+    assert.deepEqual(pipelineLog(root), []);
+  });
 });
