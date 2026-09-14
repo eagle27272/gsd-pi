@@ -36,20 +36,22 @@ test("closeBrowser resets browser state even when no browser is running", async 
 test("closeBrowser calls browser.close() and resets all state", async () => {
   resetAllState();
 
-  let closeCalled = false;
+  const closed: string[] = [];
   const fakeBrowser = {
-    close: async () => { closeCalled = true; },
+    close: async () => { closed.push("browser"); },
   } as any;
 
   setBrowser(fakeBrowser);
-  setContext({ /* fake context */ } as any);
+  // A real BrowserContext always has close(); teardown closes it so Playwright
+  // flushes the session HAR, which it only writes when the context goes away.
+  setContext({ close: async () => { closed.push("context"); } } as any);
 
   assert.ok(getBrowser(), "browser should be set before teardown");
   assert.ok(getContext(), "context should be set before teardown");
 
   await closeBrowser();
 
-  assert.equal(closeCalled, true, "browser.close() should have been called");
+  assert.deepEqual(closed, ["context", "browser"], "the context must close before the browser");
   assert.equal(getBrowser(), null, "browser should be null after teardown");
   assert.equal(getContext(), null, "context should be null after teardown");
 });
