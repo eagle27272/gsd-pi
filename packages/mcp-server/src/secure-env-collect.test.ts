@@ -32,7 +32,10 @@ interface ToolContentShape {
 }
 
 function makeTempDir(prefix: string): string {
-  return mkdtempSync(join(tmpdir(), `${prefix}-`));
+  const dir = mkdtempSync(join(tmpdir(), `${prefix}-`));
+  // resolveProjectEnvFilePath refuses a projectDir with no project marker.
+  writeFileSync(join(dir, 'package.json'), '{}');
+  return dir;
 }
 
 function textOf(result: unknown): string {
@@ -113,7 +116,7 @@ describe("secure_env_collect — handler behaviour", () => {
     // .env must contain the value.
     assert.match(
       readFileSync(envPath, "utf-8"),
-      /SEC_KEY_WRITE=sk-definitely-not-in-output-xyz/,
+      /SEC_KEY_WRITE='sk-definitely-not-in-output-xyz'/,
     );
     // But the tool output must NOT — this is the contract the tool name promises.
     assert.ok(
@@ -160,7 +163,7 @@ describe("secure_env_collect — handler behaviour", () => {
 
     // The .env must only contain the filled key.
     const envContent = readFileSync(envPath, "utf-8");
-    assert.match(envContent, /FILLED_KEY=real-value/);
+    assert.match(envContent, /FILLED_KEY='real-value'/);
     assert.ok(
       !envContent.includes("EMPTY_KEY="),
       "empty form field must not be written to .env",
@@ -272,6 +275,26 @@ describe("secure_env_collect — handler behaviour", () => {
     } finally {
       clearTimeout(timeout);
     }
+  });
+
+  it("refuses a destination outside the .env family before eliciting anything", async () => {
+    const { fn, calls } = fakeElicit({ action: "accept", content: { SHELL_RC_KEY: "v" } });
+
+    const result = await secureEnvCollectHandler(
+      {
+        projectDir: tmp,
+        keys: [{ key: "SHELL_RC_KEY" }],
+        destination: "dotenv",
+        envFilePath: ".bashrc",
+      },
+      fn,
+    );
+
+    assert.equal((result as ToolContentShape).isError, true);
+    assert.match(textOf(result), /\.env/);
+    assert.equal(calls.length, 0, "the user must not be prompted for a write we will refuse");
+    const { existsSync: exists } = await import("node:fs");
+    assert.equal(exists(join(tmp, ".bashrc")), false);
   });
 
   it("auto-detects destination from project files when not specified", async () => {

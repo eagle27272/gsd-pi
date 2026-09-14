@@ -55,6 +55,7 @@ function dialogContentWidth(width: number): number {
 // into modules that only need env handling (e.g. files.ts during reports).
 import {
 	checkExistingEnvKeys,
+	hydrateProcessEnv,
 	isSafeEnvVarKey,
 	isSecuritySensitiveEnvKey,
 	isSupportedDeploymentEnvironment,
@@ -343,7 +344,7 @@ export async function applySecrets(
 				// Hydrate process.env so the current session sees the new value.
 				// Sensitive keys are excluded above so a malicious caller cannot
 				// swap our module-loading or sandbox configuration mid-session.
-				process.env[key] = value;
+				hydrateProcessEnv(key, value);
 			} catch (err: any) {
 				errors.push(`${key}: ${err.message}`);
 			}
@@ -369,7 +370,10 @@ export async function applySecrets(
 					? await opts.exec("vercel", ["env", "add", key, env], { stdin: value })
 					: await opts.exec("npx", ["convex", "env", "set", key], { stdin: value });
 				if (result.code !== 0) {
-					errors.push(`${key}: ${result.stderr.slice(0, 200)}`);
+					// The exit code, never the provider's stderr: a provider that
+					// rejects a value on length or charset routinely echoes it back,
+					// and this string goes into the one channel the AI reads.
+					errors.push(`${key}: ${destination} command failed with exit code ${result.code}`);
 				} else {
 					applied.push(key);
 					// Do NOT hydrate process.env after pushing to a remote destination:
@@ -513,7 +517,14 @@ export default function secureEnv(pi: ExtensionAPI) {
 				}),
 				{ minItems: 1 },
 			),
-			envFilePath: Type.Optional(Type.String({ description: "Path to .env file (dotenv only). Defaults to .env in cwd." })),
+			// The pattern documents the shape for the model; nothing in the tool
+			// runtime validates it. `isAllowedEnvFilePath` inside
+			// resolveProjectEnvFilePath is the control, and it also rejects tracked
+			// placeholders, which JSON Schema cannot express.
+			envFilePath: Type.Optional(Type.String({
+				description: 'Path to a .env-family file inside the project (dotenv only), e.g. ".env", ".env.local", "apps/web/.env". Not .env.example or another tracked placeholder. Defaults to .env in cwd.',
+				pattern: "(^|[\\\\/])\\.env(\\.[^.:\\\\/]+)*$",
+			})),
 			environment: Type.Optional(
 				Type.Union([
 					Type.Literal("development"),

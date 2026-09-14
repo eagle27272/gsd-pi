@@ -16,6 +16,8 @@ import { checkExistingEnvKeys, detectDestination } from "../../get-secrets-from-
 function makeTempDir(prefix: string): string {
 	const dir = join(tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 	mkdirSync(dir, { recursive: true });
+	// resolveProjectEnvFilePath refuses a projectDir with no project marker.
+	writeFileSync(join(dir, "package.json"), "{}");
 	return dir;
 }
 
@@ -449,7 +451,7 @@ test("secure_env_collect #10: dotenv branch still writes and hydrates a valid ke
 
 	assert.deepStrictEqual(errors, []);
 	assert.deepStrictEqual(applied, ["GSD_TEST_ISSUE10_KEY"]);
-	assert.match(readFileSync(envFilePath, "utf8"), /GSD_TEST_ISSUE10_KEY=sk-value/);
+	assert.match(readFileSync(envFilePath, "utf8"), /GSD_TEST_ISSUE10_KEY='sk-value'/);
 	assert.equal(process.env.GSD_TEST_ISSUE10_KEY, "sk-value");
 });
 
@@ -617,6 +619,30 @@ test("secure_env_collect #10: an envFilePath inside the project still writes", a
 	);
 
 	assert.equal(result.isError, false);
-	assert.match(readFileSync(join(tmp, ".env.local"), "utf8"), /API_KEY=sk-secret/);
+	assert.match(readFileSync(join(tmp, ".env.local"), "utf8"), /API_KEY='sk-secret'/);
 	delete process.env.API_KEY;
+});
+
+test("secure_env_collect #20: a failed provider command reports its exit code, not its stderr", async (t) => {
+	const applySecrets = await loadApplySecrets();
+	const tmp = makeTempDir("sec-stderr");
+	t.after(() => rmSync(tmp, { recursive: true, force: true }));
+
+	const secret = "sk-supersecret-value";
+	const { applied, errors } = await applySecrets(
+		[{ key: "REMOTE_KEY", value: secret }],
+		"vercel",
+		{
+			envFilePath: join(tmp, ".env"),
+			environment: "production",
+			// Providers routinely echo the rejected value back in validation errors.
+			exec: async () => ({ code: 2, stderr: `Error: value "${secret}" is too long` }),
+		},
+	);
+
+	assert.deepStrictEqual(applied, []);
+	assert.equal(errors.length, 1);
+	assert.equal(errors[0].includes(secret), false, `provider stderr leaked the secret: ${errors[0]}`);
+	assert.match(errors[0], /REMOTE_KEY/);
+	assert.match(errors[0], /\b2\b/);
 });
