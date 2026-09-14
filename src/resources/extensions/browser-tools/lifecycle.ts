@@ -46,8 +46,12 @@ import {
 	updatePendingCriticalRequests,
 	ensureSessionStartedAt,
 	ensureSessionArtifactDir,
+	firstErrorLine,
 } from "./utils.js";
 import { EVALUATE_HELPERS_SOURCE } from "./evaluate-helpers.js";
+import { flushSessionHar, startSessionHarRecording } from "./har.js";
+
+export { flushSessionHar } from "./har.js";
 
 // ---------------------------------------------------------------------------
 // Page event wiring
@@ -207,15 +211,14 @@ export async function buildBrowserSession(
 			deviceScaleFactor: 2,
 			viewport: { width: 1280, height: 800 },
 			...contextOptions,
-			recordHar: {
-				path: harPath,
-				mode: "minimal",
-				content: "omit",
-			},
 		});
 
 		// Inject shared browser-side utilities into every new page/frame
 		await context.addInitScript(EVALUATE_HELPERS_SOURCE);
+
+		// Deliberately not the `recordHar` context option: that only writes when
+		// the context closes, so nothing could ever export a HAR mid-session.
+		await startSessionHarRecording(context, harPath);
 
 		const page = await context.newPage();
 		return { browser, context, page };
@@ -242,6 +245,8 @@ export async function commitBrowserSession(session: BrowserSession, harPath: str
 	setHarState({
 		enabled: true,
 		configuredAtContextCreation: true,
+		// buildBrowserSession started the recorder on this context.
+		recordingActive: true,
 		path: harPath,
 		exportCount: 0,
 		lastExportedPath: null,
@@ -330,6 +335,15 @@ export function getActivePageOrNull(): Page | null {
 }
 
 export async function closeBrowser(): Promise<void> {
+	const context = getContext();
+	if (context) {
+		// Flush before closing: once the context is gone the recorder is gone
+		// with it, and the session HAR would never reach disk.
+		await flushSessionHar({ resume: false }).catch((err) => {
+			if (process.env.GSD_DEBUG) console.error("[browser-tools] session HAR flush failed:", firstErrorLine(err));
+		});
+		await context.close().catch(() => { /* cleanup — context may already be closed */ });
+	}
 	const browser = getBrowser();
 	if (browser) {
 		await browser.close().catch(() => { /* cleanup — browser may already be closed */ });
