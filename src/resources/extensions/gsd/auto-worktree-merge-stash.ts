@@ -4,7 +4,6 @@
 // DB handle cycling for Windows, restoring on merge failures, and post-commit
 // stash-pop conflict recovery.
 
-import { execFileSync } from "node:child_process";
 import { closeSync, constants, fstatSync, lstatSync, openSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 
@@ -28,6 +27,7 @@ import {
 } from "./worktree-git-recovery.js";
 import { logWarning } from "./workflow-logger.js";
 import { checkpointDatabase } from "./gsd-db.js";
+import { gitCapture } from "./git-exec.js";
 
 export interface PreMergeStash {
   stash(): void;
@@ -55,32 +55,24 @@ export function createPreMergeStash(
     stash(): void {
       closeDbBeforeStashIfNeeded(cycleDbHandles);
       try {
-        const status = execFileSync("git", ["status", "--porcelain"], {
-          cwd: basePath,
-          stdio: ["ignore", "pipe", "pipe"],
-          encoding: "utf-8",
-        }).trim();
+        const status = gitCapture(basePath, ["status", "--porcelain"]);
         if (!status) return;
 
         marker = createStashMarker(milestoneId);
-        const stashOutput = execFileSync(
-          "git",
-          [
-            "stash",
-            "push",
-            "--include-untracked",
-            "-m",
-            `gsd: pre-merge stash for ${milestoneId} [${marker}]`,
-            "--",
-            ".",
-            ":(exclude).gsd/.milestone-shelter",
-            ":(exclude,glob).gsd/.milestone-shelter/**",
-            ...(options.excludeGsdState
-              ? [":(exclude).gsd", ":(exclude,glob).gsd/**"]
-              : []),
-          ],
-          { cwd: basePath, stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" },
-        );
+        const stashOutput = gitCapture(basePath, [
+          "stash",
+          "push",
+          "--include-untracked",
+          "-m",
+          `gsd: pre-merge stash for ${milestoneId} [${marker}]`,
+          "--",
+          ".",
+          ":(exclude).gsd/.milestone-shelter",
+          ":(exclude,glob).gsd/.milestone-shelter/**",
+          ...(options.excludeGsdState
+            ? [":(exclude).gsd", ":(exclude,glob).gsd/**"]
+            : []),
+        ], { trim: false });
         stashed = stashOutput.includes(marker);
       } catch (err) {
         // Stash failure is non-fatal — proceed without stash and let the merge
@@ -222,11 +214,7 @@ function resolveGsdConflictFiles(basePath: string, conflictFiles: string[]): voi
   for (const file of conflictFiles) {
     try {
       // Accept the committed (HEAD) version of the state file.
-      execFileSync("git", ["checkout", "HEAD", "--", file], {
-        cwd: basePath,
-        stdio: ["ignore", "pipe", "pipe"],
-        encoding: "utf-8",
-      });
+      gitCapture(basePath, ["checkout", "HEAD", "--", file]);
       nativeAddPaths(basePath, [file]);
     } catch (err) {
       // Last resort: remove the conflicted state file.
@@ -264,11 +252,7 @@ function dropRecordedStash(basePath: string, stashRefForDrop: string | null): vo
     return;
   }
   try {
-    execFileSync("git", ["stash", "drop", stashRefForDrop], {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf-8",
-    });
+    gitCapture(basePath, ["stash", "drop", stashRefForDrop]);
   } catch (err) {
     logWarning("worktree", `git stash drop failed: ${err instanceof Error ? err.message : String(err)}`);
   }

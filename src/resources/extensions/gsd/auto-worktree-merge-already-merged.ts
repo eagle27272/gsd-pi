@@ -4,8 +4,6 @@
 // integration branch: skip the squash merge only when milestone-touched code is
 // still anchored on the current integration branch, then run normal cleanup.
 
-import { execFileSync } from "node:child_process";
-
 import { debugLog } from "./debug-logger.js";
 import { GSDError, GSD_GIT_ERROR } from "./errors.js";
 import {
@@ -16,6 +14,7 @@ import { cleanupMergedMilestoneWorktree } from "./auto-worktree-merge-cleanup.js
 import { loadEffectiveGSDPreferences } from "./preferences.js";
 import { pushIntegrationBranchIfAhead } from "./publication.js";
 import { logWarning } from "./workflow-logger.js";
+import { gitCapture } from "./git-exec.js";
 
 export interface AlreadyMergedMilestoneRequest {
   projectRoot: string;
@@ -136,15 +135,7 @@ function findRegularMergeChangedPaths(
   const changedPaths = new Set<string>();
   let mergeLog = "";
   try {
-    mergeLog = execFileSync(
-      "git",
-      ["rev-list", "--merges", "--parents", mainBranch],
-      {
-        cwd: basePath,
-        stdio: ["ignore", "pipe", "pipe"],
-        encoding: "utf-8",
-      },
-    ).trim();
+    mergeLog = gitCapture(basePath, ["rev-list", "--merges", "--parents", mainBranch]);
   } catch (err) {
     logWarning("worktree", `regular merge lookup failed: ${err instanceof Error ? err.message : String(err)}`);
     return changedPaths;
@@ -163,15 +154,7 @@ function findRegularMergeChangedPaths(
     if (!mergedMilestone) continue;
 
     try {
-      const output = execFileSync(
-        "git",
-        ["diff", "--name-only", firstParent, mergeCommit],
-        {
-          cwd: basePath,
-          stdio: ["ignore", "pipe", "pipe"],
-          encoding: "utf-8",
-        },
-      ).trim();
+      const output = gitCapture(basePath, ["diff", "--name-only", firstParent, mergeCommit]);
       for (const path of output.split("\n").filter(Boolean)) {
         if (!path.startsWith(".gsd/")) changedPaths.add(path);
       }

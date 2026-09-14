@@ -2,7 +2,6 @@
 // File Purpose: Deterministic fail-closed source snapshots for host verification targets.
 
 import { createHash, type Hash } from "node:crypto";
-import { spawnSync } from "node:child_process";
 import { closeSync, lstatSync, openSync, readSync, readlinkSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative } from "node:path";
 import type { SliceRow, TaskRow } from "./db-task-slice-rows.js";
@@ -13,6 +12,7 @@ import {
   deriveRepositoryTargetsFromPlannedPaths,
   type RegisteredRepository,
 } from "./repository-registry.js";
+import { gitSpawnBuffer } from "./git-exec.js";
 
 export interface VerificationSourceTarget {
   id: string;
@@ -161,11 +161,7 @@ function addFileHashField(hash: Hash, label: string, path: string, expectedSize:
 }
 
 function gitOutput(cwd: string, args: string[]): Buffer {
-  const result = spawnSync("git", args, {
-    cwd,
-    encoding: "buffer",
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  const result = gitSpawnBuffer(cwd, args, { maxBuffer: 64 * 1024 * 1024 });
   if (result.error) throw result.error;
   if (result.status !== 0) {
     const detail = result.stderr.toString("utf8").trim();

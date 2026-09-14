@@ -7,11 +7,9 @@
  * environment capture, gh-missing fallback) are enforced in runReport().
  */
 
-import { execFileSync } from "node:child_process";
 import { basename, dirname } from "node:path";
 import type { ExtensionAPI } from "@gsd/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { GIT_NO_PROMPT_ENV } from "../gsd/git-constants.js";
 import { isEnabled, targetRepo, SOFT_CAP } from "./config.js";
 import {
   BUG_REPORT_GUIDELINES,
@@ -29,6 +27,7 @@ import {
   truncateBody,
 } from "./github.js";
 import { filedThisSession, recordFiled, resetSession } from "./session-state.js";
+import { gitCapture } from "../gsd/git-exec.js";
 
 export interface ReportInput {
   title: string;
@@ -57,13 +56,7 @@ export interface ReportResult {
 function defaultEnvSnapshot(env: NodeJS.ProcessEnv): ReportEnv {
   let commit: string | null = null;
   try {
-    commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
-      cwd: env.GSD_PKG_ROOT ?? (env.GSD_BIN_PATH ? dirname(env.GSD_BIN_PATH) : process.cwd()),
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: 3_000,
-      env: GIT_NO_PROMPT_ENV,
-    }).trim() || null;
+    commit = gitCapture(env.GSD_PKG_ROOT ?? (env.GSD_BIN_PATH ? dirname(env.GSD_BIN_PATH) : process.cwd()), ["rev-parse", "--short", "HEAD"], { timeout: 3_000 }) || null;
   } catch {
     commit = null;
   }

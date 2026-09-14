@@ -6,7 +6,6 @@
  * flow to show when entering a project directory.
  */
 
-import { execFileSync } from "node:child_process";
 import { existsSync, openSync, readSync, closeSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, parse as parsePath } from "node:path";
 import { homedir } from "node:os";
@@ -14,6 +13,7 @@ import { gsdRoot } from "./paths.js";
 import { gsdHome } from "./gsd-home.js";
 import { detectPackageManager, buildScriptCommand } from "./package-manager.js";
 import { LAYOUT_SEGMENTS } from "./layout-policy.js";
+import { gitCapture } from "./git-exec.js";
 
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
@@ -574,11 +574,7 @@ function isProjectContentFile(file: string): boolean {
 
 function runGitLines(basePath: string, args: string[]): string[] {
   try {
-    const output = execFileSync("git", args, {
-      cwd: basePath,
-      stdio: ["ignore", "pipe", "ignore"],
-      encoding: "utf-8",
-    }).trim();
+    const output = gitCapture(basePath, args);
     return output ? output.split("\n").map((line) => line.trim()).filter(Boolean) : [];
   } catch {
     return [];

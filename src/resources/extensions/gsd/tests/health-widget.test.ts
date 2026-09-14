@@ -17,7 +17,6 @@ import {
 import { HEALTH_WIDGET_ACTIVE_HINTS, getCachedProjectState, initHealthWidget } from "../health-widget.ts";
 import { canonicalPhaseDirName, LAYOUT_SEGMENTS } from "../layout-policy.ts";
 import { registerHooks } from "../bootstrap/register-hooks.ts";
-import { GIT_NO_PROMPT_ENV } from "../git-constants.ts";
 
 function makeTempDir(prefix: string): string {
   const dir = join(
@@ -245,14 +244,12 @@ test("health widget async refresh does not block timers while git log is slow", 
 
   const originalCwd = process.cwd();
   const originalProcessPath = process.env.PATH;
-  const originalEnvPath = GIT_NO_PROMPT_ENV.PATH;
-  const originalEnvRealPath = GIT_NO_PROMPT_ENV.GSD_REAL_PATH;
+  const originalEnvRealPath = process.env.GSD_REAL_PATH;
   const shimmedPath = `${binDir}${delimiter}${originalProcessPath ?? ""}`;
 
   process.chdir(dir);
   process.env.PATH = shimmedPath;
-  GIT_NO_PROMPT_ENV.PATH = shimmedPath;
-  GIT_NO_PROMPT_ENV.GSD_REAL_PATH = originalProcessPath ?? "";
+  process.env.GSD_REAL_PATH = originalProcessPath ?? "";
 
   let factory: HealthWidgetFactory | null = null;
   let resolveRefresh: (() => void) | undefined;
@@ -270,10 +267,8 @@ test("health widget async refresh does not block timers while git log is slow", 
     process.chdir(originalCwd);
     if (originalProcessPath === undefined) delete process.env.PATH;
     else process.env.PATH = originalProcessPath;
-    if (originalEnvPath === undefined) delete GIT_NO_PROMPT_ENV.PATH;
-    else GIT_NO_PROMPT_ENV.PATH = originalEnvPath;
-    if (originalEnvRealPath === undefined) delete GIT_NO_PROMPT_ENV.GSD_REAL_PATH;
-    else GIT_NO_PROMPT_ENV.GSD_REAL_PATH = originalEnvRealPath;
+    if (originalEnvRealPath === undefined) delete process.env.GSD_REAL_PATH;
+    else process.env.GSD_REAL_PATH = originalEnvRealPath;
     cleanup(binDir);
     cleanup(dir);
   });

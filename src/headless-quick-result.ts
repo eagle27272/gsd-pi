@@ -1,8 +1,8 @@
-import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { basename, resolve } from 'node:path'
 
 import type { HeadlessJsonResult } from './headless-types.js'
+import { gitCapture } from './resources/extensions/gsd/git-exec.js'
 
 export interface QuickTaskMetadata {
   task: NonNullable<HeadlessJsonResult['task']>
@@ -30,11 +30,7 @@ export interface CollectedQuickTaskResult {
 
 function runGit(cwd: string, args: string[]): string | undefined {
   try {
-    return execFileSync('git', args, {
-      cwd,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim()
+    return gitCapture(cwd, args)
   } catch {
     return undefined
   }

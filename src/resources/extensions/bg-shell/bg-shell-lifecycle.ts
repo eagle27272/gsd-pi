@@ -24,6 +24,7 @@ import {
 	loadManifest,
 	pruneDeadProcesses,
 } from "./process-manager.js";
+import { installBgShellSignalHandlers } from "./signal-handlers.js";
 import { formatUptime, getBgShellLiveCwd, resolveBgShellPersistenceCwd } from "./utilities.js";
 import { formatTokenCount } from "../shared/format-utils.js";
 
@@ -52,9 +53,7 @@ export function registerBgShellLifecycle(pi: ExtensionAPI, state: BgShellSharedS
 			}
 		} catch {}
 	};
-	process.on("SIGTERM", signalCleanup);
-	process.on("SIGINT", signalCleanup);
-	process.on("beforeExit", signalCleanup);
+	const uninstallSignalHandlers = installBgShellSignalHandlers(signalCleanup);
 
 	// ── Compaction Awareness: Survive Context Resets ───────────────
 
@@ -398,9 +397,7 @@ export function registerBgShellLifecycle(pi: ExtensionAPI, state: BgShellSharedS
 	// describe what survived, which is only knowable once teardown has run.
 	pi.on("session_shutdown", async (event) => {
 		clearInterval(maintenanceInterval);
-		process.off("SIGTERM", signalCleanup);
-		process.off("SIGINT", signalCleanup);
-		process.off("beforeExit", signalCleanup);
+		uninstallSignalHandlers();
 
 		// "new"/"resume"/"fork" replace the session inside a live host: bg_shell
 		// promises persist_across_sessions processes survive that. "quit"/"reload"

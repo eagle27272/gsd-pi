@@ -1,4 +1,5 @@
 import { type ExecFileException, execFile, spawnSync } from "child_process";
+import { gitNoPromptEnv } from "./git-env.js";
 import { existsSync, type FSWatcher, readFileSync, statSync, unwatchFile, watchFile } from "fs";
 import { dirname, join, resolve } from "path";
 import { closeWatcher, FS_WATCH_RETRY_DELAY_MS, watchWithErrorHandler } from "../utils/fs-watch.js";
@@ -53,6 +54,7 @@ function resolveBranchWithGitSync(repoDir: string): string | null {
 		cwd: repoDir,
 		encoding: "utf8",
 		stdio: ["ignore", "pipe", "ignore"],
+		env: gitNoPromptEnv(),
 	});
 	const branch = result.status === 0 ? result.stdout.trim() : "";
 	return branch || null;
@@ -67,6 +69,7 @@ function resolveBranchWithGitAsync(repoDir: string): Promise<string | null> {
 			{
 				cwd: repoDir,
 				encoding: "utf8",
+				env: gitNoPromptEnv(),
 			},
 			(error: ExecFileException | null, stdout: string) => {
 				if (error) {

@@ -14,6 +14,7 @@ import { promisify } from "node:util";
 
 const execFile = promisify(execFileCb);
 import { gsdHome } from "../gsd/gsd-home.js";
+import { gitCapture } from "../gsd/git-exec.js";
 
 // ============================================================================
 // Types
@@ -77,12 +78,8 @@ function registerExitHandler(): void {
 		for (const dir of activeIsolations) {
 			try {
 				// Best-effort sync cleanup: remove git worktree
-				const { execFileSync } = require("node:child_process");
 				try {
-					execFileSync("git", ["worktree", "remove", "--force", dir], {
-						stdio: "ignore",
-						timeout: 5000,
-					});
+					gitCapture(undefined, ["worktree", "remove", "--force", dir], { timeout: 5000 });
 				} catch {
 					// Worktree may not exist (FUSE mode), just rm
 				}
