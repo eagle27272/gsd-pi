@@ -57,7 +57,7 @@ import { DEFAULT_COMMAND_TIMEOUT_MS } from "./constants.js";
 import type { SliceRow } from "./db-task-slice-rows.js";
 import { getSlice } from "./gsd-db.js";
 import { getLedger } from "./metrics.js";
-import { getUnitCostSpikeAction, resolveUnitCostSpikeMultiplier } from "./auto-budget.js";
+import { getUnitCostSpikeAction, resolveUnitCostSpikeMultiplier, splitUnitCostBaseline } from "./auto-budget.js";
 import { formatPostUnitStatusCard } from "./auto-status-message.js";
 import { detectWebApp } from "./web-app-uat.js";
 import {
@@ -133,24 +133,7 @@ function resolveVerificationEvidenceLocation(
 }
 
 function getCurrentUnitCostStats(unitId: string): { unitCostUsd: number; rollingAvgUsd: number } {
-  const ledger = getLedger();
-  if (!ledger || !Array.isArray(ledger.units) || ledger.units.length === 0) {
-    return { unitCostUsd: 0, rollingAvgUsd: 0 };
-  }
-  let unitCostUsd = 0;
-  let totalCost = 0;
-  let totalUnits = 0;
-  for (const unit of ledger.units) {
-    const cost = typeof unit?.cost === "number" ? unit.cost : 0;
-    if (!Number.isFinite(cost) || cost < 0) continue;
-    totalCost += cost;
-    totalUnits++;
-    if (unit?.id === unitId) unitCostUsd += cost;
-  }
-  return {
-    unitCostUsd,
-    rollingAvgUsd: totalUnits > 0 ? totalCost / totalUnits : 0,
-  };
+  return splitUnitCostBaseline(getLedger()?.units, unitId);
 }
 
 function verificationFailureSummary(

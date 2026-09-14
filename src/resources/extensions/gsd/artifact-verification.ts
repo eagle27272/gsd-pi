@@ -341,7 +341,11 @@ export function verifyExpectedArtifact(
         if (pendingIds.has(gid)) return false;
       }
     } catch (err) {
+      // Fail closed (#17), matching the parallel-research / execute-task /
+      // validate-milestone siblings below: an unreadable gate table is not
+      // evidence that the batch's gates were evaluated.
       logWarning("recovery", `gate-evaluate DB check failed: ${err instanceof Error ? err.message : String(err)}`);
+      return false;
     }
     return true;
   }
@@ -531,7 +535,11 @@ export function verifyExpectedArtifact(
           }
         }
       } catch (err) {
+        // Fail closed (#17): this catch fell through to the terminal `return true`
+        // below, so an unreadable PLAN or a parse fault verified the unit rather
+        // than failing it — the opposite of the sibling checks in this function.
         logWarning("recovery", `plan-slice task plan verification failed: ${err instanceof Error ? err.message : String(err)}`);
+        return false;
       }
     }
   }
