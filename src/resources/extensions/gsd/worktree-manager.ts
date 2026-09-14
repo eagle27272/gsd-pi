@@ -205,6 +205,16 @@ export function isInsideWorktreesDir(basePath: string, targetPath: string): bool
   });
 }
 
+/**
+ * Reject an id (milestone, slice) that would escape a worktrees container once
+ * interpolated into a worktree name. Companion to isInsideWorktreesDir: this
+ * keeps a crafted id from ever producing an out-of-container path, that one
+ * catches anything which still slips through before a destructive operation.
+ */
+export function isValidWorktreeIdentifier(id: string): boolean {
+  return id.length > 0 && !/[/\\]|\.\./.test(id);
+}
+
 function isRegisteredGitWorktreeAtPath(basePath: string, wtPath: string): boolean {
   try {
     const normalizedTarget = normalizeWorktreePathForCompare(

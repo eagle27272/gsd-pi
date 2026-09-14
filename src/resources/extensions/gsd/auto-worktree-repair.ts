@@ -4,7 +4,7 @@
 import { existsSync, lstatSync, readdirSync, type Stats } from "node:fs";
 import { join } from "node:path";
 
-import { worktreePath } from "./worktree-manager.js";
+import { isValidWorktreeIdentifier, worktreePath } from "./worktree-manager.js";
 import { worktreesDirs } from "./worktree-placement.js";
 import { normalizeWorktreePathForCompare } from "./worktree-root.js";
 import type { WorktreeSafetyResult } from "./worktree-safety.js";
@@ -23,10 +23,6 @@ const defaultFs: AutoWorktreeRepairFs = {
 
 const SAFE_STALE_WORKTREE_ENTRIES = new Set([".gsd", ".DS_Store"]);
 
-function isValidMilestoneId(milestoneId: string): boolean {
-  return milestoneId.length > 0 && !/[\/\\]|\.\./.test(milestoneId);
-}
-
 function samePath(a: string, b: string): boolean {
   return normalizeWorktreePathForCompare(a) === normalizeWorktreePathForCompare(b);
 }
@@ -36,7 +32,7 @@ export function expectedAutoWorktreePath(
   milestoneId: string | null | undefined,
 ): string | null {
   const id = milestoneId?.trim();
-  if (!id || !isValidMilestoneId(id)) return null;
+  if (!id || !isValidWorktreeIdentifier(id)) return null;
   return worktreePath(projectRoot, id);
 }
 
@@ -46,7 +42,7 @@ function candidateAutoWorktreePaths(
   milestoneId: string | null | undefined,
 ): string[] {
   const id = milestoneId?.trim();
-  if (!id || !isValidMilestoneId(id)) return [];
+  if (!id || !isValidWorktreeIdentifier(id)) return [];
   return worktreesDirs(projectRoot).map((dir) => join(dir, id));
 }
 
@@ -179,7 +175,7 @@ export async function repairAutoWorktreeSafetyFailure(input: {
   }
 
   const milestoneId = input.milestoneId?.trim();
-  if (!milestoneId || !isValidMilestoneId(milestoneId)) {
+  if (!milestoneId || !isValidWorktreeIdentifier(milestoneId)) {
     return {
       result: input.safetyResult,
       repaired: false,

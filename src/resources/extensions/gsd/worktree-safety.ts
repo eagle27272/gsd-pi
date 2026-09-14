@@ -6,7 +6,11 @@ import { join, resolve } from "node:path";
 
 import { normalizeWorktreePathForCompare } from "./worktree-root.js";
 import { worktreesDirs } from "./worktree-placement.js";
-import { listWorktrees, removeStaleWorktreeDirectory } from "./worktree-manager.js";
+import {
+  isValidWorktreeIdentifier,
+  listWorktrees,
+  removeStaleWorktreeDirectory,
+} from "./worktree-manager.js";
 import { getCurrentBranch } from "./worktree.js";
 import { gitCapture } from "./git-exec.js";
 
@@ -102,10 +106,6 @@ const defaultDeps: WorktreeSafetyDeps = {
   getCurrentBranch,
 };
 
-function isValidMilestoneId(milestoneId: string): boolean {
-  return milestoneId.length > 0 && !/[\/\\]|\.\./.test(milestoneId);
-}
-
 function samePath(a: string, b: string): boolean {
   return normalizeWorktreePathForCompare(a) === normalizeWorktreePathForCompare(b);
 }
@@ -144,7 +144,7 @@ export function createWorktreeSafetyModule(
           "Resolve the Unit milestone before preparing a worktree root.",
         );
       }
-      if (!isValidMilestoneId(milestoneId)) {
+      if (!isValidWorktreeIdentifier(milestoneId)) {
         return failure(
           "milestone-id-invalid",
           `Milestone id "${milestoneId}" is not safe for worktree path resolution.`,
