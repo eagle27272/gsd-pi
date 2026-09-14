@@ -24,8 +24,9 @@ function createTempRepo(): string {
   run("git init", dir);
   run("git config user.email test@example.com", dir);
   run("git config user.name Test", dir);
-  // These fixtures track .gsd/ on purpose; a developer's global gitignore that
-  // excludes .gsd would otherwise make the results machine-dependent.
+  // These fixtures track .gsd/ on purpose. A developer's global ignore file may
+  // list .gsd, which would silently make `git add .` stage nothing and leave the
+  // results machine-dependent.
   run("git config core.excludesFile /dev/null", dir);
   writeFileSync(join(dir, "README.md"), "# test\n");
   mkdirSync(join(dir, ".gsd"), { recursive: true });

@@ -2354,11 +2354,30 @@ const sliceCompleteParams = {
 const sliceCompleteSchema = z.object(sliceCompleteParams);
 export const _sliceCompleteSchemaForTest = sliceCompleteSchema;
 
+/**
+ * Ids that become components of an artifact file name. The layout mints
+ * `S01`, `S01-replan`, `R01`, `T01` and the redundant `S01-T01` form, so the
+ * alphabet is alphanumerics joined by single hyphens — which also excludes the
+ * path separators and `..` that would traverse out of the project once the
+ * name is joined onto the phase directory (#9). Rejecting here keeps the
+ * traversal from ever reaching a path builder.
+ */
+const ARTIFACT_ID_PATTERN = /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/;
+const ARTIFACT_ID_MAX_LENGTH = 64;
+
+function artifactIdParam(description: string) {
+  return z.string()
+    .max(ARTIFACT_ID_MAX_LENGTH, `must be an artifact id of at most ${ARTIFACT_ID_MAX_LENGTH} characters`)
+    .regex(ARTIFACT_ID_PATTERN, "must be an artifact id: alphanumerics separated by single hyphens, with no path separators")
+    .optional()
+    .describe(description);
+}
+
 const summarySaveParams = {
   projectDir: projectDirParam,
   milestone_id: z.string().optional().describe("Milestone ID (e.g. M001). Omit only for root-level PROJECT/PROJECT-DRAFT/REQUIREMENTS/REQUIREMENTS-DRAFT artifacts."),
-  slice_id: z.string().optional().describe("Slice ID (e.g. S01)"),
-  task_id: z.string().optional().describe("Task ID (e.g. T01)"),
+  slice_id: artifactIdParam("Slice ID (e.g. S01)"),
+  task_id: artifactIdParam("Task ID (e.g. T01)"),
   artifact_type: z.string().describe("Artifact type to save (SUMMARY, RESEARCH, CONTEXT, ASSESSMENT, CONTEXT-DRAFT, PROJECT, PROJECT-DRAFT, REQUIREMENTS, REQUIREMENTS-DRAFT)"),
   content: z.string()
     .max(SUMMARY_SAVE_CONTENT_MAX_LENGTH, `content must be at most ${SUMMARY_SAVE_CONTENT_MAX_LENGTH} characters per save`)

@@ -30,6 +30,9 @@ function makeBaseRepo(): string {
   run("git init -b main", base);
   run('git config user.name "Test User"', base);
   run('git config user.email "test@example.com"', base);
+  // A developer's global ignore file may list .gsd, which would silently make
+  // `git add .` stage nothing and the commit below fail.
+  run("git config core.excludesFile /dev/null", base);
   mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
   writeFileSync(join(base, "README.md"), "# Test Project\n", "utf-8");
   writeFileSync(

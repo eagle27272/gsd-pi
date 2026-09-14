@@ -441,6 +441,9 @@ describe("auto-worktree lifecycle", () => {
     run("git init", tempDir);
     run("git config user.email test@test.com", tempDir);
     run("git config user.name Test", tempDir);
+    // A developer's global ignore file may list .gsd, which would silently make
+    // `git add .` stage nothing and the commit below fail.
+    run("git config core.excludesFile /dev/null", tempDir);
 
     assert.throws(
       () => createAutoWorktree(tempDir, "M001"),

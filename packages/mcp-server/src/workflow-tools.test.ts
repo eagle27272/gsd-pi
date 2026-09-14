@@ -501,6 +501,54 @@ describe("workflow MCP tools", () => {
     );
   });
 
+  // #9: slice_id and task_id become components of an artifact file name, so a
+  // traversing value escapes the project once joined onto the phase directory.
+  // Reject it at the tool boundary, before any path is built.
+  it("rejects gsd_summary_save ids that cannot be artifact file-name components", () => {
+    for (const [field, value] of [
+      ["task_id", "../../../../../../tmp/pwned"],
+      ["slice_id", "../../../../../../tmp/pwned"],
+      ["task_id", ".."],
+      ["task_id", "T01/../../etc"],
+      ["slice_id", "S01\\..\\..\\etc"],
+      ["task_id", ""],
+    ] as const) {
+      assert.throws(
+        () => _parseWorkflowArgsForTest(_summarySaveSchemaForTest, {
+          milestone_id: "M001",
+          slice_id: "S01",
+          task_id: "T01",
+          artifact_type: "SUMMARY",
+          content: "# x",
+          [field]: value,
+        }),
+        /must be an artifact id/,
+        `${field}=${JSON.stringify(value)} should be rejected`,
+      );
+    }
+  });
+
+  it("accepts the gsd_summary_save id shapes the layout actually produces", () => {
+    for (const [sliceId, taskId] of [
+      ["S01", "T01"],
+      ["S01", "S01-T01"],
+      ["S01-replan", "T02"],
+      ["R01", "T03"],
+      ["s01", "t01"],
+    ] as const) {
+      assert.doesNotThrow(
+        () => _parseWorkflowArgsForTest(_summarySaveSchemaForTest, {
+          milestone_id: "M001",
+          slice_id: sliceId,
+          task_id: taskId,
+          artifact_type: "SUMMARY",
+          content: "# x",
+        }),
+        `${sliceId}/${taskId} should be accepted`,
+      );
+    }
+  });
+
   it("registers gsd_checkpoint_db and flushes the open WAL", async () => {
     const base = makeTmpBase();
     try {

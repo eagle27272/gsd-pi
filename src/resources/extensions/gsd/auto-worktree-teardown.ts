@@ -80,17 +80,27 @@ export function teardownAutoWorktree(
     }
 
     // 2. Reconcile worktree-local gsd.db into project root DB if both exist.
-    //    Ordinary legacy reconcile failures stay non-fatal. Canonical history
-    //    divergence preserves the worktree because deleting it would lose work.
+    //    Any failure preserves the worktree: `.gsd/gsd.db*` is gitignored, so
+    //    the worktree copy is the only record of its decisions, requirements,
+    //    tasks and artifacts. Removing it here would destroy them (#6).
+    let worktreeDbPath = "";
     try {
       const contract = resolveGsdPathContract(previousCwd, originalBasePath);
-      const worktreeDbPath = join(
+      worktreeDbPath = join(
         contract.worktreeGsd ?? join(previousCwd, ".gsd"),
         "gsd.db",
       );
       const mainDbPath = contract.projectDb;
       if (_shouldReconcileWorktreeDb(worktreeDbPath, mainDbPath)) {
-        reconcileWorktreeDb(mainDbPath, worktreeDbPath);
+        const { conflicts } = reconcileWorktreeDb(mainDbPath, worktreeDbPath);
+        if (conflicts.length > 0) {
+          logWarning(
+            "worktree",
+            `Worktree DB reconciliation resolved ${conflicts.length} conflict(s) ` +
+              `with the worktree-wins policy: ${conflicts.join("; ")}`,
+            { worktree: milestoneId },
+          );
+        }
       }
     } catch (err) {
       logError(
@@ -101,6 +111,15 @@ export function teardownAutoWorktree(
         clearActiveWorkspace = false;
         return;
       }
+      logError(
+        "worktree",
+        `Worktree for ${milestoneId} preserved because its DB was not merged. ` +
+          `Recover the un-merged state from ${worktreeDbPath || "the worktree .gsd directory"} ` +
+          `before removing the worktree manually.`,
+        { worktree: milestoneId },
+      );
+      clearActiveWorkspace = false;
+      return;
     }
 
     nudgeGitBranchCache(previousCwd);
