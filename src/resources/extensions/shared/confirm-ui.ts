@@ -19,7 +19,8 @@ import type { ExtensionContext } from "@gsd/pi-coding-agent";
 import { type Theme } from "@gsd/pi-coding-agent";
 import { Key, matchesKey, truncateToWidth, type TUI } from "@gsd/pi-tui";
 import { renderSharedDialogFrame } from "./dialog-frame.js";
-import { makeUI, GLYPH } from "./ui.js";
+import { GLYPH } from "./glyphs.js";
+import { makeUI } from "./ui.js";
 
 export interface ConfirmOptions {
 	/** Title shown at the top of the dialog */
