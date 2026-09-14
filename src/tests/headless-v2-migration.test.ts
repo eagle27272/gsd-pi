@@ -1,6 +1,6 @@
 /**
  * Tests for headless v2 migration — execution_complete handling,
- * sendUIResponse-based auto-response, and v1 fallback behavior.
+ * sendUIResponse-based auto-response, and notification-driven completion.
  *
  * Uses extracted logic mirrors to avoid importing modules with native
  * dependencies (same pattern as headless-events.test.ts and headless-detection.test.ts).
@@ -8,6 +8,8 @@
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
+
+import { negotiateV2Protocol } from '../headless-events.js'
 
 // ─── Extracted exit codes (mirrors headless-events.ts) ──────────────────────
 
@@ -118,6 +120,7 @@ class MockRpcClient {
   sendUICalls: SendUICall[] = []
   initCalled = false
   initShouldFail = false
+  initRejectionValue: unknown = undefined
 
   sendUIResponse(id: string, response: { value?: string; values?: string[]; confirmed?: boolean; cancelled?: boolean }): void {
     this.sendUICalls.push({ id, response })
@@ -125,6 +128,9 @@ class MockRpcClient {
 
   async init(_options?: { clientId?: string }): Promise<{ protocolVersion: number }> {
     this.initCalled = true
+    if (this.initRejectionValue !== undefined) {
+      throw this.initRejectionValue
+    }
     if (this.initShouldFail) {
       throw new Error('v2 init not supported')
     }
@@ -198,7 +204,6 @@ interface EventHandlerState {
   completed: boolean
   blocked: boolean
   exitCode: number
-  v2Enabled: boolean
   isMultiTurnCommand?: boolean
 }
 
@@ -229,7 +234,7 @@ function handleEvent(
     }
   }
 
-  // extension_ui_request (v1 fallback + UI responses)
+  // extension_ui_request (notification-driven completion + UI responses)
   if (eventObj.type === 'extension_ui_request') {
     if (isBlockedNotification(eventObj)) {
       state.blocked = true
@@ -258,7 +263,7 @@ function handleChildExitWithoutTerminalNotification(code: number | null, state: 
 
 test('execution_complete with status success triggers completion with EXIT_SUCCESS', () => {
   const client = new MockRpcClient()
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: true }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1 }
 
   handleEvent({ type: 'execution_complete', status: 'success' }, state, client)
 
@@ -269,7 +274,7 @@ test('execution_complete with status success triggers completion with EXIT_SUCCE
 
 test('execution_complete with status blocked sets blocked flag and EXIT_BLOCKED', () => {
   const client = new MockRpcClient()
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: true }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1 }
 
   handleEvent({ type: 'execution_complete', status: 'blocked' }, state, client)
 
@@ -280,7 +285,7 @@ test('execution_complete with status blocked sets blocked flag and EXIT_BLOCKED'
 
 test('execution_complete with status error maps to EXIT_ERROR', () => {
   const client = new MockRpcClient()
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: true }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1 }
 
   handleEvent({ type: 'execution_complete', status: 'error' }, state, client)
 
@@ -290,7 +295,7 @@ test('execution_complete with status error maps to EXIT_ERROR', () => {
 
 test('execution_complete with missing status defaults to success', () => {
   const client = new MockRpcClient()
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: true }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1 }
 
   handleEvent({ type: 'execution_complete' }, state, client)
 
@@ -300,7 +305,7 @@ test('execution_complete with missing status defaults to success', () => {
 
 test('execution_complete ignored if already completed', () => {
   const client = new MockRpcClient()
-  const state: EventHandlerState = { completed: true, blocked: false, exitCode: EXIT_SUCCESS, v2Enabled: true }
+  const state: EventHandlerState = { completed: true, blocked: false, exitCode: EXIT_SUCCESS }
 
   handleEvent({ type: 'execution_complete', status: 'error' }, state, client)
 
@@ -309,7 +314,7 @@ test('execution_complete ignored if already completed', () => {
 })
 
 test('clean child exit without terminal notification is treated as success', () => {
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: true }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1 }
 
   handleChildExitWithoutTerminalNotification(0, state)
 
@@ -318,7 +323,7 @@ test('clean child exit without terminal notification is treated as success', () 
 })
 
 test('nonzero child exit without terminal notification remains an error', () => {
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: true }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1 }
 
   handleChildExitWithoutTerminalNotification(1, state)
 
@@ -327,7 +332,7 @@ test('nonzero child exit without terminal notification remains an error', () => 
 })
 
 test('null child exit without terminal notification remains an error', () => {
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: true }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1 }
 
   handleChildExitWithoutTerminalNotification(null, state)
 
@@ -335,11 +340,11 @@ test('null child exit without terminal notification remains an error', () => {
   assert.equal(state.exitCode, EXIT_ERROR)
 })
 
-// ─── v1 string-matching fallback ────────────────────────────────────────────
+// ─── Notification-driven completion (complements execution_complete) ────────
 
-test('v1 fallback: terminal notification still triggers completion', () => {
+test('notification-driven completion: terminal notification still triggers completion', () => {
   const client = new MockRpcClient()
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: false }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1 }
 
   handleEvent(
     { type: 'extension_ui_request', method: 'notify', id: 'n1', message: 'Auto-mode stopped — all slices complete' },
@@ -351,9 +356,9 @@ test('v1 fallback: terminal notification still triggers completion', () => {
   assert.equal(state.exitCode, EXIT_SUCCESS)
 })
 
-test('v1 fallback: auto-mode complete notification triggers completion', () => {
+test('notification-driven completion: auto-mode complete notification triggers completion', () => {
   const client = new MockRpcClient()
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: false }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1 }
 
   handleEvent(
     { type: 'extension_ui_request', method: 'notify', id: 'n2', message: 'Auto-mode complete — all milestones complete.' },
@@ -365,9 +370,9 @@ test('v1 fallback: auto-mode complete notification triggers completion', () => {
   assert.equal(state.exitCode, EXIT_SUCCESS)
 })
 
-test('v1 fallback: blocked notification sets blocked flag', () => {
+test('notification-driven completion: blocked notification sets blocked flag', () => {
   const client = new MockRpcClient()
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: false }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1 }
 
   handleEvent(
     { type: 'extension_ui_request', method: 'notify', id: 'n1', message: 'Auto-mode stopped (Blocked: plan invalid)' },
@@ -380,9 +385,9 @@ test('v1 fallback: blocked notification sets blocked flag', () => {
   assert.equal(state.exitCode, EXIT_BLOCKED)
 })
 
-test('v1 fallback: pause notification sets blocked flag', () => {
+test('notification-driven completion: pause notification sets blocked flag', () => {
   const client = new MockRpcClient()
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: false }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1 }
 
   handleEvent(
     { type: 'extension_ui_request', method: 'notify', id: 'n1', message: 'Auto-mode paused due to provider error: invalid api key' },
@@ -395,9 +400,9 @@ test('v1 fallback: pause notification sets blocked flag', () => {
   assert.equal(state.exitCode, EXIT_BLOCKED)
 })
 
-test('v1 fallback: manual merge-resolution notification exits blocked', () => {
+test('notification-driven completion: manual merge-resolution notification exits blocked', () => {
   const client = new MockRpcClient()
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: false }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1 }
 
   handleEvent(
     { type: 'extension_ui_request', method: 'notify', id: 'n1', message: 'Survivor-branch finalization for M001 failed: merge conflict. Resolve manually and re-run /gsd auto.' },
@@ -412,7 +417,7 @@ test('v1 fallback: manual merge-resolution notification exits blocked', () => {
 
 test('string-matching fallback works when execution_complete never received', () => {
   const client = new MockRpcClient()
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: false }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1 }
 
   // Simulate a normal session without execution_complete
   handleEvent({ type: 'extension_ui_request', method: 'select', id: 'q1', options: ['option1'] }, state, client)
@@ -578,34 +583,39 @@ test('extension_ui_response with confirmed=true forwards correctly', () => {
 })
 
 // ─── v2 init negotiation ────────────────────────────────────────────────────
+//
+// These exercise the real negotiateV2Protocol from headless-events.ts (not a
+// mirror): the RPC peer is always the same gsd binary, so a refused init means
+// version skew or a dead child, and the run must not continue. Continuing would
+// silently drop execution_complete — the only event that maps a failure status
+// onto a non-zero exit code — so a failed run would exit 0. (#109)
 
-test('v2 init success sets v2Enabled', async () => {
+test('v2 init success reports no error', async () => {
   const client = new MockRpcClient()
-  let v2Enabled = false
-  try {
-    await client.init({ clientId: 'gsd-headless' })
-    v2Enabled = true
-  } catch {
-    // fall back to v1
-  }
+
+  const result = await negotiateV2Protocol(client)
 
   assert.equal(client.initCalled, true)
-  assert.equal(v2Enabled, true)
+  assert.equal(result.error, undefined)
 })
 
-test('v2 init failure falls back gracefully (v1 mode)', async () => {
+test('v2 init failure reports a fatal error naming the cause', async () => {
   const client = new MockRpcClient()
   client.initShouldFail = true
-  let v2Enabled = false
-  try {
-    await client.init({ clientId: 'gsd-headless' })
-    v2Enabled = true
-  } catch {
-    // fall back to v1 — this is expected
-  }
+
+  const result = await negotiateV2Protocol(client)
 
   assert.equal(client.initCalled, true)
-  assert.equal(v2Enabled, false)
+  assert.equal(result.error, 'v2 protocol init failed: v2 init not supported')
+})
+
+test('v2 init rejecting a non-Error value still reports a fatal error', async () => {
+  const client = new MockRpcClient()
+  client.initRejectionValue = 'EPIPE'
+
+  const result = await negotiateV2Protocol(client)
+
+  assert.equal(result.error, 'v2 protocol init failed: EPIPE')
 })
 
 // ─── injector adapter ───────────────────────────────────────────────────────
@@ -660,7 +670,7 @@ test('injector adapter handles multi-select values', () => {
 
 test('execution_complete is ignored for multi-turn commands (auto)', () => {
   const client = new MockRpcClient()
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: true, isMultiTurnCommand: true }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, isMultiTurnCommand: true }
 
   handleEvent({ type: 'execution_complete', status: 'success' }, state, client)
 
@@ -670,7 +680,7 @@ test('execution_complete is ignored for multi-turn commands (auto)', () => {
 
 test('execution_complete is ignored for multi-turn commands even with error status', () => {
   const client = new MockRpcClient()
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: true, isMultiTurnCommand: true }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, isMultiTurnCommand: true }
 
   handleEvent({ type: 'execution_complete', status: 'error' }, state, client)
 
@@ -680,7 +690,7 @@ test('execution_complete is ignored for multi-turn commands even with error stat
 
 test('multi-turn commands still complete via terminal notification', () => {
   const client = new MockRpcClient()
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: true, isMultiTurnCommand: true }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, isMultiTurnCommand: true }
 
   // First, execution_complete fires (should be ignored)
   handleEvent({ type: 'execution_complete', status: 'success' }, state, client)
@@ -698,7 +708,7 @@ test('multi-turn commands still complete via terminal notification', () => {
 
 test('new-milestone auto phase ignores execution_complete until terminal notification', () => {
   const client = new MockRpcClient()
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: true, isMultiTurnCommand: true }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, isMultiTurnCommand: true }
 
   handleEvent({ type: 'execution_complete', status: 'completed' }, state, client)
 
@@ -717,7 +727,7 @@ test('new-milestone auto phase ignores execution_complete until terminal notific
 
 test('multi-turn commands detect blocked via terminal notification', () => {
   const client = new MockRpcClient()
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: true, isMultiTurnCommand: true }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, isMultiTurnCommand: true }
 
   // execution_complete is ignored
   handleEvent({ type: 'execution_complete', status: 'success' }, state, client)
@@ -736,7 +746,7 @@ test('multi-turn commands detect blocked via terminal notification', () => {
 
 test('multi-turn commands detect blocked command blocks as terminal', () => {
   const client = new MockRpcClient()
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: true, isMultiTurnCommand: true }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, isMultiTurnCommand: true }
 
   handleEvent(
     {
@@ -758,7 +768,7 @@ test('multi-turn commands detect blocked command blocks as terminal', () => {
 
 test('non-multi-turn commands still complete on execution_complete', () => {
   const client = new MockRpcClient()
-  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, v2Enabled: true, isMultiTurnCommand: false }
+  const state: EventHandlerState = { completed: false, blocked: false, exitCode: -1, isMultiTurnCommand: false }
 
   handleEvent({ type: 'execution_complete', status: 'success' }, state, client)
 
