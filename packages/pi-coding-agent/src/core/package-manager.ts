@@ -294,6 +294,14 @@ function assertSafeGitArg(value: string, label: string): string {
 	return value;
 }
 
+function assertSafeGitRepo(repo: string): string {
+	const safeRepo = assertSafeGitArg(repo, "repository");
+	if (/\s/u.test(safeRepo)) {
+		throw new Error(`Invalid git repository: ${repo}`);
+	}
+	return safeRepo;
+}
+
 function assertSafeGitRef(ref: string): string {
 	const safeRef = assertSafeGitArg(ref, "ref");
 	if (!/^[A-Za-z0-9._/@+-]+$/u.test(safeRef)) {
@@ -1758,6 +1766,7 @@ export class DefaultPackageManager implements PackageManager {
 	}
 
 	private async installGit(source: GitSource, scope: SourceScope): Promise<void> {
+		const safeRepo = assertSafeGitRepo(source.repo);
 		const targetDir = this.getGitInstallPath(source, scope);
 		if (existsSync(targetDir)) {
 			if (source.ref) {
@@ -1775,7 +1784,7 @@ export class DefaultPackageManager implements PackageManager {
 		}
 		mkdirSync(dirname(targetDir), { recursive: true });
 
-		await this.runCommand("git", ["clone", "--", source.repo, targetDir]);
+		await this.runCommand("git", ["clone", "--", safeRepo, targetDir]);
 		if (source.ref) {
 			await this.runCommand("git", ["checkout", assertSafeGitRef(source.ref)], { cwd: targetDir });
 		}
