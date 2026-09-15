@@ -77,6 +77,22 @@ export interface RefNode {
 	formOwnership?: string;
 }
 
+/**
+ * Describes the snapshot the current ref map came from. Split by consumer:
+ *
+ * - `url`, `version` and `frameContext` are *guard* fields, read by
+ *   validateRefForAction to reject refs from a superseded snapshot.
+ * - the rest are *descriptive*: never read by code, serialized into tool
+ *   `details` for the session record and the TUI. Providers send only a tool
+ *   result's `content` to the model, so these never reach it — the snapshot's
+ *   scope and mode are restated as text by browser_snapshot_refs for that.
+ *
+ * A descriptive field is not a missing guard. Every scope, mode, limit or
+ * interactiveOnly change comes from a browser_snapshot_refs call, which
+ * rewrites the map, the version and this record together — so a ref can never
+ * outlive the scope it was captured under the way it can outlive a frame
+ * selection, which browser_select_frame changes on its own. See #205.
+ */
 export interface RefMetadata {
 	url: string;
 	timestamp: number;
