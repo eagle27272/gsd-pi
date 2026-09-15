@@ -36,6 +36,8 @@ const CI_PR_BLOCKING_MAP = [
     local: 'verify:fast',
     steps: ['bash scripts/ci-fast-gates.sh'],
     enforcement: 'block',
+    allowedIf: "startsWith(github.head_ref, 'mergify/merge-queue/')",
+    note: 'merge-queue branches only (fb199e97)',
   },
   {
     ciJob: 'build-and-test',
