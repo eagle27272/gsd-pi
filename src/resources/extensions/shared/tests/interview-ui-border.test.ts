@@ -18,6 +18,10 @@ const ENTER = "\r";
 const ESC = "\x1b";
 const PAGE_DOWN = "\x1b[6~";
 const PAGE_UP = "\x1b[5~";
+const CTRL_D = "\x04";
+const CTRL_U = "\x15";
+const CTRL_D_KITTY = "\x1b[100;5u";
+const CTRL_U_KITTY = "\x1b[117;5u";
 
 before(() => { initTheme(); });
 
@@ -177,7 +181,7 @@ describe("interview-ui dialog borders", () => {
 		const initial = stripAnsi(widget.render(100).join("\n"));
 		assertFullOuterBorder(widget.render(100), 100);
 		assert.match(initial, /▼ \d+ more/, "bottom scroll indicator should appear when preview overflows");
-		assert.match(initial, /pgup\/pgdn scroll preview/, "footer should hint at preview scrolling");
+		assert.match(initial, /\^u\/\^d scroll preview/, "footer should hint at preview scrolling");
 		assert.doesNotMatch(initial, /▲ \d+ more/, "top indicator should be absent before scrolling");
 
 		// Scroll down: content below is now revealed and a top indicator appears.
@@ -207,7 +211,7 @@ describe("interview-ui dialog borders", () => {
 		const initial = stripAnsi(widget.render(100).join("\n"));
 		assertFullOuterBorder(widget.render(100), 100);
 		assert.match(initial, /▼ \d+ more/, "bottom scroll indicator should appear when options overflow");
-		assert.match(initial, /pgup\/pgdn scroll options/, "footer should hint at options scrolling");
+		assert.match(initial, /\^u\/\^d scroll options/, "footer should hint at options scrolling");
 		assert.doesNotMatch(initial, /\+\d+ lines hidden/, "options overflow should not be a dead-end hidden-lines marker");
 		assert.doesNotMatch(initial, /▲ \d+ more/, "top indicator should be absent before scrolling");
 
@@ -220,5 +224,48 @@ describe("interview-ui dialog borders", () => {
 		widget.handleInput(PAGE_UP);
 		const back = stripAnsi(widget.render(100).join("\n"));
 		assert.doesNotMatch(back, /▲ \d+ more/, "top indicator should disappear after scrolling back to top");
+	});
+
+	// Terminal multiplexers claim PgUp/PgDn for their own scrollback — Herdr
+	// scrolls the pane and never forwards the keys — so the panel must also
+	// answer to a chord that reaches the application.
+	for (const [name, down, up] of [
+		["ctrl+d / ctrl+u (legacy)", CTRL_D, CTRL_U],
+		["ctrl+d / ctrl+u (kitty)", CTRL_D_KITTY, CTRL_U_KITTY],
+	] as const) {
+		it(`scrolls an overflowing preview with ${name}`, async () => {
+			const longPreview = Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join("\n");
+			const widget = await captureInterviewWidget([{
+				...questions[0],
+				options: [
+					{ label: "Web App", description: "Frontend or full-stack", preview: longPreview },
+				],
+			}]);
+
+			const initial = stripAnsi(widget.render(100).join("\n"));
+			assert.doesNotMatch(initial, /▲ \d+ more/, "top indicator should be absent before scrolling");
+
+			widget.handleInput(down);
+			const scrolled = stripAnsi(widget.render(100).join("\n"));
+			assert.match(scrolled, /▲ \d+ more/, "top scroll indicator should appear after scrolling down");
+
+			widget.handleInput(up);
+			const back = stripAnsi(widget.render(100).join("\n"));
+			assert.equal(back, initial, "scrolling back up should restore the original view");
+		});
+	}
+
+	it("hints a scroll chord that survives a multiplexer", async () => {
+		const longPreview = Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join("\n");
+		const widget = await captureInterviewWidget([{
+			...questions[0],
+			options: [
+				{ label: "Web App", description: "Frontend or full-stack", preview: longPreview },
+			],
+		}]);
+
+		const rendered = stripAnsi(widget.render(100).join("\n"));
+		assert.match(rendered, /\^u\/\^d scroll preview/, "footer should hint the multiplexer-safe chord");
+		assert.match(rendered, /▼ \d+ more · \^U\/\^D/, "scroll indicator should name the multiplexer-safe chord");
 	});
 });
