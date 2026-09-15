@@ -2,12 +2,20 @@
 // File Purpose: Coverage for the never-read interface-property dead-code gate.
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { globSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 
-import { analyse, classifyReferences, collectDeclarations, createProgram } from "../lib/iface-props-lib.mjs";
+import { renderBaselineFile, parseBaseline } from "../lib/baseline-ratchet.mjs";
+import {
+  analyse,
+  BASELINE_HEADER,
+  classifyReferences,
+  collectDeclarations,
+  createProgram,
+  DECLARATION_GLOBS,
+} from "../lib/iface-props-lib.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "../..");
 
@@ -414,4 +422,35 @@ export function render(s: StatusLike) { return s.name }`,
   });
 
   assert.deepEqual(keys, []);
+});
+
+// #81's lesson: a gate that is not wired into every runner drifts silently.
+test("the interface-property gate is wired into CI and the local merge-parity scripts", () => {
+  const read = (path) => readFileSync(join(repoRoot, path), "utf8");
+
+  assert.match(read(".github/workflows/ci.yml"), /pnpm run lint:dead-code:props/);
+  assert.match(read("scripts/ci-fast-gates.sh"), /pnpm run lint:dead-code:props/);
+  assert.match(read("scripts/verify-merge.sh"), /pnpm run lint:dead-code:props/);
+});
+
+test("the committed baseline parses and is sorted, so regeneration produces no spurious diff", () => {
+  const text = readFileSync(join(repoRoot, ".config/iface-props-baseline.json"), "utf8");
+
+  assert.equal(renderBaselineFile(BASELINE_HEADER, parseBaseline(text)), text);
+});
+
+test("the baseline holds no findings from the vendored pi-* tree", () => {
+  const text = readFileSync(join(repoRoot, ".config/iface-props-baseline.json"), "utf8");
+  const leaked = parseBaseline(text).filter((key) => key.includes("packages/pi-"));
+
+  assert.deepEqual(leaked, []);
+});
+
+// A glob matching nothing silently exempts the code it was meant to cover.
+test("every declaration glob matches at least one file", () => {
+  const dead = DECLARATION_GLOBS.filter(
+    (pattern) => globSync(pattern, { cwd: repoRoot, nodir: true }).length === 0,
+  );
+
+  assert.deepEqual(dead, []);
 });
