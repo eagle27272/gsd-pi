@@ -8,6 +8,7 @@
 import { accessSync, constants, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
+import { isTruthy } from "../shared/rtk-shared.js";
 
 export const CODEGRAPH_DISABLED_ENV = "GSD_CODEGRAPH_DISABLED";
 export const CODEGRAPH_PATH_ENV = "GSD_CODEGRAPH_PATH";
@@ -45,11 +46,6 @@ function defaultIsExecutable(path: string): boolean {
   } catch {
     return false;
   }
-}
-
-function isDisabled(value: string | undefined): boolean {
-  const v = value?.trim().toLowerCase();
-  return Boolean(v) && v !== "0" && v !== "false";
 }
 
 /** True when `projectRoot` directly contains a .codegraph/ index. */
@@ -102,7 +98,7 @@ export function resolveBinary(
 /** The whole gate. Null means this extension registers nothing at all. */
 export function detectCodegraph(opts: DetectOptions = {}): CodegraphEnv | null {
   const env = opts.env ?? process.env;
-  if (isDisabled(env[CODEGRAPH_DISABLED_ENV])) return null;
+  if (isTruthy(env[CODEGRAPH_DISABLED_ENV])) return null;
   const projectRoot = findIndexRoot(opts.cwd ?? process.cwd(), {
     home: opts.home,
     isDirectory: opts.isDirectory,

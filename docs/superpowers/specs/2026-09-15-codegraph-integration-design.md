@@ -143,6 +143,7 @@ machinery.
 | Nonzero exit | `isError` carrying the tail of codegraph's stderr. |
 | Timeout or abort | `isError` naming the timeout; the child is killed. |
 | Stale lock file | Codegraph prints its own guidance; passed through unmodified. |
+| In-tree index stale (no sync daemon, no freshness probe available) | Not detected; accepted risk, mitigated by prompt guidance to re-read a file before editing it. |
 
 Nothing in the extension throws into the agent loop, and nothing writes to the
 repository, so no failure here can corrupt a session or a working tree.

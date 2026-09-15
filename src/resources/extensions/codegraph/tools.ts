@@ -17,12 +17,10 @@ import {
   buildExploreArgs,
   buildNodeArgs,
   type CodegraphRunner,
-  type ExploreParams,
-  type NodeParams,
 } from "./cli.js";
 import { hasIndex, type CodegraphEnv } from "./detect.js";
 
-export interface CodegraphDetails {
+interface CodegraphDetails {
   command: "explore" | "node";
   projectRoot: string;
   exitCode: number | null;
@@ -100,7 +98,7 @@ export function createExploreTool(deps: CodegraphToolDeps) {
     promptSnippet: "Explore code through the CodeGraph symbol index",
     promptGuidelines: [
       "This project has a CodeGraph index. Reach for codegraph_explore before grep or find when you need to locate or understand code.",
-      "Name a file or symbol in the query to get its current line-numbered source; treat source returned this way as already read.",
+      "Name a file or symbol in the query to get its line-numbered source; treat it as already read, but the index can lag the working tree, so re-read a file before editing it.",
       "Use grep for non-code text — log lines, config values, strings in data files — where a symbol graph cannot help.",
     ],
     parameters: Type.Object({
@@ -117,7 +115,7 @@ export function createExploreTool(deps: CodegraphToolDeps) {
       ),
     }),
     async execute(_toolCallId, params, signal) {
-      return runTool(deps, "explore", buildExploreArgs(deps.env.projectRoot, params as ExploreParams), signal);
+      return runTool(deps, "explore", buildExploreArgs(deps.env.projectRoot, params), signal);
     },
   });
 }
@@ -133,7 +131,7 @@ export function createNodeTool(deps: CodegraphToolDeps) {
     promptSnippet: "Read a symbol or file, with dependents, from the CodeGraph index",
     promptGuidelines: [
       "Prefer codegraph_node over read when you want one symbol and its callers rather than a whole file.",
-      "File mode returns the same line-numbered content as read, plus the files that depend on it; treat the file as read.",
+      "File mode returns the same line-numbered content as read, plus the files that depend on it; treat it as read, but re-read before editing since the index can lag the working tree.",
     ],
     parameters: Type.Object({
       name: Type.Optional(Type.String({ description: "Symbol name, e.g. 'detectHerdrEnv'" })),
@@ -150,15 +148,14 @@ export function createNodeTool(deps: CodegraphToolDeps) {
       ),
     }),
     async execute(_toolCallId, params, signal) {
-      const p = params as NodeParams;
-      if (!p.name && !p.file) {
+      if (!params.name && !params.file) {
         return errorResult(
           "node",
           deps.env.projectRoot,
           "codegraph_node needs `name` for symbol mode or `file` for file mode.",
         );
       }
-      return runTool(deps, "node", buildNodeArgs(deps.env.projectRoot, p), signal);
+      return runTool(deps, "node", buildNodeArgs(deps.env.projectRoot, params), signal);
     },
   });
 }

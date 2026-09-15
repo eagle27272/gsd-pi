@@ -8,12 +8,12 @@ import { execFile } from "node:child_process";
 export const CODEGRAPH_TIMEOUT_MS = 60_000;
 const MAX_BUFFER = 8 * 1024 * 1024;
 
-export interface ExploreParams {
+interface ExploreParams {
   query: string;
   maxFiles?: number;
 }
 
-export interface NodeParams {
+interface NodeParams {
   name?: string;
   file?: string;
   offset?: number;
