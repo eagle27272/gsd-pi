@@ -71,12 +71,12 @@ same-stem test file.
 **`fast-gates`** — every PR to `main`. Installs dependencies only (no build, no
 Rust toolchain) and runs `scripts/ci-fast-gates.sh`: secret / base64 /
 prompt-injection scans, skill references, PR test-policy checks, the three
-audits, `verify:pi-boundary`, actionlint, and the whole `scripts/__tests__`
-suite.
+audits, `verify:pi-boundary`, `lint:dead-code`, actionlint, and the whole
+`scripts/__tests__` suite.
 
 **`build-and-test`** — merge-queue branches only, in one job to avoid repeated
-checkout/setup/install overhead: `build:core` → `typecheck:extensions` →
-`build:native:test` → `test:unit`.
+checkout/setup/install overhead: `lint:dead-code` → `build:core` →
+`typecheck:extensions` → `build:native:test` → `test:unit`.
 
 `build:native:test` is not an optimisation: `test:unit` drives fault injection
 through the native engine, and the pinned `@opengsd/engine-*` binary lags the
