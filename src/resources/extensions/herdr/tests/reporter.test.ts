@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { HerdrReporter, __resetHerdrSeqForTest } from "../reporter.ts";
 import type { HerdrEnv } from "../env.ts";
 
-const env: HerdrEnv = { paneId: "w1:p2", binPath: "/bin/herdr" };
+const env: HerdrEnv = { paneId: "w1:p2", binPath: "/bin/herdr", socketPath: "/tmp/herdr.sock" };
 
 // --seq is a process-global counter shared by every reporter instance; reset it
 // before each test so the tests that assert exact --seq values stay stable.
@@ -109,6 +109,8 @@ test("a throwing runner is swallowed", () => {
 });
 
 test("the default runner does not spawn for a bogus bin (smoke: no throw)", () => {
-  const r = new HerdrReporter({ env: { paneId: "w1:p2", binPath: "/nonexistent/herdr-xyz" } });
+  const r = new HerdrReporter({
+    env: { paneId: "w1:p2", binPath: "/nonexistent/herdr-xyz", socketPath: "/tmp/herdr.sock" },
+  });
   assert.doesNotThrow(() => r.reportState("working"));
 });
