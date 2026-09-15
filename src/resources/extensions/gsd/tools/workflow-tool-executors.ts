@@ -84,6 +84,7 @@ import {
   prepareMilestoneSubjectiveUat,
   type AnswerMilestoneSubjectiveUatInput,
   type PrepareMilestoneSubjectiveUatInput,
+  type PrepareMilestoneSubjectiveUatReceipt,
 } from "../milestone-subjective-uat-domain-operation.js";
 import { logError, logWarning } from "../workflow-logger.js";
 import { invalidateStateCache } from "../state.js";
@@ -1707,6 +1708,38 @@ export async function executeValidateMilestone(
   }
 }
 
+// The MCP bridge maps `details` to `structuredContent`, which no orchestrating
+// agent reads, so any identifier a follow-up tool call needs has to appear in
+// the text block as well. `gsd_answer_milestone_subjective_uat` requires the
+// three binding IDs plus a `verbatimResponse` that exactly equals the selected
+// option's label, and none of them are derivable from the caller's own
+// arguments or readable from disk. See #220.
+function formatPreparedSubjectiveUat(
+  result: PrepareMilestoneSubjectiveUatReceipt,
+  focusedPrompt: string,
+): string {
+  const options = result.options.map((option) =>
+    [
+      `- optionId: ${option.optionId}`,
+      `  disposition: ${option.disposition}${option.recommended ? " (recommended)" : ""}`,
+      `  verbatimResponse: ${option.label}`,
+      `  ${option.description}`,
+    ].join("\n")
+  );
+  return [
+    `Prepared subjective UAT for ${result.milestoneId}: ${focusedPrompt}`,
+    "",
+    "Ask the user this question, then call gsd_answer_milestone_subjective_uat with:",
+    `  criterionId: ${result.criterionId}`,
+    `  questionId: ${result.questionId}`,
+    `  interactionId: ${result.interactionId}`,
+    `  testedSourceRevision: ${result.testedSourceRevision}`,
+    "",
+    "Pick exactly one option. `verbatimResponse` must be that option's label, character for character:",
+    ...options,
+  ].join("\n");
+}
+
 export async function executePrepareMilestoneSubjectiveUat(
   params: PrepareMilestoneSubjectiveUatExecutorParams,
   basePath: string,
@@ -1724,7 +1757,7 @@ export async function executePrepareMilestoneSubjectiveUat(
     return {
       content: [{
         type: "text",
-        text: `Prepared subjective UAT for ${result.milestoneId}: ${params.focusedPrompt}`,
+        text: formatPreparedSubjectiveUat(result, params.focusedPrompt),
       }],
       details: {
         operation: "prepare_milestone_subjective_uat",
@@ -1758,7 +1791,12 @@ export async function executeAnswerMilestoneSubjectiveUat(
     return {
       content: [{
         type: "text",
-        text: `Recorded the authenticated subjective UAT response as ${result.disposition}.`,
+        text: [
+          `Recorded the authenticated subjective UAT response as ${result.disposition}.`,
+          `  criterionId: ${result.criterionId}`,
+          `  questionId: ${result.questionId}`,
+          `  humanAcceptanceId: ${result.humanAcceptanceId}`,
+        ].join("\n"),
       }],
       details: {
         operation: "answer_milestone_subjective_uat",

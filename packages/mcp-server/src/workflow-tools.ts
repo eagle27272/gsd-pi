@@ -3433,7 +3433,9 @@ export function registerWorkflowTools(
 
   server.tool(
     "gsd_answer_milestone_subjective_uat",
-    "Record the user's actual response to a prepared subjective Milestone UAT question using authenticated MCP session identity.",
+    "Record the user's actual response to a prepared subjective Milestone UAT question using authenticated MCP session identity. " +
+      "criterionId, questionId, interactionId, selectedOptionId, and testedSourceRevision must be copied from the " +
+      "gsd_prepare_milestone_subjective_uat result; verbatimResponse must be the selected option's label character for character.",
     answerMilestoneSubjectiveUatParams,
     async (args: Record<string, unknown>, extra?: WorkflowMcpRequestExtra) => {
       const parsed = parseWorkflowArgs(answerMilestoneSubjectiveUatSchema, args);
