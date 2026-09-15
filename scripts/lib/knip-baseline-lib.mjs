@@ -2,6 +2,12 @@
  * Knip dead-code baseline: flatten a knip JSON report into stable keys and
  * diff those keys against a committed snapshot.
  */
+import {
+  diffAgainstBaseline,
+  exitCodeForDiff,
+  parseBaseline as parseBaselineText,
+  renderBaselineFile as renderBaseline,
+} from './baseline-ratchet.mjs';
 
 // Must stay in step with the `include` list in knip.jsonc. Anything else in a
 // report row is not a finding: knip's JSON reporter also attaches `file`, and
@@ -70,38 +76,17 @@ export function parseKnipReport({ status, stdout, stderr }) {
   }
 }
 
-export function parseBaseline(text) {
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch (error) {
-    throw new Error(`knip baseline is not valid JSON: ${error.message}`);
-  }
-  const findings = parsed?.findings;
-  if (!Array.isArray(findings) || findings.some((key) => typeof key !== 'string')) {
-    throw new Error('knip baseline must hold a `findings` array of strings');
-  }
-  return findings;
-}
-
-export function diffAgainstBaseline(current, baseline) {
-  const currentSet = new Set(current);
-  const baselineSet = new Set(baseline);
-  return {
-    added: current.filter((key) => !baselineSet.has(key)).sort(),
-    resolved: baseline.filter((key) => !currentSet.has(key)).sort(),
-  };
-}
-
 const BASELINE_HEADER =
   'Accepted dead-code findings as of the knip rollout. Never add to this list by ' +
   'hand: delete the dead code, or regenerate with `pnpm run lint:dead-code:update` ' +
   'when a finding moves for a legitimate reason. See docs/dev/dead-code-lint.md.';
 
-export function renderBaselineFile(keys) {
-  return `${JSON.stringify({ '//': BASELINE_HEADER, findings: [...keys].sort() }, null, 2)}\n`;
+export { diffAgainstBaseline, exitCodeForDiff };
+
+export function parseBaseline(text) {
+  return parseBaselineText(text, 'knip baseline');
 }
 
-export function exitCodeForDiff(diff) {
-  return diff.added.length > 0 ? 1 : 0;
+export function renderBaselineFile(keys) {
+  return renderBaseline(BASELINE_HEADER, keys);
 }
