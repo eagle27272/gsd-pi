@@ -66,6 +66,9 @@ node scripts/audit-test-matrix.mjs --strict
 echo "── pi boundary ──"
 pnpm run verify:pi-boundary
 
+echo "── dead code (knip baseline ratchet) ──"
+pnpm run lint:dead-code
+
 echo "── actionlint (workflow static analysis) ──"
 # The fast-gates job installs actionlint before calling this script, so the
 # gate blocks there. Locally it runs only when the binary happens to be

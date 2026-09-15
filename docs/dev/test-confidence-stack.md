@@ -100,6 +100,7 @@ Compiled package tests use Node's `--test-force-exit` so leaked handles in one p
 - `scripts/__tests__/`
 - `audit:test-gaps --strict-unwired`
 - `audit:test-matrix --strict`
+- `lint:dead-code` — knip against `.config/knip-baseline.json`; see [dead-code-lint.md](dead-code-lint.md)
 
 ### Coverage (local only)
 
