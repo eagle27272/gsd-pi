@@ -2,7 +2,7 @@
 // the real workflow and merge-queue config, not just asserted in prose.
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -307,4 +307,46 @@ test("ciDriftForRoot reports drift against the real repo when the map is wrong",
   });
   assert.ok(issues.some((i) => /no-such-job/.test(i)), issues.join("\n"));
   assert.ok(issues.some((i) => /also-missing/.test(i)), issues.join("\n"));
+});
+
+// The CI map above is checked against the workflows, but the prose docs are
+// where people actually look. docs/dev/ci-cd-pipeline.md spent months
+// describing workflows commit 854209ad had deleted; these two guards make that
+// failure mode loud instead of silent.
+
+const CI_DOCS = ["docs/dev/ci-cd-pipeline.md", "docs/dev/test-confidence-stack.md"];
+
+// Not workflows, so a backticked mention of either is not a claim about
+// .github/workflows/.
+const NON_WORKFLOW_YAML = new Set(["dependabot.yml", ".mergify.yml"]);
+
+test("CI docs do not reference workflow files that are not on disk", () => {
+  const onDisk = new Set(Object.keys(readWorkflowSources(ROOT)));
+
+  for (const doc of CI_DOCS) {
+    const text = readFileSync(join(ROOT, doc), "utf8");
+    // Only bare backticked filenames count as a claim that the workflow
+    // exists; a full path or an unquoted mention of a deleted one does not.
+    for (const [, name] of text.matchAll(/`([a-z0-9-]+\.ya?ml)`/g)) {
+      if (NON_WORKFLOW_YAML.has(name)) continue;
+      assert.ok(
+        onDisk.has(name),
+        `${doc} references workflow '${name}', which is not in .github/workflows/`,
+      );
+    }
+  }
+});
+
+test("CI docs do not call something a job unless a workflow defines it", () => {
+  const defined = new Set(parseWorkflowJobs(readWorkflowSources(ROOT)).map((job) => job.id));
+
+  for (const doc of CI_DOCS) {
+    const text = readFileSync(join(ROOT, doc), "utf8");
+    for (const [, name] of text.matchAll(/`([a-z0-9-]+)`\s+job\b/g)) {
+      assert.ok(
+        defined.has(name),
+        `${doc} calls '${name}' a job, but no workflow defines it`,
+      );
+    }
+  }
 });
