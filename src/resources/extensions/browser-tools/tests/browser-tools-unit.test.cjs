@@ -811,7 +811,7 @@ describe("getActiveFrameContext", () => {
 
 const PAGE_URL = "https://example.test/app";
 
-function seedSnapshot({ version = 1, url = PAGE_URL, frame = null } = {}) {
+function seedSnapshot({ version = 1, url = PAGE_URL, frame = null, selectorScope, mode } = {}) {
 	setRefVersion(version);
 	setActiveFrame(frame);
 	setRefSnapshotFrame(getActiveSubFrame());
@@ -832,10 +832,12 @@ function seedSnapshot({ version = 1, url = PAGE_URL, frame = null } = {}) {
 	setRefMetadata({
 		url,
 		timestamp: Date.now(),
+		selectorScope,
 		interactiveOnly: true,
 		limit: 40,
 		version,
 		frameContext,
+		mode,
 	});
 }
 
@@ -942,6 +944,54 @@ describe("validateRefForAction", () => {
 		setActiveFrame(checkout);
 		const result = validateRefForAction(parseRef("@v1:e1"), PAGE_URL);
 		assert.equal(result.ok, true);
+	});
+
+	// RefMetadata.selectorScope and .mode are descriptive, not guards (#205).
+	// Unlike the active frame, a scope cannot drift away from the snapshot it
+	// describes: changing it means calling browser_snapshot_refs again, which
+	// replaces the ref map and bumps the version in the same write. These pin
+	// that split, so adding a scope comparison to the guard has to be deliberate.
+	it("accepts a narrowly scoped ref — scope takes no part in staleness", () => {
+		seedSnapshot({ selectorScope: "#modal", mode: "dialog" });
+		const result = validateRefForAction(parseRef("@v1:e1"), PAGE_URL);
+		assert.equal(result.ok, true);
+		assert.equal(result.node.ref, "e1");
+	});
+
+	it("rejects a re-scoped snapshot's superseded refs on version, not scope", () => {
+		seedSnapshot({ version: 1, selectorScope: "#modal" });
+		// Re-snapshotting under a wider scope is what a scope change looks like.
+		seedSnapshot({ version: 2, selectorScope: undefined });
+		const result = validateRefForAction(parseRef("@v1:e1"), PAGE_URL);
+		assert.equal(result.ok, false);
+		assert.equal(result.details.error, "ref_stale");
+		assert.equal(result.details.expectedVersion, 2);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// state.ts — RefMetadata descriptive payload (#205)
+// ---------------------------------------------------------------------------
+
+describe("RefMetadata descriptive fields", () => {
+	beforeEach(() => resetAllState());
+
+	// These reach the session record and the TUI through a tool result's
+	// `details`, never the model, and no code reads them — so nothing else would
+	// fail if one were dropped from the snapshot write.
+	it("survives on the stored record for tool details", () => {
+		seedSnapshot({ selectorScope: "#modal", mode: "dialog" });
+		const metadata = getRefMetadata();
+		assert.equal(metadata.selectorScope, "#modal");
+		assert.equal(metadata.mode, "dialog");
+		assert.equal(metadata.interactiveOnly, true);
+		assert.equal(metadata.limit, 40);
+		assert.equal(typeof metadata.timestamp, "number");
+	});
+
+	it("records an unscoped whole-page snapshot as undefined", () => {
+		seedSnapshot();
+		assert.equal(getRefMetadata().selectorScope, undefined);
 	});
 });
 
