@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 
-import { collectDeclarations, createProgram } from "../lib/iface-props-lib.mjs";
+import { classifyReferences, collectDeclarations, createProgram } from "../lib/iface-props-lib.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "../..");
 
@@ -109,4 +109,120 @@ test("collectDeclarations ignores methods and index signatures, which are not pr
   });
 
   assert.deepEqual(keys, ["writeOnly|a.ts|A.kept"]);
+});
+
+// Classify one fixture and report, per declared property name, whether the
+// property was read anywhere and whether this declaration was written.
+function classify(files) {
+  return withFixture(files, ({ program, checker, dir }) => {
+    const declarations = collectDeclarations(program, checker, () => true, dir);
+    const { readNames, writeSymbols } = classifyReferences(program, checker);
+    const result = {};
+    for (const [symbol, info] of declarations) {
+      result[`${info.owner}.${info.name}`] = {
+        read: readNames.has(info.name),
+        written: writeSymbols.has(symbol),
+      };
+    }
+    return result;
+  });
+}
+
+test("classifyReferences treats a property access as a read", () => {
+  const seen = classify({
+    "a.ts": `export interface A { x: string }
+export function f(a: A) { return a.x }`,
+  });
+
+  assert.deepEqual(seen["A.x"], { read: true, written: false });
+});
+
+test("classifyReferences treats assignment to a property access as a write", () => {
+  const seen = classify({
+    "a.ts": `export interface A { x: string }
+export function f(a: A) { a.x = "v" }`,
+  });
+
+  assert.deepEqual(seen["A.x"], { read: false, written: true });
+});
+
+// `+=` and `++` load the old value before storing, so they are reads too.
+test("classifyReferences treats compound assignment as a read", () => {
+  const seen = classify({
+    "a.ts": `export interface A { n: number }
+export function f(a: A) { a.n += 1 }`,
+  });
+
+  assert.equal(seen["A.n"].read, true);
+});
+
+test("classifyReferences treats an increment as a read", () => {
+  const seen = classify({
+    "a.ts": `export interface A { n: number }
+export function f(a: A) { a.n++ }`,
+  });
+
+  assert.equal(seen["A.n"].read, true);
+});
+
+// getSymbolAtLocation on an object-literal key returns the literal's own
+// symbol, not the interface property it satisfies. Without the contextual-type
+// bridge this write is invisible and the property reads as untouched.
+test("classifyReferences bridges an object-literal key to the interface it satisfies", () => {
+  const seen = classify({
+    "a.ts": `export interface A { x: string }
+export function make(): A { return { x: "v" } }`,
+  });
+
+  assert.deepEqual(seen["A.x"], { read: false, written: true });
+});
+
+test("classifyReferences bridges a shorthand object-literal key", () => {
+  const seen = classify({
+    "a.ts": `export interface A { x: string }
+export function make(x: string): A { return { x } }`,
+  });
+
+  assert.equal(seen["A.x"].written, true);
+});
+
+test("classifyReferences treats destructuring as a read", () => {
+  const seen = classify({
+    "a.ts": `export interface A { x: string }
+export function f(a: A) { const { x } = a; return x }`,
+  });
+
+  assert.equal(seen["A.x"].read, true);
+});
+
+test("classifyReferences treats string-literal element access as a read", () => {
+  const seen = classify({
+    "a.ts": `export interface A { x: string }
+export function f(a: A) { return a["x"] }`,
+  });
+
+  assert.equal(seen["A.x"].read, true);
+});
+
+// A spread propagates every property onward invisibly. Under-reporting there
+// is far cheaper than a false positive.
+test("classifyReferences treats every property of a spread type as read", () => {
+  const seen = classify({
+    "a.ts": `export interface A { x: string; y: string }
+export function copy(a: A) { return { ...a } }`,
+  });
+
+  assert.equal(seen["A.x"].read, true);
+  assert.equal(seen["A.y"].read, true);
+});
+
+test("classifyReferences links a key satisfying a union to both constituents", () => {
+  const seen = classify({
+    "a.ts": `export interface A { tag: string; a: number }
+export interface B { tag: string; b: number }
+export function make(): A | B { return { tag: "t", a: 1 } }`,
+  });
+
+  assert.equal(seen["A.tag"].written, true);
+  assert.equal(seen["B.tag"].written, true);
 });

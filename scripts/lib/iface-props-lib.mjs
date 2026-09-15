@@ -104,3 +104,80 @@ export function collectDeclarations(program, checker, isFirstParty, root) {
 
   return declarations;
 }
+
+// `=` stores without loading. Every other assignment operator, and ++/--, reads
+// the old value first.
+function isPlainAssignmentTarget(node) {
+  return (
+    ts.isBinaryExpression(node.parent) &&
+    node.parent.left === node &&
+    node.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
+  );
+}
+
+function rootsOf(checker, symbol) {
+  return symbol ? [symbol, ...(checker.getRootSymbols(symbol) ?? [])] : [];
+}
+
+// Resolve a property name against a type, descending into unions and
+// intersections so a key satisfying `A | B` links to the declaration in both.
+function propertiesOfType(checker, type, name) {
+  if (!type) return [];
+  const found = [];
+  const direct = checker.getPropertyOfType(type, name);
+  if (direct) found.push(direct);
+  if (type.isUnionOrIntersection?.()) {
+    for (const constituent of type.types) {
+      const property = checker.getPropertyOfType(constituent, name);
+      if (property) found.push(property);
+    }
+  }
+  return found.flatMap((symbol) => rootsOf(checker, symbol));
+}
+
+export function classifyReferences(program, checker) {
+  const readNames = new Set();
+  const writeSymbols = new Set();
+
+  const markRead = (symbols) => {
+    for (const symbol of symbols) readNames.add(symbol.getName());
+  };
+  const markWritten = (symbols) => {
+    for (const symbol of symbols) writeSymbols.add(symbol);
+  };
+
+  for (const sourceFile of program.getSourceFiles()) {
+    if (sourceFile.isDeclarationFile) continue;
+
+    const visit = (node) => {
+      if (ts.isPropertyAccessExpression(node)) {
+        const symbols = rootsOf(checker, checker.getSymbolAtLocation(node.name));
+        if (isPlainAssignmentTarget(node)) markWritten(symbols);
+        else markRead(symbols);
+      } else if (
+        ts.isElementAccessExpression(node) &&
+        node.argumentExpression &&
+        ts.isStringLiteralLike(node.argumentExpression)
+      ) {
+        const type = checker.getTypeAtLocation(node.expression);
+        markRead(propertiesOfType(checker, type, node.argumentExpression.text));
+      } else if (
+        (ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node)) &&
+        ts.isObjectLiteralExpression(node.parent)
+      ) {
+        const contextual = checker.getContextualType(node.parent);
+        markWritten(propertiesOfType(checker, contextual, node.name.text));
+      } else if (ts.isBindingElement(node) && ts.isObjectBindingPattern(node.parent)) {
+        const type = checker.getTypeAtLocation(node.parent);
+        markRead(propertiesOfType(checker, type, (node.propertyName ?? node.name).getText()));
+      } else if (ts.isSpreadAssignment(node) || ts.isSpreadElement(node)) {
+        const type = checker.getTypeAtLocation(node.expression);
+        if (type) markRead(checker.getPropertiesOfType(type) ?? []);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+  }
+
+  return { readNames, writeSymbols };
+}
