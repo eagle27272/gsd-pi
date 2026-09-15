@@ -9,7 +9,10 @@ import { createTaskVerificationRecoverySchemaV38 } from "./db-task-verification-
 import { createTaskRecoveryCurrentHeadSchemaV39 } from "./db-task-recovery-current-head-schema.js";
 import { createSliceCancellationSchemaV40 } from "./db-slice-cancellation-schema.js";
 import { createSliceCompletionSchemaV41 } from "./db-slice-completion-schema.js";
-import { createMilestoneValidationSchemaV42 } from "./db-milestone-validation-schema.js";
+import {
+  createMilestoneValidationSchemaV42,
+  createMilestoneValidationVerdictScopeSchemaV50,
+} from "./db-milestone-validation-schema.js";
 import { createMilestoneCompletionSchemaV43 } from "./db-milestone-completion-schema.js";
 import { createMilestoneReopenSchemaV44 } from "./db-milestone-reopen-schema.js";
 import { createCanonicalFoundationSchemaV31 } from "./db-canonical-foundation-schema.js";
@@ -590,4 +593,8 @@ export function applyMigrationV49MilestoneHorizontalChecklist(db: DbAdapter): vo
     "horizontal_checklist",
     "ALTER TABLE milestones ADD COLUMN horizontal_checklist TEXT NOT NULL DEFAULT '[]'",
   );
+}
+
+export function applyMigrationV50MilestoneValidationVerdictScope(db: DbAdapter): void {
+  createMilestoneValidationVerdictScopeSchemaV50(db);
 }

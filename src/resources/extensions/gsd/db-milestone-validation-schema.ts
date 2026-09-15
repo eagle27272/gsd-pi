@@ -122,3 +122,77 @@ export function createMilestoneValidationSchemaV42(db: DbAdapter): void {
     END;
   `);
 }
+
+/**
+ * V50 — per-class Technical Verdict scope under a non-passing Milestone
+ * verdict (#223). V42 required every `pass` Technical Verdict to sit on a
+ * `succeeded` Attempt Result. A Milestone validation settles one Attempt whose
+ * outcome mirrors the *aggregate* verdict, so a `needs-attention` or
+ * `needs-remediation` Milestone could never record that an individual planned
+ * verification class passed — and because planned classes also *require*
+ * current structured evidence, no payload could satisfy both rules at once.
+ *
+ * The aggregate criterion keeps the original rule: a passing Milestone
+ * validation still demands a succeeded Attempt Result, which closeout
+ * re-verifies. Only the per-class criteria of a `milestone.validate` operation
+ * are exempted, so "Contract passed, the Milestone still needs attention" is
+ * recordable. Closeout remains gated on every current criterion passing, and
+ * the aggregate criterion is non-passing for every non-passing Milestone
+ * verdict, so this does not widen what can be closed out.
+ */
+export function createMilestoneValidationVerdictScopeSchemaV50(db: DbAdapter): void {
+  db.exec(`
+    DROP TRIGGER IF EXISTS trg_workflow_technical_verdict_scope;
+    CREATE TRIGGER trg_workflow_technical_verdict_scope
+    BEFORE INSERT ON workflow_technical_verdicts
+    WHEN NOT EXISTS (
+      SELECT 1
+      FROM workflow_acceptance_criteria criterion
+      JOIN workflow_execution_attempts attempt ON attempt.attempt_id = NEW.attempt_id
+      JOIN workflow_attempt_results result ON result.attempt_id = attempt.attempt_id
+      WHERE criterion.criterion_id = NEW.criterion_id
+        AND criterion.project_id = NEW.project_id
+        AND criterion.lifecycle_id = NEW.lifecycle_id
+        AND criterion.criterion_kind = 'technical'
+        AND criterion.project_revision <= NEW.project_revision
+        AND criterion.authority_epoch <= NEW.authority_epoch
+        AND NOT EXISTS (
+          SELECT 1 FROM workflow_acceptance_criteria successor
+          WHERE successor.supersedes_criterion_id = criterion.criterion_id
+        )
+        AND attempt.project_id = NEW.project_id
+        AND attempt.lifecycle_id = NEW.lifecycle_id
+        AND attempt.attempt_state = 'settled'
+        AND result.project_revision <= NEW.project_revision
+        AND result.authority_epoch <= NEW.authority_epoch
+        AND (
+          result.project_revision < NEW.project_revision OR
+          (
+            result.operation_id = NEW.operation_id AND
+            EXISTS (
+              SELECT 1 FROM workflow_operations operation
+              WHERE operation.operation_id = NEW.operation_id
+                AND operation.project_id = NEW.project_id
+                AND operation.operation_type = 'milestone.validate'
+            )
+          )
+        )
+        AND (
+          NEW.verdict != 'pass' OR
+          result.outcome = 'succeeded' OR
+          (
+            criterion.criterion_key != 'milestone-validation:aggregate' AND
+            EXISTS (
+              SELECT 1 FROM workflow_operations operation
+              WHERE operation.operation_id = NEW.operation_id
+                AND operation.project_id = NEW.project_id
+                AND operation.operation_type = 'milestone.validate'
+            )
+          )
+        )
+    )
+    BEGIN
+      SELECT RAISE(ABORT, 'technical verdict requires the current criterion and matching settled attempt');
+    END;
+  `);
+}
