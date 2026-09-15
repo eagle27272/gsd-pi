@@ -39,7 +39,13 @@ const CI_PR_BLOCKING_MAP = [
   {
     ciJob: 'build-and-test',
     local: 'verify:merge',
-    steps: ['build:core', 'typecheck:extensions', 'build:native:test', 'test:unit'],
+    steps: [
+      'lint:dead-code',
+      'build:core',
+      'typecheck:extensions',
+      'build:native:test',
+      'test:unit',
+    ],
     enforcement: 'block',
     allowedIf: "startsWith(github.head_ref, 'mergify/merge-queue/')",
     note: 'merge-queue branches only; verify:merge covers more, but not test:live-workflow:unit',
