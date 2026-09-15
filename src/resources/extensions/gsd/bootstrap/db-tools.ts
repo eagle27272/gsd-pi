@@ -2025,6 +2025,7 @@ export function registerDbTools(pi: ExtensionAPI): void {
 		promptGuidelines: [
 			"Use only when acceptance genuinely requires human judgment and cannot be decided by executable evidence.",
 			"After preparation, present the returned options to the user; do not fabricate or infer their answer.",
+			"The result text carries the criterionId, questionId, interactionId, and option IDs that gsd_answer_milestone_subjective_uat requires; keep them for that call.",
 		],
 		parameters: Type.Object({
 			milestoneId: Type.String({ minLength: 1 }),
@@ -2069,7 +2070,9 @@ export function registerDbTools(pi: ExtensionAPI): void {
 		promptSnippet: "Record the user's actual subjective Milestone UAT answer",
 		promptGuidelines: [
 			"Call only after the user explicitly chooses one of the prepared options.",
-			"Pass the user's response verbatim; actor identity is derived from the active session and is not a tool argument.",
+			"Copy criterionId, questionId, interactionId, selectedOptionId, and testedSourceRevision from the gsd_prepare_milestone_subjective_uat result.",
+			"verbatimResponse must be the selected option's label character for character, not a paraphrase of what the user said.",
+			"Actor identity is derived from the active session and is not a tool argument.",
 		],
 		parameters: Type.Object({
 			criterionId: Type.String({ minLength: 1 }),
