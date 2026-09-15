@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   ACKNOWLEDGED_UNRUN_TEST_PATHS,
   ACKNOWLEDGED_UNRUN_RUNNERS,
+  INTEGRATION_EXTENSION_GLOBS,
   UNIT_EXTENSION_GLOBS,
   VENDORED_PI_PACKAGE_DIRS,
   acknowledgedUnrunReason,
@@ -75,17 +76,39 @@ test("packages runner stays inside the default npm test", () => {
   assert.equal(isReachableTest("packages"), true);
 });
 
-test("UNIT_EXTENSION_GLOBS matches the extensions the test:unit:compiled script runs", () => {
+// test:unit:compiled entries come in two shapes: a wildcard over an extension's
+// whole tests/ dir, and a single named file promoted out of an otherwise
+// integration-only extension (browser-tools/har-session-flush, see #131). Only
+// the first shape says "this extension is unit-tested", so the two are split.
+function unitCompiledExtensionEntries() {
   const command = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).scripts[
     "test:unit:compiled"
   ];
-  const wired = new Set(
-    [...command.matchAll(/dist-test\/src\/resources\/extensions\/([^/]+)\/tests\//g)].map(
-      (m) => m[1],
-    ),
-  );
-  assert.ok(wired.size > 0, "expected test:unit:compiled to glob extension test dirs");
-  assert.deepEqual([...UNIT_EXTENSION_GLOBS].sort(), [...wired].sort());
+  const dirGlobs = new Set();
+  const namedFiles = new Map();
+  for (const [, ext, tail] of command.matchAll(
+    /dist-test\/src\/resources\/extensions\/([^/]+)\/tests\/([^"\s]+)/g,
+  )) {
+    if (tail.startsWith("*")) dirGlobs.add(ext);
+    else namedFiles.set(tail, ext);
+  }
+  return { dirGlobs, namedFiles };
+}
+
+test("UNIT_EXTENSION_GLOBS matches the extension test dirs test:unit:compiled globs", () => {
+  const { dirGlobs } = unitCompiledExtensionEntries();
+  assert.ok(dirGlobs.size > 0, "expected test:unit:compiled to glob extension test dirs");
+  assert.deepEqual([...UNIT_EXTENSION_GLOBS].sort(), [...dirGlobs].sort());
+});
+
+test("single test files test:unit:compiled names belong to a known extension", () => {
+  const { namedFiles } = unitCompiledExtensionEntries();
+  for (const [file, ext] of namedFiles) {
+    assert.ok(
+      UNIT_EXTENSION_GLOBS.has(ext) || INTEGRATION_EXTENSION_GLOBS.has(ext),
+      `${file} names extension "${ext}", which is in neither glob set — typo or a new extension needing classification`,
+    );
+  }
 });
 
 test("VENDORED_PI_PACKAGE_DIRS matches the vendored package map in pi-upstream.json", () => {
