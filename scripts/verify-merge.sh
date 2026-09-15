@@ -85,6 +85,9 @@ pnpm run typecheck:extensions
 echo "── lint:dead-code ──"
 pnpm run lint:dead-code
 
+echo "── lint:dead-code:props ──"
+pnpm run lint:dead-code:props
+
 echo "── validate-pack ──"
 pnpm run validate-pack
 

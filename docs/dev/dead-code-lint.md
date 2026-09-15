@@ -1,10 +1,12 @@
-# Dead-code lint (knip)
+# Dead-code lint
 
 `noUnusedLocals` / `noUnusedParameters` (see `tsconfig.options.json`) catch unused
 locals, parameters, imports and non-exported types. They cannot see an **exported**
 symbol that nothing imports, which in a repo this size is the more common form of
-drift. [knip](https://knip.dev) closes that gap, plus unused files, unused
-dependencies, and unused class and enum members.
+drift. Two gates close that gap: [knip](https://knip.dev) covers unused files,
+exports, dependencies, and class and enum members; a custom interface-property gate
+covers properties that are written somewhere and read nowhere, which knip's member
+analysis does not reach.
 
 ## Running it
 
@@ -14,6 +16,54 @@ pnpm run lint:dead-code
 
 Takes about a minute. It runs in CI (`.github/workflows/ci.yml`), in
 `scripts/ci-fast-gates.sh` (`pnpm run verify:fast`) and in `scripts/verify-merge.sh`.
+
+### Interface properties
+
+```bash
+pnpm run lint:dead-code:props
+```
+
+Takes about ten seconds. Runs in the same three places as the knip gate.
+
+This is a custom pass over the TypeScript compiler API
+(`scripts/lib/iface-props-lib.mjs`) rather than a third-party tool, because no
+tool reports this: knip's member analysis covers classes and enums only, and
+`tsc`, `ts-prune`, `biome` and `@typescript-eslint` have no interface-member rule
+at all.
+
+Declarations are collected from `.ts` files only, but the program that resolves
+reads against them also includes `.mjs`/`.cjs`/`.js` files (with `allowJs: true`):
+`packages/native`'s test suite is entirely `.mjs`, and without those extensions in
+the program every read from it would be invisible, making its properties look
+write-only. knip needed the same widening for the same reason — see the `project`
+glob comment for the root workspace in `knip.jsonc`.
+
+### What the interface-property gate trades away
+
+Reads are matched by property **name**, not by symbol. TypeScript is structurally
+typed, so a read through a compatible-but-separate interface never links back to
+the declaration: `WorktreeStatus.name` (`src/worktree-cli-status.ts`) is read only
+via `WorktreeStatusLike` (`src/worktree-cli-format.ts`), and a symbol-identity join
+calls it dead. A throwaway prototype of a symbol-identity join (see the design
+spec's "What the prototype established" table) turned roughly 190 name-keyed
+findings into roughly 1,800, almost all of them reads the join could not see. That
+prototype predates this pass's `allowJs` program widening and has not been re-run
+against it, so read the ratio as directional, not as a current measurement.
+
+The cost is recall. A same-named property on an unrelated type that *is* read masks
+a genuine finding: `CompletionDashboardSnapshot.cacheHitRate`
+(`src/resources/extensions/gsd/auto-dashboard.ts`) is written and read nowhere. But
+`UnitMetrics.cacheHitRate` (`src/resources/extensions/gsd/metrics.ts`) — a different,
+unrelated interface that happens to share the name — is written twice and then
+spread into six test fixtures as `Partial<UnitMetrics>` (e.g.
+`src/resources/extensions/gsd/tests/metrics.test.ts`), which the gate counts as
+reading every `UnitMetrics` property. Reads are matched by name, so that spread
+keeps the gate quiet about both properties. That is the intended bias — for
+something wired into three CI runners, silence is a cheaper failure than noise.
+
+The gate also reports only properties that are **written somewhere**. A property
+declared and never touched at all is not reported here; knip's `types` and `exports`
+rules approach that case from the other side.
 
 ## The baseline ratchet
 
@@ -33,6 +83,11 @@ pnpm run lint:dead-code:update
 ```
 
 Never hand-edit `.config/knip-baseline.json`. Explain any regeneration in the PR.
+
+Both gates share this mechanism through `scripts/lib/baseline-ratchet.mjs`. The
+interface-property gate's baseline is `.config/iface-props-baseline.json`,
+regenerated with `pnpm run lint:dead-code:props:update`; everything above about
+when to regenerate and never hand-editing applies there too.
 
 Regenerating accepts whatever the tree currently reports, including dead code added by
 the same change — so a regeneration in a PR that also touches source needs a look at the
@@ -72,26 +127,22 @@ depending on build state.
 ## What knip does *not* catch
 
 **Never-read interface or type-literal properties.** knip's member analysis covers
-classes and enums only. This matters because both cases that motivated the gate are
-interface properties:
+classes and enums only. A second gate covers this case — see "Interface properties"
+above — because both findings that motivated knip were interface properties:
 
-- `RefMetadata.frameContext` (`src/resources/extensions/browser-tools/state.ts`) — see #79.
-- `FuzzyMatchResult.contentForReplacement`, fixed in c680e785 after it shipped a real bug.
+- `RefMetadata.frameContext` (`src/resources/extensions/browser-tools/state.ts`),
+  #79, fixed in ba897845 (#129).
+- `FuzzyMatchResult.contentForReplacement`, fixed in c680e785 (#38) after it shipped
+  a real bug.
 
-Nothing in the TypeScript tooling ecosystem reports these; detecting them needs a custom
-TS-compiler-API pass. Tracked in #185.
+Note that `contentForReplacement` lived in
+`packages/pi-coding-agent/src/core/tools/edit-diff.ts`. The vendored tree is out of
+scope for both gates, so neither would have caught it where it actually was.
 
 **Anything inside the vendored `packages/pi-*` tree.** That exemption is deliberate — the
 pi boundary (`scripts/verify-pi-boundary.cjs`) owns those packages, and deleting code
 there fights upstream syncs — but it costs real coverage: about 670 of the repo's ~3,400
-first-party source files. Note that `contentForReplacement`, one of the two findings that
-motivated this gate, lived in `packages/pi-coding-agent/src/core/tools/edit-diff.ts`, so
-even after #185 lands the gate would not have caught it where it actually was.
-
-**Its own drift tests, in CI.** `scripts/__tests__/knip-gate.test.mjs` asserts the gate is
-wired into all three runners and that no config glob has rotted, but nothing in
-`.github/workflows/` runs `scripts/__tests__/` or `ci-fast-gates.sh` — those tests are
-local-only today. Pre-existing and repo-wide, tracked in #191.
+first-party source files.
 
 ## Known baseline contents worth burning down
 
@@ -106,3 +157,30 @@ local-only today. Pre-existing and repo-wide, tracked in #191.
   treat it as a workspace; knip sees it only because the root `project` glob names it.
 - **`packages/db/src/schema/` imports `./auth.js` and `./devices.js`**, neither of which
   exists. Consistent with the package being unreachable aspirational code.
+
+### Interface-property baseline contents worth burning down
+
+- **175 accepted findings at rollout.** Each is a property written at one or more
+  sites and matched by the gate's name-keyed join at none. That is not the same as
+  "read nowhere in the program": a read can still be invisible to the join, through
+  an untyped `.js` consumer, a `Record<string, unknown>` or other index-signature
+  access, or a narrowed union member the checker resolves to no symbol. Confirm
+  there is no such consumer before deleting a baselined property; if there is,
+  the finding is a missing read, not dead code.
+- **Three are options forwarded whole into a third-party API and must not be
+  deleted**, even though nothing in this repo's TypeScript reads them back:
+  `opts.dot` (`src/resources/extensions/gsd/safety/file-change-validator.ts:26`)
+  is passed to `picomatch` at `:124` so that `**/.hidden` patterns match (see the
+  comment at `:123`) — deleting it would silently change what the safety
+  validator matches. `opts.stdio`, in both `src/claude-cli-check.ts:30` and
+  `src/resources/extensions/claude-code-cli/readiness.ts:39`, is forwarded
+  wholesale into `execFileSync`.
+- **Six are in `.test.ts` files.** A write-only property in a test usually means an
+  assertion was weakened or removed and the fixture field outlived it.
+- **`RefMetadata.selectorScope`** (`src/resources/extensions/browser-tools/state.ts`)
+  was the same shape as #79 on the same interface. #205 tracked it, then concluded
+  it was descriptive rather than dead and added tests in `browser-tools-unit.test.cjs`
+  that read it directly. The gate stopped flagging it, `lint:dead-code:props:update`
+  dropped it from the baseline, and the count went from 176 to 175 without anyone
+  hand-editing the file — the ratchet resolving a finding instead of the usual
+  delete-the-dead-code fix.

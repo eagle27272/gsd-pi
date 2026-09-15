@@ -4,10 +4,8 @@ on:
     branches:
       - main
 jobs:
-  # Unlike build-and-test this is not restricted to the merge queue: the scans
-  # and policy checks diff against the PR base, so they need the real PR, and
-  # they are cheap enough (no build, no native toolchain) to run on every one.
   fast-gates:
+    if: startsWith(github.head_ref, 'mergify/merge-queue/')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -62,6 +60,9 @@ jobs:
       # Dead-code gate. Runs on source, so it needs no build and can fail in
       # about a minute, before the expensive build/test steps below.
       - run: pnpm run lint:dead-code
+      # Interface-property dead-code gate (#185). knip's member analysis covers
+      # classes and enums only; this covers never-read interface properties.
+      - run: pnpm run lint:dead-code:props
       - run: pnpm run build:core
       - run: pnpm run typecheck:extensions
       # The unit suite drives fault injection through the native engine, and the
