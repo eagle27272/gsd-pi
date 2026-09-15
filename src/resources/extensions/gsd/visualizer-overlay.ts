@@ -426,8 +426,8 @@ export class GSDVisualizerOverlay {
       ["Tab/Shift+Tab", "Next/Previous tab"],
       ["1-9, 0", "Jump to tab"],
       ["j/k, Up/Down", "Scroll line"],
-      ["PgUp/PgDn", "Scroll page"],
       ["Ctrl+U/Ctrl+D", "Scroll half-page"],
+      ["PgUp/PgDn", "Scroll page (not in a Herdr pane)"],
       ["g/G", "Top/Bottom"],
       ["/", "Search/filter"],
       ["f", "Cycle filter field"],
@@ -512,7 +512,7 @@ export class GSDVisualizerOverlay {
 
     const footer = renderKeyHints(
       th,
-      ["Tab/Shift+Tab/1-9,0 switch", "/ filter", "PgUp/PgDn scroll", "? help", "esc close"],
+      ["Tab/Shift+Tab/1-9,0 switch", "/ filter", "^U/^D scroll", "? help", "esc close"],
       Math.max(1, width - 4),
     );
     const lines = renderDialogFrame(th, "GSD Visualizer", visibleContent, width, {

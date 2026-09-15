@@ -11,6 +11,7 @@ import type { Theme } from "@gsd/pi-coding-agent";
 import { matchesKey, Key, truncateToWidth } from "@gsd/pi-tui";
 
 import { renderDialogFrame, renderKeyHints } from "./tui/render-kit.js";
+import { isScrollDownKey, isScrollUpKey } from "../shared/scroll-keys.js";
 import {
   loadEffectiveGSDPreferences,
   loadGlobalGSDPreferences,
@@ -296,13 +297,13 @@ export class GSDConfigOverlay {
       this.tui.requestRender();
       return;
     }
-    if (matchesKey(data, Key.pageDown)) {
+    if (isScrollDownKey(data)) {
       this.scrollOffset += 10;
       this.cachedLines = undefined;
       this.tui.requestRender();
       return;
     }
-    if (matchesKey(data, Key.pageUp)) {
+    if (isScrollUpKey(data)) {
       this.scrollOffset = Math.max(0, this.scrollOffset - 10);
       this.cachedLines = undefined;
       this.tui.requestRender();

@@ -38,6 +38,12 @@ import {
 } from "@gsd/pi-tui";
 import { renderSharedDialogFrame } from "./dialog-frame.js";
 import { mergeSideBySide } from "./layout-utils.js";
+import {
+	isScrollDownKey,
+	isScrollUpKey,
+	SCROLL_HINT_KEYS,
+	SCROLL_INDICATOR_KEYS,
+} from "./scroll-keys.js";
 import { INDENT } from "./glyphs.js";
 import { makeUI } from "./ui.js";
 
@@ -247,7 +253,7 @@ export async function showInterviewRound(
 
 		// Preview-panel scrolling. previewScroll is the first visible line of the
 		// side-by-side preview column; the viewport/total are captured on each
-		// render so PgUp/PgDn input can clamp against real bounds.
+		// render so scroll-key input can clamp against real bounds.
 		let previewScroll = 0;
 		let previewViewport = 0;
 		let previewTotal = 0;
@@ -472,7 +478,7 @@ export async function showInterviewRound(
 			}
 
 			// ── Side-by-side panel scrolling ─────────────────────────────
-			if (matchesKey(data, Key.pageUp)) {
+			if (isScrollUpKey(data)) {
 				let didScroll = false;
 				if (optionsScroll > 0) {
 					optionsScroll = Math.max(0, optionsScroll - optionsViewport);
@@ -485,7 +491,7 @@ export async function showInterviewRound(
 				if (didScroll) refresh();
 				return;
 			}
-			if (matchesKey(data, Key.pageDown)) {
+			if (isScrollDownKey(data)) {
 				let didScroll = false;
 				const maxOptionsScroll = Math.max(0, optionsTotal - optionsViewport);
 				if (optionsScroll < maxOptionsScroll) {
@@ -775,14 +781,14 @@ export async function showInterviewRound(
 						leftLines[0] = scrollIndicator(`▲ ${hiddenAbove} more`, leftWidth);
 					}
 					if (hiddenBelow > 0) {
-						leftLines[leftLines.length - 1] = scrollIndicator(`▼ ${hiddenBelow} more · PgUp/PgDn`, leftWidth);
+						leftLines[leftLines.length - 1] = scrollIndicator(`▼ ${hiddenBelow} more · ${SCROLL_INDICATOR_KEYS}`, leftWidth);
 					}
 				}
 
 				const preview = getCurrentPreview();
 				const fullRight = preview ? renderPreviewColumn(preview, previewWidth) : [];
 				// The first two lines are the pinned "Preview" header; the body
-				// below them scrolls via PgUp/PgDn so no content is unreachable.
+				// below them scrolls via the scroll keys so no content is unreachable.
 				const headerRows = fullRight.length > 0 ? 2 : 0;
 				const previewBody = fullRight.slice(headerRows);
 				const bodyViewport = Math.max(1, maxBody - headerRows);
@@ -803,7 +809,7 @@ export async function showInterviewRound(
 						rightLines[headerRows] = scrollIndicator(`▲ ${hiddenAbove} more`, previewWidth);
 					}
 					if (hiddenBelow > 0) {
-						rightLines[rightLines.length - 1] = scrollIndicator(`▼ ${hiddenBelow} more · PgUp/PgDn`, previewWidth);
+						rightLines[rightLines.length - 1] = scrollIndicator(`▼ ${hiddenBelow} more · ${SCROLL_INDICATOR_KEYS}`, previewWidth);
 					}
 				}
 
@@ -829,8 +835,8 @@ export async function showInterviewRound(
 					if (isMultiQuestion) hints.push("←/→ navigate");
 					hints.push(isLast && allAnswered() ? "enter to review" : "enter to next");
 				}
-				if (previewTotal > previewViewport) hints.push("pgup/pgdn scroll preview");
-				if (optionsTotal > optionsViewport) hints.push("pgup/pgdn scroll options");
+				if (previewTotal > previewViewport) hints.push(`${SCROLL_HINT_KEYS} scroll preview`);
+				if (optionsTotal > optionsViewport) hints.push(`${SCROLL_HINT_KEYS} scroll options`);
 				hints.push("esc to exit");
 				const footer = ui.hints(hints)[0] ?? "";
 

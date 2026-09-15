@@ -10,6 +10,7 @@ import { Key, matchesKey } from "@gsd/pi-tui";
 import { formatCost, formatPercent, formatTokenCount } from "./metrics.js";
 import { loadEffectiveGSDPreferences } from "./preferences.js";
 import { renderDialogFrame, renderKeyHints } from "./tui/render-kit.js";
+import { isScrollDownKey, isScrollUpKey } from "../shared/scroll-keys.js";
 
 export interface SessionTokenTotals {
   input: number;
@@ -237,10 +238,10 @@ async function showUsageDialog(
         if (matchesKey(data, Key.up) || matchesKey(data, "k")) {
           if (scrollBy(-1)) return;
         }
-        if (matchesKey(data, Key.pageDown)) {
+        if (isScrollDownKey(data)) {
           if (scrollBy(lastVisibleRows)) return;
         }
-        if (matchesKey(data, Key.pageUp)) {
+        if (isScrollUpKey(data)) {
           if (scrollBy(-lastVisibleRows)) return;
         }
         done(true);
