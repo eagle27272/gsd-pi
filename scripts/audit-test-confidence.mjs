@@ -10,6 +10,7 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ciDriftForRoot } from './lib/ci-workflow-lib.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -20,7 +21,14 @@ const strict = args.has('--strict');
 
 const TEST_FILE_RE = /\.(?:test|spec)\.(?:ts|tsx|mjs|js|cjs)$/;
 
-/** Expected local npm script steps for each CI blocking PR job. */
+/**
+ * CI jobs that gate merges, and the local script that reproduces each.
+ *
+ * `steps` are matched as substrings against the job's actual `run:` commands,
+ * and every entry must name a job that exists and is in .mergify.yml's
+ * merge_conditions — ciMapDrift enforces both. Keep this list honest: it used
+ * to describe an older, much larger CI that no longer exists (#191).
+ */
 const CI_PR_BLOCKING_MAP = [
   {
     ciJob: 'fast-gates',
@@ -29,48 +37,18 @@ const CI_PR_BLOCKING_MAP = [
     enforcement: 'block',
   },
   {
-    ciJob: 'build',
+    ciJob: 'build-and-test',
     local: 'verify:merge',
-    steps: [
-      'build:core',
-      'typecheck:extensions',
-      'validate-pack',
-      'verify:workspace-coverage',
-      'test:compile',
-      'test:unit:compiled',
-      'test:packages:compiled (native skipped unless portability-changed)',
-      'playwright install chromium',
-      'test:integration',
-      'test:e2e (GSD_SMOKE_BINARY=dist/loader.js)',
-    ],
+    steps: ['build:core', 'typecheck:extensions', 'build:native:test', 'test:unit'],
     enforcement: 'block',
+    allowedIf: "startsWith(github.head_ref, 'mergify/merge-queue/')",
+    note: 'merge-queue branches only; verify:merge covers more, but not test:live-workflow:unit',
   },
 ];
 
-const CI_AUXILIARY = [
-  {
-    ciJob: 'coverage-report',
-    local: 'test:coverage + test:coverage:full',
-    when: 'manual, weekly schedule, or PR labeled coverage',
-    enforcement: 'separate-workflow',
-  },
-];
+const CI_AUXILIARY = [];
 
-const CI_CONDITIONAL = [
-  {
-    ciJob: 'windows-portability',
-    local: 'windows-portability.test.ts (+ package tests on Windows)',
-    when: 'portability-changed=true',
-    enforcement: 'block-when-triggered',
-  },
-  {
-    ciJob: 'windows-smoke-e2e',
-    local: 'test:e2e:windows-smoke',
-    when: 'windows-e2e-changed=true',
-    enforcement: 'warn',
-    note: 'continue-on-error: true in ci.yml',
-  },
-];
+const CI_CONDITIONAL = [];
 
 const LOCAL_TIERS = [
   {
@@ -82,21 +60,24 @@ const LOCAL_TIERS = [
   {
     name: 'verify:pr',
     when: 'Fast iteration while editing',
-    matchesCi: ['build (partial: build:core + unit tests)'],
+    matchesCi: ['build-and-test'],
+    ciNote: 'partial: build:core + unit tests',
     scriptKey: 'verify:pr',
     gapNote: 'Unit-only preflight; does not replace verify:merge before review.',
   },
   {
     name: 'verify:merge',
     when: 'Before requesting PR review (default merge confidence)',
-    matchesCi: ['build'],
+    matchesCi: ['build-and-test'],
     scriptKey: 'verify:merge',
+    gapNote: 'Covers more than CI does, but omits test:live-workflow:unit.',
   },
   {
     name: 'test:coverage',
-    when: 'Manual/scheduled coverage workflow or local spot-check',
-    matchesCi: ['coverage-report'],
+    when: 'Local spot-check only',
+    matchesCi: [],
     scriptKey: 'test:coverage',
+    gapNote: 'No CI job runs coverage.',
   },
 ];
 
@@ -166,7 +147,14 @@ function buildReport() {
     { area: 'web/', tests: countByPrefix(allTests, 'web/'), sources: countSourceFiles(join(ROOT, 'web')) },
   ].filter(row => row.sources > 0 && row.tests / row.sources < 0.05);
 
-  const drift = verifyMergeScriptExists(scripts);
+  const drift = [
+    ...verifyMergeScriptExists(scripts),
+    ...ciDriftForRoot(ROOT, {
+      blocking: CI_PR_BLOCKING_MAP,
+      conditional: CI_CONDITIONAL,
+      localTiers: LOCAL_TIERS,
+    }),
+  ];
 
   return {
     generatedAt: new Date().toISOString(),
@@ -204,7 +192,8 @@ function printHuman(report) {
   process.stdout.write('Local tiers\n');
   for (const tier of report.localTiers) {
     process.stdout.write(`  ${tier.name} — ${tier.when}\n`);
-    process.stdout.write(`    CI: ${tier.matchesCi.join(', ')}\n`);
+    const ci = tier.matchesCi.length > 0 ? tier.matchesCi.join(', ') : 'no CI job';
+    process.stdout.write(`    CI: ${ci}${tier.ciNote ? ` (${tier.ciNote})` : ''}\n`);
     if (tier.gapNote) process.stdout.write(`    Note: ${tier.gapNote}\n`);
   }
   process.stdout.write('\n');
@@ -215,12 +204,15 @@ function printHuman(report) {
   }
   process.stdout.write('\n');
 
-  process.stdout.write('Auxiliary / conditional\n');
-  for (const row of [...report.ciAuxiliary, ...report.ciConditional]) {
-    const note = row.note ? ` — ${row.note}` : '';
-    process.stdout.write(`  ${row.ciJob} [${row.enforcement}] when ${row.when}${note}\n`);
+  const auxiliary = [...report.ciAuxiliary, ...report.ciConditional];
+  if (auxiliary.length > 0) {
+    process.stdout.write('Auxiliary / conditional\n');
+    for (const row of auxiliary) {
+      const note = row.note ? ` — ${row.note}` : '';
+      process.stdout.write(`  ${row.ciJob} [${row.enforcement}] when ${row.when}${note}\n`);
+    }
+    process.stdout.write('\n');
   }
-  process.stdout.write('\n');
 
   if (report.thinAreas.length > 0) {
     process.stdout.write('Low test density (tests / source files < 5%)\n');

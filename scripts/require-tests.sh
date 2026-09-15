@@ -30,6 +30,11 @@ elif [ -n "${GITHUB_REF_NAME:-}" ]; then
 else
   BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 fi
+# Mergify queues a PR under mergify/merge-queue/<base>/<original-branch>-<sha>,
+# and that name is what GITHUB_HEAD_REF reports there. Strip the prefix so a
+# branch exempted on the PR stays exempted in the queue; without this the queue
+# PR fails a check the source PR passed and the car is ejected on every retry.
+BRANCH="${BRANCH#mergify/merge-queue/*/}"
 if [[ "$BRANCH" =~ ^(docs|chore|ci)/ ]]; then
   echo "✓ Branch type '${BRANCH%%/*}/' is exempt from test requirements"
   exit 0
