@@ -67,8 +67,9 @@ echo "── pi boundary ──"
 pnpm run verify:pi-boundary
 
 echo "── actionlint (workflow static analysis) ──"
-# Enforced as a blocking job in CI (ci.yml workflow-lint). Locally it runs
-# only when the binary is installed so the gate stays dependency-free.
+# The fast-gates job installs actionlint before calling this script, so the
+# gate blocks there. Locally it runs only when the binary happens to be
+# installed, keeping the script dependency-free.
 if command -v actionlint >/dev/null 2>&1; then
   actionlint -config-file .config/actionlint.yaml
 else
