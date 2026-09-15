@@ -55,13 +55,21 @@ const NAMED_ANCESTORS = [
   ts.isParameter,
 ];
 
+// Walking straight to the nearest NAMED_ANCESTORS match skips over any
+// PropertySignatures in between, collapsing `R.cost.total` and `R.duration`
+// onto the same shape. Collecting each intervening property name keeps the
+// nesting path visible in the key.
 export function ownerLabel(node) {
+  const path = [];
   for (let current = node.parent; current; current = current.parent) {
-    if (NAMED_ANCESTORS.some((is) => is(current)) && current.name && ts.isIdentifier(current.name)) {
-      return current.name.text;
+    if (ts.isPropertySignature(current) && (ts.isIdentifier(current.name) || ts.isStringLiteralLike(current.name))) {
+      path.unshift(current.name.text);
+    } else if (NAMED_ANCESTORS.some((is) => is(current)) && current.name && ts.isIdentifier(current.name)) {
+      path.unshift(current.name.text);
+      return path.join('.');
     }
   }
-  return '<module>';
+  return ['<module>', ...path].join('.');
 }
 
 export function collectDeclarations(program, checker, isFirstParty, root) {

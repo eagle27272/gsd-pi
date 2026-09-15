@@ -56,6 +56,24 @@ test("collectDeclarations names an anonymous literal after its nearest named anc
   assert.deepEqual(keys, ["writeOnly|a.ts|scan.items"]);
 });
 
+test("collectDeclarations includes the intervening property in the owner path for one level of nesting", () => {
+  const keys = declarationKeys({
+    "a.ts": "export interface R { cost: { total: number } }",
+  });
+
+  // `cost` is itself a PropertySignature (object-literal-typed) and gets its
+  // own entry alongside the nested `total`, which is the case this test is for.
+  assert.deepEqual(keys, ["writeOnly|a.ts|R.cost", "writeOnly|a.ts|R.cost.total"]);
+});
+
+test("collectDeclarations keeps accumulating the owner path across multiple levels of nesting", () => {
+  const keys = declarationKeys({
+    "a.ts": "export interface R { a: { b: { c: string } } }",
+  });
+
+  assert.deepEqual(keys, ["writeOnly|a.ts|R.a", "writeOnly|a.ts|R.a.b", "writeOnly|a.ts|R.a.b.c"]);
+});
+
 test("collectDeclarations disambiguates two literals sharing an ancestor and a property name", () => {
   const keys = declarationKeys({
     "a.ts": "export function scan(a: { items: string[] }, b: { items: number[] }) { return [a, b] }",
