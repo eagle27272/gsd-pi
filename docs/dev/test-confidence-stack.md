@@ -2,20 +2,30 @@
 
 This document maps **what protects what** across local scripts and CI. Use it when you need merge confidence, not just a green `verify:pr`.
 
+**CI is one job.** `build-and-test` runs `lint:dead-code`, `build:core`,
+`typecheck:extensions`, a native test-addon build, and `test:unit` — and only
+on merge-queue branches, not on your PR. Every other row below is enforced
+locally or not at all. See [CI/CD Pipeline Guide](./ci-cd-pipeline.md).
+
 ## Quick reference
 
 | When | Run locally | CI equivalent | Blocks merge? |
 |------|-------------|---------------|---------------|
-| Every push | `npm run verify:fast` | `fast-gates` | Yes |
-| Fast iteration while editing | `npm run verify:pr` | Partial `build` job (`build:core` + unit tests) | No — not sufficient alone |
-| Decide whether the heavy merge gate is needed | `npm run verify:merge:needed -- --base upstream/main` | `fast-gates` path classification | No — advisory |
-| **Before requesting PR review on heavy-code changes** | **`npm run verify:merge`** | `build` | Yes (when `heavy-code-changed`) |
-| Full evaluation baseline | `npm run test:evaluation` | Partial (blocking tiers + auxiliary) | No |
-| Repo-wide coverage report | `npm run test:coverage:full` | `Coverage report` workflow | Separate workflow |
-| Coverage thresholds | `npm run test:coverage` | `Coverage report` workflow | Separate workflow |
-| Docker paths changed | `npm run test:e2e:docker` | `build` Docker e2e step | Yes when triggered |
-| Portability paths changed | Windows job + package tests | `windows-portability` | Yes when triggered |
-| Windows smoke (experimental) | `npm run test:e2e:windows-smoke` | `windows-smoke-e2e` | **Warn only** (`continue-on-error`) |
+| Every push | `npm run verify:fast` | none | No — local only |
+| Fast iteration while editing | `npm run verify:pr` | Closest analogue to `build-and-test` | No — not sufficient alone |
+| Decide whether the heavy local gate is needed | `npm run verify:merge:needed -- --base upstream/main` | none | No — advisory |
+| **Before requesting PR review on heavy-code changes** | **`npm run verify:merge`** | none | No — but it is the real safety net |
+| Merge queue | — | `build-and-test` | **Yes — the only required check** |
+| Full evaluation baseline | `npm run test:evaluation` | none | No |
+| Repo-wide coverage report | `npm run test:coverage:full` | none | No |
+| Coverage thresholds | `npm run test:coverage` | none | No |
+| Docker paths changed | `npm run test:e2e:docker` | none | No |
+| Portability paths changed | `npm run test:packages` on Windows | none | No |
+| Windows smoke (experimental) | `npm run test:e2e:windows-smoke` | none | No |
+
+The `none` rows are not aspirational — the workflows that once ran them were
+deleted in `854209ad`. Path gating, the Windows matrix, the coverage workflow,
+and the Docker e2e job survive only as local scripts.
 
 **Node 26+:** `c8` depends on `yargs` v17, which breaks under Node 26’s module resolution. The repo pins `yargs@^18` via `package.json` `overrides` (CI uses Node 24).
 
@@ -45,27 +55,33 @@ same-stem test file.
 | `src/` + GSD extension | `node --test` on compiled `dist-test/` | `test:unit` | Primary app unit tests; compile via `test:compile` |
 | Extension integration suites | `node --test` + `resolve-ts.mjs` | `test:integration` | ollama, async-jobs, browser-tools, search-the-web, bg-shell, slash-commands |
 | `packages/*` | `node --test` (compiled to dist-test) | `test:packages` | Every linkable package must have ≥1 test (`verify:workspace-coverage`) |
-| `@gsd/pi-ai` vitest | `vitest --run` | `pnpm --filter @gsd/pi-ai test` | Wired into CI `build` and `verify:merge`; not covered by `test:packages` |
+| `@gsd/pi-ai` vitest | `vitest --run` | `pnpm --filter @gsd/pi-ai test` | Wired into `verify:merge`; not covered by `test:packages` or by CI |
 | Extensions with ≥5 source files | `tests/*.test.*` required | `verify:extension-coverage` | Enforced in `verify:merge` |
-| `scripts/__tests__` | `node --test` | `verify:fast` | CI contract/policy regressions |
+| `scripts/__tests__` | `node --test` | `verify:fast` | CI contract/policy regressions, including the workflow/doc reconciliation guards |
 | `tests/e2e/` | `node --test` against built binary | `test:e2e` | Requires `GSD_SMOKE_BINARY=dist/loader.js` |
 | Coverage (merged) | c8 across unit/integration/packages | `test:coverage:full` | Writes `coverage/lcov.info` + `coverage/file-index.json` |
-| Coverage thresholds | c8 on GSD slice | `test:coverage` | Manual/scheduled coverage workflow |
+| Coverage thresholds | c8 on GSD slice | `test:coverage` | Manual only — no coverage workflow exists |
 
 ## Enforcement philosophy
 
-### Block merge (PR)
+### Block merge (merge queue)
 
-When `heavy-code-changed=true`, CI runs the Linux build and test stack in one job to avoid repeated checkout/setup/install/artifact restore overhead:
+One job, `build-and-test`, gated on `startsWith(github.head_ref, 'mergify/merge-queue/')`. It does not run on ordinary PRs — only once the PR is queued:
 
-1. `build` — compile, web host, `validate-pack`, workspace coverage gate
-2. `build` — compiled unit tests, package tests, `@gsd/pi-ai` vitest, integration tests, and e2e smoke
-3. `build` — Docker e2e when `docker-changed=true`
+1. `lint:dead-code` — knip baseline ratchet, first because it needs no build
+2. `build:core` and `typecheck:extensions`
+3. `build:native:test` — the unit suite drives fault injection through the native engine, and the pinned `@opengsd/engine-*` binary lags the Rust source
+4. `test:unit`
 
-Native package tests are skipped in the main Linux package-test step unless native/portability paths changed; otherwise a full Rust native rebuild can dominate unrelated CI runs.
-Compiled package tests use Node's `--test-force-exit` so leaked handles in one package do not idle until the CI watchdog fires after all assertions pass.
+`.mergify.yml` requires exactly this check and nothing else.
 
-Local parity: **`npm run verify:merge`** (runs the same npm scripts sequentially, including `verify:extension-coverage`). It also builds `pnpm run build:native:test` and stages `dist-test/native/addon/` with `GSD_NATIVE_PREFER_LOCAL=1`, matching the CI `build` job; requires a local Rust toolchain. Use `npm run verify:merge:needed -- --base upstream/main` first so you only pay for it when the diff would actually trigger CI's heavy Linux gate.
+### The local gate is broader than CI
+
+**`npm run verify:merge`** runs the full Linux stack sequentially — `validate-pack`, `verify:workspace-coverage`, `verify:extension-coverage`, compiled unit and package tests, `@gsd/pi-ai` vitest, integration, and e2e. It also builds `pnpm run build:native:test` and stages `dist-test/native/addon/` with `GSD_NATIVE_PREFER_LOCAL=1`; requires a local Rust toolchain.
+
+Nothing in CI re-runs any of that. Use `npm run verify:merge:needed -- --base upstream/main` first so you only pay for it when the diff warrants it — the classification is a local heuristic (`scripts/ci-classify-changes.sh`), not a CI behaviour.
+
+Native package tests are skipped in the main package-test step unless native/portability paths changed; otherwise a full Rust native rebuild dominates the run. Compiled package tests use Node's `--test-force-exit` so leaked handles in one package do not idle after all assertions pass.
 
 `verify:fast` also runs:
 
@@ -74,27 +90,31 @@ Local parity: **`npm run verify:merge`** (runs the same npm scripts sequentially
 - `audit:test-matrix --strict`
 - `lint:dead-code` — knip against `.config/knip-baseline.json`; see [dead-code-lint.md](dead-code-lint.md)
 
-### Coverage workflow
+### Coverage (local only)
 
 - `test:coverage` — c8 thresholds (40/40/20/20) on the GSD slice
 - `test:coverage:full` — merged coverage artifacts
-- Runs manually, weekly, or on PRs labeled `coverage`
 
-The workflow builds the native test addon from the checked-out Rust source and
-sets `GSD_NATIVE_PREFER_LOCAL=1`. For compiled coverage suites, it copies that
-addon into `dist-test/native/addon/` before merging the coverage artifacts.
+The coverage workflow that once ran these weekly was deleted in `854209ad`;
+both commands are now manual. Build the native test addon from the checked-out
+Rust source and set `GSD_NATIVE_PREFER_LOCAL=1` first. For compiled coverage
+suites, copy that addon into `dist-test/native/addon/` before merging the
+coverage artifacts.
 
-### Warn or path-gate
+### Not enforced anywhere
 
-- **Windows e2e smoke** — runs when Windows-relevant paths change but does not block merge today
-- **Docker e2e** — required when docker paths change, skipped otherwise
-- **Doc-only PRs** — skip build/test jobs intentionally; `fast-gates` still runs
+- **Windows e2e smoke** — `test:e2e:windows-smoke` exists; no job runs it
+- **Docker e2e** — `test:e2e:docker` exists; no job runs it
+- **Path gating** — `scripts/ci-classify-changes.sh` is consumed only by
+  `verify:merge` and `verify:merge:needed`, both local
+- **Doc-only PRs** — nothing to skip; the merge-queue job builds and runs the
+  unit suite regardless of what changed
 
 ## Why `verify:pr` still exists
 
 `verify:pr` is a **fast inner loop** (~5–15 min): `build:core` → `typecheck:extensions` → `test:unit`.
 
-It is intentionally lighter than CI. Do not treat a passing `verify:pr` as merge-ready when `verify:merge:needed` says the diff triggers the heavy Linux gate. Start with `verify:merge:needed`, then pay for `verify:merge` only when the path classification says it matters or when you want extra confidence.
+It is close to what the merge queue runs, which is exactly why it is not enough: CI is thin, so a green `verify:pr` mostly predicts a green CI, not a correct change. Start with `verify:merge:needed`, then pay for `verify:merge` when the classification says it matters.
 
 `verify:full` is an alias for `verify:merge` (kept for backward compatibility).
 
@@ -102,12 +122,14 @@ It is intentionally lighter than CI. Do not treat a passing `verify:pr` as merge
 
 These are tracked limitations, not bugs to hide:
 
-1. **Web UI** — many files rely on suite-level indirect coverage; use `audit:test-matrix` to separate named coverage from indirect coverage
-2. **Windows smoke** — non-blocking until flake rate is acceptable
-3. **Single-file extensions** — may rely on root-level suite coverage instead of dedicated extension-local tests
+1. **CI covers a fraction of the suite** — integration, package, e2e, coverage, Windows, and Docker tests block nothing. A PR can merge having run only `test:unit`.
+2. **The merge gate skips ordinary PRs** — `build-and-test` fires only on merge-queue branches, so a PR shows no signal until it is queued.
+3. **Web UI** — many files rely on suite-level indirect coverage; use `audit:test-matrix` to separate named coverage from indirect coverage
+4. **Windows smoke** — not run anywhere; flake rate is unmeasured
+5. **Single-file extensions** — may rely on root-level suite coverage instead of dedicated extension-local tests
 
 ## Related docs
 
 - [Test evaluation report](./test-evaluation-report.md) — regeneratable matrix snapshot
-- [CI/CD Pipeline Guide](./ci-cd-pipeline.md) — promotion pipeline and workflow files
+- [CI/CD Pipeline Guide](./ci-cd-pipeline.md) — the workflow, the merge gate, and what CI does not run
 - [Development](./development.md) — local development commands

@@ -53,7 +53,7 @@ Design documents, ADRs, and internal references. Located in [`dev/`](./dev/).
 | [Lifecycle Command Integration Runbook](./dev/lifecycle-command-integration-runbook.md) | Canonical writer boundary, downstream entry gates, and verification loop |
 | [Context Optimization Opportunities](./dev/pi-context-optimization-opportunities.md) | Analysis of context window usage and optimization strategies |
 | [File System Map](./dev/FILE-SYSTEM-MAP.md) | Complete file system reference |
-| [CI/CD Pipeline](./dev/ci-cd-pipeline.md) | Continuous integration and deployment pipeline |
+| [CI/CD Pipeline](./dev/ci-cd-pipeline.md) | The single CI job, what gates merge, and what only runs locally |
 | [Frontier Techniques](./dev/FRONTIER-TECHNIQUES.md) | Advanced techniques and research |
 | [PRD: Branchless Worktree](./dev/PRD-branchless-worktree-architecture.md) | Product requirements for branchless worktree architecture |
 | [Agent Knowledge Index](./dev/agent-knowledge-index.md) | Index of agent knowledge resources |
