@@ -44,8 +44,11 @@ Reads are matched by property **name**, not by symbol. TypeScript is structurall
 typed, so a read through a compatible-but-separate interface never links back to
 the declaration: `WorktreeStatus.name` (`src/worktree-cli-status.ts`) is read only
 via `WorktreeStatusLike` (`src/worktree-cli-format.ts`), and a symbol-identity join
-calls it dead. Keying on the symbol turns roughly 190 findings into roughly 1,800,
-almost all of them reads the join could not see.
+calls it dead. A throwaway prototype of a symbol-identity join (see the design
+spec's "What the prototype established" table) turned roughly 190 name-keyed
+findings into roughly 1,800, almost all of them reads the join could not see. That
+prototype predates this pass's `allowJs` program widening and has not been re-run
+against it, so read the ratio as directional, not as a current measurement.
 
 The cost is recall. A same-named property on an unrelated type that *is* read masks
 a genuine finding: `CompletionDashboardSnapshot.cacheHitRate`
@@ -163,7 +166,20 @@ local-only today. Pre-existing and repo-wide, tracked in #191.
 ### Interface-property baseline contents worth burning down
 
 - **177 accepted findings at rollout.** Each is a property written at one or more
-  sites and read at none, so each is either a missing read or a deletion.
+  sites and matched by the gate's name-keyed join at none. That is not the same as
+  "read nowhere in the program": a read can still be invisible to the join, through
+  an untyped `.js` consumer, a `Record<string, unknown>` or other index-signature
+  access, or a narrowed union member the checker resolves to no symbol. Confirm
+  there is no such consumer before deleting a baselined property; if there is,
+  the finding is a missing read, not dead code.
+- **Three are options forwarded whole into a third-party API and must not be
+  deleted**, even though nothing in this repo's TypeScript reads them back:
+  `opts.dot` (`src/resources/extensions/gsd/safety/file-change-validator.ts:26`)
+  is passed to `picomatch` at `:124` so that `**/.hidden` patterns match (see the
+  comment at `:123`) — deleting it would silently change what the safety
+  validator matches. `opts.stdio`, in both `src/claude-cli-check.ts:30` and
+  `src/resources/extensions/claude-code-cli/readiness.ts:39`, is forwarded
+  wholesale into `execFileSync`.
 - **Six are in `.test.ts` files.** A write-only property in a test usually means an
   assertion was weakened or removed and the fixture field outlived it.
 - **`RefMetadata.selectorScope`** (`src/resources/extensions/browser-tools/state.ts`)

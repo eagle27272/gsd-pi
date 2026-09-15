@@ -3,7 +3,6 @@
   "findings": [
     "writeOnly|packages/gsd-agent-core/src/compaction/compaction.ts|ContextUsageEstimate.trailingTokens",
     "writeOnly|packages/gsd-agent-core/src/compaction/compaction.ts|ContextUsageEstimate.usageTokens",
-    "writeOnly|packages/gsd-agent-core/src/export-html/index.ts|SessionData.renderedTools",
     "writeOnly|packages/gsd-agent-core/src/lifecycle-hooks.ts|LifecycleHooksRunResult.entryPathCount",
     "writeOnly|packages/gsd-agent-core/src/lifecycle-hooks.ts|LifecycleHooksRunResult.hooksRun",
     "writeOnly|packages/gsd-agent-core/src/lifecycle-hooks.ts|LifecycleHooksRunResult.legacyHooksRun",

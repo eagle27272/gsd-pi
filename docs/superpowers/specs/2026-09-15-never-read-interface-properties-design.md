@@ -56,18 +56,26 @@ reported when it is written at least once and no property of that name is read
 anywhere in the program.
 
 This trades recall for precision. A same-named property on an unrelated type that
-*is* read will mask a genuine finding — `UnitMetrics.cacheHitRate`
-(`src/resources/extensions/gsd/metrics.ts:67`, written at `:240` and `:438`, read
-nowhere) is masked by `CompletionDashboardSnapshot.cacheHitRate`. That is an accepted
-cost. For something wired into three CI runners, the correct failure mode is silence
-rather than noise.
+*is* read — or, as here, spread — will mask a genuine finding:
+`CompletionDashboardSnapshot.cacheHitRate`
+(`src/resources/extensions/gsd/auto-dashboard.ts:101`) is written and read nowhere.
+But `UnitMetrics.cacheHitRate` (`src/resources/extensions/gsd/metrics.ts:67`, written
+at `:240` and `:438`) — a different, unrelated interface that happens to share the
+name — is spread into six test fixtures as `Partial<UnitMetrics>` (e.g.
+`src/resources/extensions/gsd/tests/metrics.test.ts`), which the gate counts as
+reading every `UnitMetrics` property, `cacheHitRate` included, even though no code
+anywhere genuinely reads `.cacheHitRate` by name. That is an accepted cost. For
+something wired into three CI runners, the correct failure mode is silence rather
+than noise.
 
 Two alternatives were considered and rejected:
 
 - **Symbol identity widened by assignability.** For each candidate, test
   assignability against every type declaring that property. Recovers `cacheHitRate`
-  and its class. Rejected: TS assignability checks are expensive and the pass is
-  O(candidates × types), turning seconds into minutes, for materially more code.
+  and other findings masked the same way — by a spread of a same-named,
+  unrelated type, not by a genuine same-named read. Rejected: TS assignability
+  checks are expensive and the pass is O(candidates × types), turning seconds
+  into minutes, for materially more code.
 - **The issue's original `findReferences` sketch.** Slowest of the three, and it does
   not solve the structural problem it would need to solve to justify the cost.
 
@@ -117,13 +125,20 @@ packages/rpc-client/src/**/*.ts
 `packages/db` is matched without a `src/` segment because it has no `package.json`
 and is not a pnpm workspace; knip.jsonc reaches it the same way. Test files are in
 scope — a write-only property in a test is usually a stale assertion, and six of the
-~192 baseline findings are in `.test.ts` files.
+177 baseline findings are in `.test.ts` files.
 
 `packages/pi-*` is included in the **program** so that reads from vendored code
 count, but excluded from **declaration collection**. This matches both the issue's
 scope and knip's, and carries the same known cost the knip docs record:
 `contentForReplacement` lived in `packages/pi-coding-agent`, so even with this gate
 in place that specific finding would not have been caught where it actually was.
+
+The **program** (though not `DECLARATION_GLOBS`, which stays `.ts`-only — a
+`PropertySignature` cannot exist in a `.js` file) additionally widens each
+declaration glob's `.ts` extension to `.mjs`, `.cjs`, and `.js`, with
+`allowJs: true`. `packages/native`'s entire test suite is `.mjs`; without
+widening the program too, every read from a non-`.ts` first-party file would be
+invisible, making its declared properties look write-only.
 
 The analysed set must be a function of this config alone — the same determinism
 argument behind knip's `--no-gitignore` flag. `.d.ts` files are excluded from
@@ -145,6 +160,7 @@ References, resolved in one walk over every source file in the program:
 | `obj["prop"]` | read | `getPropertyOfType` on the object's type |
 | `{ prop: v }`, `{ prop }` | write | `getPropertyOfType` on the literal's **contextual type** |
 | `const { prop } = obj` | read | `getPropertyOfType` on the binding pattern's type |
+| `const { ...rest } = obj` | read, all properties | `getPropertiesOfType` on the pattern's type — `rest` carries every property the pattern didn't name onward, same rationale as a spread |
 | `{ ...obj }` | read, all properties | `getPropertiesOfType` on the spread type |
 
 The contextual-type bridge is load-bearing. `getSymbolAtLocation` on an
@@ -153,6 +169,17 @@ property it satisfies, and `getRootSymbols` does not bridge the two. Without the
 bridge the classification is simply wrong: a prototype lacking it reported a
 reconstructed `frameContext` as untouched rather than write-only, and reported a
 destructured-and-used property as untouched as well.
+
+When resolution finds no symbol at all — an index signature
+(`Record<string, unknown>`), a narrowed union member with a fully concrete type,
+or any value typed `any` (`JSON.parse(...)`'s result being the idiomatic source
+of one) — the `obj.prop` and `const { prop } = obj` forms both fall back to
+recording a read of the reference's own name, rather than being dropped as
+untouched. Reads are already matched by name, so this closes a hole instead of
+opening a new kind of match. `obj["prop"]` deliberately does not get the same
+fallback: on the one property this repo has where it would fire, the read is on
+a raw, differently-shaped value (a sqlite row) rather than the declared type, so
+the fallback would trade a true positive for nothing.
 
 Spreads count every property of the spread type as read. This is deliberately
 conservative — a spread propagates properties invisibly, and under-reporting there is
@@ -237,7 +264,7 @@ was meant to cover.
 
 ## Rollout
 
-Land the gate with the ~192 existing findings baselined as-is rather than burning
+Land the gate with the 177 existing findings baselined as-is rather than burning
 them down in the same change. This is #81's reasoning and it applies unchanged: the
 triage is its own work, and bundling it would make the gate's own diff unreviewable.
 

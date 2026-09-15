@@ -164,6 +164,15 @@ export function classifyReferences(program, checker) {
   const markAllPropertiesRead = (type) => {
     if (type) markRead(checker.getPropertiesOfType(type) ?? []);
   };
+  // Not just `any` (e.g. `JSON.parse(...)`): an index signature
+  // (`Record<string, unknown>`) and a narrowed discriminated-union member
+  // with a fully concrete type both resolve no property symbol either.
+  // Reads are already matched by name, so falling back to the reference's
+  // own name closes that hole instead of opening a new kind of match.
+  const markReadWithNameFallback = (symbols, name) => {
+    if (symbols.length > 0) markRead(symbols);
+    else readNames.add(name);
+  };
 
   for (const sourceFile of program.getSourceFiles()) {
     if (sourceFile.isDeclarationFile) continue;
@@ -173,18 +182,8 @@ export function classifyReferences(program, checker) {
         const symbols = rootsOf(checker, checker.getSymbolAtLocation(node.name));
         if (isPlainAssignmentTarget(node)) {
           markWritten(symbols);
-        } else if (symbols.length > 0) {
-          markRead(symbols);
         } else {
-          // Not just `any` (e.g. `JSON.parse(...)`): an index signature
-          // (`Record<string, unknown>`) and a narrowed discriminated-union
-          // member with a fully concrete type both resolve no symbol here
-          // either. Disabling this fallback turns 177 baseline findings into
-          // 190 — those 13 properties are genuinely read, only through one of
-          // these unresolved-symbol shapes. Reads are already matched by
-          // name, so recording the access's own name closes that hole
-          // instead of opening a new kind of match.
-          readNames.add(node.name.text);
+          markReadWithNameFallback(symbols, node.name.text);
         }
       } else if (
         ts.isElementAccessExpression(node) &&
@@ -208,8 +207,12 @@ export function classifyReferences(program, checker) {
         // `...rest` carries every property the pattern didn't name onward,
         // same as a spread in an object literal, so it gets the same
         // mark-everything treatment rather than a lookup by `rest`'s own name.
-        if (node.dotDotDotToken) markAllPropertiesRead(type);
-        else markRead(propertiesOfType(checker, type, (node.propertyName ?? node.name).getText()));
+        if (node.dotDotDotToken) {
+          markAllPropertiesRead(type);
+        } else {
+          const name = (node.propertyName ?? node.name).getText();
+          markReadWithNameFallback(propertiesOfType(checker, type, name), name);
+        }
       } else if (ts.isSpreadAssignment(node) || ts.isSpreadElement(node)) {
         markAllPropertiesRead(checker.getTypeAtLocation(node.expression));
       }

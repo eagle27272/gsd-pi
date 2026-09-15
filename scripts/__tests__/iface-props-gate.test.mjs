@@ -410,6 +410,23 @@ export function make(): A { return { x: "v" } }`,
   assert.deepEqual(keys, []);
 });
 
+// Same unresolved-symbol shape as the any-typed-read case above, but through
+// destructuring rather than a dotted access — the false positive this gate
+// shipped with for SessionData.renderedTools, read only via
+// `const { renderedTools } = JSON.parse(...)` in an untyped .js template.
+test("analyse does not report a property read only by destructuring an any-typed value", () => {
+  const keys = findings({
+    "state.ts": `export interface A { x: string }
+export function make(): A { return { x: "v" } }`,
+    "use.ts": `export function read(json: string) {
+  const { x } = JSON.parse(json);
+  return x;
+}`,
+  });
+
+  assert.deepEqual(keys, []);
+});
+
 // Structural typing: the read goes through a compatible but nominally separate
 // interface, exactly as WorktreeStatus is read via WorktreeStatusLike. A
 // symbol-identity join reports this; keying reads by name is what prevents it.
