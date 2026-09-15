@@ -113,6 +113,8 @@
     "typecheck:extensions": "tsc --noEmit --project tsconfig.extensions.json",
     "lint:dead-code": "node scripts/knip-gate.mjs",
     "lint:dead-code:update": "node scripts/knip-gate.mjs --write",
+    "lint:dead-code:props": "node scripts/iface-props-gate.mjs",
+    "lint:dead-code:props:update": "node scripts/iface-props-gate.mjs --write",
     "verify:gsd-projection-mutations": "node scripts/check-gsd-projection-mutations.mjs",
     "audit:test-confidence": "node scripts/audit-test-confidence.mjs",
     "audit:test-gaps": "node scripts/audit-test-gaps.mjs",

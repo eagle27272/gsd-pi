@@ -186,6 +186,18 @@ export function make(x: string): A { return { x } }`,
   assert.equal(seen["A.x"].written, true);
 });
 
+// A computed key's name is only known at runtime, so it cannot be resolved
+// against the contextual type. This must not crash the walk (regression: a
+// `PropertyAssignment` with a `ComputedPropertyName` has no `.text`).
+test("classifyReferences ignores a computed object-literal key instead of crashing", () => {
+  const seen = classify({
+    "a.ts": `export interface A { x: string }
+export function make(k: "x"): A { return { [k]: "v" } }`,
+  });
+
+  assert.equal(seen["A.x"].written, false);
+});
+
 test("classifyReferences treats destructuring as a read", () => {
   const seen = classify({
     "a.ts": `export interface A { x: string }

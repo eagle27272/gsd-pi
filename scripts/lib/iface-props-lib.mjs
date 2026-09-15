@@ -166,8 +166,12 @@ export function classifyReferences(program, checker) {
         markRead(propertiesOfType(checker, type, node.argumentExpression.text));
       } else if (
         (ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node)) &&
-        ts.isObjectLiteralExpression(node.parent)
+        ts.isObjectLiteralExpression(node.parent) &&
+        (ts.isIdentifier(node.name) || ts.isStringLiteralLike(node.name))
       ) {
+        // A computed key (`{ [expr]: value }`) has no static name to look up
+        // against the contextual type, so it is skipped rather than crashing —
+        // the same treatment dynamic element-access reads already get below.
         const contextual = checker.getContextualType(node.parent);
         markWritten(propertiesOfType(checker, contextual, node.name.text));
       } else if (ts.isBindingElement(node) && ts.isObjectBindingPattern(node.parent)) {
