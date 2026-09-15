@@ -176,11 +176,14 @@ export function classifyReferences(program, checker) {
         } else if (symbols.length > 0) {
           markRead(symbols);
         } else {
-          // An `any`-typed value (e.g. a `JSON.parse(...)` result) resolves no
-          // symbol at all, so the read would otherwise be invisible rather
-          // than merely unresolved. Reads are already matched by name, so
-          // recording the access's own name here closes that hole instead of
-          // opening a new kind of match.
+          // Not just `any` (e.g. `JSON.parse(...)`): an index signature
+          // (`Record<string, unknown>`) and a narrowed discriminated-union
+          // member with a fully concrete type both resolve no symbol here
+          // either. Disabling this fallback turns 177 baseline findings into
+          // 190 — those 13 properties are genuinely read, only through one of
+          // these unresolved-symbol shapes. Reads are already matched by
+          // name, so recording the access's own name closes that hole
+          // instead of opening a new kind of match.
           readNames.add(node.name.text);
         }
       } else if (

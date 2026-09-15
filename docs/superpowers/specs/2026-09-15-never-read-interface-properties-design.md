@@ -173,8 +173,11 @@ knip's issue type so the two baselines stay legible side by side.
 distinct `<type-literal>.items` entries in the prototype, which would collapse to a
 single key, so deleting seven of the eight would go undetected. The owner is
 therefore the nearest *named* enclosing declaration — interface, type alias,
-function, method, or variable — which is stable under movement within a file and
-unique in practice.
+function, method, or variable — joined with the name of every intervening property
+signature as a dotted path, which is stable under movement within a file and
+unique in practice. A nested inline object literal like
+`interface R { cost: { total: number } }` therefore has owner `R.cost`, keying the
+inner property `R.cost.total`.
 
 Concretely, a property signature inside a type literal in the return type of
 `function scanClaude()` keys as `writeOnly|…/scanners.ts|scanClaude.items`, and a
