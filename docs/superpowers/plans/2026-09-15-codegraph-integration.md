@@ -773,8 +773,13 @@ Create `src/resources/extensions/codegraph/tools.ts`:
 // ever constructed when detect.ts says the project is indexed, so their prompt
 // guidelines are automatically absent in projects without a graph.
 
-import type { AgentToolResult } from "@gsd/pi-agent-core";
-import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, defineTool, truncateHead } from "@gsd/pi-coding-agent";
+import {
+  DEFAULT_MAX_BYTES,
+  DEFAULT_MAX_LINES,
+  defineTool,
+  truncateHead,
+  type AgentToolResult,
+} from "@gsd/pi-coding-agent";
 import { Type } from "@gsd/pi-ai";
 import {
   CODEGRAPH_TIMEOUT_MS,
@@ -936,7 +941,7 @@ node --import ./src/resources/extensions/gsd/tests/resolve-ts.mjs --experimental
 
 Expected: PASS, 10 tests.
 
-If `defineTool` or `AgentToolResult` does not resolve from the import paths above, check the re-exports in `packages/pi-coding-agent/src/index.ts` and adjust the import to wherever the symbol is actually exported; do not widen the types to `any` to get past it.
+`defineTool` and `AgentToolResult` are both re-exported from `@gsd/pi-coding-agent` (`packages/pi-coding-agent/src/index.ts:19` and `:107`). Do not import them from `@gsd/pi-agent-core` — that package is not a declared dependency of the root package. If any import fails to resolve, find the real export site rather than widening types to `any`.
 
 - [ ] **Step 5: Commit**
 
