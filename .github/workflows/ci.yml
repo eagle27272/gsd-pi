@@ -62,6 +62,9 @@ jobs:
       # Dead-code gate. Runs on source, so it needs no build and can fail in
       # about a minute, before the expensive build/test steps below.
       - run: pnpm run lint:dead-code
+      # Interface-property dead-code gate (#185). knip's member analysis covers
+      # classes and enums only; this covers never-read interface properties.
+      - run: pnpm run lint:dead-code:props
       - run: pnpm run build:core
       - run: pnpm run typecheck:extensions
       # The unit suite drives fault injection through the native engine, and the
