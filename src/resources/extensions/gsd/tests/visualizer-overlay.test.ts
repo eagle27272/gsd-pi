@@ -329,7 +329,8 @@ test("overlay footer hint mentions tab navigation, filter, scroll, and help", (t
 
   const lines = overlay.render(120).map(stripAnsi).join("\n");
   assert.ok(lines.includes("1-9,0"), "footer shows 1-9,0 tab range hint");
-  assert.ok(lines.includes("PgUp/PgDn") || lines.includes("PgUp"), "footer mentions PgUp/PgDn");
+  // Herdr swallows PgUp/PgDn, so the footer advertises the chord that reaches us.
+  assert.ok(lines.includes("^U/^D"), "footer mentions the multiplexer-safe scroll chord");
   assert.ok(lines.includes("? help"), "footer mentions ? help");
   assert.ok(lines.includes("/"), "footer mentions / for filter");
 });

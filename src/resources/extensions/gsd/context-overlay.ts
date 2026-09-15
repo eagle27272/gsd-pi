@@ -8,6 +8,7 @@ import { matchesKey, Key, truncateToWidth } from "@gsd/pi-tui";
 import type { ContextBreakdownReport, ContextSectionBreakdown } from "./commands-context.js";
 import { formatTokenCount } from "./metrics.js";
 import { renderDialogFrame, renderKeyHints, renderProgressBar, rightAlign } from "./tui/render-kit.js";
+import { isScrollDownKey, isScrollUpKey } from "../shared/scroll-keys.js";
 
 const SECTION_COLORS: ThemeColor[] = ["accent", "success", "warning", "borderAccent", "text"];
 
@@ -111,13 +112,13 @@ export class GSDContextOverlay {
       this.tui.requestRender();
       return;
     }
-    if (matchesKey(data, Key.pageDown)) {
+    if (isScrollDownKey(data)) {
       this.scrollOffset += 12;
       this.cachedLines = undefined;
       this.tui.requestRender();
       return;
     }
-    if (matchesKey(data, Key.pageUp)) {
+    if (isScrollUpKey(data)) {
       this.scrollOffset = Math.max(0, this.scrollOffset - 12);
       this.cachedLines = undefined;
       this.tui.requestRender();
