@@ -4,10 +4,8 @@ on:
     branches:
       - main
 jobs:
-  # Unlike build-and-test this is not restricted to the merge queue: the scans
-  # and policy checks diff against the PR base, so they need the real PR, and
-  # they are cheap enough (no build, no native toolchain) to run on every one.
   fast-gates:
+    if: startsWith(github.head_ref, 'mergify/merge-queue/')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

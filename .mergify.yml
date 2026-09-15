@@ -7,9 +7,6 @@ queue_rules:
     branch_protection_injection_mode: queue
     queue_conditions:
       - base = main
-      # fast-gates runs on the PR itself, so requiring it here keeps a
-      # known-red PR from entering the queue and burning a check slot.
-      - check-success = @github-actions/fast-gates
     merge_conditions:
       - check-success = @github-actions/fast-gates
       - check-success = @github-actions/build-and-test
