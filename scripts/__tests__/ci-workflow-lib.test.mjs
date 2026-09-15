@@ -1,155 +1,352 @@
-// Regression guard: CI docs and the tier map stay reconciled with the real
-// workflow files. Commit 854209ad deleted most of this repo's workflows and
-// docs/dev/ci-cd-pipeline.md went on describing them for months; these tests
-// exist so the next deletion fails a gate instead of rotting quietly.
+// Regression guard: the CI map in audit-test-confidence.mjs is checked against
+// the real workflow and merge-queue config, not just asserted in prose.
 
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
-
 import {
-  diffDocumentedJobs,
-  listJobIds,
-  readRequiredChecks,
-  readWorkflows,
+  ciDriftForRoot,
+  ciMapDrift,
+  localTierDrift,
+  parseRequiredChecks,
+  parseWorkflowJobs,
+  readMergifySource,
+  readWorkflowSources,
 } from "../lib/ci-workflow-lib.mjs";
+
+const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..", "..");
+
+const CI_YML = `
+name: CI
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  fast-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: pnpm install --frozen-lockfile
+      - run: bash scripts/ci-fast-gates.sh
+  build-and-test:
+    if: startsWith(github.head_ref, 'mergify/merge-queue/')
+    runs-on: ubuntu-latest
+    steps:
+      - run: pnpm run build:core
+      - run: pnpm run test:unit
+`;
+
+const MERGIFY_YML = `
+queue_rules:
+  - name: Auto Merge
+    queue_conditions:
+      - base = main
+    merge_conditions:
+      - check-success = @github-actions/fast-gates
+      - check-success = @github-actions/build-and-test
+`;
+
+const QUEUE_ONLY_IF = "startsWith(github.head_ref, 'mergify/merge-queue/')";
+
+const blocking = (overrides = []) => [
+  { ciJob: "fast-gates", steps: ["bash scripts/ci-fast-gates.sh"], enforcement: "block" },
+  {
+    ciJob: "build-and-test",
+    steps: ["build:core", "test:unit"],
+    enforcement: "block",
+    allowedIf: QUEUE_ONLY_IF,
+  },
+  ...overrides,
+];
+
+const findJob = (jobs, id) => jobs.find((job) => job.id === id);
+
+test("parseWorkflowJobs returns each job's id and its run commands", () => {
+  const jobs = parseWorkflowJobs({ "ci.yml": CI_YML });
+  assert.deepEqual(jobs.map((job) => job.id).sort(), ["build-and-test", "fast-gates"]);
+  assert.equal(findJob(jobs, "fast-gates").workflow, "ci.yml");
+  assert.deepEqual(findJob(jobs, "build-and-test").runs, [
+    "pnpm run build:core",
+    "pnpm run test:unit",
+  ]);
+});
+
+test("parseWorkflowJobs ignores steps that use an action instead of run", () => {
+  const jobs = parseWorkflowJobs({ "ci.yml": CI_YML });
+  assert.deepEqual(findJob(jobs, "fast-gates").runs, [
+    "pnpm install --frozen-lockfile",
+    "bash scripts/ci-fast-gates.sh",
+  ]);
+});
+
+test("parseWorkflowJobs keeps same-named jobs from different workflows apart", () => {
+  const jobs = parseWorkflowJobs({
+    "a.yml": CI_YML,
+    "b.yml": "jobs:\n  fast-gates:\n    steps:\n      - run: echo other\n",
+  });
+  assert.deepEqual(
+    jobs.filter((job) => job.id === "fast-gates").map((job) => job.workflow).sort(),
+    ["a.yml", "b.yml"],
+  );
+});
+
+test("parseWorkflowJobs records a job-level if condition", () => {
+  const jobs = parseWorkflowJobs({ "ci.yml": CI_YML });
+  assert.equal(findJob(jobs, "build-and-test").if, QUEUE_ONLY_IF);
+  assert.equal(findJob(jobs, "fast-gates").if, null);
+});
+
+test("parseRequiredChecks descends into nested and/or condition groups", () => {
+  const nested = `
+queue_rules:
+  - name: Auto Merge
+    merge_conditions:
+      - and:
+          - check-success = @github-actions/fast-gates
+          - or:
+              - check-success = build-and-test
+`;
+  assert.deepEqual(parseRequiredChecks(nested), new Set(["fast-gates", "build-and-test"]));
+});
+
+test("parseRequiredChecks extracts the job names Mergify gates merges on", () => {
+  assert.deepEqual(parseRequiredChecks(MERGIFY_YML), new Set(["fast-gates", "build-and-test"]));
+});
+
+test("ciMapDrift reports nothing when the map matches the workflow", () => {
+  assert.deepEqual(
+    ciMapDrift({
+      blocking: blocking(),
+      conditional: [],
+      workflows: { "ci.yml": CI_YML },
+      mergify: MERGIFY_YML,
+    }),
+    [],
+  );
+});
+
+test("ciMapDrift reports a documented job that no workflow defines", () => {
+  const issues = ciMapDrift({
+    blocking: blocking([
+      { ciJob: "windows-portability", steps: [], enforcement: "block-when-triggered" },
+    ]),
+    conditional: [],
+    workflows: { "ci.yml": CI_YML },
+    mergify: MERGIFY_YML,
+  });
+  assert.equal(issues.length, 1);
+  assert.match(issues[0], /windows-portability/);
+  assert.match(issues[0], /no workflow defines/i);
+});
+
+test("ciMapDrift reports a blocking job Mergify does not require", () => {
+  const issues = ciMapDrift({
+    blocking: blocking(),
+    conditional: [],
+    workflows: { "ci.yml": CI_YML },
+    mergify: MERGIFY_YML.replace("      - check-success = @github-actions/fast-gates\n", ""),
+  });
+  assert.equal(issues.length, 1);
+  assert.match(issues[0], /fast-gates/);
+  assert.match(issues[0], /merge_conditions/);
+});
+
+// The failure mode issue #191 was filed about: a gate is deleted from CI and
+// the guard that documents it stays quietly green.
+test("ciMapDrift reports a documented step the job no longer runs", () => {
+  const issues = ciMapDrift({
+    blocking: blocking(),
+    conditional: [],
+    workflows: { "ci.yml": CI_YML.replace("      - run: pnpm run test:unit\n", "") },
+    mergify: MERGIFY_YML,
+  });
+  assert.equal(issues.length, 1);
+  assert.match(issues[0], /build-and-test/);
+  assert.match(issues[0], /test:unit/);
+});
+
+// `pnpm run test:unit:compiled` is a strictly narrower gate than
+// `pnpm run test:unit`; a substring match would call that no drift at all.
+test("ciMapDrift reports a documented step narrowed to a different script", () => {
+  const issues = ciMapDrift({
+    blocking: blocking(),
+    conditional: [],
+    workflows: {
+      "ci.yml": CI_YML.replace("pnpm run test:unit", "pnpm run test:unit:compiled"),
+    },
+    mergify: MERGIFY_YML,
+  });
+  assert.equal(issues.length, 1);
+  assert.match(issues[0], /test:unit/);
+});
+
+test("ciMapDrift does not accept a documented step that only appears in a comment", () => {
+  const issues = ciMapDrift({
+    blocking: blocking(),
+    conditional: [],
+    workflows: {
+      "ci.yml": CI_YML.replace(
+        "      - run: pnpm run test:unit\n",
+        "      - run: |\n          # pnpm run test:unit is temporarily disabled\n          echo skipped\n",
+      ),
+    },
+    mergify: MERGIFY_YML,
+  });
+  assert.equal(issues.length, 1);
+  assert.match(issues[0], /test:unit/);
+});
+
+test("ciMapDrift accepts the merge-queue guard a blocking job declares", () => {
+  assert.deepEqual(
+    ciMapDrift({
+      blocking: blocking(),
+      conditional: [],
+      workflows: { "ci.yml": CI_YML },
+      mergify: MERGIFY_YML,
+    }),
+    [],
+  );
+});
+
+// A blocking job that never runs never reports a check, so the merge queue
+// stalls rather than merging something unverified — but it is still drift.
+test("ciMapDrift reports an undeclared if condition on a blocking job", () => {
+  const issues = ciMapDrift({
+    blocking: blocking(),
+    conditional: [],
+    workflows: {
+      "ci.yml": CI_YML.replace(
+        "  fast-gates:\n",
+        "  fast-gates:\n    if: github.event_name == 'push'\n",
+      ),
+    },
+    mergify: MERGIFY_YML,
+  });
+  assert.equal(issues.length, 1);
+  assert.match(issues[0], /fast-gates/);
+  assert.match(issues[0], /if:/);
+});
+
+test("ciMapDrift reports a workflow job missing from the map", () => {
+  const issues = ciMapDrift({
+    blocking: blocking().slice(0, 1),
+    conditional: [],
+    workflows: { "ci.yml": CI_YML },
+    mergify: MERGIFY_YML,
+  });
+  assert.equal(issues.length, 1);
+  assert.match(issues[0], /build-and-test/);
+  assert.match(issues[0], /not documented/i);
+});
+
+test("ciMapDrift counts conditional jobs as documented without requiring a merge check", () => {
+  const workflows = {
+    "ci.yml": `${CI_YML}  nightly:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n`,
+  };
+  assert.deepEqual(
+    ciMapDrift({
+      blocking: blocking(),
+      conditional: [{ ciJob: "nightly", enforcement: "warn" }],
+      workflows,
+      mergify: MERGIFY_YML,
+    }),
+    [],
+  );
+});
+
+// The local-tier table names CI jobs too, and it is what the human-readable
+// report prints. It drifted the same way the blocking map did (#191).
+test("localTierDrift accepts tiers whose CI jobs exist", () => {
+  assert.deepEqual(
+    localTierDrift({
+      tiers: [
+        { name: "verify:fast", matchesCi: ["fast-gates"] },
+        { name: "test:coverage", matchesCi: [] },
+      ],
+      workflows: { "ci.yml": CI_YML },
+    }),
+    [],
+  );
+});
+
+test("localTierDrift reports a tier pointing at a job that does not exist", () => {
+  const issues = localTierDrift({
+    tiers: [{ name: "test:coverage", matchesCi: ["coverage-report"] }],
+    workflows: { "ci.yml": CI_YML },
+  });
+  assert.equal(issues.length, 1);
+  assert.match(issues[0], /test:coverage/);
+  assert.match(issues[0], /coverage-report/);
+});
+
+test("readWorkflowSources and readMergifySource read this repo's real config", () => {
+  const sources = readWorkflowSources(ROOT);
+  assert.ok(Object.hasOwn(sources, "ci.yml"), "expected .github/workflows/ci.yml");
+  assert.match(readMergifySource(ROOT), /queue_rules/);
+});
+
+test("readWorkflowSources returns nothing when the workflow dir is absent", () => {
+  const empty = mkdtempSync(join(tmpdir(), "ci-workflow-lib-"));
+  try {
+    assert.deepEqual(readWorkflowSources(empty), {});
+    assert.equal(readMergifySource(empty), "");
+  } finally {
+    rmSync(empty, { recursive: true, force: true });
+  }
+});
+
+// The end-to-end path audit-test-confidence.mjs actually calls.
+test("ciDriftForRoot reports drift against the real repo when the map is wrong", () => {
+  const issues = ciDriftForRoot(ROOT, {
+    blocking: [{ ciJob: "no-such-job", steps: [], enforcement: "block" }],
+    conditional: [],
+    localTiers: [{ name: "made-up", matchesCi: ["also-missing"] }],
+  });
+  assert.ok(issues.some((i) => /no-such-job/.test(i)), issues.join("\n"));
+  assert.ok(issues.some((i) => /also-missing/.test(i)), issues.join("\n"));
+});
+
+// The CI map above is checked against the workflows, but the prose docs are
+// where people actually look. docs/dev/ci-cd-pipeline.md spent months
+// describing workflows commit 854209ad had deleted; these two guards make that
+// failure mode loud instead of silent.
 
 const CI_DOCS = ["docs/dev/ci-cd-pipeline.md", "docs/dev/test-confidence-stack.md"];
 
-function fixture(workflows, mergify) {
-  const root = mkdtempSync(join(tmpdir(), "ci-workflow-lib-"));
-  mkdirSync(join(root, ".github/workflows"), { recursive: true });
-  for (const [name, body] of Object.entries(workflows)) {
-    writeFileSync(join(root, ".github/workflows", name), body);
-  }
-  if (mergify) writeFileSync(join(root, ".mergify.yml"), mergify);
-  return root;
-}
+// Not workflows, so a backticked mention of either is not a claim about
+// .github/workflows/.
+const NON_WORKFLOW_YAML = new Set(["dependabot.yml", ".mergify.yml"]);
 
-test("reads job ids and triggers from the real workflow files", () => {
-  const workflows = readWorkflows(".");
-  assert.ok(workflows.length > 0, "expected at least one workflow file");
-
-  for (const workflow of workflows) {
-    assert.ok(workflow.jobs.length > 0, `${workflow.file} defines no jobs`);
-    assert.ok(workflow.triggers.length > 0, `${workflow.file} declares no triggers`);
-  }
-});
-
-test("every check .mergify.yml requires is a job some workflow defines", () => {
-  const jobs = listJobIds(".");
-  for (const check of readRequiredChecks(".")) {
-    assert.ok(
-      jobs.has(check),
-      `.mergify.yml requires '${check}', but no workflow defines that job`,
-    );
-  }
-});
-
-test("the documented tier map matches the workflows on disk", async () => {
-  const { spawnSync } = await import("node:child_process");
-  const result = spawnSync(
-    process.execPath,
-    ["scripts/audit-test-confidence.mjs", "--json"],
-    { encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, result.stderr);
-
-  const report = JSON.parse(result.stdout);
-  const documented = report.ciPrBlocking.map((row) => row.ciJob);
-  const diff = diffDocumentedJobs(".", documented);
-
-  assert.deepEqual(diff.missing, [], "tier map documents jobs that do not exist");
-  assert.deepEqual(diff.undocumented, [], "workflows define jobs the tier map omits");
-});
-
-test("CI docs do not reference workflow files that were deleted", () => {
-  const onDisk = new Set(readWorkflows(".").map((w) => w.file.split("/").pop()));
+test("CI docs do not reference workflow files that are not on disk", () => {
+  const onDisk = new Set(Object.keys(readWorkflowSources(ROOT)));
 
   for (const doc of CI_DOCS) {
-    const text = readFileSync(doc, "utf8");
-    // Only flag `.github/workflows/`-shaped names; a bare `ci.yml` in prose is
-    // ambiguous, but `foo.yml` claimed as a workflow is checkable.
-    const claimed = text.matchAll(/`([a-z0-9-]+\.ya?ml)`/g);
-    for (const [, name] of claimed) {
-      if (name === "dependabot.yml" || name === ".mergify.yml") continue;
+    const text = readFileSync(join(ROOT, doc), "utf8");
+    // Only bare backticked filenames count as a claim that the workflow
+    // exists; a full path or an unquoted mention of a deleted one does not.
+    for (const [, name] of text.matchAll(/`([a-z0-9-]+\.ya?ml)`/g)) {
+      if (NON_WORKFLOW_YAML.has(name)) continue;
       assert.ok(
         onDisk.has(name),
-        `${doc} references workflow '${name}', which does not exist in .github/workflows/`,
+        `${doc} references workflow '${name}', which is not in .github/workflows/`,
       );
     }
   }
 });
 
-test("CI docs do not claim a job that no workflow defines", () => {
-  const jobs = listJobIds(".");
-  // Job names the docs previously asserted as CI jobs. Each was real once and
-  // is now local-only or gone; if one comes back, drop it from this list.
-  const retired = ["fast-gates", "windows-portability", "windows-smoke-e2e", "coverage-report"];
+test("CI docs do not call something a job unless a workflow defines it", () => {
+  const defined = new Set(parseWorkflowJobs(readWorkflowSources(ROOT)).map((job) => job.id));
 
   for (const doc of CI_DOCS) {
-    const text = readFileSync(doc, "utf8");
-    for (const name of retired) {
-      if (!jobs.has(name) && new RegExp(`\`${name}\`\\s+job`).test(text)) {
-        assert.fail(`${doc} calls '${name}' a job, but no workflow defines it`);
-      }
+    const text = readFileSync(join(ROOT, doc), "utf8");
+    for (const [, name] of text.matchAll(/`([a-z0-9-]+)`\s+job\b/g)) {
+      assert.ok(
+        defined.has(name),
+        `${doc} calls '${name}' a job, but no workflow defines it`,
+      );
     }
-  }
-});
-
-test("diffDocumentedJobs reports drift in both directions", () => {
-  const root = fixture(
-    {
-      "ci.yml": "name: CI\non:\n  pull_request:\njobs:\n  build-and-test:\n    runs-on: ubuntu-latest\n",
-    },
-    "queue_rules:\n  - name: q\n    merge_conditions:\n      - check-success = @github-actions/ghost\n",
-  );
-
-  try {
-    const diff = diffDocumentedJobs(root, ["build-and-test", "deleted-job"]);
-    assert.deepEqual(diff.actual, ["build-and-test"]);
-    assert.deepEqual(diff.missing, ["deleted-job"]);
-    assert.deepEqual(diff.undocumented, []);
-    assert.deepEqual(diff.requiredButUndefined, ["ghost"]);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("an undocumented workflow job is drift", () => {
-  const root = fixture({
-    "ci.yml": "name: CI\non:\n  pull_request:\njobs:\n  a:\n    runs-on: x\n  b:\n    runs-on: x\n",
-  });
-
-  try {
-    assert.deepEqual(diffDocumentedJobs(root, ["a"]).undocumented, ["b"]);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("strips the Mergify app prefix from required checks", () => {
-  const root = fixture(
-    { "ci.yml": "name: CI\non:\n  pull_request:\njobs:\n  build-and-test:\n    runs-on: x\n" },
-    "queue_rules:\n  - name: q\n    merge_conditions:\n      - check-success = @github-actions/build-and-test\n      - base = main\n",
-  );
-
-  try {
-    assert.deepEqual(readRequiredChecks(root), ["build-and-test"]);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("a repo with no workflows yields no jobs rather than throwing", () => {
-  const root = mkdtempSync(join(tmpdir(), "ci-workflow-lib-empty-"));
-  try {
-    assert.deepEqual(readWorkflows(root), []);
-    assert.deepEqual(readRequiredChecks(root), []);
-    assert.deepEqual([...listJobIds(root)], []);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
   }
 });

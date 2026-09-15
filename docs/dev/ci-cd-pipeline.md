@@ -12,27 +12,42 @@ What remains is two files:
 | File | Purpose |
 |------|---------|
 | `.github/dependabot.yml` | Weekly grouped GitHub Actions version bumps |
-| `.github/workflows/ci.yml` | One workflow, one job |
+| `.github/workflows/ci.yml` | Two jobs: `fast-gates` and `build-and-test` |
 
-Everything else this repo calls a "gate" is a local script. That is a
-deliberate trade, and the important consequence is in the next section.
+`ci.yml` triggers on `pull_request` against `main`. There is no `push:`
+trigger, no `workflow_dispatch`, and no schedule — nothing runs after a merge.
 
-## The only CI job
+## The two jobs
 
-`ci.yml` triggers on `pull_request` against `main` — there is no `push:`
-trigger, no `workflow_dispatch`, and no schedule. It defines a single job,
-`build-and-test`, guarded by:
+### `fast-gates` — every PR
+
+Runs on every pull request, with no `if:` guard. It checks out full history
+(`fetch-depth: 0`), because the scans diff against the base ref and a local
+`verify:fast` falls back to `git merge-base`, which a shallow clone lacks. It
+installs dependencies with `--ignore-scripts`, installs a pinned,
+SHA256-verified `actionlint`, then runs `bash scripts/ci-fast-gates.sh` with
+`BASE_REF` and `PR_BASE_SHA` from the PR event.
+
+The actionlint install is load-bearing: `ci-fast-gates.sh` runs actionlint only
+when it is already on `PATH`, so without that step the workflow static-analysis
+gate would silently self-skip in the one place it is meant to block.
+
+The script covers secret and base64 scans, the docs prompt-injection scan,
+skill references, `require-tests`, source-grep test rejection, the three
+`audit:*` strict gates, `scripts/__tests__/`, the pi boundary check, the
+knip dead-code baseline, and actionlint.
+
+### `build-and-test` — merge queue only
+
+Guarded by:
 
 ```yaml
 if: startsWith(github.head_ref, 'mergify/merge-queue/')
 ```
 
-**That guard means the job does not run on your PR.** It runs only on the
-temporary branches Mergify creates when a PR enters the merge queue. Open a
-pull request and you will see `build-and-test` skipped; it executes once, after
-you queue the PR, against the prospective merge result.
-
-The job runs on `ubuntu-latest`:
+**It does not run on your PR.** It runs only on the temporary branches Mergify
+creates when a PR enters the merge queue, so you will see it skipped until the
+PR is queued. Steps:
 
 1. `pnpm install --frozen-lockfile` (pnpm 10.12.1, Node 24.20.0, pnpm cache)
 2. `pnpm run lint:dead-code` — knip against the committed baseline. Runs on
@@ -58,50 +73,48 @@ workflow:
   one, and rustc dies with SIGILL when it dlopens `napi_derive`. Any non-empty
   `RUSTFLAGS` replaces the config wholesale, dropping `target-cpu=native`.
 
-## What actually gates merge
+## What gates merge
 
 Not GitHub branch protection — Mergify. `.mergify.yml` sets
-`branch_protection_injection_mode: queue` and declares exactly one required
-check:
+`branch_protection_injection_mode: queue` and requires both jobs:
 
 ```yaml
+queue_conditions:
+  - base = main
+  - check-success = @github-actions/fast-gates
 merge_conditions:
+  - check-success = @github-actions/fast-gates
   - check-success = @github-actions/build-and-test
 ```
 
-So the complete merge gate is: **the unit suite, a typecheck, a core build, and
-the dead-code baseline, run once in the merge queue.** Nothing else blocks.
+`fast-gates` appears in **both** lists on purpose: because it runs on the PR
+itself, requiring it as a queue condition keeps a known-red PR from entering
+the queue and burning a check slot.
 
-## What CI does not run
+## What CI still does not run
 
-This is the honest part of the document. All of the following exist as scripts,
-are useful, and are enforced nowhere except on your machine:
+These exist as scripts, are useful, and are enforced nowhere but your machine:
 
-| Local command | What it covers | CI job |
+| Local command | What it covers | In CI? |
 |---|---|---|
-| `pnpm run verify:fast` (`scripts/ci-fast-gates.sh`) | Secret scan, base64 scan, docs prompt-injection scan, skill references, `require-tests`, source-grep test rejection, the three `audit:*` strict gates, `scripts/__tests__/`, pi boundary, dead code, actionlint | **none** |
-| `pnpm run verify:merge` (`scripts/verify-merge.sh`) | Full Linux stack: `validate-pack`, workspace coverage, compiled unit + package tests, integration, e2e | **none** |
-| `pnpm run verify:merge:needed` (`scripts/ci-classify-changes.sh`) | Heavy-change classification — decides whether `verify:merge` is worth paying for | **none** |
-| `pnpm run test:integration`, `test:packages`, `test:e2e`, `test:coverage` | Everything beyond `test:unit` | **none** |
+| `pnpm run verify:merge` (`scripts/verify-merge.sh`) | Full Linux stack: `validate-pack`, workspace and extension coverage, compiled unit + package tests, `@gsd/pi-ai` vitest, integration, e2e | No |
+| `pnpm run verify:merge:needed` (`scripts/ci-classify-changes.sh`) | Heavy-change classification — decides whether `verify:merge` is worth paying for | No |
+| `pnpm run test:integration`, `test:packages`, `test:e2e` | Everything beyond `test:unit` | No |
+| `pnpm run test:coverage`, `test:coverage:full` | c8 thresholds and merged coverage | No |
+| `pnpm run test:e2e:docker`, `test:e2e:windows-smoke` | Docker and Windows paths | No |
 
-Note the filename trap: `scripts/ci-fast-gates.sh` is named after a `fast-gates`
-CI job that was deleted in `854209ad`. The script is current and worth running;
-the name is a fossil.
+`scripts/ci-classify-changes.sh` is **not** dead code — `scripts/verify-merge.sh`
+and `scripts/verify-merge-needed.sh` both call it, and
+`scripts/__tests__/verify-merge.test.mjs` asserts it. It is simply local-only:
+no CI job has invoked it since the pipeline was cut down, so the path gating it
+implements is a local cost-saving heuristic, not a CI behaviour.
 
-Likewise `scripts/ci-classify-changes.sh` is **not** dead code — it is called by
-`scripts/verify-merge.sh` and `scripts/verify-merge-needed.sh` and asserted by
-`scripts/__tests__/verify-merge.test.mjs`. It is simply local-only. No CI job
-has invoked it since the pipeline was cut down.
-
-There is no Windows job, no Docker job, no coverage workflow, and no
-path-gating in CI. Those concepts survive only inside the local scripts.
+There is no Windows job, no Docker job, and no coverage workflow.
 
 ## Recommended local workflow
 
-Because the merge gate is thin, local verification is doing the real work:
-
 ```bash
-pnpm run verify:fast      # before every push — fast, catches policy/security
+pnpm run verify:fast      # what fast-gates runs — check before pushing
 pnpm run verify:pr        # inner loop: build:core + typecheck + unit
 pnpm run verify:merge     # before requesting review on heavy code changes
 ```
@@ -128,17 +141,18 @@ obsolete.
 The job names and workflow filenames above are machine-checked.
 `scripts/lib/ci-workflow-lib.mjs` parses `.github/workflows/*.yml` and
 `.mergify.yml`; `scripts/audit-test-confidence.mjs --strict` fails when a
-documented job is not defined by any workflow, when a workflow defines a job
-nobody documented, or when `.mergify.yml` requires a check that does not exist.
-`scripts/__tests__/ci-workflow-lib.test.mjs` additionally fails this file and
-[test-confidence-stack.md](./test-confidence-stack.md) if either references a
-workflow filename that is not on disk.
+documented job does not exist, when it is documented as blocking but missing
+from `merge_conditions`, when it no longer runs a step the map claims, when a
+blocking job carries an undeclared `if:` that would let it skip, or when a
+workflow defines a job nobody documented.
 
-Both run inside `pnpm run verify:fast`.
+`scripts/__tests__/ci-workflow-lib.test.mjs` additionally fails the build if
+this file or [test-confidence-stack.md](./test-confidence-stack.md) references
+a workflow filename that is not on disk, or calls a name a job when no workflow
+defines it.
 
-Two conventions keep those guards usable when editing this file:
+All of it runs inside `fast-gates`, on every PR.
 
-- Refer to a deleted workflow by bare name, without backticks — the filename
-  check only inspects backticked names, so backticks assert "this exists".
-- Do not describe something as a job unless a workflow defines it. The guard
-  looks for a backticked name followed by the word "job".
+One convention keeps those guards usable when editing this file: refer to a
+deleted workflow by bare name, without backticks. The filename check only
+inspects backticked names, so backticks assert "this exists".

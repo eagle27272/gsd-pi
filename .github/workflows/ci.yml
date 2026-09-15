@@ -4,6 +4,48 @@ on:
     branches:
       - main
 jobs:
+  # Unlike build-and-test this is not restricted to the merge queue: the scans
+  # and policy checks diff against the PR base, so they need the real PR, and
+  # they are cheap enough (no build, no native toolchain) to run on every one.
+  fast-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Full history: the scans diff against the base ref, and a local
+      # verify:fast falls back to git merge-base, which a shallow clone lacks.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.20.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      # ci-fast-gates.sh runs actionlint only when it is on PATH, so without
+      # this step the workflow static-analysis gate would silently self-skip in
+      # the one place it is meant to block.
+      - name: Install actionlint
+        run: |
+          set -euo pipefail
+          ACTIONLINT_VERSION=1.7.7
+          ACTIONLINT_SHA256=023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757
+          TARBALL="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          # Verified before extraction: /usr/local/bin is world-writable and on
+          # PATH, so an unchecked tarball would be an easy foothold in the job
+          # that runs this repo's secret scans.
+          curl -sSfL -o "$TARBALL" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${TARBALL}"
+          echo "${ACTIONLINT_SHA256}  ${TARBALL}" | sha256sum -c -
+          tar -xzf "$TARBALL" -C /usr/local/bin actionlint
+          rm "$TARBALL"
+      - run: bash scripts/ci-fast-gates.sh
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+
   build-and-test:
     if: startsWith(github.head_ref, 'mergify/merge-queue/')
     runs-on: ubuntu-latest
