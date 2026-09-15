@@ -24,10 +24,11 @@ const TEST_FILE_RE = /\.(?:test|spec)\.(?:ts|tsx|mjs|js|cjs)$/;
 /**
  * CI jobs that gate merges, and the local script that reproduces each.
  *
- * `steps` are matched as substrings against the job's actual `run:` commands,
- * and every entry must name a job that exists and is in .mergify.yml's
- * merge_conditions — ciMapDrift enforces both. Keep this list honest: it used
- * to describe an older, much larger CI that no longer exists (#191).
+ * `steps` are matched on whitespace boundaries against the job's actual `run:`
+ * commands, and every entry must name a job that exists and is in
+ * .mergify.yml's merge_conditions — ciMapDrift enforces both. Keep this list
+ * honest: it used to describe an older, much larger CI that no longer exists
+ * (#191).
  */
 const CI_PR_BLOCKING_MAP = [
   {
@@ -39,7 +40,13 @@ const CI_PR_BLOCKING_MAP = [
   {
     ciJob: 'build-and-test',
     local: 'verify:merge',
-    steps: ['build:core', 'typecheck:extensions', 'build:native:test', 'test:unit'],
+    steps: [
+      'lint:dead-code',
+      'build:core',
+      'typecheck:extensions',
+      'build:native:test',
+      'test:unit',
+    ],
     enforcement: 'block',
     allowedIf: "startsWith(github.head_ref, 'mergify/merge-queue/')",
     note: 'merge-queue branches only; verify:merge covers more, but not test:live-workflow:unit',
