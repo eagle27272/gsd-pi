@@ -264,7 +264,7 @@ test("buildDesktopNotificationCommand includes project name in title on macOS", 
 
 // ─── Task 8: route blocked notifications through Herdr ──────────────────────────
 
-const herdrEnv = { paneId: "w1:p2", binPath: "/bin/herdr" };
+const herdrEnv = { paneId: "w1:p2", binPath: "/bin/herdr", socketPath: "/tmp/herdr.sock" };
 
 test("inside Herdr, attention notification → delivered as a blocked state-label, no throw", () => {
   const calls: string[][] = [];
@@ -324,7 +324,7 @@ test("deps.herdrEnv omitted → detectHerdrEnv() fallback is consulted from proc
   const prev = {
     HERDR_ENV: process.env.HERDR_ENV,
     HERDR_PANE_ID: process.env.HERDR_PANE_ID,
-    HERDR_BIN_PATH: process.env.HERDR_BIN_PATH,
+    HERDR_SOCKET_PATH: process.env.HERDR_SOCKET_PATH,
   };
   t.after(() => {
     for (const [k, v] of Object.entries(prev)) {
@@ -332,9 +332,10 @@ test("deps.herdrEnv omitted → detectHerdrEnv() fallback is consulted from proc
       else process.env[k] = v;
     }
   });
+  // The three vars Herdr actually exports into a pane — HERDR_BIN_PATH is not one.
   process.env.HERDR_ENV = "1";
   process.env.HERDR_PANE_ID = "w1:p2";
-  process.env.HERDR_BIN_PATH = "/bin/herdr";
+  process.env.HERDR_SOCKET_PATH = "/tmp/herdr.sock";
 
   const calls: string[][] = [];
   sendDesktopNotification("GSD", "Blocked: needs input", "warning", "attention", undefined, {
