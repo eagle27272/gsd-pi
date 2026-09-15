@@ -1,0 +1,11 @@
+{
+  "id": "codegraph",
+  "name": "CodeGraph",
+  "version": "1.0.0",
+  "description": "Symbol-graph code exploration for projects that have a .codegraph/ index",
+  "tier": "bundled",
+  "requires": { "platform": ">=2.29.0" },
+  "provides": {
+    "tools": ["codegraph_explore", "codegraph_node"]
+  }
+}
