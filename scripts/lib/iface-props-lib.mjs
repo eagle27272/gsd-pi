@@ -75,7 +75,7 @@ const NAMED_ANCESTORS = [
 // PropertySignatures in between, collapsing `R.cost.total` and `R.duration`
 // onto the same shape. Collecting each intervening property name keeps the
 // nesting path visible in the key.
-export function ownerLabel(node) {
+function ownerLabel(node) {
   const path = [];
   for (let current = node.parent; current; current = current.parent) {
     if (ts.isPropertySignature(current) && (ts.isIdentifier(current.name) || ts.isStringLiteralLike(current.name))) {
@@ -235,7 +235,7 @@ export function classifyReferences(program, checker) {
  * recall — a same-named property on an unrelated type that *is* read masks a
  * genuine finding — which is the right trade for a gate wired into CI.
  */
-export function findWriteOnly(declarations, references) {
+function findWriteOnly(declarations, references) {
   const keys = [];
   for (const [symbol, info] of declarations) {
     if (references.readNames.has(info.name)) continue;
