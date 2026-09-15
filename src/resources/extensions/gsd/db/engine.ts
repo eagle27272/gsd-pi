@@ -92,6 +92,7 @@ import {
   applyMigrationV47SameLeaseAttemptSettlement,
   applyMigrationV48TaskToolRequirements,
   applyMigrationV49MilestoneHorizontalChecklist,
+  applyMigrationV50MilestoneValidationVerdictScope,
 } from "../db-migration-steps.js";
 import {
   createCanonicalFoundationSchemaV31,
@@ -161,7 +162,7 @@ const providerLoader = createSqliteProviderLoader({
   nodeVersion: process.versions.node,
   writeStderr: (message: string) => process.stderr.write(message),
 });
-export const SCHEMA_VERSION = 49;
+export const SCHEMA_VERSION = 50;
 
 /**
  * PRAGMA application_id stamped on every gsd.db at V46 so binaries and
@@ -411,6 +412,7 @@ function initSchema(
         applyMigrationV47SameLeaseAttemptSettlement(db);
         applyMigrationV48TaskToolRequirements(db);
         applyMigrationV49MilestoneHorizontalChecklist(db);
+        applyMigrationV50MilestoneValidationVerdictScope(db);
 
         // Fresh install — all tables are created above with the full current schema,
         // so it is safe to create all migration-specific indexes here.  For existing
@@ -800,6 +802,15 @@ function migrateSchema(
       applyMigrationV49MilestoneHorizontalChecklist(db);
       stampStateCutoverPragmas(db, 49);
       recordSchemaVersion(db, 49);
+    }
+
+    if (currentVersion < 50) {
+      // V50 — per-class Technical Verdict scope (#223): recreate the
+      // verdict-scope trigger so a non-passing Milestone verdict can still
+      // record that an individual planned verification class passed.
+      applyMigrationV50MilestoneValidationVerdictScope(db);
+      stampStateCutoverPragmas(db, 50);
+      recordSchemaVersion(db, 50);
     }
 
     if (_migrationFaultForTest) throw new Error("migration fault injected for test");
