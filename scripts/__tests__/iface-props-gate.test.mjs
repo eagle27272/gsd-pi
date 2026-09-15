@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 
-import { classifyReferences, collectDeclarations, createProgram } from "../lib/iface-props-lib.mjs";
+import { analyse, classifyReferences, collectDeclarations, createProgram } from "../lib/iface-props-lib.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "../..");
 
@@ -250,4 +250,124 @@ export function f(a: A) { const { x, ...rest } = a; return x }`,
   });
 
   assert.equal(seen["A.y"].read, true);
+});
+
+function findings(files, isFirstParty = () => true) {
+  const dir = mkdtempSync(join(tmpdir(), "gsd-iface-props-"));
+  try {
+    const paths = Object.entries(files).map(([name, source]) => {
+      const path = join(dir, name);
+      writeFileSync(path, source, "utf-8");
+      return path;
+    });
+    return analyse(paths, isFirstParty, dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// The regression this gate exists for: #79, RefMetadata.frameContext, a
+// property written at one site and read at none. Fixed in ba897845; this
+// fixture reconstructs it.
+test("analyse reports the never-read property from #79", () => {
+  const keys = findings({
+    "state.ts": `export interface RefMetadata { url: string; frameContext?: string }`,
+    "refs.ts": `import type { RefMetadata } from "./state.js";
+export function snapshot(url: string, frame: string): RefMetadata {
+  return { url, frameContext: frame };
+}`,
+    "use.ts": `import type { RefMetadata } from "./state.js";
+export function describe(m: RefMetadata) { return m.url }`,
+  });
+
+  assert.deepEqual(keys, ["writeOnly|state.ts|RefMetadata.frameContext"]);
+});
+
+test("analyse stays silent once the property is read", () => {
+  const keys = findings({
+    "state.ts": `export interface RefMetadata { url: string; frameContext?: string }`,
+    "refs.ts": `import type { RefMetadata } from "./state.js";
+export function snapshot(url: string, frame: string): RefMetadata {
+  return { url, frameContext: frame };
+}`,
+    "use.ts": `import type { RefMetadata } from "./state.js";
+export function stale(m: RefMetadata, now: string) { return m.url !== "" && m.frameContext !== now }`,
+  });
+
+  assert.deepEqual(keys, []);
+});
+
+test("analyse reports nothing for a property that is never written either", () => {
+  const keys = findings({ "a.ts": `export interface A { unused: string }` });
+
+  assert.deepEqual(keys, []);
+});
+
+test("analyse never reports a declaration the first-party predicate rejects", () => {
+  const keys = findings(
+    {
+      "vendored.ts": `export interface V { dead: string }`,
+      "use.ts": `import type { V } from "./vendored.js";
+export function make(): V { return { dead: "x" } }`,
+    },
+    (path) => !path.endsWith("vendored.ts"),
+  );
+
+  assert.deepEqual(keys, []);
+});
+
+// --- false-positive categories: each must produce no finding ---
+
+test("analyse does not report a discriminant narrowed but never read as a property", () => {
+  const keys = findings({
+    "a.ts": `export interface A { kind: "a"; value: string }
+export function make(): A { return { kind: "a", value: "v" } }
+export function read(a: A) { if (a.kind === "a") return a.value; return "" }`,
+  });
+
+  assert.deepEqual(keys, []);
+});
+
+test("analyse does not report a property reached only through a spread", () => {
+  const keys = findings({
+    "a.ts": `export interface A { x: string }
+export function make(): A { return { x: "v" } }
+export function copy(a: A) { return { ...a } }`,
+  });
+
+  assert.deepEqual(keys, []);
+});
+
+test("analyse does not report a property read only by destructuring", () => {
+  const keys = findings({
+    "a.ts": `export interface A { x: string }
+export function make(): A { return { x: "v" } }
+export function read(a: A) { const { x } = a; return x }`,
+  });
+
+  assert.deepEqual(keys, []);
+});
+
+test("analyse does not report a property read only by string-literal element access", () => {
+  const keys = findings({
+    "a.ts": `export interface A { x: string }
+export function make(): A { return { x: "v" } }
+export function read(a: A) { return a["x"] }`,
+  });
+
+  assert.deepEqual(keys, []);
+});
+
+// Structural typing: the read goes through a compatible but nominally separate
+// interface, exactly as WorktreeStatus is read via WorktreeStatusLike. A
+// symbol-identity join reports this; keying reads by name is what prevents it.
+test("analyse does not report a property read through a structurally-compatible alias", () => {
+  const keys = findings({
+    "a.ts": `export interface Status { name: string }
+export function make(): Status { return { name: "n" } }`,
+    "b.ts": `export interface StatusLike { name: string }
+export function render(s: StatusLike) { return s.name }`,
+  });
+
+  assert.deepEqual(keys, []);
 });

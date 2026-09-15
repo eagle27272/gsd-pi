@@ -187,3 +187,31 @@ export function classifyReferences(program, checker) {
 
   return { readNames, writeSymbols };
 }
+
+/**
+ * A property is dead when it is written somewhere and no property of that name
+ * is read anywhere in the program.
+ *
+ * Reads are matched by name rather than by symbol because TypeScript is
+ * structurally typed: a read through a compatible-but-separate interface never
+ * links back to this declaration. Keying on the symbol turns ~190 findings into
+ * ~1800, nearly all of them reads the join simply could not see. The cost is
+ * recall — a same-named property on an unrelated type that *is* read masks a
+ * genuine finding — which is the right trade for a gate wired into CI.
+ */
+export function findWriteOnly(declarations, references) {
+  const keys = [];
+  for (const [symbol, info] of declarations) {
+    if (references.readNames.has(info.name)) continue;
+    if (!references.writeSymbols.has(symbol)) continue;
+    keys.push(info.key);
+  }
+  return keys.sort();
+}
+
+export function analyse(filePaths, isFirstParty, root) {
+  const program = createProgram(filePaths);
+  const checker = program.getTypeChecker();
+  const declarations = collectDeclarations(program, checker, isFirstParty, root);
+  return findWriteOnly(declarations, classifyReferences(program, checker));
+}
