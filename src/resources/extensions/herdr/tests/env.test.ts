@@ -17,13 +17,17 @@ test("detectHerdrEnv returns the env when all required vars are present", () => 
   });
 });
 
-test("detectHerdrEnv omits socketPath when unset", () => {
-  const { HERDR_SOCKET_PATH, ...rest } = base as Record<string, string>;
-  assert.deepEqual(detectHerdrEnv(rest), {
+test("detectHerdrEnv falls back to `herdr` on PATH when HERDR_BIN_PATH is absent", () => {
+  // Herdr exports HERDR_ENV / HERDR_PANE_ID / HERDR_SOCKET_PATH into every pane
+  // but only sets HERDR_BIN_PATH as an override, so requiring it no-ops the
+  // whole extension in a normal pane.
+  const { HERDR_BIN_PATH, ...noBin } = base as Record<string, string>;
+  assert.deepEqual(detectHerdrEnv(noBin), {
     paneId: "w1:p2",
-    binPath: "/usr/local/bin/herdr",
-    socketPath: undefined,
+    binPath: "herdr",
+    socketPath: "/tmp/herdr.sock",
   });
+  assert.equal(detectHerdrEnv({ ...base, HERDR_BIN_PATH: "   " })?.binPath, "herdr");
 });
 
 test("detectHerdrEnv returns null when HERDR_ENV is not exactly '1'", () => {
@@ -32,11 +36,12 @@ test("detectHerdrEnv returns null when HERDR_ENV is not exactly '1'", () => {
   assert.equal(detectHerdrEnv({ ...base, HERDR_ENV: "true" }), null);
 });
 
-test("detectHerdrEnv returns null when pane id or bin path is missing/empty", () => {
+test("detectHerdrEnv returns null when pane id or socket path is missing/empty", () => {
   assert.equal(detectHerdrEnv({ ...base, HERDR_PANE_ID: "" }), null);
   assert.equal(detectHerdrEnv({ ...base, HERDR_PANE_ID: "   " }), null);
-  const { HERDR_BIN_PATH, ...noBin } = base as Record<string, string>;
-  assert.equal(detectHerdrEnv(noBin), null);
+  assert.equal(detectHerdrEnv({ ...base, HERDR_SOCKET_PATH: "" }), null);
+  const { HERDR_SOCKET_PATH, ...noSocket } = base as Record<string, string>;
+  assert.equal(detectHerdrEnv(noSocket), null);
 });
 
 test("detectHerdrEnv returns null on an empty environment", () => {
