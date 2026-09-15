@@ -226,3 +226,28 @@ export function make(): A | B { return { tag: "t", a: 1 } }`,
   assert.equal(seen["A.tag"].written, true);
   assert.equal(seen["B.tag"].written, true);
 });
+
+// `...rest` carries every unnamed property onward invisibly, same as a
+// spread in an object literal. Looking up a property literally named `rest`
+// would find nothing and miss this read.
+test("classifyReferences treats an object-rest binding element as reading every property of its type", () => {
+  const seen = classify({
+    "a.ts": `export interface A { x: string; y: string }
+export function f(a: A) { const { x, ...rest } = a; return [x, rest] }`,
+  });
+
+  assert.equal(seen["A.x"].read, true);
+  assert.equal(seen["A.y"].read, true);
+});
+
+// Over-marking is the intended behaviour: even if `rest` is never used
+// afterward, its properties are conservatively read rather than risking the
+// false positive of reporting a genuinely-consumed property as never-read.
+test("classifyReferences marks object-rest properties read even when the rest binding is never used", () => {
+  const seen = classify({
+    "a.ts": `export interface A { x: string; y: string }
+export function f(a: A) { const { x, ...rest } = a; return x }`,
+  });
+
+  assert.equal(seen["A.y"].read, true);
+});

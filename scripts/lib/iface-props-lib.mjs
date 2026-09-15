@@ -145,6 +145,9 @@ export function classifyReferences(program, checker) {
   const markWritten = (symbols) => {
     for (const symbol of symbols) writeSymbols.add(symbol);
   };
+  const markAllPropertiesRead = (type) => {
+    if (type) markRead(checker.getPropertiesOfType(type) ?? []);
+  };
 
   for (const sourceFile of program.getSourceFiles()) {
     if (sourceFile.isDeclarationFile) continue;
@@ -169,10 +172,13 @@ export function classifyReferences(program, checker) {
         markWritten(propertiesOfType(checker, contextual, node.name.text));
       } else if (ts.isBindingElement(node) && ts.isObjectBindingPattern(node.parent)) {
         const type = checker.getTypeAtLocation(node.parent);
-        markRead(propertiesOfType(checker, type, (node.propertyName ?? node.name).getText()));
+        // `...rest` carries every property the pattern didn't name onward,
+        // same as a spread in an object literal, so it gets the same
+        // mark-everything treatment rather than a lookup by `rest`'s own name.
+        if (node.dotDotDotToken) markAllPropertiesRead(type);
+        else markRead(propertiesOfType(checker, type, (node.propertyName ?? node.name).getText()));
       } else if (ts.isSpreadAssignment(node) || ts.isSpreadElement(node)) {
-        const type = checker.getTypeAtLocation(node.expression);
-        if (type) markRead(checker.getPropertiesOfType(type) ?? []);
+        markAllPropertiesRead(checker.getTypeAtLocation(node.expression));
       }
       ts.forEachChild(node, visit);
     };
