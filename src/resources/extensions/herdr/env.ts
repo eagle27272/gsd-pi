@@ -1,17 +1,24 @@
 // gsd-pi — Herdr environment detection.
 //
 // A GSD session running inside a Herdr pane inherits HERDR_ENV=1 plus
-// HERDR_PANE_ID / HERDR_BIN_PATH / HERDR_SOCKET_PATH. Everything the herdr
-// extension does is gated on detectHerdrEnv() returning non-null.
+// HERDR_PANE_ID / HERDR_SOCKET_PATH. Everything the herdr extension does is
+// gated on detectHerdrEnv() returning non-null.
 
 export interface HerdrEnv {
   /** e.g. "w1:p2" — the pane to report against. */
   paneId: string;
-  /** Absolute path to the `herdr` binary to invoke. */
+  /** The `herdr` binary to invoke — an absolute override, or the PATH default. */
   binPath: string;
   /** Unix socket for the equivalent IPC API. Captured but unused by this extension. */
-  socketPath?: string;
+  socketPath: string;
 }
+
+/**
+ * HERDR_BIN_PATH is an override Herdr sets only in some contexts; its own
+ * integration snippets fall back to `herdr` on PATH. Requiring it here made the
+ * extension a silent no-op in every ordinary pane.
+ */
+const DEFAULT_BIN = "herdr";
 
 function nonEmpty(value: string | undefined): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -20,11 +27,11 @@ function nonEmpty(value: string | undefined): value is string {
 /** Returns the Herdr env, or null unless we are demonstrably inside a Herdr pane. */
 export function detectHerdrEnv(env: NodeJS.ProcessEnv = process.env): HerdrEnv | null {
   if (env.HERDR_ENV !== "1") return null;
-  if (!nonEmpty(env.HERDR_PANE_ID) || !nonEmpty(env.HERDR_BIN_PATH)) return null;
+  if (!nonEmpty(env.HERDR_PANE_ID) || !nonEmpty(env.HERDR_SOCKET_PATH)) return null;
   return {
     paneId: env.HERDR_PANE_ID.trim(),
-    binPath: env.HERDR_BIN_PATH.trim(),
-    socketPath: nonEmpty(env.HERDR_SOCKET_PATH) ? env.HERDR_SOCKET_PATH.trim() : undefined,
+    binPath: nonEmpty(env.HERDR_BIN_PATH) ? env.HERDR_BIN_PATH.trim() : DEFAULT_BIN,
+    socketPath: env.HERDR_SOCKET_PATH.trim(),
   };
 }
 
