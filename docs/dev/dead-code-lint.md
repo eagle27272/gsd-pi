@@ -165,7 +165,7 @@ local-only today. Pre-existing and repo-wide, tracked in #191.
 
 ### Interface-property baseline contents worth burning down
 
-- **177 accepted findings at rollout.** Each is a property written at one or more
+- **176 accepted findings at rollout.** Each is a property written at one or more
   sites and matched by the gate's name-keyed join at none. That is not the same as
   "read nowhere in the program": a read can still be invisible to the join, through
   an untyped `.js` consumer, a `Record<string, unknown>` or other index-signature
