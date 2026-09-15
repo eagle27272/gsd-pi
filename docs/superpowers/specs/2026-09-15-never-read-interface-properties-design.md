@@ -125,7 +125,7 @@ packages/rpc-client/src/**/*.ts
 `packages/db` is matched without a `src/` segment because it has no `package.json`
 and is not a pnpm workspace; knip.jsonc reaches it the same way. Test files are in
 scope — a write-only property in a test is usually a stale assertion, and six of the
-176 baseline findings are in `.test.ts` files.
+175 baseline findings are in `.test.ts` files.
 
 `packages/pi-*` is included in the **program** so that reads from vendored code
 count, but excluded from **declaration collection**. This matches both the issue's
@@ -264,7 +264,7 @@ was meant to cover.
 
 ## Rollout
 
-Land the gate with the 176 existing findings baselined as-is rather than burning
+Land the gate with the 175 existing findings baselined as-is rather than burning
 them down in the same change. This is #81's reasoning and it applies unchanged: the
 triage is its own work, and bundling it would make the gate's own diff unreviewable.
 

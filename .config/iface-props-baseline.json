@@ -32,7 +32,6 @@
     "writeOnly|src/resources/extensions/browser-tools/core.ts|SessionSummary.counts.waits",
     "writeOnly|src/resources/extensions/browser-tools/core.ts|registryRemovePage.newActiveId",
     "writeOnly|src/resources/extensions/browser-tools/engine/managed-gsd-browser.ts|ManagedBrowserToolDetails.mcpIsError",
-    "writeOnly|src/resources/extensions/browser-tools/state.ts|RefMetadata.selectorScope",
     "writeOnly|src/resources/extensions/browser-tools/state.ts|updates.beforeState",
     "writeOnly|src/resources/extensions/claude-code-cli/readiness.ts|opts.stdio",
     "writeOnly|src/resources/extensions/claude-code-cli/sdk-types.ts|SDKResultMessage.duration_api_ms",

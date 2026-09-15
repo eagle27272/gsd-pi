@@ -144,11 +144,6 @@ pi boundary (`scripts/verify-pi-boundary.cjs`) owns those packages, and deleting
 there fights upstream syncs — but it costs real coverage: about 670 of the repo's ~3,400
 first-party source files.
 
-**Its own drift tests, in CI.** `scripts/__tests__/knip-gate.test.mjs` asserts the gate is
-wired into all three runners and that no config glob has rotted, but nothing in
-`.github/workflows/` runs `scripts/__tests__/` or `ci-fast-gates.sh` — those tests are
-local-only today. Pre-existing and repo-wide, tracked in #191.
-
 ## Known baseline contents worth burning down
 
 - **21 unused root `dependencies`.** Each is declared by the vendored package that
@@ -165,7 +160,7 @@ local-only today. Pre-existing and repo-wide, tracked in #191.
 
 ### Interface-property baseline contents worth burning down
 
-- **176 accepted findings at rollout.** Each is a property written at one or more
+- **175 accepted findings at rollout.** Each is a property written at one or more
   sites and matched by the gate's name-keyed join at none. That is not the same as
   "read nowhere in the program": a read can still be invisible to the join, through
   an untyped `.js` consumer, a `Record<string, unknown>` or other index-signature
@@ -183,7 +178,9 @@ local-only today. Pre-existing and repo-wide, tracked in #191.
 - **Six are in `.test.ts` files.** A write-only property in a test usually means an
   assertion was weakened or removed and the fixture field outlived it.
 - **`RefMetadata.selectorScope`** (`src/resources/extensions/browser-tools/state.ts`)
-  is the same shape as #79 on the same interface: written at
-  `src/resources/extensions/browser-tools/tools/refs.ts`, read nowhere, and
-  `validateRefForAction` never consults the snapshot's selector scope. Tracked as
-  #205.
+  was the same shape as #79 on the same interface. #205 tracked it, then concluded
+  it was descriptive rather than dead and added tests in `browser-tools-unit.test.cjs`
+  that read it directly. The gate stopped flagging it, `lint:dead-code:props:update`
+  dropped it from the baseline, and the count went from 176 to 175 without anyone
+  hand-editing the file — the ratchet resolving a finding instead of the usual
+  delete-the-dead-code fix.
