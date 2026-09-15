@@ -370,6 +370,38 @@ export function read(a: A) { return a["x"] }`,
   assert.deepEqual(keys, []);
 });
 
+// A PropertySignature cannot exist in a .js/.mjs/.cjs file, so DECLARATION_GLOBS
+// stays .ts-only, but a read from one of those files must still be visible to
+// the program or it is indistinguishable from no read at all. packages/native's
+// entire test suite is .mjs; this reconstructs that shape at the analyse level.
+test("analyse does not report a property read only from a .mjs file", () => {
+  const keys = findings({
+    "state.ts": `export interface A { x: string }
+export function make(): A { return { x: "v" } }`,
+    "use.mjs": `import { make } from "./state.js";
+export function read() { return make().x; }`,
+  });
+
+  assert.deepEqual(keys, []);
+});
+
+// `JSON.parse(...)` (the idiomatic way this codebase asserts on CLI JSON
+// output) types its result `any`, so the property access resolves no symbol
+// at all. Falling back to the access's own name is what keeps this read from
+// looking like no read happened.
+test("analyse does not report a property read only through an any-typed value", () => {
+  const keys = findings({
+    "state.ts": `export interface A { x: string }
+export function make(): A { return { x: "v" } }`,
+    "use.ts": `export function read(json: string) {
+  const parsed = JSON.parse(json);
+  return parsed.x;
+}`,
+  });
+
+  assert.deepEqual(keys, []);
+});
+
 // Structural typing: the read goes through a compatible but nominally separate
 // interface, exactly as WorktreeStatus is read via WorktreeStatusLike. A
 // symbol-identity join reports this; keying reads by name is what prevents it.

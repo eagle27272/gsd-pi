@@ -22,10 +22,25 @@ export const DECLARATION_GLOBS = Object.freeze([
   'packages/rpc-client/src/**/*.ts',
 ]);
 
+const NON_TS_PROGRAM_EXTENSIONS = ['mjs', 'cjs', 'js'];
+
 // The vendored packages are in the program so that reads from them count
 // against first-party declarations, but they never yield findings of their own:
 // the pi boundary owns that tree and deleting code there fights upstream syncs.
-export const PROGRAM_GLOBS = Object.freeze([...DECLARATION_GLOBS, 'packages/pi-*/src/**/*.ts']);
+//
+// A `PropertySignature` cannot exist in a .js file, so DECLARATION_GLOBS stays
+// .ts-only. But a .mjs/.cjs/.js file's reads still count against those
+// declarations — packages/native's entire test suite is .mjs — so without
+// widening the program too, every read outside a .ts file is invisible and
+// its property looks write-only.
+export const PROGRAM_GLOBS = Object.freeze([
+  ...DECLARATION_GLOBS,
+  ...DECLARATION_GLOBS.flatMap((pattern) =>
+    NON_TS_PROGRAM_EXTENSIONS.map((extension) => pattern.replace(/\.ts$/, `.${extension}`)),
+  ),
+  'packages/pi-*/src/**/*.ts',
+  ...NON_TS_PROGRAM_EXTENSIONS.map((extension) => `packages/pi-*/src/**/*.${extension}`),
+]);
 
 export const BASELINE_HEADER =
   'Accepted never-read interface properties as of the gate rollout. Never add to ' +
@@ -38,6 +53,7 @@ export function createProgram(filePaths) {
     target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.NodeNext,
     moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    allowJs: true,
     skipLibCheck: true,
     noEmit: true,
   });
@@ -155,8 +171,18 @@ export function classifyReferences(program, checker) {
     const visit = (node) => {
       if (ts.isPropertyAccessExpression(node)) {
         const symbols = rootsOf(checker, checker.getSymbolAtLocation(node.name));
-        if (isPlainAssignmentTarget(node)) markWritten(symbols);
-        else markRead(symbols);
+        if (isPlainAssignmentTarget(node)) {
+          markWritten(symbols);
+        } else if (symbols.length > 0) {
+          markRead(symbols);
+        } else {
+          // An `any`-typed value (e.g. a `JSON.parse(...)` result) resolves no
+          // symbol at all, so the read would otherwise be invisible rather
+          // than merely unresolved. Reads are already matched by name, so
+          // recording the access's own name here closes that hole instead of
+          // opening a new kind of match.
+          readNames.add(node.name.text);
+        }
       } else if (
         ts.isElementAccessExpression(node) &&
         node.argumentExpression &&
