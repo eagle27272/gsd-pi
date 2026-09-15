@@ -123,6 +123,7 @@ history below explains each migration without duplicating that live value.
 | V47 | **Same-lease Attempt settlement** (#1740): extends the Attempt dispatch-scope transition trigger so a worker holding its own milestone lease can settle its own running Attempt after its coordination dispatch is gone; adds no tables |
 | V48 | **Task execution-tool requirements**: adds `tasks.required_workflow_tools` as a non-null JSON-array column defaulting to `[]`; planning and replanning persist the workflow tools each Task expects its execution unit to expose |
 | V49 | **Milestone horizontal checklist**: adds `milestones.horizontal_checklist` as a non-null JSON-array column defaulting to `[]`; `gsd_plan_milestone` persists the cross-cutting concerns the planner considered and the roadmap projection renders them |
+| V50 | **Per-class Technical Verdict scope** (#223): recreates the verdict-scope trigger so only the `milestone-validation:aggregate` criterion needs a `succeeded` Attempt Result to record `pass`; a `needs-attention` or `needs-remediation` Milestone can now record that an individual planned verification class passed. Adds no tables |
 
 ---
 

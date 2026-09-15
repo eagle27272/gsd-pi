@@ -799,3 +799,82 @@ test("planned UAT rejects structured evidence from an older source revision", as
     WHERE operation_type = 'milestone.validate'
   `).count, 0, "stale evidence must not create a canonical validation receipt");
 });
+
+test("needs-attention records passing per-class verdicts without authorizing closeout", async () => {
+  const basePath = makeBase("Run the browser acceptance journey.");
+  db().prepare(`
+    UPDATE milestones
+    SET verification_contract = 'Contract tests pass.',
+        verification_integration = 'Integration tests pass.',
+        verification_operational = 'Cold build is clean.'
+    WHERE id = 'M001'
+  `).run();
+  const testedSourceRevision = sourceRevision(basePath);
+  const commandEvidence = (name: string, minute: string) => ({
+    evidenceClass: "command" as const,
+    commandOrTool: name,
+    workingDirectory: basePath,
+    startedAt: `2026-07-14T10:0${minute}:00.000Z`,
+    endedAt: `2026-07-14T10:0${minute}:30.000Z`,
+    exitCode: 0,
+    testedSourceRevision,
+    observation: "passed" as const,
+    durableOutputRef: `artifact://${name}`,
+    environment: { runner: "node" },
+    rationale: `${name} is green.`,
+  });
+
+  const result = await handleValidateMilestone({
+    ...validValidation,
+    verdict: "needs-attention",
+    remediationRound: 1,
+    verificationClasses:
+      "| Class | Evidence | Verdict |\n| --- | --- | --- |\n| Contract | unit | PASS |" +
+      "\n| Integration | integration | PASS |\n| Operational | build | PASS |\n| UAT | browser | PASS |",
+    verdictRationale: "Every planned class passed; follow-ups outside those classes remain.",
+    verificationEvidence: [
+      { verificationClass: "Contract", ...commandEvidence("contract", "0") },
+      { verificationClass: "Integration", ...commandEvidence("integration", "2") },
+      { verificationClass: "Operational", ...commandEvidence("operational", "4") },
+      {
+        verificationClass: "UAT",
+        evidenceClass: "browser",
+        commandOrTool: "browser acceptance journey",
+        workingDirectory: basePath,
+        startedAt: "2026-07-14T10:06:00.000Z",
+        endedAt: "2026-07-14T10:07:00.000Z",
+        testedSourceRevision,
+        observation: "passed",
+        durableOutputRef: "artifact://browser/acceptance-journey",
+        environment: { runner: "browser", route: "/acceptance" },
+        rationale: "The user-visible acceptance journey passed.",
+      },
+    ],
+  } as ValidateMilestoneParams, basePath, validationOptions("milestone-validate/public/needs-attention-classes"));
+
+  assert.ok(
+    !("error" in result),
+    `a non-passing Milestone verdict must still record passing class evidence: ${"error" in result ? result.error : ""}`,
+  );
+  assert.deepEqual(db().prepare(`
+    SELECT criterion.criterion_key, verdict.verdict
+    FROM workflow_technical_verdicts verdict
+    JOIN workflow_acceptance_criteria criterion
+      ON criterion.criterion_id = verdict.criterion_id
+    ORDER BY criterion.criterion_key
+  `).all(), [
+    { criterion_key: "milestone-validation:aggregate", verdict: "inconclusive" },
+    { criterion_key: "milestone-validation:contract", verdict: "pass" },
+    { criterion_key: "milestone-validation:integration", verdict: "pass" },
+    { criterion_key: "milestone-validation:operational", verdict: "pass" },
+    { criterion_key: "milestone-validation:uat", verdict: "pass" },
+  ]);
+  assert.equal(row(`
+    SELECT settle_outcome FROM workflow_execution_attempts
+  `).settle_outcome, "interrupted");
+  assert.equal(
+    readMilestoneCloseoutReadiness({ milestoneId: "M001" }).ready,
+    false,
+    "the inconclusive aggregate criterion must still block closeout",
+  );
+});
