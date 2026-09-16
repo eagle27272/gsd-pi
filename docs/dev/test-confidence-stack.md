@@ -83,6 +83,17 @@ through the native engine, and the pinned `@opengsd/engine-*` binary lags the
 Rust source, so without a local addon the loader silently falls back and the
 migrate-safety-audit suite fails.
 
+`test:unit:compiled` and `test:coverage:unit` launch Node through
+`scripts/with-test-concurrency.mjs`, which pins `--test-concurrency` to
+`min(8, availableParallelism() - 1)`. Unbounded, the process-isolated workers
+get the run OOM-killed (exit 137, empty log) on a many-core dev machine or
+oversubscribe it enough to trip the 90s workflow-authority baseline budget; the
+`min` keeps it a no-op on small CI runners, where Node already picks a lower
+number. Set `TEST_CONCURRENCY=<n>` to override. Do **not** try to pass
+`--test-concurrency` to `pnpm run test:unit`: that is a compound `&&` script and
+pnpm appends trailing args to the last sub-command only, so the flag lands on
+`test:live-workflow:unit` and never reaches the big suite.
+
 Local parity for `build-and-test` is **`npm run verify:merge`**. It covers far
 more — `validate-pack`, `verify:workspace-coverage`,
 `verify:extension-coverage`, package tests, `@gsd/pi-ai` vitest,
