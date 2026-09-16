@@ -17,6 +17,7 @@ import {
 import { nativeIsRepo, nativeInit, nativeAddAll, nativeCommit, nativeDetectMainBranch } from "./native-git-bridge.js";
 import { ensureGitignore, untrackRuntimeFiles } from "./gitignore.js";
 import { gsdRoot } from "./paths.js";
+import { LAYOUT_SEGMENTS } from "./layout-policy.js";
 import { ensureExternalState } from "./external-state-bootstrap.js";
 import { assertSafeDirectory } from "./validate-directory.js";
 import type { ProjectDetection, ProjectSignals } from "./detection.js";
@@ -519,13 +520,15 @@ async function customizeAdvancedPrefs(
  *
  * Preferences are written separately by the caller via the unified
  * writePreferencesFile helper so init and the prefs wizard share one path.
+ *
+ * Exported for testing.
  */
-function bootstrapGsdDirectoryStructure(basePath: string, signals: ProjectSignals): void {
+export function bootstrapGsdDirectoryStructure(basePath: string, signals: ProjectSignals): void {
   // Final safety check before writing any files
   assertSafeDirectory(basePath);
 
   const gsd = gsdRoot(basePath);
-  createProjectionDirectorySync(join(gsd, "milestones"));
+  createProjectionDirectorySync(join(gsd, LAYOUT_SEGMENTS.level1));
   mkdirSync(join(gsd, "runtime"), { recursive: true });
 
   // Seed CONTEXT.md with detected project signals
