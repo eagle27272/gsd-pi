@@ -145,6 +145,22 @@ export const WORKFLOW_TOOL_CONTRACTS = [
 		auditEvent: "workflow.milestone.subjective_uat.answer",
 	},
 	{
+		canonicalName: "gsd_prepare_milestone_subjective_uat_retirement",
+		aliases: [],
+		schemaId: "workflow.milestone.subjective_uat.prepare_retirement",
+		executorId: "executePrepareMilestoneSubjectiveUatRetirement",
+		writePolicy: "write",
+		auditEvent: "workflow.milestone.subjective_uat.prepare_retirement",
+	},
+	{
+		canonicalName: "gsd_retire_milestone_subjective_uat",
+		aliases: [],
+		schemaId: "workflow.milestone.subjective_uat.retire",
+		executorId: "executeRetireMilestoneSubjectiveUat",
+		writePolicy: "write",
+		auditEvent: "workflow.milestone.subjective_uat.retire",
+	},
+	{
 		canonicalName: "gsd_reassess_roadmap",
 		aliases: ["gsd_roadmap_reassess"],
 		schemaId: "workflow.roadmap.reassess",

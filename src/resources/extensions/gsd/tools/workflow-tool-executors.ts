@@ -82,9 +82,14 @@ import { handleValidateMilestone } from "./validate-milestone.js";
 import {
   answerMilestoneSubjectiveUat,
   prepareMilestoneSubjectiveUat,
+  prepareMilestoneSubjectiveUatRetirement,
+  retireMilestoneSubjectiveUat,
   type AnswerMilestoneSubjectiveUatInput,
   type PrepareMilestoneSubjectiveUatInput,
   type PrepareMilestoneSubjectiveUatReceipt,
+  type PrepareMilestoneSubjectiveUatRetirementInput,
+  type PrepareMilestoneSubjectiveUatRetirementReceipt,
+  type RetireMilestoneSubjectiveUatInput,
 } from "../milestone-subjective-uat-domain-operation.js";
 import { logError, logWarning } from "../workflow-logger.js";
 import { invalidateStateCache } from "../state.js";
@@ -872,6 +877,14 @@ export type PrepareMilestoneSubjectiveUatExecutorParams = Omit<
 >;
 export type AnswerMilestoneSubjectiveUatExecutorParams = Omit<
   AnswerMilestoneSubjectiveUatInput,
+  "invocation"
+>;
+export type PrepareMilestoneSubjectiveUatRetirementExecutorParams = Omit<
+  PrepareMilestoneSubjectiveUatRetirementInput,
+  "invocation"
+>;
+export type RetireMilestoneSubjectiveUatExecutorParams = Omit<
+  RetireMilestoneSubjectiveUatInput,
   "invocation"
 >;
 export type ReassessRoadmapExecutorParams = ReassessRoadmapParams;
@@ -2454,6 +2467,106 @@ export async function executeMilestoneStatus(
     return {
       content: [{ type: "text", text: `Error querying milestone status: ${msg}` }],
       details: { operation: "milestone_status", error: msg },
+      isError: true,
+    };
+  }
+}
+
+// Same constraint as formatPreparedSubjectiveUat: `details` becomes
+// `structuredContent`, which no orchestrating agent reads, so the binding IDs
+// and the exact option labels have to appear in the text block too.
+function formatPreparedSubjectiveUatRetirement(
+  result: PrepareMilestoneSubjectiveUatRetirementReceipt,
+): string {
+  const options = result.options.map((option) =>
+    [
+      `- optionId: ${option.optionId}`,
+      `  choice: ${option.choice}${option.recommended ? " (recommended)" : ""}`,
+      `  verbatimResponse: ${option.label}`,
+      `  ${option.description}`,
+    ].join("\n")
+  );
+  return [
+    `Prepared a retirement decision for subjective UAT criterion '${result.criterionKey}' on ${result.milestoneId}.`,
+    "",
+    "Ask the user this question, then call gsd_retire_milestone_subjective_uat with:",
+    `  criterionId: ${result.criterionId}`,
+    `  questionId: ${result.questionId}`,
+    `  interactionId: ${result.interactionId}`,
+    "",
+    "Pick exactly one option. `verbatimResponse` must be that option's label, character for character:",
+    ...options,
+  ].join("\n");
+}
+
+export async function executePrepareMilestoneSubjectiveUatRetirement(
+  params: PrepareMilestoneSubjectiveUatRetirementExecutorParams,
+  basePath: string,
+  invocation: ExecutionInvocation,
+): Promise<ToolExecutionResult> {
+  if (!await ensureDbOpen(basePath)) {
+    return {
+      content: [{ type: "text", text: "Error: GSD database is not available. Cannot prepare subjective UAT retirement." }],
+      details: { operation: "prepare_milestone_subjective_uat_retirement", error: "db_unavailable" },
+      isError: true,
+    };
+  }
+  try {
+    const result = prepareMilestoneSubjectiveUatRetirement({ ...params, invocation });
+    return {
+      content: [{ type: "text", text: formatPreparedSubjectiveUatRetirement(result) }],
+      details: {
+        operation: "prepare_milestone_subjective_uat_retirement",
+        ...result,
+      },
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      content: [{ type: "text", text: `Error preparing subjective UAT retirement: ${message}` }],
+      details: { operation: "prepare_milestone_subjective_uat_retirement", error: message },
+      isError: true,
+    };
+  }
+}
+
+export async function executeRetireMilestoneSubjectiveUat(
+  params: RetireMilestoneSubjectiveUatExecutorParams,
+  basePath: string,
+  invocation: ExecutionInvocation,
+): Promise<ToolExecutionResult> {
+  if (!await ensureDbOpen(basePath)) {
+    return {
+      content: [{ type: "text", text: "Error: GSD database is not available. Cannot retire subjective UAT criterion." }],
+      details: { operation: "retire_milestone_subjective_uat", error: "db_unavailable" },
+      isError: true,
+    };
+  }
+  try {
+    const result = retireMilestoneSubjectiveUat({ ...params, invocation });
+    const summary = result.choice === "retire"
+      ? `Retired subjective UAT criterion '${result.criterionKey}' on the user's recorded consent.`
+      : `The user kept subjective UAT criterion '${result.criterionKey}'; it still requires an answer.`;
+    return {
+      content: [{
+        type: "text",
+        text: [
+          summary,
+          `  criterionId: ${result.criterionId}`,
+          `  retiredCriterionId: ${result.retiredCriterionId ?? "none"}`,
+          `  withdrawnQuestionIds: ${result.withdrawnQuestionIds.join(", ") || "none"}`,
+        ].join("\n"),
+      }],
+      details: {
+        operation: "retire_milestone_subjective_uat",
+        ...result,
+      },
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      content: [{ type: "text", text: `Error retiring subjective UAT criterion: ${message}` }],
+      details: { operation: "retire_milestone_subjective_uat", error: message },
       isError: true,
     };
   }

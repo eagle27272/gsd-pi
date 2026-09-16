@@ -334,6 +334,26 @@ type WorkflowToolExecutors = {
     basePath: string,
     invocation: ExecutionInvocation,
   ) => Promise<unknown>;
+  executePrepareMilestoneSubjectiveUatRetirement: (
+    params: {
+      criterionId: string;
+      rationale: string;
+    },
+    basePath: string,
+    invocation: ExecutionInvocation,
+  ) => Promise<unknown>;
+  executeRetireMilestoneSubjectiveUat: (
+    params: {
+      criterionId: string;
+      questionId: string;
+      interactionId: string;
+      selectedOptionId: string;
+      verbatimResponse: string;
+      rationale: string;
+    },
+    basePath: string,
+    invocation: ExecutionInvocation,
+  ) => Promise<unknown>;
   executeReassessRoadmap: (
     params: {
       milestoneId: string;
@@ -1657,6 +1677,30 @@ async function handleAnswerMilestoneSubjectiveUat(
   ));
 }
 
+async function handlePrepareMilestoneSubjectiveUatRetirement(
+  projectDir: string,
+  args: z.infer<typeof prepareMilestoneSubjectiveUatRetirementSchema>,
+  invocation: ExecutionInvocation,
+): Promise<unknown> {
+  const { executePrepareMilestoneSubjectiveUatRetirement } = await getWorkflowToolExecutors();
+  const { projectDir: _projectDir, ...params } = args;
+  return adaptExecutorResult(await runSerializedWorkflowOperation(() =>
+    executePrepareMilestoneSubjectiveUatRetirement(params, projectDir, invocation)
+  ));
+}
+
+async function handleRetireMilestoneSubjectiveUat(
+  projectDir: string,
+  args: z.infer<typeof retireMilestoneSubjectiveUatSchema>,
+  invocation: ExecutionInvocation,
+): Promise<unknown> {
+  const { executeRetireMilestoneSubjectiveUat } = await getWorkflowToolExecutors();
+  const { projectDir: _projectDir, ...params } = args;
+  return adaptExecutorResult(await runSerializedWorkflowOperation(() =>
+    executeRetireMilestoneSubjectiveUat(params, projectDir, invocation)
+  ));
+}
+
 async function handleReassessRoadmap(
   projectDir: string,
   args: z.infer<typeof reassessRoadmapSchema>,
@@ -2160,6 +2204,26 @@ const answerMilestoneSubjectiveUatParams = {
   testedSourceRevision: nonEmptyString("testedSourceRevision"),
 };
 const answerMilestoneSubjectiveUatSchema = z.object(answerMilestoneSubjectiveUatParams);
+
+const prepareMilestoneSubjectiveUatRetirementParams = {
+  projectDir: projectDirParam,
+  criterionId: nonEmptyString("criterionId"),
+  rationale: nonEmptyString("rationale"),
+};
+const prepareMilestoneSubjectiveUatRetirementSchema = z.object(
+  prepareMilestoneSubjectiveUatRetirementParams,
+);
+
+const retireMilestoneSubjectiveUatParams = {
+  projectDir: projectDirParam,
+  criterionId: nonEmptyString("criterionId"),
+  questionId: nonEmptyString("questionId"),
+  interactionId: nonEmptyString("interactionId"),
+  selectedOptionId: nonEmptyString("selectedOptionId"),
+  verbatimResponse: nonEmptyString("verbatimResponse"),
+  rationale: nonEmptyString("rationale"),
+};
+const retireMilestoneSubjectiveUatSchema = z.object(retireMilestoneSubjectiveUatParams);
 
 const roadmapSliceChangeSchema = z.object({
   sliceId: nonEmptyString("sliceId"),
@@ -3443,6 +3507,40 @@ export function registerWorkflowTools(
         parsed.projectDir,
         parsed,
         mcpUserResponseInvocation("gsd_answer_milestone_subjective_uat", extra),
+      );
+    },
+  );
+
+  server.tool(
+    "gsd_prepare_milestone_subjective_uat_retirement",
+    "Prepare a user decision to retire a stranded or obsolete required subjective Milestone UAT criterion. " +
+      "Use only when the criterion can no longer be answered meaningfully, typically a duplicate left behind by an " +
+      "earlier rephrased criterionKey. The result carries the criterionId, questionId, interactionId, and option IDs " +
+      "that gsd_retire_milestone_subjective_uat requires.",
+    prepareMilestoneSubjectiveUatRetirementParams,
+    async (args: Record<string, unknown>, extra?: WorkflowMcpRequestExtra) => {
+      const parsed = parseWorkflowArgs(prepareMilestoneSubjectiveUatRetirementSchema, args);
+      return handlePrepareMilestoneSubjectiveUatRetirement(
+        parsed.projectDir,
+        parsed,
+        mcpWorkflowExecutionInvocation("gsd_prepare_milestone_subjective_uat_retirement", extra),
+      );
+    },
+  );
+
+  server.tool(
+    "gsd_retire_milestone_subjective_uat",
+    "Record the user's decision to retire or keep a required subjective Milestone UAT criterion using authenticated " +
+      "MCP session identity. criterionId, questionId, interactionId, and selectedOptionId must be copied from the " +
+      "gsd_prepare_milestone_subjective_uat_retirement result; verbatimResponse must be the selected option's label " +
+      "character for character.",
+    retireMilestoneSubjectiveUatParams,
+    async (args: Record<string, unknown>, extra?: WorkflowMcpRequestExtra) => {
+      const parsed = parseWorkflowArgs(retireMilestoneSubjectiveUatSchema, args);
+      return handleRetireMilestoneSubjectiveUat(
+        parsed.projectDir,
+        parsed,
+        mcpUserResponseInvocation("gsd_retire_milestone_subjective_uat", extra),
       );
     },
   );

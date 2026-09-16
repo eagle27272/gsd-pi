@@ -11,8 +11,13 @@ import { readDomainOperationFence } from "./db/writers/lifecycle-commands.js";
 import {
   answerMilestoneSubjectiveUatQuestion,
   prepareMilestoneSubjectiveUatQuestion,
+  prepareMilestoneSubjectiveUatRetirementQuestion,
+  retireMilestoneSubjectiveUatCriterion,
   type AnsweredMilestoneSubjectiveUat,
   type PreparedMilestoneSubjectiveUat,
+  type PreparedSubjectiveUatRetirement,
+  type RetiredMilestoneSubjectiveUat,
+  type SubjectiveUatRetirementOption,
 } from "./db/writers/milestone-subjective-uat.js";
 import type { ExecutionInvocation } from "./execution-invocation.js";
 
@@ -355,4 +360,235 @@ export function answerMilestoneSubjectiveUat(
     };
   });
   return { ...operationReceipt(operation), ...(answered ?? storedAnswer(operation.operationId)) };
+}
+
+export interface PrepareMilestoneSubjectiveUatRetirementInput {
+  invocation: ExecutionInvocation;
+  criterionId: string;
+  rationale: string;
+}
+
+export interface PrepareMilestoneSubjectiveUatRetirementReceipt
+  extends OperationReceipt, PreparedSubjectiveUatRetirement {}
+
+function storedRetirementPreparation(operationId: string): PreparedSubjectiveUatRetirement {
+  const eventType = "milestone.subjective-uat.retirement-prepared";
+  const payload = storedPayload(operationId, eventType);
+  const options = payload["options"];
+  if (!Array.isArray(options) || options.length !== 2) {
+    throw new Error(`Subjective UAT receipt ${eventType} options are invalid`);
+  }
+  const parsedOptions = options.map((option): SubjectiveUatRetirementOption => {
+    if (!option || typeof option !== "object" || Array.isArray(option)) {
+      throw new Error(`Subjective UAT receipt ${eventType} options are invalid`);
+    }
+    const entry = option as Record<string, unknown>;
+    const choice = entry["choice"];
+    if (choice !== "retire" && choice !== "keep") {
+      throw new Error(`Subjective UAT receipt ${eventType} options are invalid`);
+    }
+    if (
+      typeof entry["optionId"] !== "string" || !entry["optionId"].trim() ||
+      typeof entry["label"] !== "string" || !entry["label"].trim() ||
+      typeof entry["description"] !== "string" || !entry["description"].trim() ||
+      typeof entry["recommended"] !== "boolean"
+    ) {
+      throw new Error(`Subjective UAT receipt ${eventType} options are invalid`);
+    }
+    return {
+      optionId: entry["optionId"],
+      choice,
+      label: entry["label"],
+      description: entry["description"],
+      recommended: entry["recommended"],
+    };
+  });
+  return {
+    milestoneId: receiptString(payload, "milestoneId", eventType),
+    lifecycleId: receiptString(payload, "lifecycleId", eventType),
+    criterionId: receiptString(payload, "criterionId", eventType),
+    criterionKey: receiptString(payload, "criterionKey", eventType),
+    questionId: receiptString(payload, "questionId", eventType),
+    interactionId: receiptString(payload, "interactionId", eventType),
+    retireOptionId: receiptString(payload, "retireOptionId", eventType),
+    keepOptionId: receiptString(payload, "keepOptionId", eventType),
+    withdrawnQuestionIds: receiptStringArray(payload, "withdrawnQuestionIds", eventType),
+    options: parsedOptions,
+  };
+}
+
+export function prepareMilestoneSubjectiveUatRetirement(
+  input: PrepareMilestoneSubjectiveUatRetirementInput,
+): PrepareMilestoneSubjectiveUatRetirementReceipt {
+  const retirementInput = {
+    criterionId: requireNonBlank(input.criterionId, "criterionId"),
+    rationale: requireNonBlank(input.rationale, "rationale"),
+  };
+  const fence = readDomainOperationFence(input.invocation.idempotencyKey);
+  let prepared: PreparedSubjectiveUatRetirement | undefined;
+  const operation = executeDomainOperation({
+    operationType: "milestone.subjective-uat.prepare-retirement",
+    idempotencyKey: input.invocation.idempotencyKey,
+    expectedRevision: fence.revision,
+    expectedAuthorityEpoch: fence.authorityEpoch,
+    actorType: input.invocation.actorType,
+    ...(input.invocation.actorId ? { actorId: input.invocation.actorId } : {}),
+    sourceTransport: input.invocation.sourceTransport,
+    ...(input.invocation.traceId ? { traceId: input.invocation.traceId } : {}),
+    ...(input.invocation.turnId ? { turnId: input.invocation.turnId } : {}),
+    payload: retirementInput,
+  }, (context) => {
+    prepared = prepareMilestoneSubjectiveUatRetirementQuestion(context, retirementInput);
+    const eventPayload: DomainJsonValue = {
+      milestoneId: prepared.milestoneId,
+      lifecycleId: prepared.lifecycleId,
+      criterionId: prepared.criterionId,
+      criterionKey: prepared.criterionKey,
+      questionId: prepared.questionId,
+      interactionId: prepared.interactionId,
+      retireOptionId: prepared.retireOptionId,
+      keepOptionId: prepared.keepOptionId,
+      withdrawnQuestionIds: prepared.withdrawnQuestionIds,
+      options: prepared.options.map((option) => ({
+        optionId: option.optionId,
+        choice: option.choice,
+        label: option.label,
+        description: option.description,
+        recommended: option.recommended,
+      })),
+    };
+    return {
+      events: [{
+        eventType: "milestone.subjective-uat.retirement-prepared",
+        entityType: "milestone",
+        entityId: prepared.milestoneId,
+        payload: eventPayload,
+        destinations: ["projection"],
+      }],
+      projections: [{
+        projectionKey: `subjective-uat/${prepared.milestoneId}/${prepared.questionId}`.toLowerCase(),
+        projectionKind: "milestone-subjective-uat",
+        rendererVersion: "1",
+      }],
+    };
+  });
+  return {
+    ...operationReceipt(operation),
+    ...(prepared ?? storedRetirementPreparation(operation.operationId)),
+  };
+}
+
+export interface RetireMilestoneSubjectiveUatInput {
+  invocation: ExecutionInvocation;
+  criterionId: string;
+  questionId: string;
+  interactionId: string;
+  selectedOptionId: string;
+  verbatimResponse: string;
+  rationale: string;
+}
+
+interface RetireMilestoneSubjectiveUatReceipt
+  extends OperationReceipt, RetiredMilestoneSubjectiveUat {}
+
+function storedRetirement(operationId: string): RetiredMilestoneSubjectiveUat {
+  const retiredType = "milestone.subjective-uat.retired";
+  const declinedType = "milestone.subjective-uat.retirement-declined";
+  const row = getDb().prepare(`
+    SELECT event_type FROM workflow_domain_events
+    WHERE operation_id = :operation_id
+      AND event_type IN (:retired_type, :declined_type)
+  `).get({
+    ":operation_id": operationId,
+    ":retired_type": retiredType,
+    ":declined_type": declinedType,
+  }) as Record<string, unknown> | undefined;
+  if (!row) throw new Error(`Subjective UAT receipt is missing ${retiredType} or ${declinedType}`);
+  const eventType = String(row["event_type"]);
+  const payload = storedPayload(operationId, eventType);
+  const retiredCriterionId = payload["retiredCriterionId"];
+  if (retiredCriterionId !== null && typeof retiredCriterionId !== "string") {
+    throw new Error(`Subjective UAT receipt ${eventType} retiredCriterionId is invalid`);
+  }
+  const choice = payload["choice"];
+  if (choice !== "retire" && choice !== "keep") {
+    throw new Error(`Subjective UAT receipt ${eventType} choice is invalid`);
+  }
+  return {
+    milestoneId: receiptString(payload, "milestoneId", eventType),
+    lifecycleId: receiptString(payload, "lifecycleId", eventType),
+    criterionId: receiptString(payload, "criterionId", eventType),
+    criterionKey: receiptString(payload, "criterionKey", eventType),
+    questionId: receiptString(payload, "questionId", eventType),
+    interactionId: receiptString(payload, "interactionId", eventType),
+    answerId: receiptString(payload, "answerId", eventType),
+    choice,
+    retiredCriterionId,
+    withdrawnQuestionIds: receiptStringArray(payload, "withdrawnQuestionIds", eventType),
+  };
+}
+
+export function retireMilestoneSubjectiveUat(
+  input: RetireMilestoneSubjectiveUatInput,
+): RetireMilestoneSubjectiveUatReceipt {
+  if (input.invocation.actorType !== "user" || !input.invocation.actorId?.trim()) {
+    throw new Error("Subjective UAT retirement requires a user actor identity");
+  }
+  const retireInput = {
+    criterionId: requireNonBlank(input.criterionId, "criterionId"),
+    questionId: requireNonBlank(input.questionId, "questionId"),
+    interactionId: requireNonBlank(input.interactionId, "interactionId"),
+    selectedOptionId: requireNonBlank(input.selectedOptionId, "selectedOptionId"),
+    verbatimResponse: requireNonBlank(input.verbatimResponse, "verbatimResponse"),
+    rationale: requireNonBlank(input.rationale, "rationale"),
+    actorId: input.invocation.actorId.trim(),
+  };
+  const fence = readDomainOperationFence(input.invocation.idempotencyKey);
+  let retired: RetiredMilestoneSubjectiveUat | undefined;
+  const operation = executeDomainOperation({
+    operationType: "milestone.subjective-uat.retire",
+    idempotencyKey: input.invocation.idempotencyKey,
+    expectedRevision: fence.revision,
+    expectedAuthorityEpoch: fence.authorityEpoch,
+    actorType: "user",
+    actorId: retireInput.actorId,
+    sourceTransport: input.invocation.sourceTransport,
+    ...(input.invocation.traceId ? { traceId: input.invocation.traceId } : {}),
+    ...(input.invocation.turnId ? { turnId: input.invocation.turnId } : {}),
+    payload: retireInput,
+  }, (context) => {
+    retired = retireMilestoneSubjectiveUatCriterion(context, retireInput);
+    const eventPayload: DomainJsonValue = {
+      milestoneId: retired.milestoneId,
+      lifecycleId: retired.lifecycleId,
+      criterionId: retired.criterionId,
+      criterionKey: retired.criterionKey,
+      questionId: retired.questionId,
+      interactionId: retired.interactionId,
+      answerId: retired.answerId,
+      choice: retired.choice,
+      retiredCriterionId: retired.retiredCriterionId,
+      withdrawnQuestionIds: retired.withdrawnQuestionIds,
+    };
+    return {
+      events: [{
+        eventType: retired.choice === "retire"
+          ? "milestone.subjective-uat.retired"
+          : "milestone.subjective-uat.retirement-declined",
+        entityType: "milestone",
+        entityId: retired.milestoneId,
+        payload: eventPayload,
+        destinations: ["projection"],
+      }],
+      projections: [{
+        projectionKey: `subjective-uat/${retired.milestoneId}/${retired.questionId}`.toLowerCase(),
+        projectionKind: "milestone-subjective-uat",
+        rendererVersion: "1",
+      }],
+    };
+  });
+  return {
+    ...operationReceipt(operation),
+    ...(retired ?? storedRetirement(operation.operationId)),
+  };
 }
