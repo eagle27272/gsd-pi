@@ -449,6 +449,8 @@ describe("workflow MCP tools", () => {
       "gsd_reopen_milestone",
       "gsd_prepare_milestone_subjective_uat",
       "gsd_answer_milestone_subjective_uat",
+      "gsd_prepare_milestone_subjective_uat_retirement",
+      "gsd_retire_milestone_subjective_uat",
     ]) {
       const tool = server.tools.find((candidate) => candidate.name === name);
       assert.ok(tool, `${name} must be registered`);

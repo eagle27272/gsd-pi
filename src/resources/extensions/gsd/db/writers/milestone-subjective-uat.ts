@@ -17,6 +17,44 @@ export interface SubjectiveUatOption {
   recommended: boolean;
 }
 
+export type SubjectiveUatRetirementChoice = "retire" | "keep";
+
+export interface SubjectiveUatRetirementOption {
+  optionId: string;
+  choice: SubjectiveUatRetirementChoice;
+  label: string;
+  description: string;
+  recommended: boolean;
+}
+
+interface PrepareSubjectiveUatRetirementWriteInput {
+  criterionId: string;
+  rationale: string;
+}
+
+export interface PreparedSubjectiveUatRetirement {
+  milestoneId: string;
+  lifecycleId: string;
+  criterionId: string;
+  criterionKey: string;
+  questionId: string;
+  interactionId: string;
+  retireOptionId: string;
+  keepOptionId: string;
+  withdrawnQuestionIds: string[];
+  options: SubjectiveUatRetirementOption[];
+}
+
+interface RetirableCriterionRow {
+  milestone_id: string;
+  lifecycle_id: string;
+  lifecycle_status: string;
+  criterion_key: string;
+  requirement_id: string | null;
+  description: string;
+  head_disposition: string | null;
+}
+
 export interface PrepareMilestoneSubjectiveUatWriteInput {
   milestoneId: string;
   criterionKey: string;
@@ -79,6 +117,11 @@ interface CriterionRow {
   evidence_class: string;
   required: number;
   description: string;
+}
+
+interface UnansweredRequiredCriterionRow {
+  criterion_id: string;
+  criterion_key: string;
 }
 
 interface PreparedBindingRow {
@@ -167,6 +210,38 @@ function currentCriterion(
   }) as unknown as CriterionRow | undefined;
 }
 
+// Identity is (lifecycle, criterion_key, requirement_id), so a prepare under a
+// rephrased key opens a second required chain instead of superseding the first.
+// Chains cannot merge, so the stranded chain would block every later `pass`
+// verdict with no way to clear it. Refuse at the point of the mistake.
+function unansweredRequiredSubjectiveCriterion(
+  context: Readonly<DomainOperationContext>,
+  lifecycleId: string,
+): UnansweredRequiredCriterionRow | undefined {
+  return getDb().prepare(`
+    SELECT criterion.criterion_id, criterion.criterion_key
+    FROM workflow_acceptance_criteria criterion
+    WHERE criterion.project_id = :project_id
+      AND criterion.lifecycle_id = :lifecycle_id
+      AND criterion.criterion_kind = 'subjective_uat'
+      AND criterion.required = 1
+      AND NOT EXISTS (
+        SELECT 1 FROM workflow_acceptance_criteria successor
+        WHERE successor.supersedes_criterion_id = criterion.criterion_id
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM workflow_human_acceptances acceptance
+        WHERE acceptance.project_id = criterion.project_id
+          AND acceptance.criterion_id = criterion.criterion_id
+      )
+    ORDER BY criterion.criterion_id
+    LIMIT 1
+  `).get({
+    ":project_id": context.projectId,
+    ":lifecycle_id": lifecycleId,
+  }) as unknown as UnansweredRequiredCriterionRow | undefined;
+}
+
 function ensureSubjectiveCriterion(
   context: Readonly<DomainOperationContext>,
   lifecycleId: string,
@@ -189,6 +264,21 @@ function ensureSubjectiveCriterion(
     current.description === input.description
   ) {
     return current.criterion_id;
+  }
+
+  // Heuristic, not an invariant: this only runs for a brand-new key. Rephrasing
+  // an already-answered chain under its own key takes the supersession branch
+  // below and skips this check, so a second unanswered required chain can still
+  // arise through only sanctioned calls. Retirement remains the escape hatch.
+  if (!current && input.required) {
+    const unanswered = unansweredRequiredSubjectiveCriterion(context, lifecycleId);
+    if (unanswered) {
+      throw new Error(
+        `Milestone lifecycle already has an unanswered required subjective UAT criterion ` +
+        `${unanswered.criterion_id} with key '${unanswered.criterion_key}'. ` +
+        `Reuse that criterionKey to rephrase it, or retire it first.`,
+      );
+    }
   }
 
   const criterionId = randomUUID();
@@ -474,6 +564,70 @@ function distinctTimestamp(previousTimestamp: string): string {
   return new Date(Math.max(Date.now(), Date.parse(previousTimestamp) + 1)).toISOString();
 }
 
+type SubjectiveUatAnswerResponseKind = "answer" | "consent";
+
+interface RecordSubjectiveUatAnswerInput {
+  questionId: string;
+  interactionId: string;
+  responseKind: SubjectiveUatAnswerResponseKind;
+  verbatimResponse: string;
+  selectedOptionId: string;
+  normalizedInterpretation: string;
+  observedProjectRevision: number;
+  createdAt: string;
+}
+
+function recordSubjectiveUatAnswer(
+  context: Readonly<DomainOperationContext>,
+  input: RecordSubjectiveUatAnswerInput,
+): string {
+  const answerId = randomUUID();
+  getDb().prepare(`
+    INSERT INTO workflow_answers (
+      answer_id, project_id, question_id, interaction_id, response_kind,
+      verbatim_response, selected_option_id, normalized_interpretation,
+      interpretation_confidence, answer_disposition, observed_project_revision,
+      created_at, operation_id, project_revision, authority_epoch
+    ) VALUES (
+      :answer_id, :project_id, :question_id, :interaction_id, :response_kind,
+      :verbatim_response, :selected_option_id, :normalized_interpretation,
+      1, 'accepted', :observed_project_revision,
+      :created_at, :operation_id, :project_revision, :authority_epoch
+    )
+  `).run({
+    ":answer_id": answerId,
+    ":project_id": context.projectId,
+    ":question_id": input.questionId,
+    ":interaction_id": input.interactionId,
+    ":response_kind": input.responseKind,
+    ":verbatim_response": input.verbatimResponse,
+    ":selected_option_id": input.selectedOptionId,
+    ":normalized_interpretation": input.normalizedInterpretation,
+    ":observed_project_revision": input.observedProjectRevision,
+    ":created_at": input.createdAt,
+    ":operation_id": context.operationId,
+    ":project_revision": context.resultingRevision,
+    ":authority_epoch": context.resultingAuthorityEpoch,
+  });
+  getDb().prepare(`
+    UPDATE workflow_open_questions
+    SET question_status = 'answered', accepted_answer_id = :answer_id,
+        state_version = state_version + 1, updated_at = :updated_at,
+        last_operation_id = :operation_id,
+        last_project_revision = :project_revision,
+        last_authority_epoch = :authority_epoch
+    WHERE question_id = :question_id
+  `).run({
+    ":answer_id": answerId,
+    ":updated_at": input.createdAt,
+    ":operation_id": context.operationId,
+    ":project_revision": context.resultingRevision,
+    ":authority_epoch": context.resultingAuthorityEpoch,
+    ":question_id": input.questionId,
+  });
+  return answerId;
+}
+
 export function answerMilestoneSubjectiveUatQuestion(
   context: Readonly<DomainOperationContext>,
   input: AnswerMilestoneSubjectiveUatWriteInput,
@@ -517,50 +671,17 @@ export function answerMilestoneSubjectiveUatQuestion(
     ":project_id": context.projectId,
     ":criterion_id": input.criterionId,
   }) as unknown as AcceptanceHeadRow | undefined;
-  const answerId = randomUUID();
   const humanAcceptanceId = randomUUID();
   const createdAt = distinctTimestamp(binding.question_updated_at);
-  getDb().prepare(`
-    INSERT INTO workflow_answers (
-      answer_id, project_id, question_id, interaction_id, response_kind,
-      verbatim_response, selected_option_id, normalized_interpretation,
-      interpretation_confidence, answer_disposition, observed_project_revision,
-      created_at, operation_id, project_revision, authority_epoch
-    ) VALUES (
-      :answer_id, :project_id, :question_id, :interaction_id, 'answer',
-      :verbatim_response, :selected_option_id, :normalized_interpretation,
-      1, 'accepted', :observed_project_revision,
-      :created_at, :operation_id, :project_revision, :authority_epoch
-    )
-  `).run({
-    ":answer_id": answerId,
-    ":project_id": context.projectId,
-    ":question_id": input.questionId,
-    ":interaction_id": input.interactionId,
-    ":verbatim_response": input.verbatimResponse,
-    ":selected_option_id": input.selectedOptionId,
-    ":normalized_interpretation": `${disposition}_subjective_experience`,
-    ":observed_project_revision": binding.interaction_project_revision,
-    ":created_at": createdAt,
-    ":operation_id": context.operationId,
-    ":project_revision": context.resultingRevision,
-    ":authority_epoch": context.resultingAuthorityEpoch,
-  });
-  getDb().prepare(`
-    UPDATE workflow_open_questions
-    SET question_status = 'answered', accepted_answer_id = :answer_id,
-        state_version = state_version + 1, updated_at = :updated_at,
-        last_operation_id = :operation_id,
-        last_project_revision = :project_revision,
-        last_authority_epoch = :authority_epoch
-    WHERE question_id = :question_id
-  `).run({
-    ":answer_id": answerId,
-    ":updated_at": createdAt,
-    ":operation_id": context.operationId,
-    ":project_revision": context.resultingRevision,
-    ":authority_epoch": context.resultingAuthorityEpoch,
-    ":question_id": input.questionId,
+  const answerId = recordSubjectiveUatAnswer(context, {
+    questionId: input.questionId,
+    interactionId: input.interactionId,
+    responseKind: "answer",
+    verbatimResponse: input.verbatimResponse,
+    selectedOptionId: input.selectedOptionId,
+    normalizedInterpretation: `${disposition}_subjective_experience`,
+    observedProjectRevision: binding.interaction_project_revision,
+    createdAt,
   });
   getDb().prepare(`
     INSERT INTO workflow_human_acceptances (
@@ -602,5 +723,441 @@ export function answerMilestoneSubjectiveUatQuestion(
     disposition,
     testedSourceRevision: input.testedSourceRevision,
     supersedesHumanAcceptanceId: previous?.human_acceptance_id ?? null,
+  };
+}
+
+function requireRetirableCriterion(
+  context: Readonly<DomainOperationContext>,
+  criterionId: string,
+): RetirableCriterionRow {
+  const criterion = getDb().prepare(`
+    SELECT lifecycle.milestone_id, criterion.lifecycle_id, lifecycle.lifecycle_status,
+           criterion.criterion_key, criterion.requirement_id, criterion.description,
+           (
+             SELECT acceptance.disposition
+             FROM workflow_human_acceptances acceptance
+             WHERE acceptance.project_id = criterion.project_id
+               AND acceptance.criterion_id = criterion.criterion_id
+               AND NOT EXISTS (
+                 SELECT 1 FROM workflow_human_acceptances successor
+                 WHERE successor.supersedes_human_acceptance_id = acceptance.human_acceptance_id
+               )
+           ) AS head_disposition
+    FROM workflow_acceptance_criteria criterion
+    JOIN workflow_item_lifecycles lifecycle
+      ON lifecycle.lifecycle_id = criterion.lifecycle_id
+     AND lifecycle.project_id = criterion.project_id
+    WHERE criterion.criterion_id = :criterion_id
+      AND criterion.project_id = :project_id
+      AND criterion.criterion_kind = 'subjective_uat'
+      AND criterion.required = 1
+      AND lifecycle.item_kind = 'milestone'
+      AND lifecycle.slice_id IS NULL
+      AND lifecycle.task_id IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM workflow_acceptance_criteria successor
+        WHERE successor.supersedes_criterion_id = criterion.criterion_id
+      )
+  `).get({
+    ":criterion_id": criterionId,
+    ":project_id": context.projectId,
+  }) as unknown as RetirableCriterionRow | undefined;
+  if (!criterion) {
+    throw new Error(
+      "Subjective UAT retirement requires a current required subjective criterion on a Milestone lifecycle",
+    );
+  }
+  requireActiveMilestoneLifecycle(criterion.lifecycle_status);
+  // A rejection is the user saying the work is not good enough. Retiring it
+  // would launder that rejection into a pass; remediation must re-ask instead.
+  if (criterion.head_disposition === "rejected") {
+    throw new Error(
+      "Retire cannot clear a rejected subjective UAT criterion; " +
+      "re-prepare it under the same criterionKey after remediation.",
+    );
+  }
+  return criterion;
+}
+
+// An interrupted turn can strand the questionId/interactionId of a prior
+// retirement-prepared question with no tool-surface way to recover them, so
+// refusing here would trap the criterion forever. Withdraw and re-prepare.
+function withdrawOpenRetirementQuestions(
+  context: Readonly<DomainOperationContext>,
+  criterionId: string,
+): string[] {
+  const openQuestions = getDb().prepare(`
+    SELECT question.question_id, question.updated_at
+    FROM workflow_domain_events event
+    JOIN workflow_open_questions question
+      ON question.question_id = json_extract(event.payload_json, '$.questionId')
+     AND question.project_id = event.project_id
+    WHERE event.project_id = :project_id
+      AND event.event_type = 'milestone.subjective-uat.retirement-prepared'
+      AND json_extract(event.payload_json, '$.criterionId') = :criterion_id
+      AND question.question_status = 'open'
+    ORDER BY question.question_id
+  `).all({
+    ":project_id": context.projectId,
+    ":criterion_id": criterionId,
+  }) as unknown as Array<{ question_id: string; updated_at: string }>;
+
+  const withdrawQuestion = getDb().prepare(`
+    UPDATE workflow_open_questions
+    SET question_status = 'withdrawn', state_version = state_version + 1,
+        updated_at = :updated_at, last_operation_id = :operation_id,
+        last_project_revision = :project_revision,
+        last_authority_epoch = :authority_epoch
+    WHERE question_id = :question_id
+  `);
+  for (const question of openQuestions) {
+    withdrawQuestion.run({
+      ":updated_at": distinctTimestamp(question.updated_at),
+      ":operation_id": context.operationId,
+      ":project_revision": context.resultingRevision,
+      ":authority_epoch": context.resultingAuthorityEpoch,
+      ":question_id": question.question_id,
+    });
+  }
+  return openQuestions.map((question) => question.question_id);
+}
+
+function buildRetirementOptions(): SubjectiveUatRetirementOption[] {
+  return [
+    {
+      optionId: randomUUID(),
+      choice: "retire",
+      label: "Retire (Recommended)",
+      description: "Drop this acceptance criterion; it no longer needs a judgment.",
+      recommended: true,
+    },
+    {
+      optionId: randomUUID(),
+      choice: "keep",
+      label: "Keep",
+      description: "Keep this acceptance criterion; it still needs a judgment.",
+      recommended: false,
+    },
+  ];
+}
+
+export function prepareMilestoneSubjectiveUatRetirementQuestion(
+  context: Readonly<DomainOperationContext>,
+  input: PrepareSubjectiveUatRetirementWriteInput,
+): PreparedSubjectiveUatRetirement {
+  if (
+    requireActiveDomainOperationContext(context) !==
+      "milestone.subjective-uat.prepare-retirement"
+  ) {
+    throw new Error("Subjective UAT retirement preparation requires its Domain Operation");
+  }
+  const criterionId = requireNonBlank(input.criterionId, "criterionId");
+  const rationale = requireNonBlank(input.rationale, "rationale");
+  const criterion = requireRetirableCriterion(context, criterionId);
+  const withdrawnQuestionIds = withdrawOpenRetirementQuestions(context, criterionId);
+
+  const createdAt = new Date().toISOString();
+  const questionId = randomUUID();
+  const interactionId = randomUUID();
+  const options = buildRetirementOptions();
+  const focusedPrompt =
+    `Retire the subjective UAT criterion '${criterion.criterion_key}' from Milestone ` +
+    `${criterion.milestone_id} without answering it? ${rationale}`;
+
+  getDb().prepare(`
+    INSERT INTO workflow_open_questions (
+      question_id, project_id, lifecycle_id, question_text, question_status,
+      state_version, accepted_answer_id, created_at, updated_at,
+      created_operation_id, created_project_revision, created_authority_epoch,
+      last_operation_id, last_project_revision, last_authority_epoch
+    ) VALUES (
+      :question_id, :project_id, :lifecycle_id, :question_text, 'open',
+      0, NULL, :created_at, :created_at,
+      :operation_id, :project_revision, :authority_epoch,
+      :operation_id, :project_revision, :authority_epoch
+    )
+  `).run({
+    ":question_id": questionId,
+    ":project_id": context.projectId,
+    ":lifecycle_id": criterion.lifecycle_id,
+    ":question_text": focusedPrompt,
+    ":created_at": createdAt,
+    ":operation_id": context.operationId,
+    ":project_revision": context.resultingRevision,
+    ":authority_epoch": context.resultingAuthorityEpoch,
+  });
+  getDb().prepare(`
+    INSERT INTO workflow_interactions (
+      interaction_id, project_id, question_id, sequence, interaction_kind,
+      presentation_state, focused_prompt, requires_answer, option_count,
+      recommended_option_id, recommendation_text, recommendation_rationale,
+      recommendation_evidence, recommendation_confidence,
+      recommendation_uncertainty, revisit_condition, presented_at,
+      operation_id, project_revision, authority_epoch
+    ) VALUES (
+      :interaction_id, :project_id, :question_id, 1, 'consent',
+      'prepared', :focused_prompt, 1, 2,
+      :recommended_option_id, :recommendation_text, :recommendation_rationale,
+      '', NULL, '', '', '', :operation_id, :project_revision, :authority_epoch
+    )
+  `).run({
+    ":interaction_id": interactionId,
+    ":project_id": context.projectId,
+    ":question_id": questionId,
+    ":focused_prompt": focusedPrompt,
+    ":recommended_option_id": options[0]!.optionId,
+    ":recommendation_text": "I recommend retiring this criterion.",
+    ":recommendation_rationale": rationale,
+    ":operation_id": context.operationId,
+    ":project_revision": context.resultingRevision,
+    ":authority_epoch": context.resultingAuthorityEpoch,
+  });
+  const insertOption = getDb().prepare(`
+    INSERT INTO workflow_interaction_options (
+      interaction_id, option_id, project_id, ordinal, label, description,
+      operation_id, project_revision, authority_epoch
+    ) VALUES (
+      :interaction_id, :option_id, :project_id, :ordinal, :label, :description,
+      :operation_id, :project_revision, :authority_epoch
+    )
+  `);
+  options.forEach((option, index) => insertOption.run({
+    ":interaction_id": interactionId,
+    ":option_id": option.optionId,
+    ":project_id": context.projectId,
+    ":ordinal": index + 1,
+    ":label": option.label,
+    ":description": option.description,
+    ":operation_id": context.operationId,
+    ":project_revision": context.resultingRevision,
+    ":authority_epoch": context.resultingAuthorityEpoch,
+  }));
+  getDb().prepare(`
+    UPDATE workflow_interactions
+    SET presentation_state = 'presented', presented_at = :presented_at
+    WHERE interaction_id = :interaction_id
+  `).run({
+    ":presented_at": createdAt,
+    ":interaction_id": interactionId,
+  });
+
+  return {
+    milestoneId: criterion.milestone_id,
+    lifecycleId: criterion.lifecycle_id,
+    criterionId,
+    criterionKey: criterion.criterion_key,
+    questionId,
+    interactionId,
+    retireOptionId: options[0]!.optionId,
+    keepOptionId: options[1]!.optionId,
+    withdrawnQuestionIds,
+    options,
+  };
+}
+
+interface RetireSubjectiveUatWriteInput {
+  criterionId: string;
+  questionId: string;
+  interactionId: string;
+  selectedOptionId: string;
+  verbatimResponse: string;
+  rationale: string;
+}
+
+export interface RetiredMilestoneSubjectiveUat {
+  milestoneId: string;
+  lifecycleId: string;
+  criterionId: string;
+  criterionKey: string;
+  questionId: string;
+  interactionId: string;
+  answerId: string;
+  choice: SubjectiveUatRetirementChoice;
+  retiredCriterionId: string | null;
+  withdrawnQuestionIds: string[];
+}
+
+interface RetirementBindingRow {
+  interaction_project_revision: number;
+  question_updated_at: string;
+  retire_option_id: string;
+  keep_option_id: string;
+}
+
+function preparedRetirementBinding(
+  context: Readonly<DomainOperationContext>,
+  input: RetireSubjectiveUatWriteInput,
+): RetirementBindingRow {
+  const binding = getDb().prepare(`
+    SELECT interaction.project_revision AS interaction_project_revision,
+           question.updated_at AS question_updated_at,
+           json_extract(event.payload_json, '$.retireOptionId') AS retire_option_id,
+           json_extract(event.payload_json, '$.keepOptionId') AS keep_option_id
+    FROM workflow_domain_events event
+    JOIN workflow_open_questions question
+      ON question.question_id = :question_id
+     AND question.project_id = event.project_id
+    JOIN workflow_interactions interaction
+      ON interaction.interaction_id = :interaction_id
+     AND interaction.project_id = event.project_id
+     AND interaction.question_id = question.question_id
+    WHERE event.project_id = :project_id
+      AND event.event_type = 'milestone.subjective-uat.retirement-prepared'
+      AND json_extract(event.payload_json, '$.criterionId') = :criterion_id
+      AND json_extract(event.payload_json, '$.questionId') = :question_id
+      AND json_extract(event.payload_json, '$.interactionId') = :interaction_id
+      AND question.question_status = 'open'
+      AND interaction.interaction_kind = 'consent'
+      AND interaction.presentation_state = 'presented'
+  `).get({
+    ":project_id": context.projectId,
+    ":criterion_id": input.criterionId,
+    ":question_id": input.questionId,
+    ":interaction_id": input.interactionId,
+  }) as unknown as RetirementBindingRow | undefined;
+  if (!binding) {
+    throw new Error("Retirement must match a current prepared subjective-UAT retirement binding");
+  }
+  return binding;
+}
+
+function withdrawRetiredChainQuestions(
+  context: Readonly<DomainOperationContext>,
+  lifecycleId: string,
+  criterionKey: string,
+  requirementId: string | null,
+): string[] {
+  const openQuestions = getDb().prepare(`
+    SELECT DISTINCT question.question_id, question.updated_at
+    FROM workflow_domain_events event
+    JOIN workflow_open_questions question
+      ON question.question_id = json_extract(event.payload_json, '$.questionId')
+     AND question.project_id = event.project_id
+    JOIN workflow_acceptance_criteria criterion
+      ON criterion.criterion_id = json_extract(event.payload_json, '$.criterionId')
+     AND criterion.project_id = event.project_id
+    WHERE event.project_id = :project_id
+      AND event.event_type = 'milestone.subjective-uat.prepared'
+      AND criterion.lifecycle_id = :lifecycle_id
+      AND criterion.criterion_key = :criterion_key
+      AND criterion.requirement_id IS :requirement_id
+      AND question.question_status = 'open'
+    ORDER BY question.question_id
+  `).all({
+    ":project_id": context.projectId,
+    ":lifecycle_id": lifecycleId,
+    ":criterion_key": criterionKey,
+    ":requirement_id": requirementId,
+  }) as unknown as Array<{ question_id: string; updated_at: string }>;
+
+  const withdrawQuestion = getDb().prepare(`
+    UPDATE workflow_open_questions
+    SET question_status = 'withdrawn', state_version = state_version + 1,
+        updated_at = :updated_at, last_operation_id = :operation_id,
+        last_project_revision = :project_revision,
+        last_authority_epoch = :authority_epoch
+    WHERE question_id = :question_id
+  `);
+  for (const question of openQuestions) {
+    withdrawQuestion.run({
+      ":updated_at": distinctTimestamp(question.updated_at),
+      ":operation_id": context.operationId,
+      ":project_revision": context.resultingRevision,
+      ":authority_epoch": context.resultingAuthorityEpoch,
+      ":question_id": question.question_id,
+    });
+  }
+  return openQuestions.map((question) => question.question_id);
+}
+
+export function retireMilestoneSubjectiveUatCriterion(
+  context: Readonly<DomainOperationContext>,
+  input: RetireSubjectiveUatWriteInput,
+): RetiredMilestoneSubjectiveUat {
+  if (requireActiveDomainOperationContext(context) !== "milestone.subjective-uat.retire") {
+    throw new Error("Subjective UAT retirement requires its Domain Operation");
+  }
+  const criterion = requireRetirableCriterion(context, input.criterionId);
+  const binding = preparedRetirementBinding(context, input);
+
+  let choice: SubjectiveUatRetirementChoice;
+  if (input.selectedOptionId === binding.retire_option_id) {
+    choice = "retire";
+  } else if (input.selectedOptionId === binding.keep_option_id) {
+    choice = "keep";
+  } else {
+    throw new Error("Retirement must select the prepared Retire or Keep option");
+  }
+  const option = getDb().prepare(`
+    SELECT label FROM workflow_interaction_options
+    WHERE interaction_id = :interaction_id AND option_id = :option_id
+  `).get({
+    ":interaction_id": input.interactionId,
+    ":option_id": input.selectedOptionId,
+  }) as unknown as OptionRow | undefined;
+  if (!option || input.verbatimResponse !== option.label) {
+    throw new Error("Subjective UAT retirement requires the actual selected option response");
+  }
+
+  const createdAt = distinctTimestamp(binding.question_updated_at);
+  const answerId = recordSubjectiveUatAnswer(context, {
+    questionId: input.questionId,
+    interactionId: input.interactionId,
+    responseKind: "consent",
+    verbatimResponse: input.verbatimResponse,
+    selectedOptionId: input.selectedOptionId,
+    normalizedInterpretation: `${choice}_subjective_criterion`,
+    observedProjectRevision: binding.interaction_project_revision,
+    createdAt,
+  });
+
+  let retiredCriterionId: string | null = null;
+  let withdrawnQuestionIds: string[] = [];
+  if (choice === "retire") {
+    retiredCriterionId = randomUUID();
+    getDb().prepare(`
+      INSERT INTO workflow_acceptance_criteria (
+        criterion_id, criterion_key, project_id, lifecycle_id, requirement_id,
+        criterion_kind, evidence_class, required, description,
+        supersedes_criterion_id, created_at,
+        operation_id, project_revision, authority_epoch
+      ) VALUES (
+        :criterion_id, :criterion_key, :project_id, :lifecycle_id, :requirement_id,
+        'subjective_uat', 'human', 0, :description,
+        :supersedes_criterion_id, :created_at,
+        :operation_id, :project_revision, :authority_epoch
+      )
+    `).run({
+      ":criterion_id": retiredCriterionId,
+      ":criterion_key": criterion.criterion_key,
+      ":project_id": context.projectId,
+      ":lifecycle_id": criterion.lifecycle_id,
+      ":requirement_id": criterion.requirement_id,
+      ":description": criterion.description,
+      ":supersedes_criterion_id": input.criterionId,
+      ":created_at": createdAt,
+      ":operation_id": context.operationId,
+      ":project_revision": context.resultingRevision,
+      ":authority_epoch": context.resultingAuthorityEpoch,
+    });
+    withdrawnQuestionIds = withdrawRetiredChainQuestions(
+      context,
+      criterion.lifecycle_id,
+      criterion.criterion_key,
+      criterion.requirement_id,
+    );
+  }
+
+  return {
+    milestoneId: criterion.milestone_id,
+    lifecycleId: criterion.lifecycle_id,
+    criterionId: input.criterionId,
+    criterionKey: criterion.criterion_key,
+    questionId: input.questionId,
+    interactionId: input.interactionId,
+    answerId,
+    choice,
+    retiredCriterionId,
+    withdrawnQuestionIds,
   };
 }
