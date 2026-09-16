@@ -49,7 +49,7 @@ if: startsWith(github.head_ref, 'mergify/merge-queue/')
 creates when a PR enters the merge queue, so you will see it skipped until the
 PR is queued. Steps:
 
-1. `pnpm install --frozen-lockfile` (pnpm 10.12.1, Node 24.20.0, pnpm cache)
+1. `pnpm install --frozen-lockfile` (pnpm 11.25.0, Node 24.20.0, pnpm cache)
 2. `pnpm run lint:dead-code` — knip against the committed baseline. Runs on
    source, so it needs no build and fails in about a minute, ahead of the
    expensive steps.
