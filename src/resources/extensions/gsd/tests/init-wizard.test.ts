@@ -7,7 +7,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 // The bootstrap and preferences generation are tested via detection + filesystem checks.
 
 import { detectProjectState } from "../detection.ts";
-import { detectMainBranch } from "../init-wizard.ts";
+import { bootstrapGsdDirectoryStructure, detectMainBranch } from "../init-wizard.ts";
 import { canonicalPhaseDirName, LAYOUT_SEGMENTS } from "../layout-policy.ts";
 
 function makeTempDir(prefix: string): string {
@@ -35,6 +35,31 @@ function cleanup(dir: string): void {
     // best-effort
   }
 }
+
+// ─── Bootstrap Tests ────────────────────────────────────────────────────────────
+
+test("init-wizard: bootstrap creates the flat-phase dir, not the legacy milestones/ dir", (t) => {
+  const dir = makeTempDir("bootstrap-layout");
+  t.after(() => { cleanup(dir); });
+
+  bootstrapGsdDirectoryStructure(dir, {
+    detectedFiles: [],
+    isGitRepo: false,
+    isMonorepo: false,
+    xcodePlatforms: [],
+    hasCI: false,
+    hasTests: false,
+    verificationCommands: [],
+  });
+
+  assert.equal(
+    existsSync(join(dir, ".gsd", "milestones")),
+    false,
+    "the pre-flat-phase milestones/ layout must not be created",
+  );
+  assert.equal(existsSync(join(dir, ".gsd", LAYOUT_SEGMENTS.level1)), true);
+  assert.equal(existsSync(join(dir, ".gsd", "runtime")), true);
+});
 
 // ─── Detection Integration Tests ────────────────────────────────────────────────
 

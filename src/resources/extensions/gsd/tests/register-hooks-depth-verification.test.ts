@@ -347,8 +347,10 @@ test("register-hooks persists first structured question round for new milestone 
     }, ctx);
   }
 
-  // Flat-phase: ensureMilestoneShell creates phases/04-new-milestone-m004/ for M004
-  const milestoneDir = join(dir, ".gsd", "phases", "04-new-milestone-m004");
+  // ensureMilestoneShell has no title yet, so it uses the id-only phase dir name.
+  // Seeding a slug from the "New milestone M004" placeholder title would leave
+  // phases/04-new-milestone-m004/ behind once the milestone is really named.
+  const milestoneDir = join(dir, ".gsd", "phases", "04-m004");
   const draftPath = join(milestoneDir, "04-CONTEXT-DRAFT.md");
   const discussionPath = join(milestoneDir, "04-DISCUSSION.md");
 
