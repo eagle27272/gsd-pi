@@ -66,9 +66,9 @@ export interface GitPreferences {
    *  - "none": (default) no git isolation — commits land on the user's current branch directly
    */
   isolation?: "worktree" | "branch" | "none";
-  /** When false, GSD will not modify .gitignore at all — no baseline patterns
-   *  are added and no self-healing occurs. Use this if you manage your own
-   *  .gitignore and don't want GSD touching it.
+  /** When false, GSD writes no ignore rules at all — no baseline patterns
+   *  are added and no self-healing occurs. GSD never modifies the tracked
+   *  .gitignore; baseline patterns go to the clone-local .git/info/exclude.
    *  Default: true (GSD ensures baseline patterns are present).
    */
   manage_gitignore?: boolean;

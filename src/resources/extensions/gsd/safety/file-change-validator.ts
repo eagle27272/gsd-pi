@@ -58,9 +58,10 @@ export interface FileChangeAuditOptions {
 /**
  * Build the effective allowlist for a unit's file-change audit.
  *
- * When GSD manages .gitignore (manage_gitignore unset or true), ensureGitignore()
- * appends baseline patterns at auto-start and the edit rides into the task's
- * auto-commit — so .gitignore changes must not be attributed to the task.
+ * ensureGitignore() writes to .git/info/exclude, never to .gitignore, so
+ * bootstrap no longer produces a .gitignore edit of its own. The allowance
+ * stays because repos GSD manages may still carry the legacy baseline block
+ * there, and a self-heal touching it must not be attributed to the task.
  */
 export function effectiveFileChangeAllowlist(
   baseAllowlist: string[],

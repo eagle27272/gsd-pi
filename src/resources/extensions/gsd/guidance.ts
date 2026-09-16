@@ -239,7 +239,7 @@ const DOCTOR_FIX_HINTS: Partial<Record<DoctorIssueCode, string>> = {
     "Commit or merge the worktree's changes (`gsd worktree merge <name>`) before removing it.",
   worktree_branch_merged: "The branch is merged — remove the worktree to reclaim space.",
   orphaned_auto_worktree: "Run `/gsd doctor fix` to fix, or merge salvageable work with `gsd worktree merge <name>`.",
-  gitignore_missing_patterns: "Run `/gsd doctor fix` to append the missing .gitignore patterns.",
+  gitignore_missing_patterns: "Run `/gsd doctor fix` to append the missing patterns to .git/info/exclude.",
   invalid_preferences: "Edit .gsd/PREFERENCES.md to fix the invalid field, then re-run the command.",
   provider_key_missing: "Add the provider API key to your environment or provider config, then retry.",
   provider_key_backedoff: "The key is cooling down after repeated failures — wait, or switch the phase model in .gsd/PREFERENCES.md.",

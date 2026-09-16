@@ -1,8 +1,9 @@
 /**
  * gitignore-tracked-gsd.test.ts — Regression tests for #1364.
  *
- * Verifies that ensureGitignore() does NOT add ".gsd" to .gitignore
- * when .gsd/ contains git-tracked files.
+ * Verifies that ensureGitignore() does NOT ignore ".gsd" when .gsd/ contains
+ * git-tracked files. Patterns are written to `.git/info/exclude`, so that is
+ * where these assertions read from.
  *
  * Uses real temporary git repos — no mocks.
  */
@@ -42,6 +43,11 @@ function makeTempRepo(): string {
   git(dir, "commit", "-m", "init");
   git(dir, "branch", "-M", "main");
   return dir;
+}
+
+/** Where ensureGitignore writes: the repo-local exclude file, not .gitignore. */
+function excludeFile(dir: string): string {
+  return join(dir, ".git", "info", "exclude");
 }
 
 function cleanup(dir: string): void {
@@ -97,18 +103,18 @@ test("ensureGitignore does NOT add .gsd when .gsd/ has tracked files (#1364)", (
     // Run ensureGitignore
     ensureGitignore(dir);
 
-    // Verify .gsd is NOT in .gitignore
-    const gitignore = readFileSync(join(dir, ".gitignore"), "utf-8");
-    const lines = gitignore.split("\n").map((l) => l.trim());
+    // Verify .gsd is NOT ignored
+    const exclude = readFileSync(excludeFile(dir), "utf-8");
+    const lines = exclude.split("\n").map((l) => l.trim());
     assert.ok(
       !lines.includes(".gsd"),
-      `Expected .gsd NOT to appear in .gitignore, but it does:\n${gitignore}`,
+      `Expected .gsd NOT to be ignored, but it is:\n${exclude}`,
     );
 
     // Other baseline patterns should still be present
-    assert.ok(lines.includes(".DS_Store"), "Expected .DS_Store in .gitignore");
-    assert.ok(lines.includes("node_modules/"), "Expected node_modules/ in .gitignore");
-    assert.ok(lines.includes(".mcp.json"), "Expected .mcp.json in .gitignore");
+    assert.ok(lines.includes(".DS_Store"), "Expected .DS_Store to be ignored");
+    assert.ok(lines.includes("node_modules/"), "Expected node_modules/ to be ignored");
+    assert.ok(lines.includes(".mcp.json"), "Expected .mcp.json to be ignored");
   } finally {
     cleanup(dir);
   }
@@ -131,11 +137,11 @@ test("ensureGitignore adds granular runtime patterns when .gsd/ has tracked file
 
     ensureGitignore(dir);
 
-    const gitignore = readFileSync(join(dir, ".gitignore"), "utf-8");
-    const lines = new Set(gitignore.split("\n").map((l) => l.trim()));
+    const exclude = readFileSync(excludeFile(dir), "utf-8");
+    const lines = new Set(exclude.split("\n").map((l) => l.trim()));
 
     // The umbrella pattern must still be omitted (preserves #1364).
-    assert.ok(!lines.has(".gsd"), `.gsd should not appear when tracked; got:\n${gitignore}`);
+    assert.ok(!lines.has(".gsd"), `.gsd should not appear when tracked; got:\n${exclude}`);
 
     // The runtime artifacts that break the close-out gate must be ignored.
     for (const pattern of [
@@ -151,18 +157,18 @@ test("ensureGitignore adds granular runtime patterns when .gsd/ has tracked file
     ]) {
       assert.ok(
         lines.has(pattern),
-        `Expected ${pattern} in .gitignore so close-out gate sees a clean tree; got:\n${gitignore}`,
+        `Expected ${pattern} ignored so close-out gate sees a clean tree; got:\n${exclude}`,
       );
     }
 
     // BASELINE and GSD_RUNTIME both contain .gsd-worktrees/ — must not duplicate.
-    const worktreeOccurrences = gitignore
+    const worktreeOccurrences = exclude
       .split("\n")
       .filter((l) => l.trim() === ".gsd-worktrees/").length;
     assert.equal(
       worktreeOccurrences,
       1,
-      `.gsd-worktrees/ should appear exactly once; got ${worktreeOccurrences} in:\n${gitignore}`,
+      `.gsd-worktrees/ should appear exactly once; got ${worktreeOccurrences} in:\n${exclude}`,
     );
   } finally {
     cleanup(dir);
@@ -175,12 +181,12 @@ test("ensureGitignore adds .gsd when .gsd/ has NO tracked files", (_t) => {
     // Run ensureGitignore (no .gsd/ at all)
     ensureGitignore(dir);
 
-    // Verify .gsd IS in .gitignore
-    const gitignore = readFileSync(join(dir, ".gitignore"), "utf-8");
-    const lines = gitignore.split("\n").map((l) => l.trim());
+    // Verify .gsd IS ignored
+    const exclude = readFileSync(excludeFile(dir), "utf-8");
+    const lines = exclude.split("\n").map((l) => l.trim());
     assert.ok(
       lines.includes(".gsd"),
-      `Expected .gsd in .gitignore, but it's missing:\n${gitignore}`,
+      `Expected .gsd to be ignored, but it's missing:\n${exclude}`,
     );
   } finally {
     cleanup(dir);
