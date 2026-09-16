@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync, readFileSync, existsSync, symlinkSync, writeFileSync, unlinkSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync, readFileSync, existsSync, symlinkSync, writeFileSync, unlinkSync } from "node:fs";
 import { join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -16,6 +16,7 @@ import {
   insertMilestone,
   upsertRequirement,
   getAllMilestones,
+  getMilestone,
 } from "../gsd-db.ts";
 import { getAutoWorker, registerAutoWorker } from "../db/auto-workers.ts";
 import { claimMilestoneLease, getMilestoneLease } from "../db/milestone-leases.ts";
@@ -3192,6 +3193,59 @@ test("executeSummarySave registers PROJECT milestone sequence for the next run",
     assert.equal(state.phase, "pre-planning");
     assert.equal(state.registry[0]?.status, "active");
     assert.equal(state.registry[1]?.status, "pending");
+  } finally {
+    closeDatabase();
+    cleanup(base);
+  }
+});
+
+test("executeSummarySave renames the placeholder phase dir when PROJECT.md titles an existing milestone", async () => {
+  const base = makeTmpBase();
+  try {
+    openTestDb(base);
+    // A discussion round ran before the milestone was named: ensureMilestoneShell
+    // seeded a "New milestone M001" row and a matching placeholder phase dir.
+    insertMilestone({ id: "M001", title: "New milestone M001", status: "queued" });
+    const placeholderDir = join(base, ".gsd", "phases", "01-new-milestone-m001");
+    mkdirSync(placeholderDir, { recursive: true });
+    writeFileSync(join(placeholderDir, "01-CONTEXT-DRAFT.md"), "# draft\n");
+    writeFileSync(join(placeholderDir, "01-DISCUSSION.md"), "# discussion\n");
+
+    const result = await inProjectDir(base, () => executeSummarySave({
+      artifact_type: "PROJECT",
+      content: [
+        "# Project",
+        "",
+        "## What This Is",
+        "",
+        "Deep project setup output.",
+        "",
+        "## Project Shape",
+        "",
+        "**Complexity:** complex",
+        "**Why:** It spans multiple delivery steps.",
+        "",
+        "## Capability Contract",
+        "",
+        "See .gsd/REQUIREMENTS.md.",
+        "",
+        "## Milestone Sequence",
+        "",
+        "- [ ] M001: Backstage Catalog Registration - Register services in Backstage.",
+        "",
+      ].join("\n"),
+    }, base));
+
+    assert.equal(result.isError, undefined);
+    assert.equal(getMilestone("M001")?.title, "Backstage Catalog Registration");
+
+    const namedDir = join(base, ".gsd", "phases", "01-backstage-catalog-registration");
+    assert.equal(existsSync(placeholderDir), false, "placeholder phase dir should be gone");
+    assert.deepEqual(
+      readdirSync(namedDir).sort(),
+      ["01-CONTEXT-DRAFT.md", "01-DISCUSSION.md"],
+      "discussion artifacts should move with the renamed dir",
+    );
   } finally {
     closeDatabase();
     cleanup(base);
