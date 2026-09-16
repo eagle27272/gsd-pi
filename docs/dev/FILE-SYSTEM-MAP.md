@@ -656,6 +656,10 @@
 | voice/speech-recognizer.swift | Voice | macOS Swift speech recognizer |
 | voice/speech-recognizer.py | Voice | Linux/Windows Python speech recognizer |
 | cmux/index.ts | CMux | Tmux/multiplexer session management |
+| codegraph/index.ts | CodeGraph | CodeGraph extension entry — registers tools only when the project is indexed |
+| codegraph/detect.ts | CodeGraph | Binary and .codegraph/ index detection gate |
+| codegraph/cli.ts | CodeGraph | codegraph argv construction and process execution |
+| codegraph/tools.ts | CodeGraph | codegraph_explore and codegraph_node tool definitions |
 | mac-tools/index.ts | Mac Tools | macOS-specific utilities extension |
 | mac-tools/swift-cli/Sources/main.swift | Mac Tools | macOS native tools Swift implementation |
 | aws-auth/index.ts | Auth/OAuth | AWS authentication and credential handling |
@@ -1011,6 +1015,7 @@ Quick lookup: which files are part of each system?
 | **Integration Tests** | tests/**/* |
 | **Loader / Bootstrap** | src/loader.ts, src/resource-loader.ts, src/tool-bootstrap.ts, src/bundled-resource-path.ts, gsd/bootstrap/* |
 | **LSP** | pi-coding-agent/src/core/lsp/* |
+| **CodeGraph** | src/resources/extensions/codegraph/* |
 | **Mac Tools** | src/resources/extensions/mac-tools/* |
 | **MCP Server/Client** | src/mcp-server.ts, src/resources/extensions/mcp-client/index.ts, vscode-extension/src/gsd-client.ts, modes/rpc/* |
 | **Memory Extension** | pi-coding-agent/src/resources/extensions/memory/* |

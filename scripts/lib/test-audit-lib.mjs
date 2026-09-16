@@ -32,6 +32,7 @@ export const UNIT_EXTENSION_GLOBS = new Set([
   'universal-config',
   'visual-brief',
   'mcp-client',
+  'codegraph',
 ]);
 
 export const INTEGRATION_EXTENSION_GLOBS = new Set([
