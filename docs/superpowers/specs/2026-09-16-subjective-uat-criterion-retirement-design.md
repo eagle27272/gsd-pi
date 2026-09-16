@@ -264,7 +264,7 @@ same criterion shape. Live state is not written to during implementation.
 | `packages/contracts/src/workflow.ts` | two registry entries |
 | `packages/mcp-server/src/workflow-tools.ts` | two MCP tools, zod schemas, handlers; retire uses `mcpUserResponseInvocation` |
 | `packages/mcp-server/README.md` | tool list and the idempotency-key paragraph |
-| `docs/db-map.md`, `docs/prompt-db-combined-map.md` | tool rows |
+| `docs/db-map.md` | tool rows. `docs/prompt-db-combined-map.md` is organised by pipeline phase, not by tool, and gets no row |
 
 ## Testing
 
