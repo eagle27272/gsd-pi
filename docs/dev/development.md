@@ -32,6 +32,8 @@ pnpm --filter @gsd/<package> test      # run one workspace package's tests
 
 If `pnpm run build` fails after running tests (e.g. `Cannot find module '@gsd/*'` errors), run `pnpm install --frozen-lockfile` first to restore workspace symlinks, then try again.
 
+The unit suite caps its own worker concurrency (see [Test confidence stack](./test-confidence-stack.md)), so `pnpm run test:unit` is correct as written. To change the cap, set `TEST_CONCURRENCY=<n>` in the environment — appending `--test-concurrency` to `pnpm run test:unit` does nothing useful, because pnpm passes trailing args to the last sub-command of a compound script only.
+
 ### Before pushing
 
 CI is tiered to match local scripts. See [Test confidence stack](./test-confidence-stack.md) for the full map.
