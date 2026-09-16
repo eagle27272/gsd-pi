@@ -19,6 +19,7 @@ import {
   resolveWorkflowToolNameForProvider,
 } from "../workflow-tool-name-resolver.ts";
 import { collectNativeRegisteredToolNames } from "./native-tool-registry-fixture.ts";
+import { shouldBlockAutoUnitToolCall } from "../auto-unit-tool-scope.ts";
 
 const UNITS = Object.keys(UNIT_TOOL_CONTRACTS);
 
@@ -132,6 +133,46 @@ describe("tail reminder puts the affordance where the model acts", () => {
 
   test("units without a tool contract get no reminder", () => {
     assert.equal(composeToolAffordanceReminder("definitely-not-a-unit"), "");
+  });
+});
+
+describe("units that can hit a subjective-UAT blocker can clear it", () => {
+  // Issue #242: a required subjective criterion blocks `gsd_validate_milestone`
+  // pass and milestone closeout, and the only remediation is these four tools.
+  // Omitting them from the allow-list left eight sessions reading the "near-miss
+  // variants are rejected" reminder and concluding the blocker was unfixable.
+  const SUBJECTIVE_UAT_TOOLS = [
+    "gsd_prepare_milestone_subjective_uat",
+    "gsd_answer_milestone_subjective_uat",
+    "gsd_prepare_milestone_subjective_uat_retirement",
+    "gsd_retire_milestone_subjective_uat",
+  ] as const;
+  const BLOCKED_UNITS = ["validate-milestone", "complete-milestone"] as const;
+
+  for (const unit of BLOCKED_UNITS) {
+    test(`${unit} allows and advertises the subjective-UAT remediation tools`, () => {
+      const allowed = UNIT_TOOL_CONTRACTS[unit]!.allowedGsdTools as readonly string[];
+      const surface = composeToolSurfaceInstructions(unit, { renderMode: "standalone" });
+      for (const tool of SUBJECTIVE_UAT_TOOLS) {
+        assert.ok(allowed.includes(tool), `${unit}: contract omits ${tool}`);
+        assert.ok(surface.includes(`\`${tool}\``), `${unit}: surface omits ${tool}`);
+        assert.equal(
+          shouldBlockAutoUnitToolCall(unit, tool).block,
+          false,
+          `${unit}: enforcer blocks ${tool}`,
+        );
+      }
+    });
+  }
+
+  test("a unit with no subjective-UAT concern is blocked from these tools", () => {
+    for (const tool of SUBJECTIVE_UAT_TOOLS) {
+      assert.equal(
+        shouldBlockAutoUnitToolCall("plan-slice", tool).block,
+        true,
+        `plan-slice should not reach ${tool}`,
+      );
+    }
   });
 });
 

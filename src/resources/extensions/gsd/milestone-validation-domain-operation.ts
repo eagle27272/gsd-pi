@@ -73,6 +73,9 @@ interface OperationReceipt {
 
 interface SubjectiveProofRow {
   criterion_id: string;
+  criterion_key: string;
+  description: string;
+  question_text: string | null;
   human_acceptance_id: string | null;
   disposition: string | null;
 }
@@ -348,6 +351,21 @@ function currentRequiredSubjectiveProofs(
 ): SubjectiveProofRow[] {
   return getDb().prepare(`
     SELECT criterion.criterion_id,
+           criterion.criterion_key,
+           criterion.description,
+           (
+             SELECT question.question_text
+             FROM workflow_domain_events prepared
+             JOIN workflow_open_questions question
+               ON question.question_id = json_extract(prepared.payload_json, '$.questionId')
+              AND question.project_id = prepared.project_id
+             WHERE prepared.project_id = criterion.project_id
+               AND prepared.event_type = 'milestone.subjective-uat.prepared'
+               AND json_extract(prepared.payload_json, '$.criterionId') = criterion.criterion_id
+               AND question.question_status = 'open'
+             ORDER BY prepared.project_revision DESC
+             LIMIT 1
+           ) AS question_text,
            acceptance.human_acceptance_id,
            acceptance.disposition
     FROM workflow_acceptance_criteria criterion
@@ -386,6 +404,29 @@ function currentRequiredSubjectiveProofs(
     ":lifecycle_id": lifecycleId,
     ":tested_source_revision": testedSourceRevision,
   }) as unknown as SubjectiveProofRow[];
+}
+
+/**
+ * Every fact here was already on the row the blocker query reads. Issue #242:
+ * emitting the UUID alone cost eight validate-milestone sessions and five
+ * duplicate criterion rows — a unit that cannot name the blocking criterion
+ * cannot reuse its key, so it mints a new one and multiplies the gate.
+ */
+function describeUnsatisfiedSubjectiveProof(proof: SubjectiveProofRow): string {
+  return [
+    "Milestone validation pass requires an accepted subjective UAT criterion.",
+    "",
+    `  criterion_id:  ${proof.criterion_id}`,
+    `  criterion_key: ${proof.criterion_key}`,
+    `  criterion:     ${proof.description}`,
+    ...(proof.question_text ? [`  question:      ${proof.question_text}`] : []),
+    "",
+    "  To settle it, call one of:",
+    "    gsd_prepare_milestone_subjective_uat            (ask, then answer with gsd_answer_milestone_subjective_uat)",
+    "    gsd_prepare_milestone_subjective_uat_retirement (retire a stale row, then gsd_retire_milestone_subjective_uat)",
+    "",
+    `  Reuse criterion_key '${proof.criterion_key}' to rephrase — a new key opens a second required gate.`,
+  ].join("\n");
 }
 
 export function validateMilestone(input: ValidateMilestoneInput): ValidateMilestoneReceipt {
@@ -490,9 +531,7 @@ export function validateMilestone(input: ValidateMilestoneInput): ValidateMilest
         !proof.human_acceptance_id || proof.disposition !== "accepted"
       );
       if (unsatisfied) {
-        throw new Error(
-          `Milestone validation pass requires accepted subjective UAT criterion ${unsatisfied.criterion_id}`,
-        );
+        throw new Error(describeUnsatisfiedSubjectiveProof(unsatisfied));
       }
     }
     const recordedSubjectiveProofs = subjectiveProofs.filter(
