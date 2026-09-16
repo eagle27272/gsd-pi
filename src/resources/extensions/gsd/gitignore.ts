@@ -1,13 +1,16 @@
 /**
- * GSD bootstrappers for .gitignore and PREFERENCES.md
+ * GSD bootstrappers for ignore rules and PREFERENCES.md
  *
- * Ensures baseline .gitignore exists with universally-correct patterns.
+ * Ensures the repo ignores GSD's runtime paths using universally-correct
+ * patterns, written to `.git/info/exclude` so bootstrapping never dirties the
+ * tracked `.gitignore` the whole team shares.
  * Creates an empty PREFERENCES.md template if it doesn't exist.
  * Both idempotent — non-destructive if already present.
  */
 
 import { join } from "node:path";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
+import { declaredIgnorePatterns, excludeFilePath } from "./ignore-file.js";
 import { nativeRmCached, nativeLsFiles } from "./native-git-bridge.js";
 import { gsdRoot } from "./paths.js";
 import { atomicWriteSync } from "./atomic-write.js";
@@ -191,9 +194,14 @@ export function hasGitTrackedGsdFiles(basePath: string): boolean {
 }
 
 /**
- * Ensure basePath/.gitignore contains baseline ignore patterns.
- * Creates the file if missing; appends missing patterns.
- * Returns true if the file was created or modified, false if already complete.
+ * Ensure the repo ignores GSD's baseline patterns, appending any that are
+ * missing to `.git/info/exclude`.
+ * Returns true if the exclude file was created or modified.
+ *
+ * The tracked `.gitignore` is never written, but it *is* read: a pattern
+ * already listed there counts as present. Repos bootstrapped by older versions
+ * carry the baseline block in their committed `.gitignore`, so they stay a
+ * no-op instead of gaining a duplicate copy in the exclude file.
  *
  * **Safety check:** If `.gsd/` contains git-tracked files (i.e., the project
  * intentionally keeps `.gsd/` in version control), the `.gsd` ignore pattern
@@ -204,23 +212,16 @@ export function ensureGitignore(
   basePath: string,
   options?: { manageGitignore?: boolean },
 ): boolean {
-  // If manage_gitignore is explicitly false, do not touch .gitignore at all
+  // If manage_gitignore is explicitly false, write no ignore rules at all
   if (options?.manageGitignore === false) return false;
 
-  const gitignorePath = join(basePath, ".gitignore");
+  const excludePath = excludeFilePath(basePath);
+  if (!excludePath) return false;
 
-  let existing = "";
-  if (existsSync(gitignorePath)) {
-    existing = readFileSync(gitignorePath, "utf-8");
-  }
+  const existing = existsSync(excludePath) ? readFileSync(excludePath, "utf-8") : "";
 
-  // Parse existing lines (trimmed, ignoring comments and blanks)
-  const existingLines = new Set(
-    existing
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => l && !l.startsWith("#")),
-  );
+  // A pattern counts as present if either file already carries it.
+  const existingLines = declaredIgnorePatterns(basePath, excludePath);
 
   // Determine which patterns to apply. If .gsd/ has tracked files,
   // exclude the ".gsd" pattern to prevent deleting tracked state, but
@@ -248,7 +249,7 @@ export function ensureGitignore(
 
   // Ensure existing content ends with a newline before appending
   const prefix = existing && !existing.endsWith("\n") ? "\n" : "";
-  atomicWriteSync(gitignorePath, existing + prefix + block, "utf-8");
+  atomicWriteSync(excludePath, existing + prefix + block, "utf-8");
 
   return true;
 }

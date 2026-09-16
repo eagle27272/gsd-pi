@@ -3,14 +3,14 @@
  *
  * The deleted `gitignore-bg-shell.test.ts` asserted `.bg-shell/` appeared in
  * the BASELINE_PATTERNS array via source grep. This rewrite drives
- * `ensureGitignore()` against a tmp directory and asserts the written
- * `.gitignore` actually contains the `.bg-shell/` pattern — i.e. tests the
- * behaviour the constant exists to guarantee, not the spelling of the
- * constant.
+ * `ensureGitignore()` against a tmp repo and asserts the written ignore rules
+ * actually contain the `.bg-shell/` pattern — i.e. tests the behaviour the
+ * constant exists to guarantee, not the spelling of the constant.
  */
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -18,7 +18,23 @@ import * as path from 'node:path';
 import { ensureGitignore } from '../gitignore.ts';
 
 function makeTmpRepo(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-gitignore-bg-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsd-gitignore-bg-'));
+  execFileSync('git', ['init'], { cwd: dir, stdio: 'ignore' });
+  return dir;
+}
+
+/** Where ensureGitignore writes: the repo-local exclude file, not .gitignore. */
+function excludeFile(dir: string): string {
+  return path.join(dir, '.git', 'info', 'exclude');
+}
+
+function patternsIn(file: string): Set<string> {
+  return new Set(
+    fs.readFileSync(file, 'utf-8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#')),
+  );
 }
 
 function cleanup(dir: string): void {
@@ -26,40 +42,30 @@ function cleanup(dir: string): void {
 }
 
 describe('ensureGitignore writes .bg-shell/ baseline (#4902)', () => {
-  test('appends .bg-shell/ to a fresh project .gitignore', () => {
+  test('appends .bg-shell/ to a fresh repo', () => {
     const dir = makeTmpRepo();
     try {
       const wrote = ensureGitignore(dir);
       assert.equal(wrote, true, 'ensureGitignore should report it wrote');
 
-      const ignore = fs.readFileSync(path.join(dir, '.gitignore'), 'utf-8');
-      const lines = new Set(
-        ignore.split('\n').map((l) => l.trim()).filter(Boolean),
-      );
-      assert.ok(
-        lines.has('.bg-shell/'),
-        `.gitignore should include .bg-shell/. Got:\n${ignore}`,
-      );
-      assert.ok(
-        lines.has('.gsd-backups/'),
-        `.gitignore should include .gsd-backups/. Got:\n${ignore}`,
-      );
+      const lines = patternsIn(excludeFile(dir));
+      assert.ok(lines.has('.bg-shell/'), 'exclude should include .bg-shell/');
+      assert.ok(lines.has('.gsd-backups/'), 'exclude should include .gsd-backups/');
     } finally {
       cleanup(dir);
     }
   });
 
-  test('preserves .bg-shell/ when it is already present (idempotent)', () => {
+  test('does not re-add .bg-shell/ when .gitignore already declares it', () => {
     const dir = makeTmpRepo();
     try {
-      fs.writeFileSync(
-        path.join(dir, '.gitignore'),
-        '.bg-shell/\nnode_modules/\n',
+      fs.writeFileSync(path.join(dir, '.gitignore'), '.bg-shell/\nnode_modules/\n');
+      ensureGitignore(dir);
+
+      assert.ok(
+        !patternsIn(excludeFile(dir)).has('.bg-shell/'),
+        'a pattern already in .gitignore must not be duplicated into the exclude file',
       );
-      ensureGitignore(dir); // run once to fill missing baseline
-      const ignore = fs.readFileSync(path.join(dir, '.gitignore'), 'utf-8');
-      const occurrences = ignore.split('\n').filter((l) => l.trim() === '.bg-shell/').length;
-      assert.equal(occurrences, 1, 'should not duplicate an existing .bg-shell/ entry');
     } finally {
       cleanup(dir);
     }
@@ -69,8 +75,7 @@ describe('ensureGitignore writes .bg-shell/ baseline (#4902)', () => {
     const dir = makeTmpRepo();
     try {
       ensureGitignore(dir);
-      const ignore = fs.readFileSync(path.join(dir, '.gitignore'), 'utf-8');
-      const lines = new Set(ignore.split('\n').map((l) => l.trim()).filter(Boolean));
+      const lines = patternsIn(excludeFile(dir));
       for (const pattern of ['nul', 'nul.*', 'con', 'con.*', 'prn', 'prn.*', 'aux', 'aux.*', 'com[1-9]', 'com[1-9].*', 'lpt[1-9]', 'lpt[1-9].*']) {
         assert.ok(lines.has(pattern), `missing Windows reserved pattern: ${pattern}`);
       }

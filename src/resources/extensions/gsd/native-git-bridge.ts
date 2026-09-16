@@ -5,9 +5,10 @@
 // Both READ and WRITE operations are native — push operations stay on the git
 // CLI because git2 credential handling is too complex.
 
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { GSDError, GSD_GIT_ERROR } from "./errors.js";
+import { declaredIgnorePatterns, excludeFilePath } from "./ignore-file.js";
 import { getErrorMessage } from "./error-utils.js";
 import { isInfrastructureError } from "./auto/infra-errors.js";
 import { debugCount } from "./debug-logger.js";
@@ -808,27 +809,30 @@ function isGitignoreManagementDisabled(basePath: string): boolean {
 
 /**
  * Self-heal path for the symlinked-`.gsd` staging failure: append `.gsd` to
- * `.gitignore` so subsequent `git add -A` calls succeed without the symlink
- * pathspec error. Honors the `git.manage_gitignore: false` opt-out.
+ * `.git/info/exclude` so subsequent `git add -A` calls succeed without the
+ * symlink pathspec error. The tracked `.gitignore` is read but never written,
+ * so a repo that already declares `.gsd` there needs no heal. Honors the
+ * `git.manage_gitignore: false` opt-out.
  *
- * Returns true when `.gitignore` now contains an entry covering `.gsd`
- * (either pre-existing or newly appended). Returns false when the opt-out
- * is set or the write fails.
+ * Returns true when `.gsd` is now covered (either pre-existing or newly
+ * appended). Returns false when the opt-out is set, basePath is not a git
+ * repo, or the write fails.
  */
 function trySelfHealGsdGitignore(basePath: string): boolean {
   if (isGitignoreManagementDisabled(basePath)) return false;
 
-  const gitignorePath = join(basePath, ".gitignore");
-  try {
-    const existing = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf-8") : "";
-    const lines = new Set(
-      existing.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("#")),
-    );
-    if (lines.has(".gsd") || lines.has(".gsd/")) return true;
+  const excludePath = excludeFilePath(basePath);
+  if (!excludePath) return false;
 
+  try {
+    const declared = declaredIgnorePatterns(basePath, excludePath);
+    if (declared.has(".gsd") || declared.has(".gsd/")) return true;
+
+    const existing = existsSync(excludePath) ? readFileSync(excludePath, "utf-8") : "";
     const prefix = existing.length > 0 && !existing.endsWith("\n") ? "\n" : "";
     const block = `${prefix}\n# ── GSD self-heal: .gsd is a symlink to external state ──\n.gsd\n`;
-    writeFileSync(gitignorePath, existing + block, "utf-8");
+    mkdirSync(dirname(excludePath), { recursive: true });
+    writeFileSync(excludePath, existing + block, "utf-8");
     return true;
   } catch {
     return false;
