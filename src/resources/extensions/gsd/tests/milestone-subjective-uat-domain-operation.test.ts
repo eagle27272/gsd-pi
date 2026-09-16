@@ -841,6 +841,9 @@ test("subjective UAT retirement declined by the user changes nothing", () => {
   assert.equal(db().prepare(`
     SELECT question_status FROM workflow_open_questions WHERE question_id = :question_id
   `).get({ ":question_id": prepared.questionId })?.["question_status"], "open");
+  assert.equal(db().prepare(`
+    SELECT question_status FROM workflow_open_questions WHERE question_id = :question_id
+  `).get({ ":question_id": retirement.questionId })?.["question_status"], "answered");
   assert.equal(
     db().prepare(`
       SELECT COUNT(*) AS count FROM workflow_domain_events

@@ -559,6 +559,66 @@ function distinctTimestamp(previousTimestamp: string): string {
   return new Date(Math.max(Date.now(), Date.parse(previousTimestamp) + 1)).toISOString();
 }
 
+interface RecordSubjectiveUatAnswerInput {
+  questionId: string;
+  interactionId: string;
+  verbatimResponse: string;
+  selectedOptionId: string;
+  normalizedInterpretation: string;
+  observedProjectRevision: number;
+  createdAt: string;
+}
+
+function recordSubjectiveUatAnswer(
+  context: Readonly<DomainOperationContext>,
+  input: RecordSubjectiveUatAnswerInput,
+): string {
+  const answerId = randomUUID();
+  getDb().prepare(`
+    INSERT INTO workflow_answers (
+      answer_id, project_id, question_id, interaction_id, response_kind,
+      verbatim_response, selected_option_id, normalized_interpretation,
+      interpretation_confidence, answer_disposition, observed_project_revision,
+      created_at, operation_id, project_revision, authority_epoch
+    ) VALUES (
+      :answer_id, :project_id, :question_id, :interaction_id, 'answer',
+      :verbatim_response, :selected_option_id, :normalized_interpretation,
+      1, 'accepted', :observed_project_revision,
+      :created_at, :operation_id, :project_revision, :authority_epoch
+    )
+  `).run({
+    ":answer_id": answerId,
+    ":project_id": context.projectId,
+    ":question_id": input.questionId,
+    ":interaction_id": input.interactionId,
+    ":verbatim_response": input.verbatimResponse,
+    ":selected_option_id": input.selectedOptionId,
+    ":normalized_interpretation": input.normalizedInterpretation,
+    ":observed_project_revision": input.observedProjectRevision,
+    ":created_at": input.createdAt,
+    ":operation_id": context.operationId,
+    ":project_revision": context.resultingRevision,
+    ":authority_epoch": context.resultingAuthorityEpoch,
+  });
+  getDb().prepare(`
+    UPDATE workflow_open_questions
+    SET question_status = 'answered', accepted_answer_id = :answer_id,
+        state_version = state_version + 1, updated_at = :updated_at,
+        last_operation_id = :operation_id,
+        last_project_revision = :project_revision,
+        last_authority_epoch = :authority_epoch
+    WHERE question_id = :question_id
+  `).run({
+    ":answer_id": answerId,
+    ":updated_at": input.createdAt,
+    ":operation_id": context.operationId,
+    ":project_revision": context.resultingRevision,
+    ":authority_epoch": context.resultingAuthorityEpoch,
+    ":question_id": input.questionId,
+  });
+  return answerId;
+}
+
 export function answerMilestoneSubjectiveUatQuestion(
   context: Readonly<DomainOperationContext>,
   input: AnswerMilestoneSubjectiveUatWriteInput,
@@ -602,50 +662,16 @@ export function answerMilestoneSubjectiveUatQuestion(
     ":project_id": context.projectId,
     ":criterion_id": input.criterionId,
   }) as unknown as AcceptanceHeadRow | undefined;
-  const answerId = randomUUID();
   const humanAcceptanceId = randomUUID();
   const createdAt = distinctTimestamp(binding.question_updated_at);
-  getDb().prepare(`
-    INSERT INTO workflow_answers (
-      answer_id, project_id, question_id, interaction_id, response_kind,
-      verbatim_response, selected_option_id, normalized_interpretation,
-      interpretation_confidence, answer_disposition, observed_project_revision,
-      created_at, operation_id, project_revision, authority_epoch
-    ) VALUES (
-      :answer_id, :project_id, :question_id, :interaction_id, 'answer',
-      :verbatim_response, :selected_option_id, :normalized_interpretation,
-      1, 'accepted', :observed_project_revision,
-      :created_at, :operation_id, :project_revision, :authority_epoch
-    )
-  `).run({
-    ":answer_id": answerId,
-    ":project_id": context.projectId,
-    ":question_id": input.questionId,
-    ":interaction_id": input.interactionId,
-    ":verbatim_response": input.verbatimResponse,
-    ":selected_option_id": input.selectedOptionId,
-    ":normalized_interpretation": `${disposition}_subjective_experience`,
-    ":observed_project_revision": binding.interaction_project_revision,
-    ":created_at": createdAt,
-    ":operation_id": context.operationId,
-    ":project_revision": context.resultingRevision,
-    ":authority_epoch": context.resultingAuthorityEpoch,
-  });
-  getDb().prepare(`
-    UPDATE workflow_open_questions
-    SET question_status = 'answered', accepted_answer_id = :answer_id,
-        state_version = state_version + 1, updated_at = :updated_at,
-        last_operation_id = :operation_id,
-        last_project_revision = :project_revision,
-        last_authority_epoch = :authority_epoch
-    WHERE question_id = :question_id
-  `).run({
-    ":answer_id": answerId,
-    ":updated_at": createdAt,
-    ":operation_id": context.operationId,
-    ":project_revision": context.resultingRevision,
-    ":authority_epoch": context.resultingAuthorityEpoch,
-    ":question_id": input.questionId,
+  const answerId = recordSubjectiveUatAnswer(context, {
+    questionId: input.questionId,
+    interactionId: input.interactionId,
+    verbatimResponse: input.verbatimResponse,
+    selectedOptionId: input.selectedOptionId,
+    normalizedInterpretation: `${disposition}_subjective_experience`,
+    observedProjectRevision: binding.interaction_project_revision,
+    createdAt,
   });
   getDb().prepare(`
     INSERT INTO workflow_human_acceptances (
@@ -1042,49 +1068,15 @@ export function retireMilestoneSubjectiveUatCriterion(
     throw new Error("Subjective UAT retirement requires the actual selected option response");
   }
 
-  const answerId = randomUUID();
   const createdAt = distinctTimestamp(binding.question_updated_at);
-  getDb().prepare(`
-    INSERT INTO workflow_answers (
-      answer_id, project_id, question_id, interaction_id, response_kind,
-      verbatim_response, selected_option_id, normalized_interpretation,
-      interpretation_confidence, answer_disposition, observed_project_revision,
-      created_at, operation_id, project_revision, authority_epoch
-    ) VALUES (
-      :answer_id, :project_id, :question_id, :interaction_id, 'answer',
-      :verbatim_response, :selected_option_id, :normalized_interpretation,
-      1, 'accepted', :observed_project_revision,
-      :created_at, :operation_id, :project_revision, :authority_epoch
-    )
-  `).run({
-    ":answer_id": answerId,
-    ":project_id": context.projectId,
-    ":question_id": input.questionId,
-    ":interaction_id": input.interactionId,
-    ":verbatim_response": input.verbatimResponse,
-    ":selected_option_id": input.selectedOptionId,
-    ":normalized_interpretation": `${choice}_subjective_criterion`,
-    ":observed_project_revision": binding.interaction_project_revision,
-    ":created_at": createdAt,
-    ":operation_id": context.operationId,
-    ":project_revision": context.resultingRevision,
-    ":authority_epoch": context.resultingAuthorityEpoch,
-  });
-  getDb().prepare(`
-    UPDATE workflow_open_questions
-    SET question_status = 'answered', accepted_answer_id = :answer_id,
-        state_version = state_version + 1, updated_at = :updated_at,
-        last_operation_id = :operation_id,
-        last_project_revision = :project_revision,
-        last_authority_epoch = :authority_epoch
-    WHERE question_id = :question_id
-  `).run({
-    ":answer_id": answerId,
-    ":updated_at": createdAt,
-    ":operation_id": context.operationId,
-    ":project_revision": context.resultingRevision,
-    ":authority_epoch": context.resultingAuthorityEpoch,
-    ":question_id": input.questionId,
+  const answerId = recordSubjectiveUatAnswer(context, {
+    questionId: input.questionId,
+    interactionId: input.interactionId,
+    verbatimResponse: input.verbatimResponse,
+    selectedOptionId: input.selectedOptionId,
+    normalizedInterpretation: `${choice}_subjective_criterion`,
+    observedProjectRevision: binding.interaction_project_revision,
+    createdAt,
   });
 
   let retiredCriterionId: string | null = null;
