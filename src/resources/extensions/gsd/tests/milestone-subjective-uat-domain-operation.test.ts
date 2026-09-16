@@ -19,6 +19,7 @@ import {
   answerMilestoneSubjectiveUat,
   prepareMilestoneSubjectiveUat,
   prepareMilestoneSubjectiveUatRetirement,
+  retireMilestoneSubjectiveUat,
 } from "../milestone-subjective-uat-domain-operation.ts";
 import {
   _getAdapter,
@@ -750,4 +751,151 @@ test("subjective UAT retirement requires an open Milestone lifecycle", () => {
     ),
     /ready or in_progress lifecycle/i,
   );
+});
+
+function retireCall(
+  retirement: { criterionId: string; questionId: string; interactionId: string },
+  optionId: string,
+  label: string,
+  idempotencyKey: string,
+) {
+  return {
+    invocation: userInvocation(idempotencyKey),
+    criterionId: retirement.criterionId,
+    questionId: retirement.questionId,
+    interactionId: retirement.interactionId,
+    selectedOptionId: optionId,
+    verbatimResponse: label,
+    rationale: "The user confirmed this criterion is a stranded duplicate.",
+  };
+}
+
+test("subjective UAT retirement supersedes the criterion as not required and withdraws its question", () => {
+  setup();
+  const prepared = prepareMilestoneSubjectiveUat(prepareInput("subjective/retire/apply/target"));
+  const retirement = prepareMilestoneSubjectiveUatRetirement(
+    retirementInput(prepared.criterionId, "subjective/retire/apply/prepare"),
+  );
+  const retired = retireMilestoneSubjectiveUat(retireCall(
+    retirement,
+    retirement.retireOptionId,
+    retirement.options[0]!.label,
+    "subjective/retire/apply/answer",
+  ));
+  const replayed = retireMilestoneSubjectiveUat(retireCall(
+    retirement,
+    retirement.retireOptionId,
+    retirement.options[0]!.label,
+    "subjective/retire/apply/answer",
+  ));
+
+  assert.equal(retired.choice, "retire");
+  assert.ok(retired.retiredCriterionId);
+  assert.equal(replayed.status, "replayed");
+  assert.equal(replayed.retiredCriterionId, retired.retiredCriterionId);
+  assert.equal(replayed.answerId, retired.answerId);
+
+  assert.deepEqual(db().prepare(`
+    SELECT criterion_key, criterion_kind, evidence_class, required,
+           description, supersedes_criterion_id
+    FROM workflow_acceptance_criteria WHERE criterion_id = :criterion_id
+  `).get({ ":criterion_id": retired.retiredCriterionId }), {
+    criterion_key: "guided-flow",
+    criterion_kind: "subjective_uat",
+    evidence_class: "human",
+    required: 0,
+    description: "The guided flow feels natural and clear.",
+    supersedes_criterion_id: prepared.criterionId,
+  });
+
+  assert.deepEqual(retired.withdrawnQuestionIds, [prepared.questionId]);
+  assert.equal(db().prepare(`
+    SELECT question_status FROM workflow_open_questions WHERE question_id = :question_id
+  `).get({ ":question_id": prepared.questionId })?.["question_status"], "withdrawn");
+  assert.equal(db().prepare(`
+    SELECT question_status FROM workflow_open_questions WHERE question_id = :question_id
+  `).get({ ":question_id": retirement.questionId })?.["question_status"], "answered");
+  assert.equal(count("workflow_human_acceptances"), 0, "retirement must never synthesize acceptance");
+});
+
+test("subjective UAT retirement declined by the user changes nothing", () => {
+  setup();
+  const prepared = prepareMilestoneSubjectiveUat(prepareInput("subjective/retire/keep/target"));
+  const retirement = prepareMilestoneSubjectiveUatRetirement(
+    retirementInput(prepared.criterionId, "subjective/retire/keep/prepare"),
+  );
+  const kept = retireMilestoneSubjectiveUat(retireCall(
+    retirement,
+    retirement.keepOptionId,
+    retirement.options[1]!.label,
+    "subjective/retire/keep/answer",
+  ));
+
+  assert.equal(kept.choice, "keep");
+  assert.equal(kept.retiredCriterionId, null);
+  assert.deepEqual(kept.withdrawnQuestionIds, []);
+  assert.equal(count("workflow_acceptance_criteria"), 1);
+  assert.equal(db().prepare(`
+    SELECT required FROM workflow_acceptance_criteria WHERE criterion_id = :criterion_id
+  `).get({ ":criterion_id": prepared.criterionId })?.["required"], 1);
+  assert.equal(db().prepare(`
+    SELECT question_status FROM workflow_open_questions WHERE question_id = :question_id
+  `).get({ ":question_id": prepared.questionId })?.["question_status"], "open");
+  assert.equal(
+    db().prepare(`
+      SELECT COUNT(*) AS count FROM workflow_domain_events
+      WHERE event_type = 'milestone.subjective-uat.retirement-declined'
+    `).get()?.["count"],
+    1,
+  );
+});
+
+test("subjective UAT retirement requires a user actor identity", () => {
+  setup();
+  const prepared = prepareMilestoneSubjectiveUat(prepareInput("subjective/retire/actor/target"));
+  const retirement = prepareMilestoneSubjectiveUatRetirement(
+    retirementInput(prepared.criterionId, "subjective/retire/actor/prepare"),
+  );
+
+  assert.throws(() => retireMilestoneSubjectiveUat({
+    ...retireCall(
+      retirement,
+      retirement.retireOptionId,
+      retirement.options[0]!.label,
+      "subjective/retire/actor/answer",
+    ),
+    invocation: agentInvocation("subjective/retire/actor/answer"),
+  }), /requires a user actor identity/i);
+  assert.equal(count("workflow_acceptance_criteria"), 1);
+});
+
+test("subjective UAT retirement rejects a paraphrased response", () => {
+  setup();
+  const prepared = prepareMilestoneSubjectiveUat(prepareInput("subjective/retire/verbatim/target"));
+  const retirement = prepareMilestoneSubjectiveUatRetirement(
+    retirementInput(prepared.criterionId, "subjective/retire/verbatim/prepare"),
+  );
+
+  assert.throws(() => retireMilestoneSubjectiveUat(retireCall(
+    retirement,
+    retirement.retireOptionId,
+    "yes retire it",
+    "subjective/retire/verbatim/answer",
+  )), /actual selected option response/i);
+  assert.equal(count("workflow_acceptance_criteria"), 1);
+});
+
+test("subjective UAT retirement rejects an option outside the prepared pair", () => {
+  setup();
+  const prepared = prepareMilestoneSubjectiveUat(prepareInput("subjective/retire/option/target"));
+  const retirement = prepareMilestoneSubjectiveUatRetirement(
+    retirementInput(prepared.criterionId, "subjective/retire/option/prepare"),
+  );
+
+  assert.throws(() => retireMilestoneSubjectiveUat(retireCall(
+    retirement,
+    prepared.options[0]!.optionId,
+    retirement.options[0]!.label,
+    "subjective/retire/option/answer",
+  )), /must select the prepared Retire or Keep option/i);
 });
