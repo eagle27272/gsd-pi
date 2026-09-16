@@ -11,8 +11,11 @@ import { readDomainOperationFence } from "./db/writers/lifecycle-commands.js";
 import {
   answerMilestoneSubjectiveUatQuestion,
   prepareMilestoneSubjectiveUatQuestion,
+  prepareMilestoneSubjectiveUatRetirementQuestion,
   type AnsweredMilestoneSubjectiveUat,
   type PreparedMilestoneSubjectiveUat,
+  type PreparedSubjectiveUatRetirement,
+  type SubjectiveUatRetirementOption,
 } from "./db/writers/milestone-subjective-uat.js";
 import type { ExecutionInvocation } from "./execution-invocation.js";
 
@@ -355,4 +358,118 @@ export function answerMilestoneSubjectiveUat(
     };
   });
   return { ...operationReceipt(operation), ...(answered ?? storedAnswer(operation.operationId)) };
+}
+
+export interface PrepareMilestoneSubjectiveUatRetirementInput {
+  invocation: ExecutionInvocation;
+  criterionId: string;
+  rationale: string;
+}
+
+export interface PrepareMilestoneSubjectiveUatRetirementReceipt
+  extends OperationReceipt, PreparedSubjectiveUatRetirement {}
+
+function storedRetirementPreparation(operationId: string): PreparedSubjectiveUatRetirement {
+  const eventType = "milestone.subjective-uat.retirement-prepared";
+  const payload = storedPayload(operationId, eventType);
+  const options = payload["options"];
+  if (!Array.isArray(options) || options.length !== 2) {
+    throw new Error(`Subjective UAT receipt ${eventType} options are invalid`);
+  }
+  const parsedOptions = options.map((option): SubjectiveUatRetirementOption => {
+    if (!option || typeof option !== "object" || Array.isArray(option)) {
+      throw new Error(`Subjective UAT receipt ${eventType} options are invalid`);
+    }
+    const entry = option as Record<string, unknown>;
+    const choice = entry["choice"];
+    if (choice !== "retire" && choice !== "keep") {
+      throw new Error(`Subjective UAT receipt ${eventType} options are invalid`);
+    }
+    if (
+      typeof entry["optionId"] !== "string" || !entry["optionId"].trim() ||
+      typeof entry["label"] !== "string" || !entry["label"].trim() ||
+      typeof entry["description"] !== "string" || !entry["description"].trim() ||
+      typeof entry["recommended"] !== "boolean"
+    ) {
+      throw new Error(`Subjective UAT receipt ${eventType} options are invalid`);
+    }
+    return {
+      optionId: entry["optionId"],
+      choice,
+      label: entry["label"],
+      description: entry["description"],
+      recommended: entry["recommended"],
+    };
+  });
+  return {
+    milestoneId: receiptString(payload, "milestoneId", eventType),
+    lifecycleId: receiptString(payload, "lifecycleId", eventType),
+    criterionId: receiptString(payload, "criterionId", eventType),
+    criterionKey: receiptString(payload, "criterionKey", eventType),
+    questionId: receiptString(payload, "questionId", eventType),
+    interactionId: receiptString(payload, "interactionId", eventType),
+    retireOptionId: receiptString(payload, "retireOptionId", eventType),
+    keepOptionId: receiptString(payload, "keepOptionId", eventType),
+    options: parsedOptions,
+  };
+}
+
+export function prepareMilestoneSubjectiveUatRetirement(
+  input: PrepareMilestoneSubjectiveUatRetirementInput,
+): PrepareMilestoneSubjectiveUatRetirementReceipt {
+  const retirementInput = {
+    criterionId: requireNonBlank(input.criterionId, "criterionId"),
+    rationale: requireNonBlank(input.rationale, "rationale"),
+  };
+  const fence = readDomainOperationFence(input.invocation.idempotencyKey);
+  let prepared: PreparedSubjectiveUatRetirement | undefined;
+  const operation = executeDomainOperation({
+    operationType: "milestone.subjective-uat.prepare-retirement",
+    idempotencyKey: input.invocation.idempotencyKey,
+    expectedRevision: fence.revision,
+    expectedAuthorityEpoch: fence.authorityEpoch,
+    actorType: input.invocation.actorType,
+    ...(input.invocation.actorId ? { actorId: input.invocation.actorId } : {}),
+    sourceTransport: input.invocation.sourceTransport,
+    ...(input.invocation.traceId ? { traceId: input.invocation.traceId } : {}),
+    ...(input.invocation.turnId ? { turnId: input.invocation.turnId } : {}),
+    payload: retirementInput,
+  }, (context) => {
+    prepared = prepareMilestoneSubjectiveUatRetirementQuestion(context, retirementInput);
+    const eventPayload: DomainJsonValue = {
+      milestoneId: prepared.milestoneId,
+      lifecycleId: prepared.lifecycleId,
+      criterionId: prepared.criterionId,
+      criterionKey: prepared.criterionKey,
+      questionId: prepared.questionId,
+      interactionId: prepared.interactionId,
+      retireOptionId: prepared.retireOptionId,
+      keepOptionId: prepared.keepOptionId,
+      options: prepared.options.map((option) => ({
+        optionId: option.optionId,
+        choice: option.choice,
+        label: option.label,
+        description: option.description,
+        recommended: option.recommended,
+      })),
+    };
+    return {
+      events: [{
+        eventType: "milestone.subjective-uat.retirement-prepared",
+        entityType: "milestone",
+        entityId: prepared.milestoneId,
+        payload: eventPayload,
+        destinations: ["projection"],
+      }],
+      projections: [{
+        projectionKey: `subjective-uat/${prepared.milestoneId}/${prepared.questionId}`.toLowerCase(),
+        projectionKind: "milestone-subjective-uat",
+        rendererVersion: "1",
+      }],
+    };
+  });
+  return {
+    ...operationReceipt(operation),
+    ...(prepared ?? storedRetirementPreparation(operation.operationId)),
+  };
 }

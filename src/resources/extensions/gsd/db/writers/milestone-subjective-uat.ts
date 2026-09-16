@@ -17,6 +17,43 @@ export interface SubjectiveUatOption {
   recommended: boolean;
 }
 
+export type SubjectiveUatRetirementChoice = "retire" | "keep";
+
+export interface SubjectiveUatRetirementOption {
+  optionId: string;
+  choice: SubjectiveUatRetirementChoice;
+  label: string;
+  description: string;
+  recommended: boolean;
+}
+
+export interface PrepareSubjectiveUatRetirementWriteInput {
+  criterionId: string;
+  rationale: string;
+}
+
+export interface PreparedSubjectiveUatRetirement {
+  milestoneId: string;
+  lifecycleId: string;
+  criterionId: string;
+  criterionKey: string;
+  questionId: string;
+  interactionId: string;
+  retireOptionId: string;
+  keepOptionId: string;
+  options: SubjectiveUatRetirementOption[];
+}
+
+export interface RetirableCriterionRow {
+  milestone_id: string;
+  lifecycle_id: string;
+  lifecycle_status: string;
+  criterion_key: string;
+  requirement_id: string | null;
+  description: string;
+  head_disposition: string | null;
+}
+
 export interface PrepareMilestoneSubjectiveUatWriteInput {
   milestoneId: string;
   criterionKey: string;
@@ -650,5 +687,212 @@ export function answerMilestoneSubjectiveUatQuestion(
     disposition,
     testedSourceRevision: input.testedSourceRevision,
     supersedesHumanAcceptanceId: previous?.human_acceptance_id ?? null,
+  };
+}
+
+export function requireRetirableCriterion(
+  context: Readonly<DomainOperationContext>,
+  criterionId: string,
+): RetirableCriterionRow {
+  const criterion = getDb().prepare(`
+    SELECT lifecycle.milestone_id, criterion.lifecycle_id, lifecycle.lifecycle_status,
+           criterion.criterion_key, criterion.requirement_id, criterion.description,
+           (
+             SELECT acceptance.disposition
+             FROM workflow_human_acceptances acceptance
+             WHERE acceptance.project_id = criterion.project_id
+               AND acceptance.criterion_id = criterion.criterion_id
+               AND NOT EXISTS (
+                 SELECT 1 FROM workflow_human_acceptances successor
+                 WHERE successor.supersedes_human_acceptance_id = acceptance.human_acceptance_id
+               )
+           ) AS head_disposition
+    FROM workflow_acceptance_criteria criterion
+    JOIN workflow_item_lifecycles lifecycle
+      ON lifecycle.lifecycle_id = criterion.lifecycle_id
+     AND lifecycle.project_id = criterion.project_id
+    WHERE criterion.criterion_id = :criterion_id
+      AND criterion.project_id = :project_id
+      AND criterion.criterion_kind = 'subjective_uat'
+      AND criterion.required = 1
+      AND lifecycle.item_kind = 'milestone'
+      AND lifecycle.slice_id IS NULL
+      AND lifecycle.task_id IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM workflow_acceptance_criteria successor
+        WHERE successor.supersedes_criterion_id = criterion.criterion_id
+      )
+  `).get({
+    ":criterion_id": criterionId,
+    ":project_id": context.projectId,
+  }) as unknown as RetirableCriterionRow | undefined;
+  if (!criterion) {
+    throw new Error(
+      "Subjective UAT retirement requires a current required subjective criterion on a Milestone lifecycle",
+    );
+  }
+  requireActiveMilestoneLifecycle(criterion.lifecycle_status);
+  // A rejection is the user saying the work is not good enough. Retiring it
+  // would launder that rejection into a pass; remediation must re-ask instead.
+  if (criterion.head_disposition === "rejected") {
+    throw new Error(
+      "Retire cannot clear a rejected subjective UAT criterion; " +
+      "re-prepare it under the same criterionKey after remediation.",
+    );
+  }
+  return criterion;
+}
+
+function requireNoOpenRetirementQuestion(
+  context: Readonly<DomainOperationContext>,
+  criterionId: string,
+): void {
+  const open = getDb().prepare(`
+    SELECT question.question_id
+    FROM workflow_domain_events event
+    JOIN workflow_open_questions question
+      ON question.question_id = json_extract(event.payload_json, '$.questionId')
+     AND question.project_id = event.project_id
+    WHERE event.project_id = :project_id
+      AND event.event_type = 'milestone.subjective-uat.retirement-prepared'
+      AND json_extract(event.payload_json, '$.criterionId') = :criterion_id
+      AND question.question_status = 'open'
+    LIMIT 1
+  `).get({
+    ":project_id": context.projectId,
+    ":criterion_id": criterionId,
+  });
+  if (open) throw new Error("Subjective UAT criterion already has an open retirement question");
+}
+
+function buildRetirementOptions(): SubjectiveUatRetirementOption[] {
+  return [
+    {
+      optionId: randomUUID(),
+      choice: "retire",
+      label: "Retire (Recommended)",
+      description: "Drop this acceptance criterion; it no longer needs a judgment.",
+      recommended: true,
+    },
+    {
+      optionId: randomUUID(),
+      choice: "keep",
+      label: "Keep",
+      description: "Keep this acceptance criterion; it still needs a judgment.",
+      recommended: false,
+    },
+  ];
+}
+
+export function prepareMilestoneSubjectiveUatRetirementQuestion(
+  context: Readonly<DomainOperationContext>,
+  input: PrepareSubjectiveUatRetirementWriteInput,
+): PreparedSubjectiveUatRetirement {
+  if (
+    requireActiveDomainOperationContext(context) !==
+      "milestone.subjective-uat.prepare-retirement"
+  ) {
+    throw new Error("Subjective UAT retirement preparation requires its Domain Operation");
+  }
+  const criterionId = requireNonBlank(input.criterionId, "criterionId");
+  const rationale = requireNonBlank(input.rationale, "rationale");
+  const criterion = requireRetirableCriterion(context, criterionId);
+  requireNoOpenRetirementQuestion(context, criterionId);
+
+  const createdAt = new Date().toISOString();
+  const questionId = randomUUID();
+  const interactionId = randomUUID();
+  const options = buildRetirementOptions();
+  const focusedPrompt =
+    `Retire the subjective UAT criterion '${criterion.criterion_key}' from Milestone ` +
+    `${criterion.milestone_id} without answering it? ${rationale}`;
+
+  getDb().prepare(`
+    INSERT INTO workflow_open_questions (
+      question_id, project_id, lifecycle_id, question_text, question_status,
+      state_version, accepted_answer_id, created_at, updated_at,
+      created_operation_id, created_project_revision, created_authority_epoch,
+      last_operation_id, last_project_revision, last_authority_epoch
+    ) VALUES (
+      :question_id, :project_id, :lifecycle_id, :question_text, 'open',
+      0, NULL, :created_at, :created_at,
+      :operation_id, :project_revision, :authority_epoch,
+      :operation_id, :project_revision, :authority_epoch
+    )
+  `).run({
+    ":question_id": questionId,
+    ":project_id": context.projectId,
+    ":lifecycle_id": criterion.lifecycle_id,
+    ":question_text": focusedPrompt,
+    ":created_at": createdAt,
+    ":operation_id": context.operationId,
+    ":project_revision": context.resultingRevision,
+    ":authority_epoch": context.resultingAuthorityEpoch,
+  });
+  getDb().prepare(`
+    INSERT INTO workflow_interactions (
+      interaction_id, project_id, question_id, sequence, interaction_kind,
+      presentation_state, focused_prompt, requires_answer, option_count,
+      recommended_option_id, recommendation_text, recommendation_rationale,
+      recommendation_evidence, recommendation_confidence,
+      recommendation_uncertainty, revisit_condition, presented_at,
+      operation_id, project_revision, authority_epoch
+    ) VALUES (
+      :interaction_id, :project_id, :question_id, 1, 'consent',
+      'prepared', :focused_prompt, 1, 2,
+      :recommended_option_id, :recommendation_text, :recommendation_rationale,
+      '', NULL, '', '', '', :operation_id, :project_revision, :authority_epoch
+    )
+  `).run({
+    ":interaction_id": interactionId,
+    ":project_id": context.projectId,
+    ":question_id": questionId,
+    ":focused_prompt": focusedPrompt,
+    ":recommended_option_id": options[0]!.optionId,
+    ":recommendation_text": "I recommend retiring this criterion.",
+    ":recommendation_rationale": rationale,
+    ":operation_id": context.operationId,
+    ":project_revision": context.resultingRevision,
+    ":authority_epoch": context.resultingAuthorityEpoch,
+  });
+  const insertOption = getDb().prepare(`
+    INSERT INTO workflow_interaction_options (
+      interaction_id, option_id, project_id, ordinal, label, description,
+      operation_id, project_revision, authority_epoch
+    ) VALUES (
+      :interaction_id, :option_id, :project_id, :ordinal, :label, :description,
+      :operation_id, :project_revision, :authority_epoch
+    )
+  `);
+  options.forEach((option, index) => insertOption.run({
+    ":interaction_id": interactionId,
+    ":option_id": option.optionId,
+    ":project_id": context.projectId,
+    ":ordinal": index + 1,
+    ":label": option.label,
+    ":description": option.description,
+    ":operation_id": context.operationId,
+    ":project_revision": context.resultingRevision,
+    ":authority_epoch": context.resultingAuthorityEpoch,
+  }));
+  getDb().prepare(`
+    UPDATE workflow_interactions
+    SET presentation_state = 'presented', presented_at = :presented_at
+    WHERE interaction_id = :interaction_id
+  `).run({
+    ":presented_at": createdAt,
+    ":interaction_id": interactionId,
+  });
+
+  return {
+    milestoneId: criterion.milestone_id,
+    lifecycleId: criterion.lifecycle_id,
+    criterionId,
+    criterionKey: criterion.criterion_key,
+    questionId,
+    interactionId,
+    retireOptionId: options[0]!.optionId,
+    keepOptionId: options[1]!.optionId,
+    options,
   };
 }
