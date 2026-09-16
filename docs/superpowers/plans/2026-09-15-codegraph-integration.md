@@ -1123,13 +1123,11 @@ Expected: no errors in `src/resources/extensions/codegraph/`. Pre-existing error
 
 - [ ] **Step 2: Run the full unit suite**
 
-`pnpm run test:unit` needs `--test-concurrency=8` in this repo — at the default concurrency it gets OOM-killed (exit 137, empty log) or trips the 90s workflow-authority baseline budget. **`pnpm run test:unit --test-concurrency=8` does not work**: `test:unit` is three chained scripts and pnpm appends the flag to the last one only, so the big suite still runs unbounded. Run the compile step, then invoke the compiled suite yourself with the flag immediately after `node`:
-
 ```bash
-pnpm run test:compile
+pnpm run test:unit
 ```
 
-Then take the `test:unit:compiled` command from `package.json`, insert `--test-concurrency=8` directly after `node`, and run it — keeping its full glob list unchanged apart from the codegraph glob you added in Task 4.
+The concurrency ceiling this suite needs is baked into `test:unit:compiled` via `scripts/with-test-concurrency.mjs`, so there is no flag to remember. Override it with `TEST_CONCURRENCY=<n>` in the environment, never with a trailing `--test-concurrency` on `pnpm run test:unit` — that is a compound `&&` script and pnpm appends trailing args to the last sub-command only.
 
 Known baseline failures, present before this change and not caused by it:
 
