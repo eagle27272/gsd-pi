@@ -60,6 +60,58 @@ test("doctor fix respects git.manage_gitignore false (#4161)", async (t) => {
   assert.equal(existsSync(join(dir, ".gsd", "PREFERENCES.md")), true);
 });
 
+function excludeFile(dir: string): string {
+  return join(dir, ".git", "info", "exclude");
+}
+
+test("doctor reports missing runtime patterns in a repo with no .gitignore at all", async (t) => {
+  const dir = createGitProject();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+  // No .gitignore and an empty exclude file — nothing ignores GSD's runtime
+  // paths, which is exactly the drift the check exists to catch.
+  writeFileSync(excludeFile(dir), "", "utf-8");
+
+  const detect = await runGSDDoctor(dir);
+  assert.ok(
+    detect.issues.some((issue) => issue.code === "gitignore_missing_patterns"),
+    "the absence of a .gitignore must not skip the drift check",
+  );
+});
+
+test("doctor treats patterns already in .git/info/exclude as present", async (t) => {
+  const dir = createGitProject();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+  writeFileSync(join(dir, ".gitignore"), "node_modules/\n", "utf-8");
+  writeFileSync(excludeFile(dir), ".gsd\n.gsd-worktrees/\n.gsd-backups/\n", "utf-8");
+
+  const detect = await runGSDDoctor(dir);
+  assert.equal(
+    detect.issues.some((issue) => issue.code === "gitignore_missing_patterns"),
+    false,
+    "the exclude file satisfies the drift check just as .gitignore does",
+  );
+});
+
+test("doctor fix writes missing runtime patterns to .git/info/exclude", async (t) => {
+  const dir = createGitProject();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+  writeFileSync(join(dir, ".gitignore"), "node_modules/\n", "utf-8");
+  writeFileSync(excludeFile(dir), "", "utf-8");
+
+  await runGSDDoctor(dir, { fix: true });
+
+  const exclude = readFileSync(excludeFile(dir), "utf-8");
+  assert.match(exclude, /^\.gsd$/m, "baseline lands in the exclude file");
+  assert.equal(
+    readFileSync(join(dir, ".gitignore"), "utf-8"),
+    "node_modules/\n",
+    "the tracked .gitignore is left untouched",
+  );
+});
+
 test("doctor fix resets run-uat counters at the dispatch cap", async (t) => {
   const dir = createGitProject();
   t.after(() => rmSync(dir, { recursive: true, force: true }));

@@ -1817,21 +1817,25 @@ process.exit(result.status ?? 0);
     rmSync(repo, { recursive: true, force: true });
   });
 
-  // ─── ensureGitignore: always adds .gsd to gitignore ──────────────────
+  // ─── ensureGitignore: always ignores .gsd ────────────────────────────
 
   test('ensureGitignore: adds .gsd entry', async () => {
     const { ensureGitignore } = await import("../../gitignore.ts");
     const repo = mkdtempSync(join(tmpdir(), "gsd-gitignore-external-state-"));
+    run("git init", repo);
 
-    // Should add .gsd to gitignore (external state dir is a symlink)
+    // Should ignore .gsd (external state dir is a symlink)
     const modified = ensureGitignore(repo);
-    assert.ok(modified, "ensureGitignore: gitignore was modified");
+    assert.ok(modified, "ensureGitignore: exclude file was modified");
 
-    const { readFileSync } = await import("node:fs");
-    const content = readFileSync(join(repo, ".gitignore"), "utf-8");
+    const content = readFileSync(join(repo, ".git", "info", "exclude"), "utf-8");
     const lines = content.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("#"));
-    assert.ok(lines.includes(".gsd"), "ensureGitignore: .gitignore contains .gsd");
-    assert.ok(lines.includes(".mcp.json"), "ensureGitignore: .gitignore contains .mcp.json");
+    assert.ok(lines.includes(".gsd"), "ensureGitignore: exclude contains .gsd");
+    assert.ok(lines.includes(".mcp.json"), "ensureGitignore: exclude contains .mcp.json");
+    assert.ok(
+      !existsSync(join(repo, ".gitignore")),
+      "ensureGitignore: the tracked .gitignore is never created",
+    );
 
     // Idempotent — calling again doesn't add duplicates
     const modified2 = ensureGitignore(repo);
@@ -1892,9 +1896,9 @@ process.exit(result.status ?? 0);
     rmSync(externalGsd, { recursive: true, force: true });
   });
 
-  test('nativeAddAllWithExclusions: self-heals symlinked .gsd when .gitignore lacks it (#4423)', () => {
-    // When `.gsd` is a symlink AND not listed in `.gitignore`, the staging
-    // fallback must self-heal by appending `.gsd` to `.gitignore` and retrying
+  test('nativeAddAllWithExclusions: self-heals symlinked .gsd when nothing ignores it (#4423)', () => {
+    // When `.gsd` is a symlink AND not ignored, the staging fallback must
+    // self-heal by appending `.gsd` to `.git/info/exclude` and retrying
     // `git add -A`. Without this, new user files are silently dropped.
     const repo = initTempRepo();
 
@@ -1924,13 +1928,17 @@ process.exit(result.status ?? 0);
     assert.ok(staged.includes("src/app.ts"), "tracked modifications stage");
     assert.ok(
       staged.includes("src/new-feature.ts"),
-      "self-heal adds .gsd to .gitignore so new user files are staged",
+      "self-heal ignores .gsd so new user files are staged",
     );
     assert.ok(!staged.includes(".gsd"), ".gsd contents stay unstaged after self-heal");
 
-    // Verify the self-heal actually wrote to .gitignore
-    const gitignore = readFileSync(join(repo, ".gitignore"), "utf-8");
-    assert.ok(/^\.gsd\/?$/m.test(gitignore), ".gitignore contains .gsd entry after self-heal");
+    // Verify the self-heal wrote to the exclude file, leaving .gitignore alone
+    const exclude = readFileSync(join(repo, ".git", "info", "exclude"), "utf-8");
+    assert.ok(/^\.gsd\/?$/m.test(exclude), "exclude contains .gsd entry after self-heal");
+    assert.ok(
+      !existsSync(join(repo, ".gitignore")),
+      "self-heal must not create a tracked .gitignore",
+    );
 
     rmSync(repo, { recursive: true, force: true });
     rmSync(externalGsd, { recursive: true, force: true });
@@ -1979,13 +1987,12 @@ process.exit(result.status ?? 0);
     );
     assert.ok(!staged.includes(".gsd"), ".gsd contents stay unstaged");
 
-    // Self-heal must NOT have written to .gitignore
-    const gitignoreExists = existsSync(join(repo, ".gitignore"));
-    if (gitignoreExists) {
-      const gitignore = readFileSync(join(repo, ".gitignore"), "utf-8");
+    // Self-heal must NOT have written ignore rules to either file
+    for (const file of [join(repo, ".gitignore"), join(repo, ".git", "info", "exclude")]) {
+      if (!existsSync(file)) continue;
       assert.ok(
-        !/^\.gsd\/?$/m.test(gitignore),
-        "manage_gitignore:false must prevent writes to .gitignore",
+        !/^\.gsd\/?$/m.test(readFileSync(file, "utf-8")),
+        `manage_gitignore:false must prevent writes to ${file}`,
       );
     }
 

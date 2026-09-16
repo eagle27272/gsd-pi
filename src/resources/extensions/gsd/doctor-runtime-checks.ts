@@ -12,6 +12,7 @@ import { readCrashLock, isLockProcessAlive, clearStaleWorkerLock } from "./crash
 import { getActiveAutoWorkers } from "./db/auto-workers.js";
 import { normalizeRealPath } from "./paths.js";
 import { ensureGitignore, isGsdGitignored } from "./gitignore.js";
+import { declaredIgnorePatterns } from "./ignore-file.js";
 import { readAllSessionStatuses, isSessionStale, removeSessionStatus } from "./session-status-io.js";
 import { detectLegacyLayout } from "./legacy-layout-guard.js";
 import { splitCompletedKey } from "./forensics.js";
@@ -466,12 +467,10 @@ export async function checkRuntimeHealth(
 
   // ── Gitignore drift ───────────────────────────────────────────────────
   try {
-    const gitignorePath = join(basePath, ".gitignore");
-    if (existsSync(gitignorePath) && nativeIsRepo(basePath)) {
-      const content = readFileSync(gitignorePath, "utf-8");
-      const existingLines = new Set(
-        content.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("#")),
-      );
+    if (nativeIsRepo(basePath)) {
+      // Both .git/info/exclude (where GSD writes) and .gitignore (legacy GSD
+      // blocks, plus the project's own rules) count as declaring a pattern.
+      const existingLines = declaredIgnorePatterns(basePath);
 
       // Check for critical runtime patterns that must be present.
       // NOTE: GSD_RUNTIME_PATTERNS in gitignore.ts is the canonical source of truth.
@@ -505,14 +504,14 @@ export async function checkRuntimeHealth(
           code: "gitignore_missing_patterns",
           scope: "project",
           unitId: "project",
-          message: `${missing.length} critical GSD runtime pattern(s) missing from .gitignore: ${missing.join(", ")}`,
-          file: ".gitignore",
+          message: `${missing.length} critical GSD runtime pattern(s) not ignored by this repo: ${missing.join(", ")}`,
+          file: ".git/info/exclude",
           fixable: true,
         });
 
         if (shouldFix("gitignore_missing_patterns")) {
           ensureGitignore(basePath, { manageGitignore });
-          fixesApplied.push("added missing GSD runtime patterns to .gitignore");
+          fixesApplied.push("added missing GSD runtime patterns to .git/info/exclude");
         }
       }
     }
@@ -561,7 +560,7 @@ export async function checkRuntimeHealth(
           });
         }
 
-        // ── Symlinked .gsd without .gitignore entry (#4423) ──
+        // ── Symlinked .gsd not ignored (#4423) ──
         // When `.gsd` is a symlink AND not gitignored, `git add -A -- :!.gsd/...`
         // pathspecs fail with "beyond a symbolic link". Without self-heal this
         // silently drops new user files during auto-commit.
@@ -571,14 +570,14 @@ export async function checkRuntimeHealth(
             code: "symlinked_gsd_unignored",
             scope: "project",
             unitId: "project",
-            message: ".gsd is a symlink to external state but is not listed in .gitignore. This causes git pathspec exclusions to fail and can lead to silently dropped new files during auto-commit. Add `.gsd` to .gitignore.",
-            file: ".gitignore",
+            message: ".gsd is a symlink to external state but is not ignored. This causes git pathspec exclusions to fail and can lead to silently dropped new files during auto-commit. Add `.gsd` to .git/info/exclude.",
+            file: ".git/info/exclude",
             fixable: true,
           });
 
           if (shouldFix("symlinked_gsd_unignored")) {
             const modified = ensureGitignore(basePath, { manageGitignore });
-            if (modified) fixesApplied.push("added .gsd to .gitignore (symlinked external state)");
+            if (modified) fixesApplied.push("added .gsd to .git/info/exclude (symlinked external state)");
           }
         }
       }
