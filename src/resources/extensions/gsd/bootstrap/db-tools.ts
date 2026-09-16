@@ -2123,6 +2123,101 @@ export function registerDbTools(pi: ExtensionAPI): void {
 		},
 	});
 
+	registerWorkflowTool(pi, {
+		name: "gsd_prepare_milestone_subjective_uat_retirement",
+		label: "Prepare Milestone Subjective UAT Retirement",
+		description:
+			"Prepare a user decision to retire a stranded or obsolete required subjective Milestone UAT criterion.",
+		promptSnippet: "Ask the user whether to retire a subjective UAT criterion",
+		promptGuidelines: [
+			"Use only when a required subjective criterion can no longer be answered meaningfully — typically a duplicate left behind by an earlier rephrased criterionKey.",
+			"Retiring drops a human-judgment gate, so the user decides; never infer their answer.",
+			"The result text carries the criterionId, questionId, interactionId, and option IDs that gsd_retire_milestone_subjective_uat requires; keep them for that call.",
+		],
+		parameters: Type.Object({
+			criterionId: Type.String({ minLength: 1 }),
+			rationale: Type.String({ minLength: 1 }),
+		}),
+		execute: async (
+			toolCallId: string,
+			params: any,
+			_signal: AbortSignal | undefined,
+			_onUpdate: unknown,
+			_ctx: unknown,
+		) => {
+			const { executePrepareMilestoneSubjectiveUatRetirement } =
+				await loadWorkflowExecutors();
+			return executePrepareMilestoneSubjectiveUatRetirement(
+				params,
+				resolveWorkflowToolBasePath(_ctx, params),
+				piExecutionInvocation(
+					"gsd_prepare_milestone_subjective_uat_retirement",
+					toolCallId,
+				),
+			);
+		},
+	});
+
+	registerWorkflowTool(pi, {
+		name: "gsd_retire_milestone_subjective_uat",
+		label: "Retire Milestone Subjective UAT Criterion",
+		description:
+			"Record the user's decision to retire or keep a required subjective Milestone UAT criterion using the authenticated Pi session identity.",
+		promptSnippet: "Record the user's subjective UAT retirement decision",
+		promptGuidelines: [
+			"Call only after the user explicitly chooses Retire or Keep.",
+			"Copy criterionId, questionId, interactionId, and selectedOptionId from the gsd_prepare_milestone_subjective_uat_retirement result.",
+			"verbatimResponse must be the selected option's label character for character, not a paraphrase of what the user said.",
+			"Actor identity is derived from the active session and is not a tool argument.",
+		],
+		parameters: Type.Object({
+			criterionId: Type.String({ minLength: 1 }),
+			questionId: Type.String({ minLength: 1 }),
+			interactionId: Type.String({ minLength: 1 }),
+			selectedOptionId: Type.String({ minLength: 1 }),
+			verbatimResponse: Type.String({ minLength: 1 }),
+			rationale: Type.String({ minLength: 1 }),
+		}),
+		execute: async (
+			toolCallId: string,
+			params: any,
+			_signal: AbortSignal | undefined,
+			_onUpdate: unknown,
+			_ctx: any,
+		) => {
+			const actorId = _ctx?.sessionManager?.getSessionId?.();
+			if (typeof actorId !== "string" || !actorId.trim()) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: "Error retiring subjective UAT criterion: authenticated Pi session identity is unavailable",
+						},
+					],
+					details: {
+						operation: "retire_milestone_subjective_uat",
+						error: "user_identity_unavailable",
+					},
+					isError: true,
+				};
+			}
+			const { executeRetireMilestoneSubjectiveUat } =
+				await loadWorkflowExecutors();
+			return executeRetireMilestoneSubjectiveUat(
+				params,
+				resolveWorkflowToolBasePath(_ctx, params),
+				{
+					...piExecutionInvocation(
+						"gsd_retire_milestone_subjective_uat",
+						toolCallId,
+					),
+					actorType: "user",
+					actorId: actorId.trim(),
+				},
+			);
+		},
+	});
+
 	// ─── gsd_replan_slice (gsd_slice_replan alias) ─────────────────────────
 
 	const replanSliceExecute = async (
