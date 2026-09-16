@@ -1000,11 +1000,11 @@ function formatQuestionExchange(
 }
 
 async function ensureMilestoneShell(basePath: string, milestoneId: string): Promise<string> {
+  // No title exists yet, so the dir is named from the id alone. Slugging the
+  // "New milestone <id>" placeholder instead would bake a phases/NN-new-milestone-mNNN
+  // name into the tree that survives every later rename attempt.
   const milestoneDir = resolveMilestonePath(basePath, milestoneId)
-    ?? join(
-      milestonesDir(basePath),
-      canonicalPhaseDirName(milestoneId, `New milestone ${milestoneId}`),
-    );
+    ?? join(milestonesDir(basePath), canonicalPhaseDirName(milestoneId));
   mkdirSync(milestoneDir, { recursive: true });
   clearPathCache();
 

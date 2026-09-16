@@ -295,11 +295,15 @@ function registerProjectMilestoneSequence(content: string): string[] {
         registered.push(canonicalId);
         continue;
       }
-      if (canonicalId && canonicalId !== milestone.id) {
+      if (canonicalId) {
         // An existing milestone already owns this sequence number. Treat the markdown
         // line as referring to it: refresh the human title, and promote to complete
         // when the line is checked — but never demote an in-flight milestone back to
         // "queued" (the planner's row stays the single source of truth).
+        // This must route through upsertMilestonePlanning even when the IDs match:
+        // insertMilestone is INSERT OR IGNORE, so it would leave a placeholder title
+        // ("New milestone M001") in place and skip the phase-dir rename, stranding
+        // the discussion artifacts in phases/NN-new-milestone-mNNN/.
         upsertMilestonePlanning(canonicalId, {
           title: milestone.title,
           ...(milestone.done ? { status: "complete" } : {}),
