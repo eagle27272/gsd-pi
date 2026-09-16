@@ -102,6 +102,20 @@ export const RUN_UAT_READ_ONLY_TOOL_NAMES = [
  */
 export const RUN_UAT_BROWSER_TOOL_NAMES = BROWSER_CONTRACT_TOOL_NAMES;
 
+/**
+ * A required subjective UAT criterion blocks both `gsd_validate_milestone` pass
+ * and closeout readiness, and these four are its only remediation path. Issue
+ * #242: absent from the allow-list they were callable but unadvertised, so
+ * eight sessions read the "near-miss variants are rejected" reminder and
+ * reported the blocker as unfixable.
+ */
+const SUBJECTIVE_UAT_REMEDIATION_TOOLS = [
+  "gsd_prepare_milestone_subjective_uat",
+  "gsd_answer_milestone_subjective_uat",
+  "gsd_prepare_milestone_subjective_uat_retirement",
+  "gsd_retire_milestone_subjective_uat",
+] as const;
+
 // ─── The registry ─────────────────────────────────────────────────────────
 
 export const UNIT_REGISTRY = {
@@ -184,6 +198,7 @@ export const UNIT_REGISTRY = {
         "gsd_resume",
         "gsd_validate_milestone",
         "gsd_reassess_roadmap",
+        ...SUBJECTIVE_UAT_REMEDIATION_TOOLS,
         "subagent",
       ],
       requiredWorkflowTools: ["gsd_milestone_status", "gsd_validate_milestone", "gsd_reassess_roadmap"],
@@ -203,6 +218,7 @@ export const UNIT_REGISTRY = {
         "gsd_requirement_update",
         "gsd_summary_save",
         "gsd_complete_milestone",
+        ...SUBJECTIVE_UAT_REMEDIATION_TOOLS,
         "subagent",
       ],
       requiredWorkflowTools: [
