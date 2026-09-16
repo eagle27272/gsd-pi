@@ -21,14 +21,26 @@ export interface HerdrReporterOptions {
 const DEFAULT_SOURCE = "custom:gsd";
 const DEFAULT_AGENT = "gsd";
 
-// Herdr's contract (spec §2.2/§6.2) is a process-lifetime monotonic integer per
-// source. This integration uses exactly one source, so the counter is shared by
-// every HerdrReporter instance — a fresh reporter must not restart at --seq 1.
-let sharedSeq = 0;
+// Herdr ignores any report whose --seq is <= the last one it accepted for the
+// same (pane, source), and that high-water mark belongs to the pane, not to the
+// process that set it. A counter starting at 1 therefore makes every gsd restart
+// in a pane invisible until it climbs past the previous run — including the final
+// release-agent, which strands a dead agent in the pane forever. Seeding from the
+// wall clock keeps the counter monotonic across restarts. Microseconds, not
+// milliseconds: a burst of reports inside one clock tick has to keep incrementing,
+// and the finer unit keeps that lead far below the time any restart takes.
+const seqNow = (): number => Date.now() * 1000;
+let sharedSeq = seqNow();
 
-/** Test-only: reset the process-global --seq counter. */
+function nextSeq(): number {
+  const now = seqNow();
+  sharedSeq = now > sharedSeq ? now : sharedSeq + 1;
+  return sharedSeq;
+}
+
+/** Test-only: re-seed the process-global --seq counter as a fresh process would. */
 export function __resetHerdrSeqForTest(): void {
-  sharedSeq = 0;
+  sharedSeq = seqNow();
 }
 
 const defaultRunner: HerdrRunner = (file, args) => {
@@ -60,7 +72,6 @@ export class HerdrReporter {
   }
 
   private run(tail: string[], trailing: string[] = []): void {
-    sharedSeq += 1;
     // tail is [verb, subverb, paneId, ...rest]; identity goes right after paneId,
     // --seq is emitted last, and any trailing args (e.g. --message) follow it.
     const args = [
@@ -68,7 +79,7 @@ export class HerdrReporter {
       ...this.identity(),
       ...tail.slice(3),
       "--seq",
-      String(sharedSeq),
+      String(nextSeq()),
       ...trailing,
     ];
     try {
