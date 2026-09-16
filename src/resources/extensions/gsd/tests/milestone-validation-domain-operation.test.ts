@@ -1048,7 +1048,7 @@ test("Milestone validation passes once stranded subjective criteria are retired"
 
   await assert.rejects(
     () => validate(basePath, "m003/validate/blocked"),
-    /requires accepted subjective UAT criterion/i,
+    /requires an accepted subjective UAT criterion/i,
     "two unanswered required subjective criteria must block pass",
   );
 
@@ -1102,6 +1102,75 @@ test("Milestone validation passes once stranded subjective criteria are retired"
   assert.ok(criterionIds.includes(survivor.criterionId), "the surviving criterion must be bound");
   assert.ok(!criterionIds.includes(chainB.criterionId), "chain B must not be bound into the receipt");
   assert.ok(!criterionIds.includes(chainC.criterionId), "chain C must not be bound into the receipt");
+});
+
+// The bare-UUID form of this error cost eight validate-milestone sessions and
+// five duplicate criterion rows (issue #242): every fact the agent needed was
+// already on the row the query reads.
+test("Milestone validation blocker names the criterion and its resolution path", async () => {
+  const basePath = makeBase();
+  const revision = sourceRevision(basePath);
+  const blocking = prepareMilestoneSubjectiveUat({
+    invocation: invocation("blocker/prepare"),
+    milestoneId: "M001",
+    criterionKey: "developer-owns-domain-types-in-repo",
+    description: "This service owns its domain types in-repo.",
+    focusedPrompt: "Does this service own its domain types in-repo?",
+    recommendedDisposition: "accepted",
+    recommendationRationale: "The domain model moved in-repo.",
+    recommendationEvidence: "Current technical validation receipt.",
+    testedSourceRevision: revision,
+  });
+
+  await assert.rejects(
+    () => validate(basePath, "blocker/validate"),
+    (error: Error) => {
+      assert.match(error.message, new RegExp(blocking.criterionId));
+      assert.match(error.message, /developer-owns-domain-types-in-repo/);
+      assert.match(error.message, /Does this service own its domain types in-repo\?/);
+      assert.match(error.message, /gsd_prepare_milestone_subjective_uat\b/);
+      assert.match(error.message, /gsd_prepare_milestone_subjective_uat_retirement\b/);
+      return true;
+    },
+  );
+});
+
+// A rejected answer closes the question but leaves the criterion required and
+// unaccepted, so the blocker must still describe it from the criterion row.
+test("Milestone validation blocker falls back to the criterion description with no open question", async () => {
+  const basePath = makeBase();
+  const revision = sourceRevision(basePath);
+  const blocking = prepareMilestoneSubjectiveUat({
+    invocation: invocation("rejected/prepare"),
+    milestoneId: "M001",
+    criterionKey: "guided-flow",
+    description: "The guided flow feels natural and clear.",
+    focusedPrompt: "Does the guided flow feel natural and clear?",
+    recommendedDisposition: "accepted",
+    recommendationRationale: "Automated checks passed.",
+    recommendationEvidence: "Current technical validation receipt.",
+    testedSourceRevision: revision,
+  });
+  const reject = blocking.options.find((option) => option.disposition === "rejected")!;
+  answerMilestoneSubjectiveUat({
+    invocation: { ...invocation("rejected/answer"), actorType: "user", actorId: "developer" },
+    criterionId: blocking.criterionId,
+    questionId: blocking.questionId,
+    interactionId: blocking.interactionId,
+    selectedOptionId: reject.optionId,
+    verbatimResponse: reject.label,
+    rationale: "The guided flow still reads as clunky.",
+    testedSourceRevision: revision,
+  });
+
+  await assert.rejects(
+    () => validate(basePath, "rejected/validate"),
+    (error: Error) => {
+      assert.match(error.message, /guided-flow/);
+      assert.match(error.message, /The guided flow feels natural and clear\./);
+      return true;
+    },
+  );
 });
 
 test("Milestone closeout readiness ignores a retired subjective criterion", async () => {
