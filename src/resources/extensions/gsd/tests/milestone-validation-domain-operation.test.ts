@@ -33,7 +33,10 @@ import {
 import { captureVerificationSourceSnapshot } from "../verification-source-integrity.ts";
 import {
   answerMilestoneSubjectiveUat,
+  hasPendingMilestoneSubjectiveUat,
   prepareMilestoneSubjectiveUat,
+  prepareMilestoneSubjectiveUatRetirement,
+  retireMilestoneSubjectiveUat,
 } from "../milestone-subjective-uat-domain-operation.ts";
 
 const tempDirs = new Set<string>();
@@ -877,4 +880,116 @@ test("needs-attention records passing per-class verdicts without authorizing clo
     false,
     "the inconclusive aggregate criterion must still block closeout",
   );
+});
+
+test("Milestone validation passes once a stranded subjective criterion is retired", async () => {
+  const basePath = makeBase();
+  const revision = sourceRevision(basePath);
+
+  // Reproduces M003: one key superseded in place, then two rephrased keys open
+  // independent required chains, only the last of which the user ever answered.
+  const stranded = prepareMilestoneSubjectiveUat({
+    invocation: invocation("m003/prepare/owns-domain-types"),
+    milestoneId: "M001",
+    criterionKey: "developer-owns-domain-types-in-repo",
+    description: "The developer owns the domain types in this repo.",
+    focusedPrompt: "Does this service own its domain types in-repo?",
+    recommendedDisposition: "accepted",
+    recommendationRationale: "The domain model moved in-repo.",
+    recommendationEvidence: "Current technical validation receipt.",
+    testedSourceRevision: revision,
+  });
+
+  assert.throws(() => prepareMilestoneSubjectiveUat({
+    invocation: invocation("m003/prepare/single-pr"),
+    milestoneId: "M001",
+    criterionKey: "developer-single-pr-domain-change",
+    description: "A domain change is one PR.",
+    focusedPrompt: "Is a domain change now a single PR?",
+    recommendedDisposition: "accepted",
+    recommendationRationale: "The domain model moved in-repo.",
+    recommendationEvidence: "Current technical validation receipt.",
+    testedSourceRevision: revision,
+  }), /already has an unanswered required subjective UAT criterion/i);
+
+  await assert.rejects(
+    () => validate(basePath, "m003/validate/blocked"),
+    /requires accepted subjective UAT criterion/i,
+    "an unanswered required subjective criterion must block pass",
+  );
+
+  const retirement = prepareMilestoneSubjectiveUatRetirement({
+    invocation: invocation("m003/retire/prepare"),
+    criterionId: stranded.criterionId,
+    rationale: "Stranded duplicate; the same judgment is covered elsewhere.",
+  });
+  const retired = retireMilestoneSubjectiveUat({
+    invocation: {
+      ...invocation("m003/retire/answer"),
+      actorType: "user",
+      actorId: "developer",
+    },
+    criterionId: stranded.criterionId,
+    questionId: retirement.questionId,
+    interactionId: retirement.interactionId,
+    selectedOptionId: retirement.retireOptionId,
+    verbatimResponse: retirement.options[0]!.label,
+    rationale: "The user confirmed this criterion is a stranded duplicate.",
+  });
+
+  assert.equal(retired.choice, "retire");
+  assert.deepEqual(retired.withdrawnQuestionIds, [stranded.questionId]);
+  assert.equal(hasPendingMilestoneSubjectiveUat("M001"), false);
+
+  const passed = await validate(basePath, "m003/validate/passed");
+  assert.ok(!("error" in passed), "retiring the stranded criterion must unblock pass");
+  const payload = JSON.parse(String(row(`
+    SELECT payload_json FROM workflow_domain_events
+    WHERE event_type = 'milestone.validation.recorded'
+    ORDER BY project_revision DESC LIMIT 1
+  `).payload_json)) as Record<string, unknown>;
+  assert.deepEqual(payload["humanAcceptanceIds"], []);
+  assert.ok(
+    !(payload["criterionIds"] as string[]).includes(stranded.criterionId),
+    "the retired criterion must not be bound into the validation receipt",
+  );
+});
+
+test("Milestone closeout readiness ignores a retired subjective criterion", async () => {
+  const basePath = makeBase();
+  const revision = sourceRevision(basePath);
+  const stranded = prepareMilestoneSubjectiveUat({
+    invocation: invocation("closeout/prepare"),
+    milestoneId: "M001",
+    criterionKey: "guided-flow",
+    description: "The guided flow feels natural and clear.",
+    focusedPrompt: "Does the guided flow feel natural and clear?",
+    recommendedDisposition: "accepted",
+    recommendationRationale: "Automated checks passed.",
+    recommendationEvidence: "Current technical validation receipt.",
+    testedSourceRevision: revision,
+  });
+  const retirement = prepareMilestoneSubjectiveUatRetirement({
+    invocation: invocation("closeout/retire/prepare"),
+    criterionId: stranded.criterionId,
+    rationale: "Stranded duplicate.",
+  });
+  retireMilestoneSubjectiveUat({
+    invocation: {
+      ...invocation("closeout/retire/answer"),
+      actorType: "user",
+      actorId: "developer",
+    },
+    criterionId: stranded.criterionId,
+    questionId: retirement.questionId,
+    interactionId: retirement.interactionId,
+    selectedOptionId: retirement.retireOptionId,
+    verbatimResponse: retirement.options[0]!.label,
+    rationale: "The user confirmed this criterion is a stranded duplicate.",
+  });
+
+  const result = await validate(basePath, "closeout/validate");
+
+  assert.ok(!("error" in result));
+  assert.equal(readMilestoneCloseoutReadiness({ milestoneId: "M001" }).ready, true);
 });
