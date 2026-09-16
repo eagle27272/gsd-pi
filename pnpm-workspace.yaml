@@ -5,7 +5,7 @@ autoInstallPeers: true
 strictPeerDependencies: false
 engineStrict: true
 
-# Transitive-dependency security overrides (Dependabot). pnpm 10 reads overrides
+# Transitive-dependency security overrides (Dependabot). pnpm reads overrides
 # from here, not from package.json's top-level npm "overrides" field.
 #   uuid               GHSA-w5hq-g745-h8pq — bounds check in v3/v5/v6; fix only in
 #                      the 11.1.1 line, so pin ^11.1.1 to avoid 12.0.0/13.0.0.
@@ -36,14 +36,16 @@ packageImportMethod: copy
 publicHoistPattern:
   - '*'
 
-# Allow lifecycle scripts for native/tooling deps (replaces package.json#pnpm.onlyBuiltDependencies).
-onlyBuiltDependencies:
-  - '@opengsd/gsd-browser'
-  - '@google/genai'
-  - canvas
-  - esbuild
-  - koffi
-  - node-pty
-  - protobufjs
-  - sharp
-  - unrs-resolver
+# Allow lifecycle scripts for native/tooling deps. pnpm 11 reads this map and
+# ignores the pnpm 10 `onlyBuiltDependencies` list, erroring on any unlisted
+# dependency that ships a build script.
+allowBuilds:
+  '@opengsd/gsd-browser': true
+  '@google/genai': true
+  canvas: true
+  esbuild: true
+  koffi: true
+  node-pty: true
+  protobufjs: true
+  sharp: true
+  unrs-resolver: true

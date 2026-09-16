@@ -41,7 +41,7 @@
   "engines": {
     "node": ">=24.20.0"
   },
-  "packageManager": "pnpm@10.12.1",
+  "packageManager": "pnpm@11.25.0",
   "scripts": {
     "build:pi-tui": "pnpm --filter @gsd/pi-tui run build",
     "build:pi-ai": "pnpm --filter @gsd/pi-ai run build",
