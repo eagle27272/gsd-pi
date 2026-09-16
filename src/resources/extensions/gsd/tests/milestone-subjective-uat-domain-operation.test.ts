@@ -553,3 +553,84 @@ test("subjective UAT replay rejects shape-valid option binding corruption", () =
     /subjective UAT receipt.*options.*invalid|corrupt/i,
   );
 });
+
+test("subjective UAT refuses a second required criterion while the first is unanswered", () => {
+  setup();
+  const first = prepareMilestoneSubjectiveUat(prepareInput("subjective/strand/first"));
+
+  assert.throws(() => prepareMilestoneSubjectiveUat({
+    ...prepareInput("subjective/strand/second"),
+    criterionKey: "m001-guided-flow-rephrased",
+    description: "The same judgment under a rephrased key.",
+    focusedPrompt: "Does the guided flow feel natural and clear?",
+  }), (error: Error) => {
+    assert.match(error.message, /already has an unanswered required subjective UAT criterion/i);
+    assert.match(error.message, new RegExp(first.criterionId));
+    assert.match(error.message, /guided-flow/);
+    assert.match(error.message, /Reuse that criterionKey to rephrase it, or retire it first/i);
+    return true;
+  });
+
+  assert.equal(count("workflow_acceptance_criteria"), 1, "the rejected prepare must not insert a criterion");
+  assert.equal(count("workflow_open_questions"), 1);
+});
+
+test("subjective UAT still allows rephrasing under the same criterionKey", () => {
+  setup();
+  const first = prepareMilestoneSubjectiveUat(prepareInput("subjective/rephrase/first"));
+  const second = prepareMilestoneSubjectiveUat({
+    ...prepareInput("subjective/rephrase/second"),
+    description: "The guided flow reads clearly end to end.",
+    focusedPrompt: "Reading it end to end, does the guided flow stay clear?",
+  });
+
+  assert.notEqual(second.criterionId, first.criterionId);
+  assert.deepEqual(second.withdrawnQuestionIds, [first.questionId]);
+  assert.equal(db().prepare(`
+    SELECT supersedes_criterion_id FROM workflow_acceptance_criteria
+    WHERE criterion_id = :criterion_id
+  `).get({ ":criterion_id": second.criterionId })?.["supersedes_criterion_id"], first.criterionId);
+});
+
+test("subjective UAT allows a second required criterion once the first is answered", () => {
+  setup();
+  const first = prepareMilestoneSubjectiveUat(prepareInput("subjective/second-after-answer/prepare"));
+  const accepted = first.options.find((option) => option.disposition === "accepted")!;
+  answerMilestoneSubjectiveUat({
+    invocation: userInvocation("subjective/second-after-answer/answer"),
+    criterionId: first.criterionId,
+    questionId: first.questionId,
+    interactionId: first.interactionId,
+    selectedOptionId: accepted.optionId,
+    verbatimResponse: accepted.label,
+    rationale: "The user accepted the guided experience.",
+    testedSourceRevision: "source-a",
+  });
+
+  const second = prepareMilestoneSubjectiveUat({
+    ...prepareInput("subjective/second-after-answer/second"),
+    criterionKey: "error-copy",
+    description: "The error copy reads plainly.",
+    focusedPrompt: "Does the error copy read plainly?",
+  });
+
+  assert.notEqual(second.criterionId, first.criterionId);
+  assert.equal(count("workflow_acceptance_criteria"), 2);
+});
+
+test("subjective UAT exempts a non-required criterion from the stranding guard", () => {
+  setup();
+  prepareMilestoneSubjectiveUat(prepareInput("subjective/optional/first"));
+  const optional = prepareMilestoneSubjectiveUat({
+    ...prepareInput("subjective/optional/second"),
+    criterionKey: "nice-to-have",
+    description: "An optional impression worth capturing.",
+    focusedPrompt: "Anything else worth noting?",
+    required: false,
+  });
+
+  assert.equal(db().prepare(`
+    SELECT required FROM workflow_acceptance_criteria WHERE criterion_id = :criterion_id
+  `).get({ ":criterion_id": optional.criterionId })?.["required"], 0);
+  assert.equal(count("workflow_acceptance_criteria"), 2);
+});

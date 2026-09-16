@@ -81,6 +81,11 @@ interface CriterionRow {
   description: string;
 }
 
+interface UnansweredRequiredCriterionRow {
+  criterion_id: string;
+  criterion_key: string;
+}
+
 interface PreparedBindingRow {
   milestone_id: string;
   lifecycle_id: string;
@@ -167,6 +172,38 @@ function currentCriterion(
   }) as unknown as CriterionRow | undefined;
 }
 
+// Identity is (lifecycle, criterion_key, requirement_id), so a prepare under a
+// rephrased key opens a second required chain instead of superseding the first.
+// Chains cannot merge, so the stranded chain would block every later `pass`
+// verdict with no way to clear it. Refuse at the point of the mistake.
+function unansweredRequiredSubjectiveCriterion(
+  context: Readonly<DomainOperationContext>,
+  lifecycleId: string,
+): UnansweredRequiredCriterionRow | undefined {
+  return getDb().prepare(`
+    SELECT criterion.criterion_id, criterion.criterion_key
+    FROM workflow_acceptance_criteria criterion
+    WHERE criterion.project_id = :project_id
+      AND criterion.lifecycle_id = :lifecycle_id
+      AND criterion.criterion_kind = 'subjective_uat'
+      AND criterion.required = 1
+      AND NOT EXISTS (
+        SELECT 1 FROM workflow_acceptance_criteria successor
+        WHERE successor.supersedes_criterion_id = criterion.criterion_id
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM workflow_human_acceptances acceptance
+        WHERE acceptance.project_id = criterion.project_id
+          AND acceptance.criterion_id = criterion.criterion_id
+      )
+    ORDER BY criterion.criterion_id
+    LIMIT 1
+  `).get({
+    ":project_id": context.projectId,
+    ":lifecycle_id": lifecycleId,
+  }) as unknown as UnansweredRequiredCriterionRow | undefined;
+}
+
 function ensureSubjectiveCriterion(
   context: Readonly<DomainOperationContext>,
   lifecycleId: string,
@@ -189,6 +226,17 @@ function ensureSubjectiveCriterion(
     current.description === input.description
   ) {
     return current.criterion_id;
+  }
+
+  if (!current && input.required) {
+    const unanswered = unansweredRequiredSubjectiveCriterion(context, lifecycleId);
+    if (unanswered) {
+      throw new Error(
+        `Milestone lifecycle already has an unanswered required subjective UAT criterion ` +
+        `${unanswered.criterion_id} with key '${unanswered.criterion_key}'. ` +
+        `Reuse that criterionKey to rephrase it, or retire it first.`,
+      );
+    }
   }
 
   const criterionId = randomUUID();
