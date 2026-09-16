@@ -1,12 +1,13 @@
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { setTimeout as sleep } from "node:timers/promises";
 import { HerdrReporter, __resetHerdrSeqForTest } from "../reporter.ts";
 import type { HerdrEnv } from "../env.ts";
 
 const env: HerdrEnv = { paneId: "w1:p2", binPath: "/bin/herdr", socketPath: "/tmp/herdr.sock" };
 
 // --seq is a process-global counter shared by every reporter instance; reset it
-// before each test so the tests that assert exact --seq values stay stable.
+// before each test so per-test sequences start from a fresh seed.
 beforeEach(() => __resetHerdrSeqForTest());
 
 function spyReporter() {
@@ -15,20 +16,25 @@ function spyReporter() {
   return { r, calls };
 }
 
+function seqOf(args: string[]): number {
+  return Number(args[args.indexOf("--seq") + 1]);
+}
+
 test("reportState builds the documented report-agent argv", () => {
   const { r, calls } = spyReporter();
   r.reportState("working");
-  assert.deepEqual(calls[0], [
+  assert.deepEqual(calls[0].slice(0, -1), [
     "pane", "report-agent", "w1:p2",
     "--source", "custom:gsd", "--agent", "gsd",
-    "--state", "working", "--seq", "1",
+    "--state", "working", "--seq",
   ]);
 });
 
-test("reportState appends --message when given", () => {
+test("reportState appends --message after --seq", () => {
   const { r, calls } = spyReporter();
   r.reportState("blocked", { message: "waiting on approval" });
-  assert.deepEqual(calls[0].slice(-4), ["--seq", "1", "--message", "waiting on approval"]);
+  assert.deepEqual(calls[0].slice(-2), ["--message", "waiting on approval"]);
+  assert.equal(calls[0].at(-4), "--seq");
 });
 
 test("--seq strictly increases across mixed calls", () => {
@@ -37,20 +43,47 @@ test("--seq strictly increases across mixed calls", () => {
   r.reportMetadata({ title: "M1 · planning" });
   r.reportSession({ sessionId: "abc" });
   r.release();
-  const seqs = calls.map((a) => Number(a[a.indexOf("--seq") + 1]));
-  assert.deepEqual(seqs, [1, 2, 3, 4]);
+  const seqs = calls.map(seqOf);
+  assert.deepEqual(seqs, [...seqs].sort((a, b) => a - b));
+  assert.equal(new Set(seqs).size, seqs.length);
 });
 
 test("--seq is process-global across separate reporter instances", () => {
   const callsA: string[][] = [];
   const a = new HerdrReporter({ env, runner: (_f, args) => callsA.push(args) });
   a.reportState("working");
-  assert.equal(callsA[0][callsA[0].indexOf("--seq") + 1], "1");
 
   const callsB: string[][] = [];
   const b = new HerdrReporter({ env, runner: (_f, args) => callsB.push(args) });
   b.reportState("idle");
-  assert.equal(callsB[0][callsB[0].indexOf("--seq") + 1], "2");
+  assert.ok(seqOf(callsB[0]) > seqOf(callsA[0]));
+});
+
+test("--seq is seeded from the wall clock", () => {
+  const before = Date.now() * 1000;
+  __resetHerdrSeqForTest();
+  const { r, calls } = spyReporter();
+  r.reportState("working");
+  const seq = seqOf(calls[0]);
+  assert.ok(seq >= before, `${seq} < ${before}`);
+  assert.ok(seq <= Date.now() * 1000 + 1, `${seq} > now`);
+  assert.ok(Number.isSafeInteger(seq));
+});
+
+test("a restarted process outranks the previous process's last --seq", async () => {
+  const first = spyReporter();
+  for (let i = 0; i < 200; i++) first.r.reportState(i % 2 === 0 ? "working" : "idle");
+  const lastOfFirst = seqOf(first.calls.at(-1)!);
+
+  await sleep(2);
+  __resetHerdrSeqForTest(); // a fresh gsd process in the same pane
+
+  const second = spyReporter();
+  second.r.reportState("working");
+  assert.ok(
+    seqOf(second.calls[0]) > lastOfFirst,
+    `restart seq ${seqOf(second.calls[0])} must exceed ${lastOfFirst} or Herdr ignores it`,
+  );
 });
 
 test("reportState dedups identical consecutive calls but not after a change", () => {
