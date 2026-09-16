@@ -3,6 +3,7 @@
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -97,6 +98,118 @@ function executeAtFence(
       }],
     };
   });
+}
+
+// Task 1's stranding guard refuses a second unanswered required subjective
+// chain through the public prepare API, so M003's legacy rows — written before
+// that guard existed — can only be reproduced by inserting them directly, the
+// same way a pre-guard `prepareMilestoneSubjectiveUatQuestion` call would have.
+function injectStrandedSubjectiveUatChain(input: {
+  lifecycleId: string;
+  criterionKey: string;
+  description: string;
+  focusedPrompt: string;
+}): { criterionId: string; questionId: string } {
+  const criterionId = randomUUID();
+  const questionId = randomUUID();
+  const interactionId = randomUUID();
+  const fence = readDomainOperationFence();
+  executeDomainOperation({
+    operationType: "test.milestone.subjective-uat.legacy-prepare",
+    idempotencyKey: `legacy-prepare/${input.criterionKey}`,
+    expectedRevision: fence.revision,
+    expectedAuthorityEpoch: fence.authorityEpoch,
+    actorType: "test",
+    sourceTransport: "test",
+    payload: { criterionKey: input.criterionKey },
+  }, (context) => {
+    const createdAt = new Date().toISOString();
+    db().prepare(`
+      INSERT INTO workflow_acceptance_criteria (
+        criterion_id, criterion_key, project_id, lifecycle_id, requirement_id,
+        criterion_kind, evidence_class, required, description,
+        supersedes_criterion_id, created_at,
+        operation_id, project_revision, authority_epoch
+      ) VALUES (
+        :criterion_id, :criterion_key, :project_id, :lifecycle_id, NULL,
+        'subjective_uat', 'human', 1, :description,
+        NULL, :created_at,
+        :operation_id, :project_revision, :authority_epoch
+      )
+    `).run({
+      ":criterion_id": criterionId,
+      ":criterion_key": input.criterionKey,
+      ":project_id": context.projectId,
+      ":lifecycle_id": input.lifecycleId,
+      ":description": input.description,
+      ":created_at": createdAt,
+      ":operation_id": context.operationId,
+      ":project_revision": context.resultingRevision,
+      ":authority_epoch": context.resultingAuthorityEpoch,
+    });
+    db().prepare(`
+      INSERT INTO workflow_open_questions (
+        question_id, project_id, lifecycle_id, question_text, question_status,
+        state_version, accepted_answer_id, created_at, updated_at,
+        created_operation_id, created_project_revision, created_authority_epoch,
+        last_operation_id, last_project_revision, last_authority_epoch
+      ) VALUES (
+        :question_id, :project_id, :lifecycle_id, :question_text, 'open',
+        0, NULL, :created_at, :created_at,
+        :operation_id, :project_revision, :authority_epoch,
+        :operation_id, :project_revision, :authority_epoch
+      )
+    `).run({
+      ":question_id": questionId,
+      ":project_id": context.projectId,
+      ":lifecycle_id": input.lifecycleId,
+      ":question_text": input.focusedPrompt,
+      ":created_at": createdAt,
+      ":operation_id": context.operationId,
+      ":project_revision": context.resultingRevision,
+      ":authority_epoch": context.resultingAuthorityEpoch,
+    });
+    db().prepare(`
+      INSERT INTO workflow_interactions (
+        interaction_id, project_id, question_id, sequence, interaction_kind,
+        presentation_state, focused_prompt, requires_answer, option_count,
+        recommended_option_id, recommendation_text, recommendation_rationale,
+        recommendation_evidence, recommendation_confidence,
+        recommendation_uncertainty, revisit_condition, presented_at,
+        operation_id, project_revision, authority_epoch
+      ) VALUES (
+        :interaction_id, :project_id, :question_id, 1, 'subjective-uat',
+        'prepared', :focused_prompt, 1, 0,
+        NULL, :recommendation_text, :recommendation_rationale,
+        '', NULL, '', '', '', :operation_id, :project_revision, :authority_epoch
+      )
+    `).run({
+      ":interaction_id": interactionId,
+      ":project_id": context.projectId,
+      ":question_id": questionId,
+      ":focused_prompt": input.focusedPrompt,
+      ":recommendation_text": "Legacy recommendation predating the stranding guard.",
+      ":recommendation_rationale": "Legacy rationale predating the stranding guard.",
+      ":operation_id": context.operationId,
+      ":project_revision": context.resultingRevision,
+      ":authority_epoch": context.resultingAuthorityEpoch,
+    });
+    return {
+      events: [{
+        eventType: "milestone.subjective-uat.prepared",
+        entityType: "milestone",
+        entityId: "M001",
+        payload: { criterionId, questionId },
+        destinations: ["test"],
+      }],
+      projections: [{
+        projectionKey: `subjective-uat/m001/${questionId}`.toLowerCase(),
+        projectionKind: "milestone-subjective-uat",
+        rendererVersion: "1",
+      }],
+    };
+  });
+  return { criterionId, questionId };
 }
 
 function makeBase(plannedUat = "", adopted = true, adoptDescendants = adopted): string {
@@ -882,25 +995,18 @@ test("needs-attention records passing per-class verdicts without authorizing clo
   );
 });
 
-test("Milestone validation passes once a stranded subjective criterion is retired", async () => {
+test("Milestone validation passes once stranded subjective criteria are retired", async () => {
   const basePath = makeBase();
   const revision = sourceRevision(basePath);
 
-  // Reproduces M003: one key superseded in place, then two rephrased keys open
-  // independent required chains, only the last of which the user ever answered.
-  const stranded = prepareMilestoneSubjectiveUat({
-    invocation: invocation("m003/prepare/owns-domain-types"),
-    milestoneId: "M001",
-    criterionKey: "developer-owns-domain-types-in-repo",
-    description: "The developer owns the domain types in this repo.",
-    focusedPrompt: "Does this service own its domain types in-repo?",
-    recommendedDisposition: "accepted",
-    recommendationRationale: "The domain model moved in-repo.",
-    recommendationEvidence: "Current technical validation receipt.",
-    testedSourceRevision: revision,
-  });
-
-  assert.throws(() => prepareMilestoneSubjectiveUat({
+  // Reproduces M003's actual shape: a survivor criterion accepted through the
+  // real prepare/answer path, plus two required chains that predate Task 1's
+  // stranding guard. Those two are injected directly rather than prepared
+  // through the public API, because the guard now refuses to let a second
+  // unanswered required chain arise that way — which is exactly why M003's
+  // legacy rows could only have been produced before the guard existed, and
+  // why recovering from them needs the retirement path under test here.
+  const survivor = prepareMilestoneSubjectiveUat({
     invocation: invocation("m003/prepare/single-pr"),
     milestoneId: "M001",
     criterionKey: "developer-single-pr-domain-change",
@@ -910,49 +1016,92 @@ test("Milestone validation passes once a stranded subjective criterion is retire
     recommendationRationale: "The domain model moved in-repo.",
     recommendationEvidence: "Current technical validation receipt.",
     testedSourceRevision: revision,
-  }), /already has an unanswered required subjective UAT criterion/i);
+  });
+  const survivorAccept = survivor.options.find((option) => option.disposition === "accepted")!;
+  const survivorAnswer = answerMilestoneSubjectiveUat({
+    invocation: {
+      ...invocation("m003/answer/single-pr"),
+      actorType: "user",
+      actorId: "developer",
+    },
+    criterionId: survivor.criterionId,
+    questionId: survivor.questionId,
+    interactionId: survivor.interactionId,
+    selectedOptionId: survivorAccept.optionId,
+    verbatimResponse: survivorAccept.label,
+    rationale: "The user accepted the single-PR domain change criterion.",
+    testedSourceRevision: revision,
+  });
+
+  const chainB = injectStrandedSubjectiveUatChain({
+    lifecycleId: survivor.lifecycleId,
+    criterionKey: "developer-owns-domain-types-in-repo",
+    description: "The developer owns the domain types in this repo.",
+    focusedPrompt: "Does this service own its domain types in-repo?",
+  });
+  const chainC = injectStrandedSubjectiveUatChain({
+    lifecycleId: survivor.lifecycleId,
+    criterionKey: "m003-developer-owns-domain-types-single-pr",
+    description: "A domain change touching owned types stays one PR.",
+    focusedPrompt: "Does an owned-types domain change stay a single PR?",
+  });
 
   await assert.rejects(
     () => validate(basePath, "m003/validate/blocked"),
     /requires accepted subjective UAT criterion/i,
-    "an unanswered required subjective criterion must block pass",
+    "two unanswered required subjective criteria must block pass",
   );
 
-  const retirement = prepareMilestoneSubjectiveUatRetirement({
-    invocation: invocation("m003/retire/prepare"),
-    criterionId: stranded.criterionId,
-    rationale: "Stranded duplicate; the same judgment is covered elsewhere.",
-  });
-  const retired = retireMilestoneSubjectiveUat({
-    invocation: {
-      ...invocation("m003/retire/answer"),
-      actorType: "user",
-      actorId: "developer",
-    },
-    criterionId: stranded.criterionId,
-    questionId: retirement.questionId,
-    interactionId: retirement.interactionId,
-    selectedOptionId: retirement.retireOptionId,
-    verbatimResponse: retirement.options[0]!.label,
-    rationale: "The user confirmed this criterion is a stranded duplicate.",
-  });
+  function retireChain(criterionId: string, label: string) {
+    const retirement = prepareMilestoneSubjectiveUatRetirement({
+      invocation: invocation(`m003/retire/prepare/${label}`),
+      criterionId,
+      rationale: "Stranded duplicate predating the stranding guard.",
+    });
+    return retireMilestoneSubjectiveUat({
+      invocation: {
+        ...invocation(`m003/retire/answer/${label}`),
+        actorType: "user",
+        actorId: "developer",
+      },
+      criterionId,
+      questionId: retirement.questionId,
+      interactionId: retirement.interactionId,
+      selectedOptionId: retirement.retireOptionId,
+      verbatimResponse: retirement.options[0]!.label,
+      rationale: "The user confirmed this criterion is a stranded duplicate.",
+    });
+  }
 
-  assert.equal(retired.choice, "retire");
-  assert.deepEqual(retired.withdrawnQuestionIds, [stranded.questionId]);
+  const retiredB = retireChain(chainB.criterionId, "owns-domain-types");
+  const retiredC = retireChain(chainC.criterionId, "single-pr-owned-types");
+
+  assert.equal(retiredB.choice, "retire");
+  assert.equal(retiredC.choice, "retire");
+  assert.deepEqual(
+    retiredB.withdrawnQuestionIds,
+    [chainB.questionId],
+    "retiring chain B must not withdraw chain C's question",
+  );
+  assert.deepEqual(
+    retiredC.withdrawnQuestionIds,
+    [chainC.questionId],
+    "retiring chain C must not withdraw chain B's question",
+  );
   assert.equal(hasPendingMilestoneSubjectiveUat("M001"), false);
 
   const passed = await validate(basePath, "m003/validate/passed");
-  assert.ok(!("error" in passed), "retiring the stranded criterion must unblock pass");
+  assert.ok(!("error" in passed), "retiring both stranded criteria must unblock pass");
   const payload = JSON.parse(String(row(`
     SELECT payload_json FROM workflow_domain_events
     WHERE event_type = 'milestone.validation.recorded'
     ORDER BY project_revision DESC LIMIT 1
   `).payload_json)) as Record<string, unknown>;
-  assert.deepEqual(payload["humanAcceptanceIds"], []);
-  assert.ok(
-    !(payload["criterionIds"] as string[]).includes(stranded.criterionId),
-    "the retired criterion must not be bound into the validation receipt",
-  );
+  assert.deepEqual(payload["humanAcceptanceIds"], [survivorAnswer.humanAcceptanceId]);
+  const criterionIds = payload["criterionIds"] as string[];
+  assert.ok(criterionIds.includes(survivor.criterionId), "the surviving criterion must be bound");
+  assert.ok(!criterionIds.includes(chainB.criterionId), "chain B must not be bound into the receipt");
+  assert.ok(!criterionIds.includes(chainC.criterionId), "chain C must not be bound into the receipt");
 });
 
 test("Milestone closeout readiness ignores a retired subjective criterion", async () => {
