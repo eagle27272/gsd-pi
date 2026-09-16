@@ -27,7 +27,7 @@ export interface SubjectiveUatRetirementOption {
   recommended: boolean;
 }
 
-export interface PrepareSubjectiveUatRetirementWriteInput {
+interface PrepareSubjectiveUatRetirementWriteInput {
   criterionId: string;
   rationale: string;
 }
@@ -41,10 +41,11 @@ export interface PreparedSubjectiveUatRetirement {
   interactionId: string;
   retireOptionId: string;
   keepOptionId: string;
+  withdrawnQuestionIds: string[];
   options: SubjectiveUatRetirementOption[];
 }
 
-export interface RetirableCriterionRow {
+interface RetirableCriterionRow {
   milestone_id: string;
   lifecycle_id: string;
   lifecycle_status: string;
@@ -265,6 +266,10 @@ function ensureSubjectiveCriterion(
     return current.criterion_id;
   }
 
+  // Heuristic, not an invariant: this only runs for a brand-new key. Rephrasing
+  // an already-answered chain under its own key takes the supersession branch
+  // below and skips this check, so a second unanswered required chain can still
+  // arise through only sanctioned calls. Retirement remains the escape hatch.
   if (!current && input.required) {
     const unanswered = unansweredRequiredSubjectiveCriterion(context, lifecycleId);
     if (unanswered) {
@@ -559,9 +564,12 @@ function distinctTimestamp(previousTimestamp: string): string {
   return new Date(Math.max(Date.now(), Date.parse(previousTimestamp) + 1)).toISOString();
 }
 
+type SubjectiveUatAnswerResponseKind = "answer" | "consent";
+
 interface RecordSubjectiveUatAnswerInput {
   questionId: string;
   interactionId: string;
+  responseKind: SubjectiveUatAnswerResponseKind;
   verbatimResponse: string;
   selectedOptionId: string;
   normalizedInterpretation: string;
@@ -581,7 +589,7 @@ function recordSubjectiveUatAnswer(
       interpretation_confidence, answer_disposition, observed_project_revision,
       created_at, operation_id, project_revision, authority_epoch
     ) VALUES (
-      :answer_id, :project_id, :question_id, :interaction_id, 'answer',
+      :answer_id, :project_id, :question_id, :interaction_id, :response_kind,
       :verbatim_response, :selected_option_id, :normalized_interpretation,
       1, 'accepted', :observed_project_revision,
       :created_at, :operation_id, :project_revision, :authority_epoch
@@ -591,6 +599,7 @@ function recordSubjectiveUatAnswer(
     ":project_id": context.projectId,
     ":question_id": input.questionId,
     ":interaction_id": input.interactionId,
+    ":response_kind": input.responseKind,
     ":verbatim_response": input.verbatimResponse,
     ":selected_option_id": input.selectedOptionId,
     ":normalized_interpretation": input.normalizedInterpretation,
@@ -667,6 +676,7 @@ export function answerMilestoneSubjectiveUatQuestion(
   const answerId = recordSubjectiveUatAnswer(context, {
     questionId: input.questionId,
     interactionId: input.interactionId,
+    responseKind: "answer",
     verbatimResponse: input.verbatimResponse,
     selectedOptionId: input.selectedOptionId,
     normalizedInterpretation: `${disposition}_subjective_experience`,
@@ -716,7 +726,7 @@ export function answerMilestoneSubjectiveUatQuestion(
   };
 }
 
-export function requireRetirableCriterion(
+function requireRetirableCriterion(
   context: Readonly<DomainOperationContext>,
   criterionId: string,
 ): RetirableCriterionRow {
@@ -769,12 +779,15 @@ export function requireRetirableCriterion(
   return criterion;
 }
 
-function requireNoOpenRetirementQuestion(
+// An interrupted turn can strand the questionId/interactionId of a prior
+// retirement-prepared question with no tool-surface way to recover them, so
+// refusing here would trap the criterion forever. Withdraw and re-prepare.
+function withdrawOpenRetirementQuestions(
   context: Readonly<DomainOperationContext>,
   criterionId: string,
-): void {
-  const open = getDb().prepare(`
-    SELECT question.question_id
+): string[] {
+  const openQuestions = getDb().prepare(`
+    SELECT question.question_id, question.updated_at
     FROM workflow_domain_events event
     JOIN workflow_open_questions question
       ON question.question_id = json_extract(event.payload_json, '$.questionId')
@@ -783,12 +796,30 @@ function requireNoOpenRetirementQuestion(
       AND event.event_type = 'milestone.subjective-uat.retirement-prepared'
       AND json_extract(event.payload_json, '$.criterionId') = :criterion_id
       AND question.question_status = 'open'
-    LIMIT 1
-  `).get({
+    ORDER BY question.question_id
+  `).all({
     ":project_id": context.projectId,
     ":criterion_id": criterionId,
-  });
-  if (open) throw new Error("Subjective UAT criterion already has an open retirement question");
+  }) as unknown as Array<{ question_id: string; updated_at: string }>;
+
+  const withdrawQuestion = getDb().prepare(`
+    UPDATE workflow_open_questions
+    SET question_status = 'withdrawn', state_version = state_version + 1,
+        updated_at = :updated_at, last_operation_id = :operation_id,
+        last_project_revision = :project_revision,
+        last_authority_epoch = :authority_epoch
+    WHERE question_id = :question_id
+  `);
+  for (const question of openQuestions) {
+    withdrawQuestion.run({
+      ":updated_at": distinctTimestamp(question.updated_at),
+      ":operation_id": context.operationId,
+      ":project_revision": context.resultingRevision,
+      ":authority_epoch": context.resultingAuthorityEpoch,
+      ":question_id": question.question_id,
+    });
+  }
+  return openQuestions.map((question) => question.question_id);
 }
 
 function buildRetirementOptions(): SubjectiveUatRetirementOption[] {
@@ -823,7 +854,7 @@ export function prepareMilestoneSubjectiveUatRetirementQuestion(
   const criterionId = requireNonBlank(input.criterionId, "criterionId");
   const rationale = requireNonBlank(input.rationale, "rationale");
   const criterion = requireRetirableCriterion(context, criterionId);
-  requireNoOpenRetirementQuestion(context, criterionId);
+  const withdrawnQuestionIds = withdrawOpenRetirementQuestions(context, criterionId);
 
   const createdAt = new Date().toISOString();
   const questionId = randomUUID();
@@ -919,18 +950,18 @@ export function prepareMilestoneSubjectiveUatRetirementQuestion(
     interactionId,
     retireOptionId: options[0]!.optionId,
     keepOptionId: options[1]!.optionId,
+    withdrawnQuestionIds,
     options,
   };
 }
 
-export interface RetireSubjectiveUatWriteInput {
+interface RetireSubjectiveUatWriteInput {
   criterionId: string;
   questionId: string;
   interactionId: string;
   selectedOptionId: string;
   verbatimResponse: string;
   rationale: string;
-  actorId: string;
 }
 
 export interface RetiredMilestoneSubjectiveUat {
@@ -1072,6 +1103,7 @@ export function retireMilestoneSubjectiveUatCriterion(
   const answerId = recordSubjectiveUatAnswer(context, {
     questionId: input.questionId,
     interactionId: input.interactionId,
+    responseKind: "consent",
     verbatimResponse: input.verbatimResponse,
     selectedOptionId: input.selectedOptionId,
     normalizedInterpretation: `${choice}_subjective_criterion`,

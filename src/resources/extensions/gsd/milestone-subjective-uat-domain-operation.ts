@@ -412,6 +412,7 @@ function storedRetirementPreparation(operationId: string): PreparedSubjectiveUat
     interactionId: receiptString(payload, "interactionId", eventType),
     retireOptionId: receiptString(payload, "retireOptionId", eventType),
     keepOptionId: receiptString(payload, "keepOptionId", eventType),
+    withdrawnQuestionIds: receiptStringArray(payload, "withdrawnQuestionIds", eventType),
     options: parsedOptions,
   };
 }
@@ -447,6 +448,7 @@ export function prepareMilestoneSubjectiveUatRetirement(
       interactionId: prepared.interactionId,
       retireOptionId: prepared.retireOptionId,
       keepOptionId: prepared.keepOptionId,
+      withdrawnQuestionIds: prepared.withdrawnQuestionIds,
       options: prepared.options.map((option) => ({
         optionId: option.optionId,
         choice: option.choice,
@@ -486,7 +488,7 @@ export interface RetireMilestoneSubjectiveUatInput {
   rationale: string;
 }
 
-export interface RetireMilestoneSubjectiveUatReceipt
+interface RetireMilestoneSubjectiveUatReceipt
   extends OperationReceipt, RetiredMilestoneSubjectiveUat {}
 
 function storedRetirement(operationId: string): RetiredMilestoneSubjectiveUat {
@@ -501,7 +503,7 @@ function storedRetirement(operationId: string): RetiredMilestoneSubjectiveUat {
     ":retired_type": retiredType,
     ":declined_type": declinedType,
   }) as Record<string, unknown> | undefined;
-  if (!row) throw new Error(`Subjective UAT receipt is missing ${retiredType}`);
+  if (!row) throw new Error(`Subjective UAT receipt is missing ${retiredType} or ${declinedType}`);
   const eventType = String(row["event_type"]);
   const payload = storedPayload(operationId, eventType);
   const retiredCriterionId = payload["retiredCriterionId"];

@@ -725,19 +725,24 @@ test("subjective UAT retirement refuses a rejected criterion", () => {
   );
 });
 
-test("subjective UAT retirement refuses a second open retirement question", () => {
+test("subjective UAT retirement withdraws a stale open retirement question before preparing a new one", () => {
   setup();
   const prepared = prepareMilestoneSubjectiveUat(prepareInput("subjective/retire/dup/target"));
-  prepareMilestoneSubjectiveUatRetirement(
+  const first = prepareMilestoneSubjectiveUatRetirement(
     retirementInput(prepared.criterionId, "subjective/retire/dup/first"),
   );
 
-  assert.throws(
-    () => prepareMilestoneSubjectiveUatRetirement(
-      retirementInput(prepared.criterionId, "subjective/retire/dup/second"),
-    ),
-    /already has an open retirement question/i,
+  const second = prepareMilestoneSubjectiveUatRetirement(
+    retirementInput(prepared.criterionId, "subjective/retire/dup/second"),
   );
+
+  assert.deepEqual(second.withdrawnQuestionIds, [first.questionId]);
+  assert.equal(db().prepare(`
+    SELECT question_status FROM workflow_open_questions WHERE question_id = :question_id
+  `).get({ ":question_id": first.questionId })?.["question_status"], "withdrawn");
+  assert.equal(db().prepare(`
+    SELECT question_status FROM workflow_open_questions WHERE question_id = :question_id
+  `).get({ ":question_id": second.questionId })?.["question_status"], "open");
 });
 
 test("subjective UAT retirement requires an open Milestone lifecycle", () => {
@@ -901,4 +906,27 @@ test("subjective UAT retirement rejects an option outside the prepared pair", ()
     retirement.options[0]!.label,
     "subjective/retire/option/answer",
   )), /must select the prepared Retire or Keep option/i);
+});
+
+test("subjective UAT retirement re-checks eligibility at retire time against interleaved revisions", () => {
+  setup();
+  const prepared = prepareMilestoneSubjectiveUat(prepareInput("subjective/retire/interleave/target"));
+  const retirement = prepareMilestoneSubjectiveUatRetirement(
+    retirementInput(prepared.criterionId, "subjective/retire/interleave/prepare"),
+  );
+
+  prepareMilestoneSubjectiveUat({
+    ...prepareInput("subjective/retire/interleave/supersede"),
+    description: "A rephrased description that supersedes the retirement's target criterion.",
+  });
+
+  assert.throws(
+    () => retireMilestoneSubjectiveUat(retireCall(
+      retirement,
+      retirement.retireOptionId,
+      retirement.options[0]!.label,
+      "subjective/retire/interleave/answer",
+    )),
+    /requires a current required subjective criterion/i,
+  );
 });

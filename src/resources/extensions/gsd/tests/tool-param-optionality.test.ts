@@ -160,12 +160,18 @@ test("milestone subjective UAT and retirement tools keep user identity out of mo
   assert.equal(answer.parameters.properties.actorType, undefined);
   assert.ok(answer.parameters.properties.selectedOptionId);
   assert.ok(answer.parameters.properties.verbatimResponse);
-  assert.equal(prepareRetirement.parameters.properties.actorId, undefined);
-  assert.equal(prepareRetirement.parameters.properties.actorType, undefined);
-  assert.equal(retire.parameters.properties.actorId, undefined);
-  assert.equal(retire.parameters.properties.actorType, undefined);
-  assert.ok(retire.parameters.properties.selectedOptionId);
-  assert.ok(retire.parameters.properties.verbatimResponse);
+  assert.deepEqual(Object.keys(prepareRetirement.parameters.properties).sort(), [
+    "criterionId",
+    "rationale",
+  ]);
+  assert.deepEqual(Object.keys(retire.parameters.properties).sort(), [
+    "criterionId",
+    "interactionId",
+    "questionId",
+    "rationale",
+    "selectedOptionId",
+    "verbatimResponse",
+  ]);
 });
 
 // ─── gsd_slice_complete: enrichment arrays must be optional ──────────────────
