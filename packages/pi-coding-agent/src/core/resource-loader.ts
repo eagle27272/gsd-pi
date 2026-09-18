@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import chalk from "chalk";
 import { CONFIG_DIR_NAME } from "../config.js";
@@ -8,6 +9,7 @@ import type { ResourceDiagnostic } from "./diagnostics.js";
 export type { ResourceCollision, ResourceDiagnostic } from "./diagnostics.js";
 
 import { canonicalizePath, isLocalPath, resolvePath } from "../utils/paths.js";
+import { expandContextImports } from "./context-imports.js";
 import { createEventBus, type EventBus } from "./event-bus.js";
 import { createExtensionRuntime, loadExtensionFromFactory, loadExtensions } from "./extensions/loader.js";
 import type { Extension, ExtensionFactory, ExtensionRuntime, LoadExtensionsResult } from "./extensions/types.js";
@@ -63,38 +65,45 @@ function resolvePromptInput(input: string | undefined, description: string): str
 	return input;
 }
 
+function readContextFile(filePath: string): { path: string; content: string } | null {
+	if (!existsSync(filePath)) {
+		return null;
+	}
+	try {
+		return { path: filePath, content: readFileSync(filePath, "utf-8") };
+	} catch (error) {
+		console.error(chalk.yellow(`Warning: Could not read ${filePath}: ${error}`));
+		return null;
+	}
+}
+
 function loadContextFileFromDir(dir: string): { path: string; content: string } | null {
 	const candidates = ["AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD"];
 	for (const filename of candidates) {
-		const filePath = join(dir, filename);
-		if (existsSync(filePath)) {
-			try {
-				return {
-					path: filePath,
-					content: readFileSync(filePath, "utf-8"),
-				};
-			} catch (error) {
-				console.error(chalk.yellow(`Warning: Could not read ${filePath}: ${error}`));
-			}
+		const contextFile = readContextFile(join(dir, filename));
+		if (contextFile) {
+			return contextFile;
 		}
 	}
 	return null;
 }
 
-export function loadProjectContextFiles(options: {
-	cwd: string;
-	agentDir: string;
-}): Array<{ path: string; content: string }> {
-	const resolvedCwd = resolvePath(options.cwd);
-	const resolvedAgentDir = resolvePath(options.agentDir);
+/** Claude Code's user memory lives here; `CLAUDE_CONFIG_DIR` relocates it. */
+function getUserContextFilePath(): string {
+	const configDir = process.env.CLAUDE_CONFIG_DIR?.trim();
+	return join(configDir ? resolvePath(configDir) : join(homedir(), ".claude"), "CLAUDE.md");
+}
 
-	const contextFiles: Array<{ path: string; content: string }> = [];
+export function loadProjectContextFiles(options: { cwd: string }): Array<{ path: string; content: string }> {
+	const resolvedCwd = resolvePath(options.cwd);
+
+	const discovered: Array<{ path: string; content: string }> = [];
 	const seenPaths = new Set<string>();
 
-	const globalContext = loadContextFileFromDir(resolvedAgentDir);
-	if (globalContext) {
-		contextFiles.push(globalContext);
-		seenPaths.add(globalContext.path);
+	const userContext = readContextFile(getUserContextFilePath());
+	if (userContext) {
+		discovered.push(userContext);
+		seenPaths.add(userContext.path);
 	}
 
 	const ancestorContextFiles: Array<{ path: string; content: string }> = [];
@@ -116,9 +125,11 @@ export function loadProjectContextFiles(options: {
 		currentDir = parentDir;
 	}
 
-	contextFiles.push(...ancestorContextFiles);
+	discovered.push(...ancestorContextFiles);
 
-	return contextFiles;
+	// Expansion runs only once every context file is in `seenPaths`, so an
+	// import can never displace a file the walk would have discovered anyway.
+	return discovered.flatMap((file) => [file, ...expandContextImports(file, seenPaths)]);
 }
 
 export interface DefaultResourceLoaderOptions {
@@ -498,7 +509,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 		}
 
 		const agentsFiles = {
-			agentsFiles: this.noContextFiles ? [] : loadProjectContextFiles({ cwd: this.cwd, agentDir: this.agentDir }),
+			agentsFiles: this.noContextFiles ? [] : loadProjectContextFiles({ cwd: this.cwd }),
 		};
 		const resolvedAgentsFiles = this.agentsFilesOverride ? this.agentsFilesOverride(agentsFiles) : agentsFiles;
 		this.agentsFiles = resolvedAgentsFiles.agentsFiles;

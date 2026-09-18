@@ -20,9 +20,10 @@ When `buildSystemPrompt()` runs, it assembles sections in this exact order:
 │ 2. Append system prompt (APPEND_SYSTEM.md)       │
 │                                                  │
 │ 3. Project context files                         │
-│    ├── ~/.gsd/agent/AGENTS.md (global)            │
+│    ├── ~/.claude/CLAUDE.md (user memory)         │
 │    ├── Ancestor AGENTS.md / CLAUDE.md files      │
-│    └── cwd AGENTS.md / CLAUDE.md                 │
+│    ├── cwd AGENTS.md / CLAUDE.md                 │
+│    └── @-referenced imports of each of the above │
 │                                                  │
 │ 4. Skills listing                                │
 │    └── <available_skills> XML block              │
@@ -135,10 +136,11 @@ This is the safe way to add project-wide instructions without replacing the defa
 Pi walks the filesystem collecting context files:
 
 ```
-1. ~/.gsd/agent/AGENTS.md (global)
+1. ~/.claude/CLAUDE.md (Claude Code's user memory; CLAUDE_CONFIG_DIR relocates it)
 2. Walk from cwd upward to root:
    - Each directory: check for AGENTS.md, then CLAUDE.md (first found wins per directory)
    - Files are collected root-down (ancestors first, cwd last)
+3. Expand each file's @-references, inserting every imported file after its parent
 ```
 
 All found files are concatenated under a "# Project Context" header:
@@ -148,9 +150,13 @@ All found files are concatenated under a "# Project Context" header:
 
 Project-specific instructions and guidelines:
 
-## /Users/you/.gsd/agent/AGENTS.md
+## /Users/you/.claude/CLAUDE.md
 
-[global AGENTS.md content]
+[user memory content]
+
+## /Users/you/.claude/RTK.md
+
+[content of a file the user memory referenced with @RTK.md]
 
 ## /Users/you/projects/myapp/AGENTS.md
 
@@ -158,6 +164,8 @@ Project-specific instructions and guidelines:
 ```
 
 **AGENTS.md vs CLAUDE.md:** Both are treated identically. Per directory, AGENTS.md is checked first. If it exists, CLAUDE.md in the same directory is skipped.
+
+**@-references:** `@path` in any context file imports that file. Paths resolve against the referencing file's directory, `~/` expands to home, imports nest five levels deep, and each file loads at most once. References inside code fences or inline code spans, and references that do not resolve to a readable file, stay literal.
 
 ---
 
