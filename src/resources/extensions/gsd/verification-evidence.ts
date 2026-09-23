@@ -154,6 +154,7 @@ export function writeVerificationJSON(
       const stderrExcerpt = check.exitCode === 0 ? undefined : boundedOutputExcerpt(check.stderr);
       return {
         command: check.command,
+        ...(check.rewrittenCommand ? { rewrittenCommand: check.rewrittenCommand } : {}),
         exitCode: check.exitCode,
         durationMs: check.durationMs,
         verdict: check.failureClass === "command-not-found" || check.failureClass === "shell-parse"
@@ -267,8 +268,12 @@ export function formatEvidenceTable(result: VerificationResult): string {
       check.exitCode === 0 ? "✅ pass" : "❌ fail";
     const duration = formatDurationSecs(check.durationMs);
 
+    const command = check.rewrittenCommand
+      ? `${check.command} (ran as \`${check.rewrittenCommand}\`)`
+      : check.command;
+
     lines.push(
-      `| ${num} | ${check.command} | ${check.exitCode} | ${verdict} | ${duration} |`,
+      `| ${num} | ${command} | ${check.exitCode} | ${verdict} | ${duration} |`,
     );
   }
 

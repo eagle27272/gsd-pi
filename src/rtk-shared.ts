@@ -57,18 +57,25 @@ export function resolveSystemRtkPath(
   return null;
 }
 
+/** Moves an entry already on PATH to the front rather than leaving it where it is. */
 export function prependPathEntry(env: NodeJS.ProcessEnv, entry: string): NodeJS.ProcessEnv {
   const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path") ?? (process.platform === "win32" ? "Path" : "PATH");
-  const currentPath = env[pathKey] ?? "";
-  const parts = currentPath.split(delimiter).filter(Boolean);
-  if (!parts.includes(entry)) {
-    env[pathKey] = [entry, currentPath].filter(Boolean).join(delimiter);
-  }
+  const parts = (env[pathKey] ?? "").split(delimiter).filter(Boolean).filter((part) => part !== entry);
+  env[pathKey] = [entry, ...parts].join(delimiter);
   return env;
 }
 
-export function applyRtkProcessEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  prependPathEntry(env, getManagedRtkDir(env));
+/**
+ * `binDir` must hold the RTK that was actually selected. Rewritten commands run
+ * `rtk …` as a bare word, so whatever PATH resolves first is what executes — pinning
+ * the managed directory here while a different binary was chosen means GSD validates
+ * one RTK and runs another (#247).
+ */
+export function applyRtkProcessEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  binDir: string = getManagedRtkDir(env),
+): NodeJS.ProcessEnv {
+  prependPathEntry(env, binDir);
   env[RTK_TELEMETRY_DISABLED_ENV] = "1";
   return env;
 }

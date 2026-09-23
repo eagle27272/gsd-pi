@@ -85,6 +85,8 @@ export interface TaskPlanFile {
 /** Result of a single verification command execution */
 export interface VerificationCheck {
   command: string; // e.g. "npm run lint"
+  /** What actually ran, recorded only when RTK rewriting changed `command`. */
+  rewrittenCommand?: string;
   exitCode: number; // 0 = pass
   stdout: string;
   stderr: string;
