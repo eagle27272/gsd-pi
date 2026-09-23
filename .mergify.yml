@@ -10,6 +10,7 @@ queue_rules:
       - base = main
       - check-success = @github-actions/fast-gates
       - check-success = @github-actions/build-and-test
+    branch_protection_injection_mode: none
 merge_protections:
   - name: Auto Merge
     if:
