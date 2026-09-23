@@ -208,7 +208,12 @@ function isAnthropicAdaptiveThinkingModel(modelId: string): boolean {
 }
 
 function isAnthropicAlwaysThinkingModel(modelId: string): boolean {
-	return modelId.includes("fable-5") || modelId.includes("fable.5");
+	return (
+		modelId.includes("fable-5") ||
+		modelId.includes("fable.5") ||
+		modelId.includes("opus-5-5") ||
+		modelId.includes("opus-5.5")
+	);
 }
 
 function mergeAnthropicMessagesCompat(model: Model<Api>, compat: AnthropicMessagesCompat): void {
@@ -1456,6 +1461,27 @@ async function generateModels() {
 				output: 25,
 				cacheRead: 0.5,
 				cacheWrite: 6.25,
+			},
+			contextWindow: 1000000,
+			maxTokens: 128000,
+		});
+	}
+
+	// Add missing Claude Opus 5.5 on Vertex until models.dev includes it.
+	if (!allModels.some(m => m.provider === "anthropic-vertex" && m.id === "claude-opus-5-5")) {
+		allModels.push({
+			id: "claude-opus-5-5",
+			name: "Claude Opus 5.5 (Vertex)",
+			api: "anthropic-vertex",
+			baseUrl: VERTEX_BASE_URL,
+			provider: "anthropic-vertex",
+			reasoning: true,
+			input: ["text", "image"],
+			cost: {
+				input: 4,
+				output: 20,
+				cacheRead: 0.2,
+				cacheWrite: 5,
 			},
 			contextWindow: 1000000,
 			maxTokens: 128000,
