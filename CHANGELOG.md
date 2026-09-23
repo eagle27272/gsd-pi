@@ -53,15 +53,23 @@ upstream **v1.18.0**. Later changes are tracked in this repository's git history
 
 ### Fixed
 
-- The verification gate no longer fails clean Go repositories. The pinned RTK, 0.33.1,
-  re-injected a tool's own subcommand while rewriting, so a gate command of `golangci-lint
-  run` reached the binary as `golangci-lint run … run`, where the second `run` parsed as a
-  package path and exited 7. Three changes close it: the pin moves to RTK 0.49.0, which
-  preserves argv; `validateRtkBinary` now accepts the exit code 3 that RTK 0.4x returns from
-  `rewrite`, without which a fixed RTK was rejected and 0.33.1 reinstalled over it; and a
-  managed binary older than the pin is now replaced instead of being kept forever, falling
-  back to the older binary if the upgrade cannot run. Gate failures also name the rewritten
-  command, so a corrupted rewrite is visible rather than being attributed to the project —
+- The verification gate no longer fails clean Go repositories. A gate command of
+  `golangci-lint run` is rewritten to `rtk golangci-lint run`, and RTK 0.33.1's
+  golangci-lint handler appended its own `run` without noticing the caller had already
+  passed one, so the binary ran as `golangci-lint run --out-format=json run`, where the
+  second `run` parsed as a package path and exited 7. Four changes close it:
+  - GSD now puts the RTK it actually selected first on `PATH`. It always prepended the
+    managed directory, so a rewritten `rtk …` resolved to `~/.gsd/agent/bin/rtk` no
+    matter which binary had been validated — GSD checked one RTK and ran another.
+  - The pin moves to RTK 0.49.0, which preserves argv.
+  - `validateRtkBinary` accepts the exit code 3 that RTK 0.4x returns from `rewrite`.
+    Without it a fixed RTK was rejected as broken and 0.33.1 installed over it.
+  - A managed binary older than the pin is replaced rather than kept forever, atomically
+    and only after the replacement validates, falling back to the older binary when the
+    upgrade cannot run.
+
+  Gate failures, the evidence table, and `evidence.json` also name the rewritten command,
+  so a corrupted rewrite is visible instead of being attributed to the project —
   previously the same command re-run by hand (unrewritten) passed
   ([#247](https://github.com/eagle27272/gsd-pi/issues/247)).
 - Slice-parallel worktree setup no longer deletes outside the worktrees container. The

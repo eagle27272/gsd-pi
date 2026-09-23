@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
 import {
+  bootstrapRtk,
   buildRtkEnv,
   compareRtkVersions,
   ensureRtkAvailable,
@@ -19,6 +20,7 @@ import {
   rewriteCommandWithRtk,
   validateRtkBinary,
 } from "../rtk.ts";
+import { getPathValue, resolveSystemRtkPath } from "../rtk-shared.ts";
 import { createFakeRtk } from "./rtk-test-utils.ts";
 import type { FakeRtkResponse } from "./rtk-test-utils.ts";
 
@@ -258,6 +260,42 @@ test("ensureRtkAvailable leaves an up-to-date managed RTK alone", async () => {
     assert.equal(result.reason, undefined);
   } finally {
     managed.cleanup();
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("bootstrapRtk puts the selected RTK first on PATH, not the managed directory", async (t) => {
+  if (process.platform === "win32") {
+    // installFakeRtk writes rtk.cmd; getManagedRtkPath only looks for rtk.exe
+    t.skip("managed-binary discovery is exe-only on Windows");
+    return;
+  }
+
+  const home = mkdtempSync(join(tmpdir(), "gsd-rtk-path-hop-"));
+  const managedDir = join(home, "agent", "bin");
+  const systemDir = join(home, "system-bin");
+  const managed = installFakeRtk(managedDir, { "git status": "rtk git status", "--version": "rtk 0.33.1" });
+  const system = installFakeRtk(systemDir, { "git status": "rtk git status", "--version": "rtk 0.49.0" });
+  const saved = { GSD_HOME: process.env.GSD_HOME, PATH: process.env.PATH, GSD_RTK_PATH: process.env.GSD_RTK_PATH };
+
+  try {
+    process.env.GSD_HOME = home;
+    process.env.PATH = systemDir;
+    delete process.env.GSD_RTK_PATH;
+
+    const result = await bootstrapRtk({ releaseVersion: "0.49.0", allowDownload: false });
+
+    assert.equal(result.binaryPath, system.path);
+    // rewritten commands invoke `rtk` as a bare word, so PATH decides what runs
+    assert.equal(resolveSystemRtkPath(getPathValue(process.env)), system.path);
+    assert.notEqual(resolveSystemRtkPath(getPathValue(process.env)), managed.path);
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    managed.cleanup();
+    system.cleanup();
     rmSync(home, { recursive: true, force: true });
   }
 });

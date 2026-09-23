@@ -250,6 +250,8 @@ async function doRtkBootstrap(): Promise<void> {
   markStartup('bootstrapRtk')
   if (!rtkStatus.available && rtkStatus.supported && rtkStatus.enabled && rtkStatus.reason) {
     process.stderr.write(`[gsd] Warning: RTK unavailable — continuing without shell-command compression (${rtkStatus.reason}).\n`)
+  } else if (rtkStatus.available && rtkStatus.reason) {
+    process.stderr.write(`[gsd] Warning: ${rtkStatus.reason}. Older RTK builds can corrupt rewritten commands.\n`)
   }
 }
 function ensureRtkBootstrap(): Promise<void> {

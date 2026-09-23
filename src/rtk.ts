@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, chmodSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, chmodSync, readdirSync } from "node:fs";
 import { createWriteStream } from "node:fs";
 import { arch as osArch } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { finished } from "node:stream/promises";
 import extractZip from "extract-zip";
@@ -21,8 +21,9 @@ import {
   resolveSystemRtkPath,
 } from "./rtk-shared.js";
 
-// 0.33.1 re-injected a tool's own subcommand during `rewrite`, so `golangci-lint run`
-// reached the binary as `golangci-lint run … run` and failed clean repos (#247).
+// 0.33.1's golangci-lint handler appended its own `run` without noticing the caller had
+// already passed one, so `rtk golangci-lint run` executed the binary as
+// `golangci-lint run --out-format=json run` and failed clean repos (#247).
 const RTK_VERSION = "0.49.0";
 export const GSD_SKIP_RTK_INSTALL_ENV = "GSD_SKIP_RTK_INSTALL";
 export {
@@ -39,6 +40,11 @@ const RTK_REWRITE_TIMEOUT_MS = 5_000;
 /** `rtk rewrite` signals a successful rewrite with 0 on older builds and 3 from 0.4x on. */
 function isRewriteStatus(status: number | null): boolean {
   return status === 0 || status === 3;
+}
+
+/** .cmd/.bat wrappers (Windows installs, and the fake RTK in tests) are not executables. */
+function needsShell(binaryPath: string): boolean {
+  return /\.(cmd|bat)$/i.test(binaryPath);
 }
 
 export interface EnsureRtkOptions {
@@ -110,9 +116,14 @@ function sha256File(path: string): string {
   return hash.digest("hex");
 }
 
+// Upgrades now run on every start that finds an outdated RTK, so a stalled network
+// must not hold the CLI for undici's 300s default.
+const RTK_DOWNLOAD_TIMEOUT_MS = 30_000;
+
 async function downloadToFile(url: string, destination: string): Promise<void> {
   const response = await fetch(url, {
     headers: { "User-Agent": "gsd-pi-rtk" },
+    signal: AbortSignal.timeout(RTK_DOWNLOAD_TIMEOUT_MS),
   });
 
   if (!response.ok) {
@@ -231,7 +242,7 @@ export function rewriteCommandWithRtk(command: string, options: RewriteCommandOp
     stdio: ["ignore", "pipe", "ignore"],
     timeout: options.timeoutMs ?? RTK_REWRITE_TIMEOUT_MS,
     // .cmd/.bat wrappers (used by fake-rtk in tests) require shell:true on Windows
-    shell: /\.(cmd|bat)$/i.test(binaryPath),
+    shell: needsShell(binaryPath),
   });
 
   if (result.error) return command;
@@ -259,6 +270,7 @@ export function validateRtkBinary(binaryPath: string, options: ValidateRtkBinary
     env: buildRtkEnv(options.env ?? process.env),
     stdio: ["ignore", "pipe", "pipe"],
     timeout: RTK_REWRITE_TIMEOUT_MS,
+    shell: needsShell(binaryPath),
   });
 
   if (result.error) return { valid: false, error: result.error.message };
@@ -280,7 +292,10 @@ interface ReadRtkVersionOptions {
   env?: NodeJS.ProcessEnv;
 }
 
-/** Semantic version reported by an RTK binary, or null when it cannot be determined. */
+/**
+ * Semantic version reported by an RTK binary, or null when it cannot be determined.
+ * Any prerelease suffix is dropped, so `0.49.0-rc1` reads as `0.49.0`.
+ */
 export function readRtkVersion(binaryPath: string, options: ReadRtkVersionOptions = {}): string | null {
   const run = options.spawnSyncImpl ?? spawnSync;
   const result = run(binaryPath, ["--version"], {
@@ -288,6 +303,7 @@ export function readRtkVersion(binaryPath: string, options: ReadRtkVersionOption
     env: buildRtkEnv(options.env ?? process.env),
     stdio: ["ignore", "pipe", "pipe"],
     timeout: RTK_REWRITE_TIMEOUT_MS,
+    shell: needsShell(binaryPath),
   });
 
   if (result.error || result.status !== 0) return null;
@@ -385,7 +401,10 @@ export async function ensureRtkAvailable(options: EnsureRtkOptions = {}): Promis
 
   try {
     const checksumsUrl = getChecksumsUrl(version);
-    const checksumsResponse = await fetch(checksumsUrl, { headers: { "User-Agent": "gsd-pi-rtk" } });
+    const checksumsResponse = await fetch(checksumsUrl, {
+      headers: { "User-Agent": "gsd-pi-rtk" },
+      signal: AbortSignal.timeout(RTK_DOWNLOAD_TIMEOUT_MS),
+    });
     if (!checksumsResponse.ok) {
       throw new Error(`failed to fetch RTK checksums (${checksumsResponse.status})`);
     }
@@ -417,10 +436,10 @@ export async function ensureRtkAvailable(options: EnsureRtkOptions = {}): Promis
       throw new Error(`downloaded RTK binary failed validation: ${downloadedValidation.error}`);
     }
 
-    copyFileSync(extractedBinary, managedPath);
-    if (process.platform !== "win32") {
-      chmodSync(managedPath, 0o755);
-    }
+    // tempRoot lives inside targetDir, so this is a same-filesystem atomic swap. A
+    // copy would expose a half-written binary to concurrent slice workers, and would
+    // hit ETXTBSY on Linux when another process is executing the one being replaced.
+    renameSync(extractedBinary, managedPath);
 
     options.log?.(`installed RTK ${version} to ${managedPath}`);
     return { enabled: true, supported: true, available: true, source: "downloaded", binaryPath: managedPath };
@@ -443,7 +462,7 @@ export async function ensureRtkAvailable(options: EnsureRtkOptions = {}): Promis
 
 export async function bootstrapRtk(options: EnsureRtkOptions = {}): Promise<EnsureRtkResult> {
   const result = await ensureRtkAvailable(options);
-  applyRtkProcessEnv(process.env);
+  applyRtkProcessEnv(process.env, result.binaryPath ? dirname(result.binaryPath) : undefined);
   if (result.binaryPath) {
     process.env[GSD_RTK_PATH_ENV] = result.binaryPath;
   }
