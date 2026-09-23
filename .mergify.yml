@@ -13,5 +13,7 @@ queue_rules:
     branch_protection_injection_mode: queue
 merge_protections:
   - name: merge protections
+    if:
+      - base = main
     success_conditions:
       - base = main
