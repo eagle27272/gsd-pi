@@ -141,10 +141,13 @@ export const streamSimpleAnthropicVertex: StreamFunction<"anthropic-vertex", Sim
 
 	const base = buildBaseOptions(model, options, apiKey);
 	if (!options?.reasoning) {
+		// Models without an "off" level reject thinking.type "disabled"; leaving
+		// thinking unset runs them at their default effort instead.
+		const thinkingEnabled = model.thinkingLevelMap?.off === null ? undefined : false;
 		return streamAnthropicVertex(
 			model,
 			context,
-			{ ...base, thinkingEnabled: false } satisfies AnthropicVertexOptions,
+			{ ...base, thinkingEnabled } satisfies AnthropicVertexOptions,
 		);
 	}
 
