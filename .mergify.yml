@@ -3,17 +3,15 @@ merge_queue:
 merge_protections_settings:
   auto_merge_conditions: true
 queue_rules:
-  - name: Auto Queue
+  - name: queue rules
     queue_conditions:
       - base = main
     merge_conditions:
       - base = main
       - check-success = @github-actions/fast-gates
       - check-success = @github-actions/build-and-test
-    branch_protection_injection_mode: none
+    branch_protection_injection_mode: queue
 merge_protections:
-  - name: Auto Merge
-    if:
-      - base = main
+  - name: merge protections
     success_conditions:
-      - check-success = @github-actions/fast-gates
+      - base = main

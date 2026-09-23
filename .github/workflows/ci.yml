@@ -5,6 +5,7 @@ on:
       - main
 jobs:
   fast-gates:
+    if: startsWith(github.head_ref, 'mergify/merge-queue/')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
