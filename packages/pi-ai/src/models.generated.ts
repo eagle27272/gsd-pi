@@ -2078,7 +2078,7 @@ export const MODELS = {
 			baseUrl: "https://api.anthropic.com",
 			compat: {"forceAdaptiveThinking":true},
 			reasoning: true,
-			thinkingLevelMap: {"xhigh":"xhigh"},
+			thinkingLevelMap: {"xhigh":"xhigh","off":null},
 			input: ["text", "image"],
 			cost: {
 				input: 10,
@@ -2314,7 +2314,7 @@ export const MODELS = {
 			baseUrl: "https://{location}-aiplatform.googleapis.com",
 			compat: {"forceAdaptiveThinking":true},
 			reasoning: true,
-			thinkingLevelMap: {"xhigh":"xhigh"},
+			thinkingLevelMap: {"xhigh":"xhigh","off":null},
 			input: ["text", "image"],
 			cost: {
 				input: 10,
@@ -3255,7 +3255,7 @@ export const MODELS = {
 			baseUrl: "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/anthropic",
 			compat: {"forceAdaptiveThinking":true},
 			reasoning: true,
-			thinkingLevelMap: {"xhigh":"xhigh"},
+			thinkingLevelMap: {"xhigh":"xhigh","off":null},
 			input: ["text", "image"],
 			cost: {
 				input: 10,
@@ -9119,7 +9119,7 @@ export const MODELS = {
 			baseUrl: "https://opencode.ai/zen",
 			compat: {"forceAdaptiveThinking":true},
 			reasoning: true,
-			thinkingLevelMap: {"xhigh":"xhigh"},
+			thinkingLevelMap: {"xhigh":"xhigh","off":null},
 			input: ["text", "image"],
 			cost: {
 				input: 10,
@@ -17658,7 +17658,7 @@ export const MODELS = {
 			baseUrl: "https://ai-gateway.vercel.sh",
 			compat: {"forceAdaptiveThinking":true},
 			reasoning: true,
-			thinkingLevelMap: {"xhigh":"xhigh"},
+			thinkingLevelMap: {"xhigh":"xhigh","off":null},
 			input: ["text", "image"],
 			cost: {
 				input: 10,
