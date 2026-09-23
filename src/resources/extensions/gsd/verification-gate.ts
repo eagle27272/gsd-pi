@@ -332,8 +332,14 @@ export function formatFailureContext(result: VerificationResult): string {
       output = output.slice(0, MAX_FAILURE_OUTPUT_PER_CHECK) + "\n…[truncated]";
     }
 
+    // Without this line a corrupted rewrite reads as a project failure, and the
+    // command re-run by hand (unrewritten) passes — see #247.
+    const actuallyRan = check.rewrittenCommand
+      ? `\nRewritten before execution, actually ran: \`${check.rewrittenCommand}\``
+      : "";
+
     blocks.push(
-      `### ❌ \`${check.command}\` (exit code ${check.exitCode})\n\`\`\`${outputLabel}\n${output}\n\`\`\``,
+      `### ❌ \`${check.command}\` (exit code ${check.exitCode})${actuallyRan}\n\`\`\`${outputLabel}\n${output}\n\`\`\``,
     );
   }
 
@@ -958,6 +964,7 @@ export function runVerificationGate(options: RunVerificationGateOptions): Verifi
 
     checks.push({
       command,
+      ...(rewrittenCommand !== command ? { rewrittenCommand } : {}),
       exitCode,
       stdout,
       stderr: truncate(appendStderrWarning(stderr, warning), MAX_OUTPUT_BYTES),

@@ -257,6 +257,7 @@ function handleShellCommand(
   return verificationResult("retry", {
     policy: "shell-command",
     command: verify.command,
+    ...(rewrittenCommand !== verify.command ? { rewrittenCommand } : {}),
     exitCode: result.status,
     signal: result.signal,
     error: result.error?.message ?? null,

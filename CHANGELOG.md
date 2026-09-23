@@ -53,6 +53,17 @@ upstream **v1.18.0**. Later changes are tracked in this repository's git history
 
 ### Fixed
 
+- The verification gate no longer fails clean Go repositories. The pinned RTK, 0.33.1,
+  re-injected a tool's own subcommand while rewriting, so a gate command of `golangci-lint
+  run` reached the binary as `golangci-lint run … run`, where the second `run` parsed as a
+  package path and exited 7. Three changes close it: the pin moves to RTK 0.49.0, which
+  preserves argv; `validateRtkBinary` now accepts the exit code 3 that RTK 0.4x returns from
+  `rewrite`, without which a fixed RTK was rejected and 0.33.1 reinstalled over it; and a
+  managed binary older than the pin is now replaced instead of being kept forever, falling
+  back to the older binary if the upgrade cannot run. Gate failures also name the rewritten
+  command, so a corrupted rewrite is visible rather than being attributed to the project —
+  previously the same command re-run by hand (unrewritten) passed
+  ([#247](https://github.com/eagle27272/gsd-pi/issues/247)).
 - Slice-parallel worktree setup no longer deletes outside the worktrees container. The
   `rmSync` that clears a stale slice worktree ran on a path built by interpolating the
   milestone and slice ids into a worktree name, with no containment check — a `../` in
