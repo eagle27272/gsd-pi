@@ -76,6 +76,22 @@ describe("anthropic-vertex thinking payload", () => {
 		expect(payload.output_config).toEqual({ effort: "low" });
 	});
 
+	it("omits thinking for Opus 5.5 when no reasoning level is requested", async () => {
+		const payload = await captureVertexPayload(getModel("anthropic-vertex", "claude-opus-5-5"));
+
+		expect(payload.thinking).toBeUndefined();
+		expect(payload.output_config).toBeUndefined();
+	});
+
+	it("sends adaptive thinking at low effort for Opus 5.5 at minimal reasoning", async () => {
+		const payload = await captureVertexPayload(getModel("anthropic-vertex", "claude-opus-5-5"), {
+			reasoning: "minimal",
+		});
+
+		expect(payload.thinking).toEqual({ type: "adaptive", display: "summarized" });
+		expect(payload.output_config).toEqual({ effort: "low" });
+	});
+
 	it("still sends thinking.type=disabled for Opus 5 when no reasoning level is requested", async () => {
 		const payload = await captureVertexPayload(getModel("anthropic-vertex", "claude-opus-5"));
 
