@@ -1318,6 +1318,31 @@ test("formatFailureContext: formats a single failure with command, exit code, st
   assert.ok(output.includes("```stderr"), "should have stderr code block");
 });
 
+test("formatFailureContext: names the rewritten command so a corrupted rewrite is not read as a project failure", () => {
+  const result: import("../types.ts").VerificationResult = {
+    passed: false,
+    checks: [
+      {
+        command: "golangci-lint run",
+        rewrittenCommand: "rtk golangci-lint run",
+        exitCode: 7,
+        stdout: "",
+        stderr: "stat /repo/run: directory not found",
+        durationMs: 500,
+      },
+      { command: "npm run lint", exitCode: 1, stdout: "", stderr: "error: unused var", durationMs: 500 },
+    ],
+    discoverySource: "preference",
+    timestamp: Date.now(),
+  };
+
+  const output = formatFailureContext(result);
+
+  assert.match(output, /actually ran: `rtk golangci-lint run`/);
+  // a command RTK left alone must not gain a misleading "actually ran" line
+  assert.equal(output.match(/actually ran/g)?.length, 1);
+});
+
 test("formatFailureContext: preserves stdout-only failure evidence", () => {
   const result: import("../types.ts").VerificationResult = {
     passed: false,

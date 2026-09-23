@@ -5,19 +5,39 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
 import {
+  bootstrapRtk,
   buildRtkEnv,
+  compareRtkVersions,
   ensureRtkAvailable,
   GSD_RTK_DISABLED_ENV,
   GSD_RTK_PATH_ENV,
   GSD_SKIP_RTK_INSTALL_ENV,
   getManagedRtkDir,
   prependPathEntry,
+  readRtkVersion,
   resolveRtkAssetName,
   resolveRtkBinaryPath,
   rewriteCommandWithRtk,
   validateRtkBinary,
 } from "../rtk.ts";
+import { getPathValue, resolveSystemRtkPath } from "../rtk-shared.ts";
 import { createFakeRtk } from "./rtk-test-utils.ts";
+import type { FakeRtkResponse } from "./rtk-test-utils.ts";
+
+/** Install a fake RTK as the managed binary under a throwaway GSD_HOME. */
+function installFakeRtk(
+  dir: string,
+  mapping: Record<string, FakeRtkResponse>,
+): { path: string; cleanup: () => void } {
+  const fake = createFakeRtk(mapping);
+  const binaryPath = join(dir, process.platform === "win32" ? "rtk.cmd" : "rtk");
+  mkdirSync(dir, { recursive: true });
+  copyFileSync(fake.path, binaryPath);
+  if (process.platform !== "win32") {
+    chmodSync(binaryPath, 0o755);
+  }
+  return { path: binaryPath, cleanup: fake.cleanup };
+}
 
 // Store original env values for restoration
 let originalRtkDisabled: string | undefined;
@@ -145,6 +165,139 @@ test("validateRtkBinary surfaces subprocess stderr", () => {
     valid: false,
     error: glibcError,
   });
+});
+
+test("validateRtkBinary accepts the exit-3 rewrite status modern RTK returns", () => {
+  const askSpawn = ((_binary: string, _args: string[]) => ({ status: 3, stdout: "rtk git status", error: undefined })) as typeof import("node:child_process").spawnSync;
+  assert.deepEqual(validateRtkBinary("/tmp/rtk", { spawnSyncImpl: askSpawn }), { valid: true });
+});
+
+test("readRtkVersion parses the version banner and tolerates unreadable binaries", () => {
+  const versionSpawn = ((_binary: string, _args: string[]) => ({ status: 0, stdout: "rtk 0.49.0\n", error: undefined })) as typeof import("node:child_process").spawnSync;
+  assert.equal(readRtkVersion("/tmp/rtk", { spawnSyncImpl: versionSpawn }), "0.49.0");
+
+  const failingSpawn = ((_binary: string, _args: string[]) => ({ status: 1, stdout: "", error: undefined })) as typeof import("node:child_process").spawnSync;
+  assert.equal(readRtkVersion("/tmp/rtk", { spawnSyncImpl: failingSpawn }), null);
+
+  const garbageSpawn = ((_binary: string, _args: string[]) => ({ status: 0, stdout: "not a version", error: undefined })) as typeof import("node:child_process").spawnSync;
+  assert.equal(readRtkVersion("/tmp/rtk", { spawnSyncImpl: garbageSpawn }), null);
+});
+
+test("compareRtkVersions orders releases numerically, not lexically", () => {
+  assert.ok(compareRtkVersions("0.33.1", "0.49.0") < 0);
+  assert.ok(compareRtkVersions("0.49.0", "0.33.1") > 0);
+  assert.equal(compareRtkVersions("0.49.0", "0.49.0"), 0);
+  // lexical ordering would put "0.9.0" above "0.49.0"
+  assert.ok(compareRtkVersions("0.9.0", "0.49.0") < 0);
+  assert.ok(compareRtkVersions("1.0", "0.49.0") > 0);
+});
+
+test("ensureRtkAvailable prefers a current system RTK over an outdated managed one", async () => {
+  const home = mkdtempSync(join(tmpdir(), "gsd-rtk-stale-"));
+  const managedDir = join(home, "agent", "bin");
+  const systemDir = join(home, "system-bin");
+  const managed = installFakeRtk(managedDir, { "git status": "rtk git status", "--version": "rtk 0.33.1" });
+  const system = installFakeRtk(systemDir, { "git status": "rtk git status", "--version": "rtk 0.49.0" });
+
+  try {
+    const result = await ensureRtkAvailable({
+      env: { PATH: process.env.PATH ?? "" },
+      targetDir: managedDir,
+      pathValue: systemDir,
+      releaseVersion: "0.49.0",
+      allowDownload: false,
+    });
+
+    assert.equal(result.available, true);
+    assert.equal(result.source, "system");
+    assert.equal(result.binaryPath, system.path);
+  } finally {
+    managed.cleanup();
+    system.cleanup();
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("ensureRtkAvailable keeps an outdated managed RTK usable when the upgrade cannot run", async () => {
+  const home = mkdtempSync(join(tmpdir(), "gsd-rtk-stale-nodl-"));
+  const managedDir = join(home, "agent", "bin");
+  const managed = installFakeRtk(managedDir, { "git status": "rtk git status", "--version": "rtk 0.33.1" });
+
+  try {
+    const result = await ensureRtkAvailable({
+      env: { PATH: process.env.PATH ?? "" },
+      targetDir: managedDir,
+      pathValue: "",
+      releaseVersion: "0.49.0",
+      allowDownload: false,
+    });
+
+    assert.equal(result.available, true);
+    assert.equal(result.binaryPath, managed.path);
+    assert.match(result.reason ?? "", /0\.33\.1/);
+  } finally {
+    managed.cleanup();
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("ensureRtkAvailable leaves an up-to-date managed RTK alone", async () => {
+  const home = mkdtempSync(join(tmpdir(), "gsd-rtk-current-"));
+  const managedDir = join(home, "agent", "bin");
+  const managed = installFakeRtk(managedDir, { "git status": "rtk git status", "--version": "rtk 0.49.0" });
+
+  try {
+    const result = await ensureRtkAvailable({
+      env: { PATH: process.env.PATH ?? "" },
+      targetDir: managedDir,
+      pathValue: "",
+      releaseVersion: "0.49.0",
+      allowDownload: false,
+    });
+
+    assert.equal(result.source, "managed");
+    assert.equal(result.binaryPath, managed.path);
+    assert.equal(result.reason, undefined);
+  } finally {
+    managed.cleanup();
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("bootstrapRtk puts the selected RTK first on PATH, not the managed directory", async (t) => {
+  if (process.platform === "win32") {
+    // installFakeRtk writes rtk.cmd; getManagedRtkPath only looks for rtk.exe
+    t.skip("managed-binary discovery is exe-only on Windows");
+    return;
+  }
+
+  const home = mkdtempSync(join(tmpdir(), "gsd-rtk-path-hop-"));
+  const managedDir = join(home, "agent", "bin");
+  const systemDir = join(home, "system-bin");
+  const managed = installFakeRtk(managedDir, { "git status": "rtk git status", "--version": "rtk 0.33.1" });
+  const system = installFakeRtk(systemDir, { "git status": "rtk git status", "--version": "rtk 0.49.0" });
+  const saved = { GSD_HOME: process.env.GSD_HOME, PATH: process.env.PATH, GSD_RTK_PATH: process.env.GSD_RTK_PATH };
+
+  try {
+    process.env.GSD_HOME = home;
+    process.env.PATH = systemDir;
+    delete process.env.GSD_RTK_PATH;
+
+    const result = await bootstrapRtk({ releaseVersion: "0.49.0", allowDownload: false });
+
+    assert.equal(result.binaryPath, system.path);
+    // rewritten commands invoke `rtk` as a bare word, so PATH decides what runs
+    assert.equal(resolveSystemRtkPath(getPathValue(process.env)), system.path);
+    assert.notEqual(resolveSystemRtkPath(getPathValue(process.env)), managed.path);
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    managed.cleanup();
+    system.cleanup();
+    rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test("ensureRtkAvailable respects explicit disable and skip flags without downloading", async () => {

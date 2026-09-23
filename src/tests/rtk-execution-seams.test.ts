@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { rewriteCommandWithRtk as rewriteSharedCommandWithRtk } from "../resources/extensions/shared/rtk.ts";
-import { runVerificationGate } from "../resources/extensions/gsd/verification-gate.ts";
+import { formatFailureContext, runVerificationGate } from "../resources/extensions/gsd/verification-gate.ts";
 import { AsyncJobManager } from "../resources/extensions/async-jobs/job-manager.ts";
 import { createAsyncBashTool } from "../resources/extensions/async-jobs/async-bash-tool.ts";
 import { cleanupAll, startProcess } from "../resources/extensions/bg-shell/process-manager.ts";
@@ -151,6 +151,40 @@ test("verification gate executes the RTK-rewritten command", async () => {
     assert.equal(result.passed, true);
     assert.equal(result.checks.length, 1);
     assert.match(result.checks[0]?.stdout ?? "", /rewritten/);
+  });
+});
+
+test("verification gate reports the rewritten command when an RTK rewrite fails the check", async () => {
+  await withFakeRtk({ "golangci-lint run": "exit 7" }, async () => {
+    const result = runVerificationGate({
+      basePath: process.cwd(),
+      unitId: "T-RTK-FAIL",
+      cwd: process.cwd(),
+      preferenceCommands: ["golangci-lint run"],
+    });
+
+    assert.equal(result.passed, false);
+    const check = result.checks[0];
+    assert.equal(check?.command, "golangci-lint run");
+    assert.equal(check?.rewrittenCommand, "exit 7");
+
+    const context = formatFailureContext(result);
+    assert.match(context, /golangci-lint run/);
+    assert.match(context, /exit 7/);
+  });
+});
+
+test("verification gate omits rewrittenCommand when RTK leaves the command alone", async () => {
+  await withFakeRtk({ "true": "true" }, async () => {
+    const result = runVerificationGate({
+      basePath: process.cwd(),
+      unitId: "T-RTK-NOOP",
+      cwd: process.cwd(),
+      preferenceCommands: ["true"],
+    });
+
+    assert.equal(result.passed, true);
+    assert.equal(result.checks[0]?.rewrittenCommand, undefined);
   });
 });
 

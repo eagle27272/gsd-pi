@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, chmodSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, chmodSync, readdirSync } from "node:fs";
 import { createWriteStream } from "node:fs";
 import { arch as osArch } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { finished } from "node:stream/promises";
 import extractZip from "extract-zip";
@@ -21,7 +21,10 @@ import {
   resolveSystemRtkPath,
 } from "./rtk-shared.js";
 
-const RTK_VERSION = "0.33.1";
+// 0.33.1's golangci-lint handler appended its own `run` without noticing the caller had
+// already passed one, so `rtk golangci-lint run` executed the binary as
+// `golangci-lint run --out-format=json run` and failed clean repos (#247).
+const RTK_VERSION = "0.49.0";
 export const GSD_SKIP_RTK_INSTALL_ENV = "GSD_SKIP_RTK_INSTALL";
 export {
   GSD_RTK_DISABLED_ENV,
@@ -33,6 +36,16 @@ export {
 
 const RTK_REPO = "rtk-ai/rtk";
 const RTK_REWRITE_TIMEOUT_MS = 5_000;
+
+/** `rtk rewrite` signals a successful rewrite with 0 on older builds and 3 from 0.4x on. */
+function isRewriteStatus(status: number | null): boolean {
+  return status === 0 || status === 3;
+}
+
+/** .cmd/.bat wrappers (Windows installs, and the fake RTK in tests) are not executables. */
+function needsShell(binaryPath: string): boolean {
+  return /\.(cmd|bat)$/i.test(binaryPath);
+}
 
 export interface EnsureRtkOptions {
   targetDir?: string;
@@ -103,9 +116,14 @@ function sha256File(path: string): string {
   return hash.digest("hex");
 }
 
+// Upgrades now run on every start that finds an outdated RTK, so a stalled network
+// must not hold the CLI for undici's 300s default.
+const RTK_DOWNLOAD_TIMEOUT_MS = 30_000;
+
 async function downloadToFile(url: string, destination: string): Promise<void> {
   const response = await fetch(url, {
     headers: { "User-Agent": "gsd-pi-rtk" },
+    signal: AbortSignal.timeout(RTK_DOWNLOAD_TIMEOUT_MS),
   });
 
   if (!response.ok) {
@@ -224,11 +242,11 @@ export function rewriteCommandWithRtk(command: string, options: RewriteCommandOp
     stdio: ["ignore", "pipe", "ignore"],
     timeout: options.timeoutMs ?? RTK_REWRITE_TIMEOUT_MS,
     // .cmd/.bat wrappers (used by fake-rtk in tests) require shell:true on Windows
-    shell: /\.(cmd|bat)$/i.test(binaryPath),
+    shell: needsShell(binaryPath),
   });
 
   if (result.error) return command;
-  if (result.status !== 0 && result.status !== 3) return command;
+  if (!isRewriteStatus(result.status)) return command;
 
   const rewritten = (result.stdout ?? "").trimEnd();
   return rewritten || command;
@@ -252,10 +270,11 @@ export function validateRtkBinary(binaryPath: string, options: ValidateRtkBinary
     env: buildRtkEnv(options.env ?? process.env),
     stdio: ["ignore", "pipe", "pipe"],
     timeout: RTK_REWRITE_TIMEOUT_MS,
+    shell: needsShell(binaryPath),
   });
 
   if (result.error) return { valid: false, error: result.error.message };
-  if (result.status !== 0) {
+  if (!isRewriteStatus(result.status)) {
     const stderr = trimSpawnOutput(result.stderr);
     return { valid: false, error: stderr || `exit code ${result.status ?? "unknown"}` };
   }
@@ -266,6 +285,48 @@ export function validateRtkBinary(binaryPath: string, options: ValidateRtkBinary
   }
 
   return { valid: true };
+}
+
+interface ReadRtkVersionOptions {
+  spawnSyncImpl?: typeof spawnSync;
+  env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * Semantic version reported by an RTK binary, or null when it cannot be determined.
+ * Any prerelease suffix is dropped, so `0.49.0-rc1` reads as `0.49.0`.
+ */
+export function readRtkVersion(binaryPath: string, options: ReadRtkVersionOptions = {}): string | null {
+  const run = options.spawnSyncImpl ?? spawnSync;
+  const result = run(binaryPath, ["--version"], {
+    encoding: "utf-8",
+    env: buildRtkEnv(options.env ?? process.env),
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: RTK_REWRITE_TIMEOUT_MS,
+    shell: needsShell(binaryPath),
+  });
+
+  if (result.error || result.status !== 0) return null;
+  return trimSpawnOutput(result.stdout).match(/\d+(?:\.\d+)+/)?.[0] ?? null;
+}
+
+/** Negative when `a` predates `b`, positive when it is newer, zero when equivalent. */
+export function compareRtkVersions(a: string, b: string): number {
+  const left = a.split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const right = b.split(".").map((part) => Number.parseInt(part, 10) || 0);
+  for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
+    const diff = (left[i] ?? 0) - (right[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+/**
+ * An unreadable version is treated as current: re-downloading on every startup
+ * would be worse than running a binary that already passes the rewrite contract.
+ */
+function isRtkOutdated(installed: string | null, required: string): boolean {
+  return installed !== null && compareRtkVersions(installed, required) < 0;
 }
 
 export async function ensureRtkAvailable(options: EnsureRtkOptions = {}): Promise<EnsureRtkResult> {
@@ -283,36 +344,51 @@ export async function ensureRtkAvailable(options: EnsureRtkOptions = {}): Promis
 
   const targetDir = options.targetDir ?? getManagedRtkDir(env);
   const managedPath = getManagedRtkPath(process.platform, targetDir);
-
-  if (existsSync(managedPath)) {
-    const managedValidation = validateRtkBinary(managedPath, { env });
-    if (managedValidation.valid) {
-      return { enabled: true, supported: true, available: true, source: "managed", binaryPath: managedPath };
-    }
-  }
-
-  const systemPath = resolveSystemRtkPath(options.pathValue ?? getPathValue(env));
-  if (systemPath) {
-    const systemValidation = validateRtkBinary(systemPath, { env });
-    if (systemValidation.valid) {
-      return { enabled: true, supported: true, available: true, source: "system", binaryPath: systemPath };
-    }
-  }
-
   const version = options.releaseVersion ?? RTK_VERSION;
+
+  // An RTK that works but predates the pin stays in reserve: it is still better
+  // than no RTK at all if the upgrade turns out to be impossible.
+  let outdated: { result: EnsureRtkResult; installed: string | null } | undefined;
+
+  for (const candidate of [
+    { path: existsSync(managedPath) ? managedPath : null, source: "managed" as const },
+    { path: resolveSystemRtkPath(options.pathValue ?? getPathValue(env)), source: "system" as const },
+  ]) {
+    if (!candidate.path) continue;
+    if (!validateRtkBinary(candidate.path, { env }).valid) continue;
+
+    const installed = readRtkVersion(candidate.path, { env });
+    const usable: EnsureRtkResult = {
+      enabled: true,
+      supported: true,
+      available: true,
+      source: candidate.source,
+      binaryPath: candidate.path,
+    };
+    if (!isRtkOutdated(installed, version)) return usable;
+    outdated ??= { result: usable, installed };
+  }
+
+  const keepOutdated = (why: string): EnsureRtkResult | null =>
+    outdated
+      ? { ...outdated.result, reason: `RTK ${outdated.installed} predates ${version}; upgrade skipped: ${why}` }
+      : null;
+
   const assetName = resolveRtkAssetName(process.platform, osArch(), version);
   if (!assetName) {
-    return {
+    const unsupportedReason = `RTK release asset unavailable for ${process.platform}/${osArch()}`;
+    return keepOutdated(unsupportedReason) ?? {
       enabled: true,
       supported: false,
       available: false,
       source: "unsupported",
-      reason: `RTK release asset unavailable for ${process.platform}/${osArch()}`,
+      reason: unsupportedReason,
     };
   }
 
   if (options.allowDownload === false) {
-    return { enabled: true, supported: true, available: false, source: "missing", reason: "download disabled" };
+    return keepOutdated("download disabled")
+      ?? { enabled: true, supported: true, available: false, source: "missing", reason: "download disabled" };
   }
 
   mkdirSync(targetDir, { recursive: true });
@@ -325,7 +401,10 @@ export async function ensureRtkAvailable(options: EnsureRtkOptions = {}): Promis
 
   try {
     const checksumsUrl = getChecksumsUrl(version);
-    const checksumsResponse = await fetch(checksumsUrl, { headers: { "User-Agent": "gsd-pi-rtk" } });
+    const checksumsResponse = await fetch(checksumsUrl, {
+      headers: { "User-Agent": "gsd-pi-rtk" },
+      signal: AbortSignal.timeout(RTK_DOWNLOAD_TIMEOUT_MS),
+    });
     if (!checksumsResponse.ok) {
       throw new Error(`failed to fetch RTK checksums (${checksumsResponse.status})`);
     }
@@ -347,27 +426,32 @@ export async function ensureRtkAvailable(options: EnsureRtkOptions = {}): Promis
       throw new Error(`RTK binary not found in ${assetName}`);
     }
 
-    copyFileSync(extractedBinary, managedPath);
+    // Validate in place before overwriting: a replacement that fails the contract
+    // must not cost us a working older binary already sitting at managedPath.
     if (process.platform !== "win32") {
-      chmodSync(managedPath, 0o755);
+      chmodSync(extractedBinary, 0o755);
     }
-
-    const downloadedValidation = validateRtkBinary(managedPath, { env });
+    const downloadedValidation = validateRtkBinary(extractedBinary, { env });
     if (!downloadedValidation.valid) {
-      rmSync(managedPath, { force: true });
       throw new Error(`downloaded RTK binary failed validation: ${downloadedValidation.error}`);
     }
+
+    // tempRoot lives inside targetDir, so this is a same-filesystem atomic swap. A
+    // copy would expose a half-written binary to concurrent slice workers, and would
+    // hit ETXTBSY on Linux when another process is executing the one being replaced.
+    renameSync(extractedBinary, managedPath);
 
     options.log?.(`installed RTK ${version} to ${managedPath}`);
     return { enabled: true, supported: true, available: true, source: "downloaded", binaryPath: managedPath };
   } catch (error) {
-    options.log?.(`RTK install skipped: ${error instanceof Error ? error.message : String(error)}`);
-    return {
+    const message = error instanceof Error ? error.message : String(error);
+    options.log?.(`RTK install skipped: ${message}`);
+    return keepOutdated(message) ?? {
       enabled: true,
       supported: true,
       available: false,
       source: "missing",
-      reason: error instanceof Error ? error.message : String(error),
+      reason: message,
     };
   } finally {
     // best-effort: on Windows the extracted files can be held briefly by
@@ -378,7 +462,7 @@ export async function ensureRtkAvailable(options: EnsureRtkOptions = {}): Promis
 
 export async function bootstrapRtk(options: EnsureRtkOptions = {}): Promise<EnsureRtkResult> {
   const result = await ensureRtkAvailable(options);
-  applyRtkProcessEnv(process.env);
+  applyRtkProcessEnv(process.env, result.binaryPath ? dirname(result.binaryPath) : undefined);
   if (result.binaryPath) {
     process.env[GSD_RTK_PATH_ENV] = result.binaryPath;
   }
