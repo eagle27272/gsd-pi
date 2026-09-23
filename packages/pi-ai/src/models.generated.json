@@ -2940,6 +2940,33 @@
         "forceAdaptiveThinking": true
       }
     },
+    "claude-opus-5-5": {
+      "id": "claude-opus-5-5",
+      "name": "Claude Opus 5.5 (Vertex)",
+      "api": "anthropic-vertex",
+      "provider": "anthropic-vertex",
+      "baseUrl": "https://{location}-aiplatform.googleapis.com",
+      "reasoning": true,
+      "input": [
+        "text",
+        "image"
+      ],
+      "cost": {
+        "input": 4,
+        "output": 20,
+        "cacheRead": 0.2,
+        "cacheWrite": 5
+      },
+      "contextWindow": 1000000,
+      "maxTokens": 128000,
+      "thinkingLevelMap": {
+        "xhigh": "xhigh",
+        "off": null
+      },
+      "compat": {
+        "forceAdaptiveThinking": true
+      }
+    },
     "claude-opus-4@20250514": {
       "id": "claude-opus-4@20250514",
       "name": "Claude Opus 4 (Vertex)",

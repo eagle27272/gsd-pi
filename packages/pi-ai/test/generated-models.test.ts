@@ -98,6 +98,18 @@ describe("models.generated.ts", () => {
 		}
 	});
 
+	test("includes Claude Opus 5.5 on Vertex with always-on adaptive thinking", () => {
+		const vertex = MODELS["anthropic-vertex"]["claude-opus-5-5"];
+		expect(vertex).toBeDefined();
+		expect(vertex.api).toBe("anthropic-vertex");
+		expect(vertex.name).toBe("Claude Opus 5.5 (Vertex)");
+		expect(vertex.contextWindow).toBe(1_000_000);
+		expect(vertex.maxTokens).toBe(128_000);
+		expect(vertex.cost).toEqual({ input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 });
+		expect(vertex.thinkingLevelMap).toEqual({ xhigh: "xhigh", off: null });
+		expect(vertex.compat).toMatchObject({ forceAdaptiveThinking: true });
+	});
+
 	test("includes Claude Sonnet 5 across Anthropic-backed providers with adaptive thinking", () => {
 		const anthropic = MODELS.anthropic["claude-sonnet-5"];
 		expect(anthropic).toBeDefined();

@@ -8,6 +8,7 @@ const EXPECTED_ADAPTIVE_THINKING_MODELS = [
 	"anthropic-vertex/claude-opus-4-7",
 	"anthropic-vertex/claude-opus-4-8",
 	"anthropic-vertex/claude-opus-5",
+	"anthropic-vertex/claude-opus-5-5",
 	"anthropic-vertex/claude-sonnet-4-6",
 	"anthropic-vertex/claude-sonnet-5",
 	"anthropic/claude-fable-5",
