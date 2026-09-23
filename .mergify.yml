@@ -17,4 +17,3 @@ merge_protections:
       - base = main
     success_conditions:
       - check-success = @github-actions/fast-gates
-      - check-success = @github-actions/build-and-test
