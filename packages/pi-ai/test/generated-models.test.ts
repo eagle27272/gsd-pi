@@ -35,16 +35,32 @@ describe("models.generated.ts", () => {
 		const anthropic = MODELS.anthropic["claude-fable-5"];
 		expect(anthropic).toBeDefined();
 		expect(anthropic.api).toBe("anthropic-messages");
-		expect(anthropic.thinkingLevelMap).toMatchObject({ xhigh: "xhigh" });
+		expect(anthropic.thinkingLevelMap).toEqual({ xhigh: "xhigh", off: null });
 		expect(anthropic.compat).toMatchObject({ forceAdaptiveThinking: true });
 
 		const vertex = MODELS["anthropic-vertex"]["claude-fable-5"];
 		expect(vertex).toBeDefined();
 		expect(vertex.api).toBe("anthropic-vertex");
+		expect(vertex.thinkingLevelMap).toEqual({ xhigh: "xhigh", off: null });
 		expect(vertex.compat).toMatchObject({ forceAdaptiveThinking: true });
 
 		expect(MODELS["amazon-bedrock"]["us.anthropic.claude-fable-5"]).toBeDefined();
 		expect(MODELS.openrouter["anthropic/claude-fable-5"]).toBeDefined();
+	});
+
+	test("marks thinking off unsupported on every Anthropic-API Fable 5 entry", () => {
+		const fableEntries = Object.values(MODELS)
+			.flatMap((providerModels) => Object.values(providerModels))
+			.filter(
+				(model) =>
+					(model.api === "anthropic-messages" || model.api === "anthropic-vertex") &&
+					/fable[-.]5/.test(model.id),
+			);
+
+		expect(fableEntries.length).toBeGreaterThan(0);
+		for (const model of fableEntries) {
+			expect(model.thinkingLevelMap?.off, `${model.provider}/${model.id}`).toBeNull();
+		}
 	});
 
 	test("includes Claude Opus 5 across Anthropic-backed providers with adaptive thinking", () => {

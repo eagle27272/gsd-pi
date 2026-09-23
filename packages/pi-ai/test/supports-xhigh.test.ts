@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getModel, getSupportedThinkingLevels } from "../src/models.ts";
+import { clampThinkingLevel, getModel, getSupportedThinkingLevels } from "../src/models.ts";
 
 describe("getSupportedThinkingLevels", () => {
 	it("includes xhigh for Anthropic Opus 4.6 on anthropic-messages API", () => {
@@ -30,6 +30,24 @@ describe("getSupportedThinkingLevels", () => {
 		const model = getModel("anthropic-vertex", "claude-fable-5");
 		expect(model).toBeDefined();
 		expect(getSupportedThinkingLevels(model!)).toContain("xhigh");
+	});
+
+	it("offers every level except off for Anthropic Fable 5 on anthropic-messages API", () => {
+		const model = getModel("anthropic", "claude-fable-5");
+		expect(model).toBeDefined();
+		expect(getSupportedThinkingLevels(model!)).toEqual(["minimal", "low", "medium", "high", "xhigh"]);
+	});
+
+	it("offers every level except off for Anthropic Fable 5 on the Vertex API", () => {
+		const model = getModel("anthropic-vertex", "claude-fable-5");
+		expect(model).toBeDefined();
+		expect(getSupportedThinkingLevels(model!)).toEqual(["minimal", "low", "medium", "high", "xhigh"]);
+	});
+
+	it("clamps off up to minimal for Anthropic Fable 5", () => {
+		const model = getModel("anthropic", "claude-fable-5");
+		expect(model).toBeDefined();
+		expect(clampThinkingLevel(model!, "off")).toBe("minimal");
 	});
 
 	it("includes xhigh for OpenRouter Fable 5 (openai-completions API)", () => {

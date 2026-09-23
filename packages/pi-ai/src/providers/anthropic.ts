@@ -781,7 +781,10 @@ export const streamSimpleAnthropic: StreamFunction<"anthropic-messages", SimpleS
 
 	const base = buildBaseOptions(model, options, apiKey);
 	if (!options?.reasoning) {
-		return streamAnthropic(model, context, { ...base, thinkingEnabled: false } satisfies AnthropicOptions);
+		// Models without an "off" level reject thinking.type "disabled"; leaving
+		// thinking unset runs them at their default effort instead.
+		const thinkingEnabled = model.thinkingLevelMap?.off === null ? undefined : false;
+		return streamAnthropic(model, context, { ...base, thinkingEnabled } satisfies AnthropicOptions);
 	}
 
 	// For models with adaptive thinking: use an effort level.
