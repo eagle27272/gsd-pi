@@ -207,6 +207,10 @@ function isAnthropicAdaptiveThinkingModel(modelId: string): boolean {
 	);
 }
 
+function isAnthropicAlwaysThinkingModel(modelId: string): boolean {
+	return modelId.includes("fable-5") || modelId.includes("fable.5");
+}
+
 function mergeAnthropicMessagesCompat(model: Model<Api>, compat: AnthropicMessagesCompat): void {
 	model.compat = { ...(model.compat as AnthropicMessagesCompat | undefined), ...compat };
 }
@@ -272,6 +276,14 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 		isAnthropicAdaptiveThinkingModel(model.id)
 	) {
 		mergeAnthropicMessagesCompat(model, { forceAdaptiveThinking: true });
+	}
+	if (
+		(model.api === "anthropic-messages" || model.api === "anthropic-vertex") &&
+		isAnthropicAlwaysThinkingModel(model.id)
+	) {
+		// Rejects thinking.type "disabled" at every effort level; the lowest
+		// available setting is adaptive thinking at low effort.
+		mergeThinkingLevelMap(model, { off: null });
 	}
 	if (
 		(model.provider === "minimax" || model.provider === "minimax-cn") &&

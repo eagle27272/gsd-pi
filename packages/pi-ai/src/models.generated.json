@@ -2686,7 +2686,8 @@
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
-        "xhigh": "xhigh"
+        "xhigh": "xhigh",
+        "off": null
       },
       "compat": {
         "forceAdaptiveThinking": true
@@ -3019,7 +3020,8 @@
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
-        "xhigh": "xhigh"
+        "xhigh": "xhigh",
+        "off": null
       },
       "compat": {
         "forceAdaptiveThinking": true
@@ -5262,7 +5264,8 @@
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
-        "xhigh": "xhigh"
+        "xhigh": "xhigh",
+        "off": null
       },
       "compat": {
         "forceAdaptiveThinking": true
@@ -10612,7 +10615,8 @@
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
-        "xhigh": "xhigh"
+        "xhigh": "xhigh",
+        "off": null
       },
       "compat": {
         "forceAdaptiveThinking": true
@@ -21628,7 +21632,8 @@
       "contextWindow": 1000000,
       "maxTokens": 128000,
       "thinkingLevelMap": {
-        "xhigh": "xhigh"
+        "xhigh": "xhigh",
+        "off": null
       },
       "compat": {
         "forceAdaptiveThinking": true
