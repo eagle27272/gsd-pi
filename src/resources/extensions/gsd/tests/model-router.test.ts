@@ -1545,6 +1545,30 @@ test("claude-opus-5 as ceiling: light task IS downgraded to haiku - routing not 
   assert.equal(result.wasDowngraded, true);
 });
 
+// --- claude-opus-5-5 catalog coverage ---
+// Without its own tier entry, claude-opus-5-5 is an unknown model and the
+// #2192 path bypasses routing when it is the ceiling.
+
+test("claude-opus-5-5 is classified as heavy tier in MODEL_CAPABILITY_TIER", () => {
+  assert.equal(MODEL_CAPABILITY_TIER["claude-opus-5-5"], "heavy");
+});
+
+test("claude-opus-5-5 as ceiling: light task IS downgraded to haiku - routing not bypassed", () => {
+  const config = {
+    ...defaultRoutingConfig(),
+    enabled: true,
+    tier_models: { light: "claude-haiku-4-5", standard: "claude-sonnet-5", heavy: "claude-opus-5-5" },
+  };
+  const result = resolveModelForComplexity(
+    { tier: "light", reason: "test", downgraded: false },
+    { primary: "anthropic-vertex/claude-opus-5-5", fallbacks: [] },
+    config,
+    ["claude-haiku-4-5", "claude-sonnet-5", "anthropic-vertex/claude-opus-5-5"],
+  );
+  assert.equal(result.modelId, "claude-haiku-4-5", "light task with opus-5-5 ceiling must downgrade to haiku");
+  assert.equal(result.wasDowngraded, true);
+});
+
 // ─── Duplicate registry keys (#1707 regression) ──────────────────────────────
 // The Sonnet 5 rollout appended a second "claude-sonnet-5" entry to three
 // registries (MODEL_CAPABILITY_TIER, MODEL_COST_PER_1K_INPUT,
