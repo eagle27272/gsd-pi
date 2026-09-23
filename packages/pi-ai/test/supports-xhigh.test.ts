@@ -50,6 +50,18 @@ describe("getSupportedThinkingLevels", () => {
 		expect(clampThinkingLevel(model!, "off")).toBe("minimal");
 	});
 
+	it("offers every level except off for Opus 5.5 on the Vertex API", () => {
+		const model = getModel("anthropic-vertex", "claude-opus-5-5");
+		expect(model).toBeDefined();
+		expect(getSupportedThinkingLevels(model!)).toEqual(["minimal", "low", "medium", "high", "xhigh"]);
+	});
+
+	it("clamps off up to minimal for Opus 5.5 on the Vertex API", () => {
+		const model = getModel("anthropic-vertex", "claude-opus-5-5");
+		expect(model).toBeDefined();
+		expect(clampThinkingLevel(model!, "off")).toBe("minimal");
+	});
+
 	it("includes xhigh for OpenRouter Fable 5 (openai-completions API)", () => {
 		const model = getModel("openrouter", "anthropic/claude-fable-5");
 		expect(model).toBeDefined();
