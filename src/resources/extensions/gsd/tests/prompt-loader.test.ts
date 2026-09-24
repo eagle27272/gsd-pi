@@ -12,6 +12,7 @@ test("loadPrompt reports missing template variables with balanced braces", () =>
       fastPathInstruction: "",
       inlinedTemplates: "context template",
       commitInstruction: "Do not commit during this test.",
+      milestoneBranchQuestion: "",
     }),
     (error) => {
       assert.ok(error instanceof Error);

@@ -13,6 +13,7 @@ import { loadFile, parseContinue, parseSummary, loadActiveOverrides, formatOverr
 import type { Override } from "./files.js";
 import { extractVerdict } from "./verdict-parser.js";
 import { loadPrompt, inlineTemplate } from "./prompt-loader.js";
+import { renderMilestoneBranchQuestion } from "./milestone-branch-choice.js";
 import {
   resolveMilestoneFile,
   resolveSliceFile,
@@ -1813,6 +1814,7 @@ export async function buildDiscussMilestonePrompt(
     structuredQuestionsAvailable,
     commitInstruction,
     fastPathInstruction,
+    milestoneBranchQuestion: renderMilestoneBranchQuestion(base, mid),
   });
   const promptWithContextMode = includeContextMode
     ? prependContextModeToBlock("discuss-milestone", base, basePrompt)

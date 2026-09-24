@@ -23,6 +23,7 @@ import {
   resolveSliceFile,
   resolveTaskFile,
 } from "../gsd/paths.js";
+import { autoWorktreeBranch } from "../gsd/milestone-branch-registry.js";
 import { debugLog } from "../gsd/debug-logger.js";
 import { loadEffectiveGSDPreferences } from "../gsd/preferences.js";
 
@@ -396,7 +397,7 @@ async function ensureSlicePullRequest(
   if (!plan) return null;
 
   const sliceBranch = sliceRecord.branch || `milestone/${mid}/${sid}`;
-  const milestoneBranch = `milestone/${mid}`;
+  const milestoneBranch = autoWorktreeBranch(basePath, mid);
 
   const branchResult = ghCreateBranch(basePath, sliceBranch, milestoneBranch);
   if (!branchResult.ok) {

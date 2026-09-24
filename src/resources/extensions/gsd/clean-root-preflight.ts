@@ -16,6 +16,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { logWarning } from "./workflow-logger.js";
+import { autoWorktreeBranch } from "./milestone-branch-registry.js";
 import { nativeHasChanges } from "./native-git-bridge.js";
 import { probeGitConflictState } from "./git-conflict-state.js";
 import { gitCapture, gitCaptureBuffer } from "./git-exec.js";
@@ -180,7 +181,7 @@ function listDirtyPaths(basePath: string): string[] | null {
 }
 
 function listMilestoneChangedPaths(basePath: string, milestoneId: string): string[] | null {
-  const milestoneBranch = `milestone/${milestoneId}`;
+  const milestoneBranch = autoWorktreeBranch(basePath, milestoneId);
   try {
     gitText(basePath, ["rev-parse", "--verify", "--quiet", `refs/heads/${milestoneBranch}`]);
   } catch {

@@ -845,6 +845,7 @@ git:
   worktree_post_create: .gsd/hooks/post-worktree-create  # script to run after worktree creation
   auto_pr: false              # create a PR on milestone completion (requires push_branches)
   pr_target_branch: develop   # target branch for auto-created PRs (default: main branch)
+  milestone_branch_format: "<change-type>/<short_snake_case_summary>"  # convention for suggested milestone branch names
 ```
 
 | Field | Type | Default | Description |
@@ -863,6 +864,7 @@ git:
 | `worktree_post_create` | string | (none) | Script to run after worktree creation. Receives `SOURCE_DIR` and `WORKTREE_DIR` env vars |
 | `auto_pr` | boolean | `false` | Automatically create a pull request when a milestone completes. Requires `auto_push: true` and `gh` CLI installed and authenticated |
 | `pr_target_branch` | string | (main branch) | Target branch for auto-created PRs (e.g. `develop`, `qa`). Defaults to `main_branch` if not set |
+| `milestone_branch_format` | string | (none) | Naming convention that gsd follows when it suggests a milestone branch name. gsd asks for the name when `isolation` is `worktree` or `branch` |
 
 #### `git.worktree_post_create`
 

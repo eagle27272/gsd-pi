@@ -105,6 +105,8 @@ The depth verification is the only required confirmation gate. Do not add a seco
 
 **CRITICAL — Non-bypassable gate:** The system blocks CONTEXT.md writes until the user selects the "(Recommended)" option (structured path) or explicitly confirms (plain-text path). If the user declines, cancels, does not respond, or the tool fails, re-ask; never rationalize past the block ("tool not responding, I'll proceed" is forbidden).
 
+{{milestoneBranchQuestion}}
+
 ---
 
 ## Output

@@ -34,6 +34,7 @@ import {
   _runMilestoneMergeOnceWithStashRestore,
   shouldSkipTerminalMilestoneCloseout,
 } from "./closeout.js";
+import { ensureMilestoneBranchName } from "../milestone-branch-choice.js";
 import type { IterationContext, LoopState, PhaseResult, PreDispatchData } from "./types.js";
 
 type BlockerKind = "needs-remediation-dead-end" | "completed-milestone-reopened" | "other";
@@ -442,6 +443,15 @@ export async function runPreDispatch(
     if (mid) {
       if (deps.getIsolationMode(s.basePath) !== "none") {
         deps.captureIntegrationBranch(s.basePath, mid);
+        try {
+          await ensureMilestoneBranchName(ctx, s.canonicalProjectRoot, mid, midTitle);
+        } catch (err) {
+          ctx.ui.notify(
+            `Milestone transition stopped: could not settle the branch name for ${mid} (${err instanceof Error ? err.message : String(err)}).`,
+            "error",
+          );
+          return { action: "break", reason: "milestone-enter-failed" };
+        }
       }
       const enterResult = deps.lifecycle.enterMilestone(mid, ctx.ui);
       if (!enterResult.ok) {

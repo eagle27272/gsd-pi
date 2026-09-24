@@ -15,6 +15,7 @@ import {
 import { setQueuePhaseActive } from "./index.js";
 import { loadFile } from "./files.js";
 import { loadPrompt, inlineTemplate } from "./prompt-loader.js";
+import { renderMilestoneBranchQuestion } from "./milestone-branch-choice.js";
 import { deriveState } from "./state.js";
 import { invalidateAllCaches } from "./cache.js";
 import {
@@ -220,6 +221,7 @@ export async function showQueueAdd(
     existingMilestonesContext: existingContext,
     inlinedTemplates: queueInlinedTemplates,
     commitInstruction: "Do not commit planning artifacts — .gsd/ is managed externally.",
+    milestoneBranchQuestion: renderMilestoneBranchQuestion(basePath),
   });
 
   pi.sendMessage(

@@ -25,7 +25,7 @@
 
 import { appendNotification, type NotifySeverity } from "./notification-store.js";
 import { readStringField } from "./auto-unit-tool-scope.js";
-import { MILESTONE_BRANCH_PREFIX } from "./branch-patterns.js";
+import { isMilestoneBranch } from "./milestone-branch-registry.js";
 import { nativeGetCurrentBranch } from "./native-git-bridge.js";
 import { getIsolationMode } from "./preferences.js";
 import { autoCommitCurrentBranch } from "./worktree.js";
@@ -40,7 +40,7 @@ export type CloseoutOutcome = "complete" | "failed" | "skipped";
  * - `committed`           — work committed on the current branch (expected under
  *                           `isolation: none`, and for task/slice boundaries).
  * - `nothing-to-commit`   — working tree was already clean.
- * - `milestone-branch`    — milestone boundary closed on a `milestone/<MID>`
+ * - `milestone-branch`    — milestone boundary closed on the milestone's
  *                           branch; the merge stays owned by worktree tooling.
  * - `isolation-bypassed`  — milestone boundary closed outside a milestone
  *                           worktree/branch while `git.isolation` is
@@ -112,7 +112,7 @@ export function closeUnit(request: UnitCloseoutRequest, deps: UnitCloseoutDeps =
     const isolation = deps.isolationMode(request.basePath);
     if (isolation !== "none") {
       const branch = deps.currentBranch(request.basePath);
-      if (branch?.startsWith(MILESTONE_BRANCH_PREFIX)) {
+      if (branch && isMilestoneBranch(request.basePath, branch)) {
         gitVerdict = "milestone-branch";
         notice =
           `Milestone ${request.unitId} completed on ${branch}. ` +

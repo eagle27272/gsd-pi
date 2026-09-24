@@ -37,6 +37,7 @@ export {
   claimReservedId,
   findMilestoneIds,
   getReservedMilestoneIds,
+  MILESTONE_ID_RE,
   milestoneIdSort,
   nextMilestoneId,
 } from "./milestone-ids.js";

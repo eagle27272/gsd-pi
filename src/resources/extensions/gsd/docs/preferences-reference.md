@@ -159,6 +159,7 @@ Diagnostics record the file path, scope (global/project), severity (error/warnin
   - `worktree_post_create`: string — script to run after a worktree is created (both auto-mode and manual `/worktree`). Receives `SOURCE_DIR` and `WORKTREE_DIR` as environment variables. Can be absolute or relative to project root. Runs with 30-second timeout. Failure is non-fatal (logged as warning). Default: none.
   - `auto_pr`: boolean — automatically create a GitHub pull request after a milestone branch is merged. Requires `gh` CLI to be installed. Default: `false`.
   - `pr_target_branch`: string — branch to target when `auto_pr` is enabled. Defaults to `main_branch` when omitted.
+  - `milestone_branch_format`: string — the team's naming convention for milestone branches, for example `"<change-type>/<short_snake_case_summary>"`. When `isolation` is `worktree` or `branch`, gsd asks for each milestone's branch name and suggests one that follows this format. Default: none (gsd suggests `milestone/<MID>`).
   - **Deprecated:** `commit_docs` — no longer valid; `.gsd/` is always gitignored. Remove this setting.
   - **Deprecated:** `merge_to_main` — no longer valid; milestone-level merge is always used. Remove this setting.
 

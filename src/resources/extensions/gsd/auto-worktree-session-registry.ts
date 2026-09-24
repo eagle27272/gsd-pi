@@ -6,6 +6,7 @@
 // through the legacy auto-worktree compatibility barrel.
 
 import { nativeGetCurrentBranch } from "./native-git-bridge.js";
+import { isMilestoneBranch } from "./milestone-branch-registry.js";
 import {
   isGsdWorktreePath,
   normalizeWorktreePathForCompare,
@@ -62,7 +63,7 @@ export function getActiveAutoWorktreeContext(basePath: string = process.cwd()): 
   const worktreeName = detectWorktreeName(cwd);
   if (!worktreeName) return null;
   const branch = nativeGetCurrentBranch(cwd);
-  if (!branch.startsWith("milestone/")) return null;
+  if (!isMilestoneBranch(originalBase, branch)) return null;
   return {
     originalBase,
     worktreeName,

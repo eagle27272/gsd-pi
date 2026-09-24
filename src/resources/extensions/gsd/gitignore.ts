@@ -51,6 +51,7 @@ export const GSD_RUNTIME_PATTERNS = [
   ".gsd/doctor-history.jsonl",
   ".gsd/event-log.jsonl",
   ".gsd/DISCUSSION-MANIFEST.json",
+  ".gsd/milestone-branches/",
   ".gsd/milestones/**/*-CONTINUE.md",
   ".gsd/milestones/**/continue.md",
 ] as const;

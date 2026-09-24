@@ -15,6 +15,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import type { Dirent } from "node:fs";
 import { isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 import { gsdRoot } from "./paths.js";
+import { isMilestoneBranch } from "./milestone-branch-registry.js";
 import { gitNoPromptEnv } from "./git-constants.js";
 import { loadEffectiveGSDPreferences } from "./preferences.js";
 import { logWarning } from "./workflow-logger.js";
@@ -88,6 +89,11 @@ export interface GitPreferences {
    *  Default: the main branch (from `main_branch` or auto-detected).
    */
   pr_target_branch?: string;
+  /** Free-text naming convention for milestone branches, for example
+   *  "<change-type>/<short_snake_case_summary>". gsd shows it when it asks
+   *  the user for a milestone's branch name.
+   */
+  milestone_branch_format?: string;
   /** Whether to squash `gsd snapshot:` commits into the next real autoCommit.
    *  Enabled by default. Set to false to keep snapshot commits in history
    *  for forensic inspection.
@@ -385,6 +391,7 @@ export const RUNTIME_EXCLUSION_PATHS: readonly string[] = [
   ".gsd/doctor-history.jsonl",
   ".gsd/event-log.jsonl",
   ".gsd/DISCUSSION-MANIFEST.json",
+  ".gsd/milestone-branches/",
 ];
 
 const runtimeFilesCleanedUpRepos = new Set<string>();
@@ -448,7 +455,7 @@ export function writeIntegrationBranch(
 ): void {
   // Never persist milestone branches as integration targets.
   // They are ephemeral execution branches and can cause self-diff corruption.
-  if (branch.startsWith("milestone/")) return;
+  if (isMilestoneBranch(basePath, branch)) return;
   // Don't record slice branches as the integration target
   if (SLICE_BRANCH_RE.test(branch)) return;
   // Don't record quick-task branches — they are ephemeral and merge back
@@ -523,7 +530,7 @@ export function resolveMilestoneIntegrationBranch(
   }
 
   const normalizedRecordedBranch = normalizeLocalBranchRef(recordedBranch);
-  const isRecordedMilestoneBranch = normalizedRecordedBranch.startsWith("milestone/");
+  const isRecordedMilestoneBranch = isMilestoneBranch(basePath, normalizedRecordedBranch);
   const recordedBranchUsable = !isRecordedMilestoneBranch;
   const recordedBranchStateMessage = isRecordedMilestoneBranch
     ? `Recorded integration branch "${recordedBranch}" for milestone ${milestoneId} is invalid (milestone branches cannot be merge targets)`
@@ -1148,11 +1155,10 @@ export class GitServiceImpl {
 
     const wtName = detectWorktreeName(this.basePath);
     if (wtName) {
-      // Auto-mode worktrees use milestone/<MID> branches (wtName = milestone ID)
+      // Auto-mode worktrees check out their milestone branch (wtName = milestone ID)
       const currentBranch = nativeGetCurrentBranch(this.basePath);
 
-      // If we're on a milestone/<MID> branch, use it (auto-mode case)
-      if (currentBranch.startsWith("milestone/")) {
+      if (isMilestoneBranch(this.basePath, currentBranch)) {
         return currentBranch;
       }
 

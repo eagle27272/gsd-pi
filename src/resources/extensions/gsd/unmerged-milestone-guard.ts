@@ -169,7 +169,7 @@ export async function findUnmergedCompletedMilestones(base: string): Promise<Unm
   for (const milestone of getAllMilestones()) {
     if (!isClosedStatus(milestone.status)) continue;
 
-    const branch = autoWorktreeBranch(milestone.id);
+    const branch = autoWorktreeBranch(base, milestone.id);
     if (!nativeBranchExists(base, branch)) continue;
 
     const integrationBranch = resolveIntegrationBranch(base, milestone.id);

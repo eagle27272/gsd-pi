@@ -173,6 +173,8 @@ The depth verification is the required write-gate. Do **not** add another meta "
 
 **CRITICAL — Non-bypassable gate:** The system blocks CONTEXT.md writes until the user selects "(Recommended)" (structured path) or explicitly confirms (plain-text path). If the user declines, cancels, does not respond, or the tool fails, re-ask; never rationalize past the block.
 
+{{milestoneBranchQuestion}}
+
 ## Wrap-up Gate
 
 Once the depth checklist is satisfied, move directly into requirements and roadmap preview. Do not add a separate "ready to continue?" gate unless the user wants brainstorming or material ambiguity remains.

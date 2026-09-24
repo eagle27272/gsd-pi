@@ -136,6 +136,7 @@ function collectConfigSections(options?: CollectConfigOptions): ConfigSection[] 
     if (g.merge_strategy) gitRows.push({ label: "Merge strategy", value: g.merge_strategy });
     if (g.main_branch) gitRows.push({ label: "Main branch", value: g.main_branch });
     if (g.remote) gitRows.push({ label: "Remote", value: g.remote });
+    if (g.milestone_branch_format) gitRows.push({ label: "Milestone branch format", value: g.milestone_branch_format });
     if (gitRows.length > 0) sections.push({ title: "Git", rows: gitRows });
   }
 

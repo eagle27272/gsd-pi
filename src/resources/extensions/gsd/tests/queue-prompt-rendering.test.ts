@@ -24,6 +24,7 @@ test("queue prompt renders compact draft, verification, and persistence guidance
     existingMilestonesContext: "No existing milestones.",
     commitInstruction: "Commit queued milestone artifacts.",
     inlinedTemplates: "## Context Template\n\nUse standard GSD context.",
+    milestoneBranchQuestion: "",
   });
 
   assert.match(prompt, /Draft Awareness/);

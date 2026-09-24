@@ -84,7 +84,7 @@ export function createAutoWorktree(
     );
   }
 
-  const branch = autoWorktreeBranch(milestoneId);
+  const branch = autoWorktreeBranch(basePath, milestoneId);
 
   // Check if the milestone branch already exists — it survives auto-mode
   // stop/pause and contains committed work from prior sessions. If it exists,

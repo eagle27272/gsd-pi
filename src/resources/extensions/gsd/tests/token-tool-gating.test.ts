@@ -539,6 +539,7 @@ test("discuss-milestone dispatch keeps required headless milestone tools after t
     "gsd_requirement_update",
     "gsd_plan_milestone",
     "gsd_milestone_generate_id",
+    "gsd_milestone_set_branch",
     "gsd_complete_milestone",
     "gsd_task_complete",
   ];
@@ -561,6 +562,7 @@ test("discuss-milestone dispatch keeps required headless milestone tools after t
   assert.ok(activeTools.includes("gsd_requirement_update"));
   assert.ok(activeTools.includes("gsd_plan_milestone"));
   assert.ok(activeTools.includes("gsd_milestone_generate_id"));
+  assert.ok(activeTools.includes("gsd_milestone_set_branch"));
   assert.ok(!activeTools.includes("gsd_task_complete"));
   assert.ok(!activeTools.includes("gsd_complete_milestone"));
 });
