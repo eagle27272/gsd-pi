@@ -6,6 +6,7 @@
 // state, and anchor cwd back at the project root.
 
 import { nativeBranchDelete } from "./native-git-bridge.js";
+import { forgetMilestoneBranchIfDeleted } from "./milestone-branch-registry.js";
 import { clearProjectRootStateFiles } from "./auto-worktree-cleanup.js";
 import { setActiveWorkspace } from "./auto-worktree-session-registry.js";
 import { removeWorktree } from "./worktree-manager.js";
@@ -114,6 +115,8 @@ export function cleanupMergedMilestoneWorktree(
   } catch (err) {
     logWarning("worktree", `git branch-delete failed: ${err instanceof Error ? err.message : String(err)}`);
   }
+
+  forgetMilestoneBranchIfDeleted(projectRoot, milestoneId);
 
   deps.setActiveWorkspace(null);
   deps.nudgeGitBranchCache(previousCwd);

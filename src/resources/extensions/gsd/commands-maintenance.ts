@@ -15,7 +15,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { deriveState } from "./state.js";
 import { canonicalJson, hashValue } from "./canonical-json.js";
 import { nativeBranchList, nativeDetectMainBranch, nativeBranchListMerged, nativeBranchDelete, nativeForEachRef, nativeUpdateRef } from "./native-git-bridge.js";
-import { listMilestoneBranches, milestoneIdForBranch } from "./milestone-branch-registry.js";
+import { forgetMilestoneBranchIfDeleted, listMilestoneBranches, milestoneIdForBranch } from "./milestone-branch-registry.js";
 import { logWarning } from "./workflow-logger.js";
 import {
   preserveProjectionChanges,
@@ -82,6 +82,7 @@ export async function handleCleanupBranches(ctx: ExtensionCommandContext, basePa
       // Milestone is complete per DB — proceed to delete branch
       try {
         nativeBranchDelete(basePath, branch, true);
+        forgetMilestoneBranchIfDeleted(basePath, milestoneId);
         deletedStaleMilestones++;
       } catch (e) { logWarning("command", `stale milestone branch delete failed for ${branch}: ${(e as Error).message}`); }
     }

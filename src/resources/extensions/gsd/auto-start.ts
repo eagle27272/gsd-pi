@@ -37,6 +37,7 @@ import { findMilestoneIds } from "./milestone-ids.js";
 import { milestoneEntryBlockedGuidance } from "./guidance.js";
 import {
   autoWorktreeBranch,
+  forgetMilestoneBranchIfDeleted,
   isMilestoneBranch,
   listMergedMilestoneBranches,
   listMilestoneBranches,
@@ -651,6 +652,7 @@ export function auditOrphanedMilestoneBranches(
       // Branch is merged — safe to delete branch and clean up worktree dir
       try {
         nativeBranchDelete(basePath, branch, true);
+        forgetMilestoneBranchIfDeleted(basePath, milestoneId);
         pushAction({
           kind: "complete-merged-branch",
           milestoneId,

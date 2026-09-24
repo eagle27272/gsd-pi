@@ -18,7 +18,7 @@ import { loadEffectiveGSDPreferences } from "./preferences.js";
 import { listUnmergedGitPaths, probeGitConflictState, reconcileGitConflictsOnSignal } from "./git-conflict-state.js";
 import { resolveWorktreeProjectRoot } from "./worktree-root.js";
 import { enterBranchModeForMilestone } from "./auto-worktree-branch-lifecycle.js";
-import { autoWorktreeBranch, isMilestoneBranch, listMilestoneBranches, milestoneIdForBranch } from "./milestone-branch-registry.js";
+import { autoWorktreeBranch, forgetMilestoneBranchIfDeleted, isMilestoneBranch, listMilestoneBranches, milestoneIdForBranch } from "./milestone-branch-registry.js";
 import { gitSpawn } from "./git-exec.js";
 
 /**
@@ -370,6 +370,7 @@ export async function checkGitHealth(
             if (shouldFix("stale_milestone_branch")) {
               try {
                 nativeBranchDelete(basePath, branch, true);
+                forgetMilestoneBranchIfDeleted(basePath, milestoneId);
                 fixesApplied.push(`deleted stale branch ${branch}`);
               } catch {
                 fixesApplied.push(`failed to delete branch ${branch}`);
