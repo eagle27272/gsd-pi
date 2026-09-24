@@ -14,9 +14,9 @@ GSD supports three isolation modes, configured via the `git.isolation` preferenc
 
 ### Branch names
 
-When `isolation` is `worktree` or `branch`, gsd asks what to call each milestone's branch. It asks during milestone discussion, and again before auto-mode enters a milestone that has no name yet. If you set `git.milestone_branch_format`, gsd suggests a name that follows it. The default is `milestone/<MID>`.
+When `isolation` is `worktree` or `branch`, GSD asks what to call each milestone's branch. It asks during milestone discussion, and again before auto-mode enters a milestone that has no name yet. If you set `git.milestone_branch_format`, GSD suggests a name that follows it. The default is `milestone/<MID>`.
 
-gsd stores the name in `.gsd/milestone-branches/<MID>.json`. The name is fixed once the branch exists. Headless runs never ask and use `milestone/<MID>`.
+GSD stores the name in `.gsd/milestone-branches/<MID>.json`. The name is fixed once the branch exists. Headless runs never ask and use `milestone/<MID>`.
 
 ### `none` Mode (Default)
 

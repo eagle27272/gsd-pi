@@ -443,7 +443,15 @@ export async function runPreDispatch(
     if (mid) {
       if (deps.getIsolationMode(s.basePath) !== "none") {
         deps.captureIntegrationBranch(s.basePath, mid);
-        await ensureMilestoneBranchName(ctx, s.canonicalProjectRoot, mid, midTitle);
+        try {
+          await ensureMilestoneBranchName(ctx, s.canonicalProjectRoot, mid, midTitle);
+        } catch (err) {
+          ctx.ui.notify(
+            `Milestone transition stopped: could not settle the branch name for ${mid} (${err instanceof Error ? err.message : String(err)}).`,
+            "error",
+          );
+          return { action: "break", reason: "milestone-enter-failed" };
+        }
       }
       const enterResult = deps.lifecycle.enterMilestone(mid, ctx.ui);
       if (!enterResult.ok) {

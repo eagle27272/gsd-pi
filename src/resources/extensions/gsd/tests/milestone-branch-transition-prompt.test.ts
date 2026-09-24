@@ -1,6 +1,8 @@
 // gsd-pi — Auto-mode asks for the next milestone's branch name before entering it.
 
 import assert from "node:assert/strict";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
 
 import { AutoSession } from "../auto/session.ts";
@@ -8,7 +10,12 @@ import { runPreDispatch } from "../auto/pre-dispatch.ts";
 import { autoWorktreeBranch, hasMilestoneBranchRecord } from "../milestone-branch-registry.ts";
 import { makeRepo, removeRepo } from "./milestone-branch-fixture.ts";
 
-async function transitionToM002(repo: string, isolation: "none" | "branch", calls: string[]) {
+async function transitionToM002(
+  repo: string,
+  isolation: "none" | "branch",
+  calls: string[],
+  beforeAnswer?: () => void,
+) {
   const s = new AutoSession();
   s.basePath = repo;
   s.originalBasePath = repo;
@@ -32,9 +39,12 @@ async function transitionToM002(repo: string, isolation: "none" | "branch", call
     ctx: {
       hasUI: true,
       ui: {
-        notify() {},
+        notify(message: string) {
+          calls.push(`notify:${message}`);
+        },
         input: async (title: string) => {
           calls.push(`prompt:${title}`);
+          beforeAnswer?.();
           return "feat/billing";
         },
       },
@@ -104,5 +114,26 @@ describe("milestone transition branch prompt", () => {
     await transitionToM002(repo, "none", calls);
     assert.equal(calls.some((call) => call.startsWith("prompt:")), false);
     assert.equal(hasMilestoneBranchRecord(repo, "M002"), false);
+  });
+
+  // A pre-existing (even corrupt) record short-circuits ensureMilestoneBranchName
+  // before it ever reads the file's contents — hasMilestoneBranchRecord only
+  // checks existence, matching the "a record means someone asked" contract. So
+  // the read that can throw only fires if the record appears *during* the
+  // prompt, e.g. a concurrent writer — reproduced here via the input callback.
+  test("stops the transition instead of entering the milestone when the branch record turns unreadable mid-prompt", async () => {
+    const recordDir = join(repo, ".gsd", "milestone-branches");
+
+    const calls: string[] = [];
+    const result = await transitionToM002(repo, "branch", calls, () => {
+      mkdirSync(recordDir, { recursive: true });
+      writeFileSync(join(recordDir, "M002.json"), "{not json");
+    });
+    assert.deepEqual(result, { action: "break", reason: "milestone-enter-failed" });
+    assert.equal(calls.some((call) => call === "enter:M002"), false, `calls: ${calls.join(" > ")}`);
+    assert.ok(
+      calls.some((call) => /could not settle the branch name for M002/.test(call)),
+      `calls: ${calls.join(" > ")}`,
+    );
   });
 });

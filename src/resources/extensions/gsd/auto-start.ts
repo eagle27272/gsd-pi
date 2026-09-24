@@ -1760,7 +1760,16 @@ export async function bootstrapAutoSession(
       }
       if (getIsolationMode(base) !== "none" && !strandedRecoveryAction) {
         const milestoneTitle = state.registry.find((m) => m.id === s.currentMilestoneId)?.title;
-        await ensureMilestoneBranchName(ctx, base, s.currentMilestoneId, milestoneTitle);
+        try {
+          await ensureMilestoneBranchName(ctx, base, s.currentMilestoneId, milestoneTitle);
+        } catch (err) {
+          s.active = false;
+          ctx.ui.notify(
+            `Auto-mode bootstrap stopped: could not settle the branch name for ${s.currentMilestoneId} (${err instanceof Error ? err.message : String(err)}).`,
+            "error",
+          );
+          return releaseLockAndReturn();
+        }
       }
       setActiveMilestoneId(base, s.currentMilestoneId);
     }
