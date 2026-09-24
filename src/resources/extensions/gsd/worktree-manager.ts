@@ -49,7 +49,7 @@ import {
   resolveWorktreeProjectRoot,
 } from "./worktree-root.js";
 import { MILESTONE_ID_RE } from "./milestone-ids.js";
-import { listMilestoneBranches, milestoneIdForBranch } from "./milestone-branch-registry.js";
+import { forgetMilestoneBranchIfDeleted, listMilestoneBranches, milestoneIdForBranch } from "./milestone-branch-registry.js";
 import { canonicalWorktreesDir, worktreePathFor, worktreesDirs } from "./worktree-placement.js";
 import { gitCapture } from "./git-exec.js";
 
@@ -83,6 +83,8 @@ function deleteBranchIfPresent(basePath: string, branch: string, warningPrefix: 
   try {
     if (!nativeBranchExists(basePath, branch)) return;
     nativeBranchDelete(basePath, branch, true);
+    const milestoneId = milestoneIdForBranch(basePath, branch);
+    if (milestoneId) forgetMilestoneBranchIfDeleted(basePath, milestoneId);
   } catch (e) {
     logWarning("worktree", `${warningPrefix}: ${(e as Error).message}`);
   }

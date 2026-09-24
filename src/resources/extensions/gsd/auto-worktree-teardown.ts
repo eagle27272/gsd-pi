@@ -22,7 +22,6 @@ import {
 import { nudgeGitBranchCache } from "./worktree.js";
 import { resolveWorktreeProjectRoot } from "./worktree-root.js";
 import { autoWorktreeBranch } from "./auto-worktree-branch-lifecycle.js";
-import { forgetMilestoneBranchIfDeleted } from "./milestone-branch-registry.js";
 import { setActiveWorkspace } from "./auto-worktree-session-registry.js";
 import {
   _shouldReconcileWorktreeDb,
@@ -153,8 +152,6 @@ export function teardownAutoWorktree(
         clearActiveWorkspace = false;
       }
     }
-
-    if (!preserveBranch) forgetMilestoneBranchIfDeleted(originalBasePath, milestoneId);
 
     // Verify cleanup succeeded — warn if the worktree directory is still on disk.
     // On Windows, bash-based cleanup can silently fail when paths contain

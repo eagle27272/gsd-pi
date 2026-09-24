@@ -52,6 +52,8 @@ export async function handleCleanupBranches(ctx: ExtensionCommandContext, basePa
   for (const branch of mergedNonQuick) {
     try {
       nativeBranchDelete(basePath, branch, false);
+      const milestoneId = milestoneIdForBranch(basePath, branch);
+      if (milestoneId) forgetMilestoneBranchIfDeleted(basePath, milestoneId);
       deletedMerged++;
     } catch (e) {
       logWarning("command", `branch delete failed for ${branch}: ${(e as Error).message}`);

@@ -13,6 +13,7 @@ import { hasMilestoneBranchRecord, writeMilestoneBranchRecord } from "../milesto
 import { discardMilestone } from "../milestone-actions.ts";
 import { _clearGsdRootCache } from "../paths.ts";
 import { _resetServiceCache } from "../worktree.ts";
+import { removeWorktree } from "../worktree-manager.ts";
 import { seedMergeReadyMilestone } from "./merge-ready-fixture.ts";
 import { git, makeRepo, removeRepo } from "./milestone-branch-fixture.ts";
 
@@ -55,6 +56,32 @@ describe("milestone branch record cleanup", () => {
     teardownAutoWorktree(repo, "M001");
     assert.equal(git(repo, "branch", "--list", "feat/add_auth"), "");
     assert.equal(hasMilestoneBranchRecord(repo, "M001"), false);
+  });
+
+  test("removeWorktree deletes an unattached recorded branch and clears its record", () => {
+    const repo = makeRepo("gsd-ms-branch-remove-");
+    repos.push(repo);
+    writeMilestoneBranchRecord(repo, "M001", "feat/add_auth");
+    git(repo, "branch", "feat/add_auth");
+
+    removeWorktree(repo, "M001", { branch: "feat/add_auth", deleteBranch: true });
+
+    assert.equal(git(repo, "branch", "--list", "feat/add_auth"), "");
+    assert.equal(hasMilestoneBranchRecord(repo, "M001"), false);
+  });
+
+  test("removeWorktree deleting an unrecorded branch leaves other records alone", () => {
+    const repo = makeRepo("gsd-ms-branch-remove-unrelated-");
+    repos.push(repo);
+    writeMilestoneBranchRecord(repo, "M001", "feat/add_auth");
+    git(repo, "branch", "feat/add_auth");
+    git(repo, "branch", "feat/unrelated");
+
+    removeWorktree(repo, "X1", { branch: "feat/unrelated", deleteBranch: true });
+
+    assert.equal(git(repo, "branch", "--list", "feat/unrelated"), "");
+    assert.equal(git(repo, "branch", "--list", "feat/add_auth"), "feat/add_auth");
+    assert.equal(hasMilestoneBranchRecord(repo, "M001"), true);
   });
 
   test("discarding a milestone deletes its branch and clears the record", () => {
