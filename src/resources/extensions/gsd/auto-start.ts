@@ -44,6 +44,7 @@ import {
   milestoneIdForBranch,
   milestoneIdFromDefaultBranch,
 } from "./milestone-branch-registry.js";
+import { ensureMilestoneBranchName } from "./milestone-branch-choice.js";
 import { invalidateAllCaches } from "./cache.js";
 import { writeLock, clearLock, readCrashLock, isLockProcessAlive } from "./crash-recovery.js";
 import {
@@ -1756,6 +1757,10 @@ export async function bootstrapAutoSession(
     if (s.currentMilestoneId) {
       if (getIsolationMode(base) !== "none" || strandedRecoveryAction) {
         captureIntegrationBranch(base, s.currentMilestoneId);
+      }
+      if (getIsolationMode(base) !== "none" && !strandedRecoveryAction) {
+        const milestoneTitle = state.registry.find((m) => m.id === s.currentMilestoneId)?.title;
+        await ensureMilestoneBranchName(ctx, base, s.currentMilestoneId, milestoneTitle);
       }
       setActiveMilestoneId(base, s.currentMilestoneId);
     }
