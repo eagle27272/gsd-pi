@@ -29,6 +29,7 @@ test("guided milestone prompt renders compact interview and context guidance", a
     fastPathInstruction: "No fast path in this test.",
     inlinedTemplates: "## Context\n\n## Decisions\n\n## Open Questions",
     commitInstruction: "Do not commit during this test.",
+    milestoneBranchQuestion: "",
   });
 
   assert.match(prompt, /M001 context written/);

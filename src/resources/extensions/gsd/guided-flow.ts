@@ -19,6 +19,7 @@ import { loadFile, saveFile } from "./files.js";
 import { isDbAvailable, getMilestone, getMilestoneSlices } from "./gsd-db.js";
 import { parseRoadmapSlices } from "./roadmap-slices.js";
 import { loadPrompt, inlineTemplate } from "./prompt-loader.js";
+import { renderMilestoneBranchQuestion } from "./milestone-branch-choice.js";
 import {
   buildCompleteSlicePrompt,
   buildDiscussMilestonePrompt,
@@ -913,6 +914,7 @@ function buildDiscussPrompt(nextId: string, preamble: string, basePath: string, 
     inlinedTemplates,
     commitInstruction: buildDocsCommitInstruction(`docs(${nextId}): context, requirements, and roadmap`),
     multiMilestoneCommitInstruction: buildDocsCommitInstruction("docs: project plan — N milestones"),
+    milestoneBranchQuestion: renderMilestoneBranchQuestion(basePath),
   }));
 }
 
