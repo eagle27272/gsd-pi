@@ -24,7 +24,6 @@ import { join, resolve, sep } from "node:path";
 import { GSDError, GSD_PARSE_ERROR, GSD_STALE_STATE, GSD_LOCK_HELD, GSD_GIT_ERROR, GSD_MERGE_CONFLICT } from "./errors.js";
 import { logError, logWarning } from "./workflow-logger.js";
 import {
-  nativeBranchList,
   nativeBranchDelete,
   nativeBranchExists,
   nativeBranchForceReset,
@@ -50,6 +49,7 @@ import {
   resolveWorktreeProjectRoot,
 } from "./worktree-root.js";
 import { MILESTONE_ID_RE } from "./milestone-ids.js";
+import { listMilestoneBranches, milestoneIdForBranch } from "./milestone-branch-registry.js";
 import { canonicalWorktreesDir, worktreePathFor, worktreesDirs } from "./worktree-placement.js";
 import { gitCapture } from "./git-exec.js";
 
@@ -704,9 +704,7 @@ export function listWorktrees(basePath: string): WorktreeInfo[] {
 
     const branchWorktreeName = branch.startsWith("worktree/")
       ? branch.slice("worktree/".length)
-      : branch.startsWith("milestone/")
-        ? branch.slice("milestone/".length)
-        : null;
+      : milestoneIdForBranch(basePath, branch);
 
     const entryVariants = [resolve(entryPath)];
     if (existsSync(entryPath)) {
@@ -751,11 +749,11 @@ export function listWorktrees(basePath: string): WorktreeInfo[] {
       .filter(entry => !entry.isBare && !!entry.branch)
       .map(entry => entry.branch as string),
   );
-  const orphanMilestoneBranches = nativeBranchList(basePath, "milestone/*")
+  const orphanMilestoneBranches = listMilestoneBranches(basePath)
     .filter(branch => !registeredBranches.has(branch));
 
   for (const branch of orphanMilestoneBranches) {
-    const name = branch.slice("milestone/".length);
+    const name = milestoneIdForBranch(basePath, branch);
     if (!name || name.includes("/")) continue;
     worktrees.push({
       name,

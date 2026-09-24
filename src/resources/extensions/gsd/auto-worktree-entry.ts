@@ -12,6 +12,7 @@ import { nativeGetCurrentBranch } from "./native-git-bridge.js";
 import { worktreePath } from "./worktree-manager.js";
 import { worktreePathFor } from "./worktree-placement.js";
 import { nudgeGitBranchCache } from "./worktree.js";
+import { isMilestoneBranch } from "./milestone-branch-registry.js";
 import {
   isGsdWorktreePath,
   normalizeWorktreePathForCompare,
@@ -53,7 +54,7 @@ export function isInAutoWorktree(basePath: string): boolean {
 
   try {
     const branch = nativeGetCurrentBranch(targetPath);
-    return branch.startsWith("milestone/");
+    return isMilestoneBranch(projectRoot, branch);
   } catch {
     return false;
   }

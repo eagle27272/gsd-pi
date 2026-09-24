@@ -13,6 +13,7 @@ import { invalidateAllCaches } from "./cache.js";
 import { isDbAvailable } from "./db/engine.js";
 import { getMilestone } from "./db/queries.js";
 import { MILESTONE_ID_RE } from "./milestone-ids.js";
+import { listMilestoneBranches, milestoneIdForBranch } from "./milestone-branch-registry.js";
 import { mergeCompletedMilestone } from "./parallel-merge.js";
 import { cleanupQuickBranch, detectStrandedQuickBranch, type StrandedQuickBranch } from "./quick.js";
 import { isClosedStatus } from "./status-guards.js";
@@ -21,7 +22,7 @@ import {
   type UnmergedMilestoneBlocker,
 } from "./unmerged-milestone-guard.js";
 import { appendRequirementsBacklogToSummary } from "./requirements-backlog.js";
-import { nativeBranchList, nativeIsRepo } from "./native-git-bridge.js";
+import { nativeIsRepo } from "./native-git-bridge.js";
 import {
   allWorktreesDirs,
   isMilestoneWorktreeResidueCandidate,
@@ -69,9 +70,9 @@ function listMilestoneWorktreeIds(basePath: string): string[] {
 
 function listMilestoneBranchIds(basePath: string): string[] {
   try {
-    return nativeBranchList(basePath, "milestone/*")
-      .map((branch) => branch.replace(/^milestone\//, ""))
-      .filter((id) => MILESTONE_ID_RE.test(id))
+    return listMilestoneBranches(basePath)
+      .map((branch) => milestoneIdForBranch(basePath, branch))
+      .filter((id): id is string => id !== null && MILESTONE_ID_RE.test(id))
       .sort();
   } catch {
     return [];

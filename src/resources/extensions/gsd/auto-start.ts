@@ -35,7 +35,14 @@ import { collectSecretsFromManifest } from "../get-secrets-from-user.js";
 import { gsdRoot, resolveMilestoneFile } from "./paths.js";
 import { findMilestoneIds } from "./milestone-ids.js";
 import { milestoneEntryBlockedGuidance } from "./guidance.js";
-import { autoWorktreeBranch } from "./milestone-branch-registry.js";
+import {
+  autoWorktreeBranch,
+  isMilestoneBranch,
+  listMergedMilestoneBranches,
+  listMilestoneBranches,
+  milestoneIdForBranch,
+  milestoneIdFromDefaultBranch,
+} from "./milestone-branch-registry.js";
 import { invalidateAllCaches } from "./cache.js";
 import { writeLock, clearLock, readCrashLock, isLockProcessAlive } from "./crash-recovery.js";
 import {
@@ -53,7 +60,6 @@ import {
   nativeDetectMainBranch,
   nativeBranchList,
   nativeBranchExists,
-  nativeBranchListMerged,
   nativeBranchDelete,
   nativeWorktreeRemove,
   nativeCommitCountBetween,
@@ -143,9 +149,10 @@ export function resolveIsolationNoneBranchCheckout(
   integrationBranch: string,
   isolationMode: string,
   isRepo: boolean,
+  isMilestone: (branch: string) => boolean = (branch) => milestoneIdFromDefaultBranch(branch) !== null,
 ): string | null {
   if (!isRepo || isolationMode !== "none") return null;
-  return currentBranch.startsWith("milestone/") ? integrationBranch : null;
+  return isMilestone(currentBranch) ? integrationBranch : null;
 }
 
 /**
@@ -511,7 +518,7 @@ export function auditOrphanedMilestoneBranches(
   let milestoneBranches: string[];
   let milestoneBranchListAvailable = true;
   try {
-    milestoneBranches = branchList(basePath, "milestone/*");
+    milestoneBranches = listMilestoneBranches(basePath, { branchList, branchExists });
   } catch {
     milestoneBranchListAvailable = false;
     // git branch list failed — fall through with an empty branch set so the
@@ -530,7 +537,7 @@ export function auditOrphanedMilestoneBranches(
   // Get branches already merged into main
   let mergedBranches: Set<string>;
   try {
-    mergedBranches = new Set(nativeBranchListMerged(basePath, mainBranch, "milestone/*"));
+    mergedBranches = new Set(listMergedMilestoneBranches(basePath, mainBranch));
   } catch {
     mergedBranches = new Set();
   }
@@ -547,7 +554,8 @@ export function auditOrphanedMilestoneBranches(
   }
 
   for (const branch of milestoneBranches) {
-    const milestoneId = branch.replace(/^milestone\//, "");
+    const milestoneId = milestoneIdForBranch(basePath, branch);
+    if (!milestoneId) continue;
     const milestone = getMilestone(milestoneId);
 
     if (!milestone) continue;
@@ -740,7 +748,9 @@ export function auditOrphanedMilestoneBranches(
   // separately — those are handled by the in-progress orphan path above
   // when the branch is present, and by `/gsd doctor` when it is not.
   const seenMilestoneIds = new Set(
-    milestoneBranches.map((branch) => branch.replace(/^milestone\//, "")),
+    milestoneBranches
+      .map((branch) => milestoneIdForBranch(basePath, branch))
+      .filter((id): id is string => id !== null),
   );
   let completedMilestones: readonly { id: string; status: string }[] = [];
   try {
@@ -869,11 +879,12 @@ export function _selectResumableMilestone(
   mergedBranches: ReadonlySet<string>,
   isComplete: (milestoneId: string) => boolean,
   commitsAhead: (branch: string) => number,
+  milestoneIdFor: (branch: string) => string | null = milestoneIdFromDefaultBranch,
 ): string | null {
   const candidates: string[] = [];
   for (const branch of branchNames) {
-    if (!branch.startsWith("milestone/")) continue;
-    const milestoneId = branch.slice("milestone/".length);
+    const milestoneId = milestoneIdFor(branch);
+    if (!milestoneId) continue;
     if (mergedBranches.has(branch)) continue;
     if (!isComplete(milestoneId)) continue;
     let ahead = 0;
@@ -911,7 +922,7 @@ export function findUnmergedCompletedMilestone(
 
   let milestoneBranches: string[];
   try {
-    milestoneBranches = nativeBranchList(basePath, "milestone/*");
+    milestoneBranches = listMilestoneBranches(basePath);
   } catch {
     return null;
   }
@@ -926,9 +937,7 @@ export function findUnmergedCompletedMilestone(
 
   let mergedBranches: Set<string>;
   try {
-    mergedBranches = new Set(
-      nativeBranchListMerged(basePath, mainBranch, "milestone/*"),
-    );
+    mergedBranches = new Set(listMergedMilestoneBranches(basePath, mainBranch));
   } catch {
     mergedBranches = new Set();
   }
@@ -944,6 +953,7 @@ export function findUnmergedCompletedMilestone(
       return isCompletedMilestoneOnDisk(basePath, milestoneId);
     },
     (branch) => nativeCommitCountBetween(basePath, mainBranch, branch),
+    (branch) => milestoneIdForBranch(basePath, branch),
   );
 }
 
@@ -1762,6 +1772,7 @@ export async function bootstrapAutoSession(
           integrationBranch,
           isolationMode,
           isRepo,
+          (branch) => isMilestoneBranch(base, branch),
         );
         if (branchToCheckout) {
           checkoutBranchWithStashGuard(base, branchToCheckout, "isolation-none-recovery");

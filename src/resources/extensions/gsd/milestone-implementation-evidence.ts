@@ -13,6 +13,7 @@ import {
   recordMilestoneCommitAttribution,
 } from "./gsd-db.js";
 import { readIntegrationBranch } from "./git-service.js";
+import { isMilestoneBranch } from "./milestone-branch-registry.js";
 import { logWarning } from "./workflow-logger.js";
 import { resolveTasksDir } from "./paths.js";
 import { gitCapture } from "./git-exec.js";
@@ -57,7 +58,7 @@ export function hasImplementationArtifacts(basePath: string, milestoneId?: strin
       ? readIntegrationBranch(basePath, milestoneId)
       : null;
     let integrationBranch: string;
-    if (recordedIntegrationBranch?.startsWith("milestone/")) {
+    if (recordedIntegrationBranch && isMilestoneBranch(basePath, recordedIntegrationBranch)) {
       integrationBranch = detectMainBranch(basePath);
     } else {
       integrationBranch = recordedIntegrationBranch ?? detectMainBranch(basePath);
