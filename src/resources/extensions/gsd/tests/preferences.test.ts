@@ -69,6 +69,17 @@ test("getIsolationMode defaults to none when preferences have no isolation setti
   assert.equal(expected, "none", "default isolation mode is none");
 });
 
+test("git.milestone_branch_format accepts a non-empty string and rejects other values", () => {
+  const ok = validatePreferences({ git: { milestone_branch_format: "  <type>/<summary>  " } });
+  assert.equal(ok.errors.length, 0);
+  assert.equal(ok.preferences.git?.milestone_branch_format, "<type>/<summary>");
+
+  for (const bad of ["", "   ", 42]) {
+    const { errors } = validatePreferences({ git: { milestone_branch_format: bad as any } });
+    assert.ok(errors.includes("git.milestone_branch_format must be a non-empty string"), `rejects ${JSON.stringify(bad)}`);
+  }
+});
+
 // ── Mode defaults ────────────────────────────────────────────────────────────
 
 test("solo mode applies correct defaults", () => {

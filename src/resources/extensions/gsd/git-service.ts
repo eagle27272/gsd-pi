@@ -88,6 +88,11 @@ export interface GitPreferences {
    *  Default: the main branch (from `main_branch` or auto-detected).
    */
   pr_target_branch?: string;
+  /** Free-text naming convention for milestone branches, for example
+   *  "<change-type>/<short_snake_case_summary>". gsd shows it when it asks
+   *  the user for a milestone's branch name.
+   */
+  milestone_branch_format?: string;
   /** Whether to squash `gsd snapshot:` commits into the next real autoCommit.
    *  Enabled by default. Set to false to keep snapshot commits in history
    *  for forensic inspection.
