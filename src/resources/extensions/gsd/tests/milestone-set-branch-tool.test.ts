@@ -43,6 +43,13 @@ describe("gsd_milestone_set_branch", () => {
     assert.match(result.content[0].text, /Branch name rejected: .*already exists.* Ask the user for another name/);
     assert.equal(hasMilestoneBranchRecord(repo, "M001"), false);
   });
+
+  test("rejects a malformed milestone ID and records nothing", async () => {
+    const result = await setBranchTool().execute("call-3", { milestoneId: "m1", branch: "feat/add_auth" }, undefined, undefined, { cwd: repo });
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /Invalid milestone ID/);
+    assert.equal(hasMilestoneBranchRecord(repo, "m1"), false);
+  });
 });
 
 describe("gsd_milestone_set_branch tool scope", () => {

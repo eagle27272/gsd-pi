@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -148,6 +148,49 @@ describe("milestone branch prompt", () => {
       const block = renderMilestoneBranchQuestion(repo);
       assert.match(block, /team convention `<change-type>\/<summary>`, labeled "\(Recommended\)"/);
       assert.match(block, /must not contain `depth_verification`/);
+    });
+
+    test("does not offer a free-text 'Other' option; ask_user_questions already adds one", () => {
+      writeGitPrefs(repo, ["isolation: branch"]);
+      const block = renderMilestoneBranchQuestion(repo);
+      assert.doesNotMatch(block, /Other — let me type it/);
+    });
+
+    test("a milestone whose recorded branch already exists gets no repeat question", () => {
+      writeGitPrefs(repo, ["isolation: branch"]);
+      writeMilestoneBranchRecord(repo, "M001", "feat/chosen");
+      git(repo, "branch", "feat/chosen");
+      assert.equal(renderMilestoneBranchQuestion(repo, "M001"), "");
+    });
+
+    test("a milestone whose record has no branch yet still gets the question", () => {
+      writeGitPrefs(repo, ["isolation: branch"]);
+      writeMilestoneBranchRecord(repo, "M001", "feat/chosen");
+      assert.notEqual(renderMilestoneBranchQuestion(repo, "M001"), "");
+    });
+
+    test("a milestone with a live default milestone/<MID> branch and no record gets no repeat question", () => {
+      writeGitPrefs(repo, ["isolation: branch"]);
+      git(repo, "branch", "milestone/M001");
+      assert.equal(renderMilestoneBranchQuestion(repo, "M001"), "");
+    });
+
+    test("a milestone with no branch and no ID given still gets the question", () => {
+      writeGitPrefs(repo, ["isolation: branch"]);
+      assert.notEqual(renderMilestoneBranchQuestion(repo), "");
+      assert.notEqual(renderMilestoneBranchQuestion(repo, "M001"), "");
+    });
+
+    test("worktree isolation on an unborn repo renders nothing, matching getIsolationMode", () => {
+      const bareRepo = mkdtempSync(join(tmpdir(), "gsd-ms-branch-unborn-"));
+      try {
+        git(bareRepo, "init", "-q", "-b", "main");
+        mkdirSync(join(bareRepo, ".gsd"), { recursive: true });
+        writeGitPrefs(bareRepo, ["isolation: worktree"]);
+        assert.equal(renderMilestoneBranchQuestion(bareRepo), "");
+      } finally {
+        rmSync(bareRepo, { recursive: true, force: true });
+      }
     });
   });
 });

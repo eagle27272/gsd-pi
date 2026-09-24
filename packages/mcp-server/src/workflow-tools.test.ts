@@ -2989,6 +2989,24 @@ export const executeTaskComplete = async (params, projectDir, invocation) => {
     }
   });
 
+  it("gsd_milestone_set_branch rejects a milestone ID shaped like a path traversal", async () => {
+    const base = makeTmpBase();
+    try {
+      execFileSync("git", ["init", "-q", "-b", "main"], { cwd: base });
+      execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"], { cwd: base });
+      const server = makeMockServer();
+      registerWorkflowTools(server as any);
+      const tool = server.tools.find((t) => t.name === "gsd_milestone_set_branch");
+      assert.ok(tool, "set-branch tool should be registered");
+
+      const rejected = await tool!.handler({ projectDir: base, milestoneId: "../x", branch: "feat/add_auth" });
+      assertToolError(rejected, /Invalid milestone ID/);
+      assert.ok(!existsSync(join(base, ".gsd", "milestone-branches")), "no record directory created");
+    } finally {
+      cleanup(base);
+    }
+  });
+
   it("gsd_plan_task reopens the DB before inline task planning writes", async () => {
     const base = makeTmpBase();
     try {

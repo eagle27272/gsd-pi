@@ -1814,7 +1814,7 @@ export async function buildDiscussMilestonePrompt(
     structuredQuestionsAvailable,
     commitInstruction,
     fastPathInstruction,
-    milestoneBranchQuestion: renderMilestoneBranchQuestion(base),
+    milestoneBranchQuestion: renderMilestoneBranchQuestion(base, mid),
   });
   const promptWithContextMode = includeContextMode
     ? prependContextModeToBlock("discuss-milestone", base, basePrompt)

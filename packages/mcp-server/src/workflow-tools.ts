@@ -56,6 +56,7 @@ interface GsdMcpBridge {
   claimReservedId: (...args: any[]) => any;
   findMilestoneIds: (...args: any[]) => any;
   getReservedMilestoneIds: (...args: any[]) => any;
+  MILESTONE_ID_RE: RegExp;
   milestoneIdSort: (...args: any[]) => any;
   nextMilestoneId: (...args: any[]) => any;
 }
@@ -3211,6 +3212,10 @@ export function registerWorkflowTools(
     milestoneSetBranchParams,
     async (args: Record<string, unknown>) => {
       const { projectDir, milestoneId, branch } = parseWorkflowArgs(milestoneSetBranchSchema, args);
+      const { MILESTONE_ID_RE } = await importBridgeModule();
+      if (!MILESTONE_ID_RE.test(milestoneId)) {
+        throw new Error(`Invalid milestone ID: "${milestoneId}". Use the M### format (e.g. M001).`);
+      }
       await enforceWorkflowWriteGate("gsd_milestone_set_branch", projectDir, milestoneId);
       const { setMilestoneBranch } = await importWorkflowRuntimeModule<{
         setMilestoneBranch: (

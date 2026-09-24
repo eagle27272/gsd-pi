@@ -3,20 +3,23 @@
 // Separate from milestone-branch-registry.ts because validation needs
 // git-service.ts, and git-service.ts imports the registry.
 
-import { QUICK_BRANCH_RE, SLICE_BRANCH_RE, WORKFLOW_BRANCH_RE } from "./branch-patterns.js";
 import { gitCapture } from "./git-exec.js";
 import { readIntegrationBranch, VALID_BRANCH_NAME } from "./git-service.js";
 import {
   defaultMilestoneBranch,
   hasMilestoneBranchRecord,
+  listRecordedMilestoneBranches,
   milestoneIdForBranch,
   milestoneIdFromDefaultBranch,
   readMilestoneBranchRecord,
   writeMilestoneBranchRecord,
 } from "./milestone-branch-registry.js";
 import { nativeBranchExists, nativeBranchList } from "./native-git-bridge.js";
-import { loadEffectiveGSDPreferences } from "./preferences.js";
+import { getIsolationMode, loadEffectiveGSDPreferences } from "./preferences.js";
 import { resolveWorktreeProjectRoot } from "./worktree-root.js";
+
+/** gsd's own branch namespaces: `gsd/` (slice, quick-task, workflow branches) and `worktree/` (manual worktrees). */
+const RESERVED_BRANCH_PREFIXES = ["gsd/", "worktree/"];
 
 export function setMilestoneBranch(
   basePath: string,
@@ -50,15 +53,15 @@ function nameProblem(projectRoot: string, milestoneId: string, branch: string, d
   if (milestoneIdFromDefaultBranch(branch) !== null && branch !== defaultBranch) {
     return `Names under milestone/ are reserved. Use ${defaultBranch} or a name outside milestone/.`;
   }
-  if (SLICE_BRANCH_RE.test(branch) || QUICK_BRANCH_RE.test(branch) || WORKFLOW_BRANCH_RE.test(branch)) {
-    return `"${branch}" matches a pattern that gsd reserves for slice, quick-task, or workflow branches.`;
+  if (RESERVED_BRANCH_PREFIXES.some((prefix) => branch.startsWith(prefix))) {
+    return `"${branch}" starts with a prefix gsd reserves for its own branches.`;
   }
   const owner = milestoneIdForBranch(projectRoot, branch);
   if (owner !== null && owner !== milestoneId) return `Milestone ${owner} already uses "${branch}".`;
   if (branch === readIntegrationBranch(projectRoot, milestoneId)) {
     return `"${branch}" is the integration branch that ${milestoneId} merges into.`;
   }
-  const clash = clashingBranch(projectRoot, branch);
+  const clash = clashingBranch(projectRoot, milestoneId, branch);
   if (clash === branch) return `A branch named "${branch}" already exists.`;
   if (clash) return `"${branch}" clashes with the existing branch "${clash}".`;
   return null;
@@ -79,13 +82,25 @@ function isValidBranchName(branch: string): boolean {
 // Git refuses to create a ref when another ref differs only in case on a
 // case-insensitive file system, or when one name is a directory of the other
 // (`feat` and `feat/x`). Catch both here instead of at milestone entry.
-function clashingBranch(projectRoot: string, branch: string): string | null {
+// Also checks other milestones' recorded names that have no live branch yet:
+// two milestones can otherwise both record clashing names and only the
+// second fails, at entry time instead of at name-choice time.
+function clashingBranch(projectRoot: string, milestoneId: string, branch: string): string | null {
   const wanted = branch.toLowerCase();
-  for (const existing of nativeBranchList(projectRoot)) {
+  const otherRecordedNames = [...listRecordedMilestoneBranches(projectRoot)]
+    .filter(([id]) => id !== milestoneId)
+    .map(([, recorded]) => recorded);
+  for (const existing of [...nativeBranchList(projectRoot), ...otherRecordedNames]) {
     const have = existing.toLowerCase();
     if (have === wanted || have.startsWith(`${wanted}/`) || wanted.startsWith(`${have}/`)) return existing;
   }
   return null;
+}
+
+function hasLiveMilestoneBranch(basePath: string, milestoneId: string): boolean {
+  const projectRoot = resolveWorktreeProjectRoot(basePath);
+  const candidates = [readMilestoneBranchRecord(projectRoot, milestoneId), defaultMilestoneBranch(milestoneId)];
+  return candidates.some((candidate) => candidate !== null && nativeBranchExists(projectRoot, candidate));
 }
 
 interface MilestoneBranchPromptCtx {
@@ -133,18 +148,24 @@ export async function ensureMilestoneBranchName(
   }
 }
 
-/** Empty when git isolation is off, because then gsd creates no milestone branch. */
-export function renderMilestoneBranchQuestion(basePath: string): string {
-  const git = loadEffectiveGSDPreferences(basePath)?.preferences?.git;
-  if (git?.isolation !== "worktree" && git?.isolation !== "branch") return "";
-  const format = git.milestone_branch_format;
+/**
+ * Empty when git isolation is off, because then gsd creates no milestone
+ * branch. Also empty once `milestoneId` already has a live branch (recorded
+ * name or the `milestone/<MID>` default): the name is fixed at that point
+ * (setMilestoneBranch), so asking again only produces answers that get
+ * rejected.
+ */
+export function renderMilestoneBranchQuestion(basePath: string, milestoneId?: string): string {
+  const isolation = getIsolationMode(basePath);
+  if (isolation !== "worktree" && isolation !== "branch") return "";
+  if (milestoneId && hasLiveMilestoneBranch(basePath, milestoneId)) return "";
+  const format = loadEffectiveGSDPreferences(basePath)?.preferences?.git?.milestone_branch_format;
   const options = format
     ? [
         `a name built from the milestone title that follows the team convention \`${format}\`, labeled "(Recommended)"`,
         "`milestone/<ID>`",
-        "\"Other — let me type it\"",
       ]
-    : ["`milestone/<ID>`, labeled \"(Recommended)\"", "\"Other — let me type it\""];
+    : ["`milestone/<ID>`, labeled \"(Recommended)\""];
   return [
     "## Milestone Branch Name",
     "",

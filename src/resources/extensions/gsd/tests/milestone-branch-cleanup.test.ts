@@ -6,6 +6,7 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { enterBranchModeForMilestone } from "../auto-worktree-branch-lifecycle.ts";
 import { createAutoWorktree } from "../auto-worktree-creation.ts";
 import { mergeMilestoneToMain } from "../auto-worktree-merge.ts";
 import { teardownAutoWorktree } from "../auto-worktree-teardown.ts";
@@ -97,6 +98,17 @@ describe("milestone branch record cleanup", () => {
     assert.equal(hasMilestoneBranchRecord(repo, "M001"), false);
   });
 
+  test("discarding a milestone that never started clears its record even though no branch exists", () => {
+    const repo = makeRepo("gsd-ms-branch-discard-unstarted-");
+    repos.push(repo);
+    writeMilestoneBranchRecord(repo, "M001", "feat/add_auth");
+    // Discard needs a milestone gsd recognizes on disk (flat-phase layout).
+    mkdirSync(join(repo, ".gsd", "phases", "01-m001"), { recursive: true });
+
+    assert.equal(discardMilestone(repo, "M001"), true);
+    assert.equal(hasMilestoneBranchRecord(repo, "M001"), false);
+  });
+
   test("merging a milestone deletes its branch and clears the record", () => {
     const repo = realpathSync(mkdtempSync(join(tmpdir(), "gsd-ms-branch-merge-")));
     repos.push(repo);
@@ -135,5 +147,45 @@ describe("milestone branch record cleanup", () => {
     assert.ok(existsSync(join(repo, "feature.txt")), "merged content reached main");
     assert.equal(git(repo, "branch", "--list", "feat/test_milestone"), "");
     assert.equal(hasMilestoneBranchRecord(repo, "M050"), false);
+  });
+
+  test("merging a milestone in branch mode deletes its branch and clears the record", () => {
+    const repo = realpathSync(mkdtempSync(join(tmpdir(), "gsd-ms-branch-merge-")));
+    repos.push(repo);
+    git(repo, "init", "-q", "-b", "main");
+    git(repo, "config", "user.email", "test@example.com");
+    git(repo, "config", "user.name", "test");
+    // Production ignores all of .gsd/; this repo tracks milestone docs like the
+    // stale-worktree-cwd fixture, so only the record directory is ignored.
+    appendFileSync(join(repo, ".git", "info", "exclude"), ".gsd/milestone-branches/\n");
+    writeFileSync(join(repo, "README.md"), "# test\n");
+    const msDir = join(repo, ".gsd", "milestones", "M060");
+    mkdirSync(msDir, { recursive: true });
+    writeFileSync(join(msDir, "CONTEXT.md"), "# M060 Context\n");
+    const roadmap = [
+      "# M060: Test Milestone",
+      "**Vision**: testing",
+      "## Success Criteria",
+      "- It works",
+      "## Slices",
+      "- [x] S01 — First slice",
+    ].join("\n");
+    writeFileSync(join(msDir, "ROADMAP.md"), roadmap);
+    git(repo, "add", ".");
+    git(repo, "commit", "-q", "-m", "init");
+    seedMergeReadyMilestone(repo, "M060");
+    writeMilestoneBranchRecord(repo, "M060", "feat/branch_mode_milestone");
+
+    enterBranchModeForMilestone(repo, "M060");
+    assert.equal(git(repo, "branch", "--show-current"), "feat/branch_mode_milestone");
+    writeFileSync(join(repo, "feature.txt"), "new feature\n");
+    git(repo, "add", "feature.txt");
+    git(repo, "commit", "-q", "-m", "feat: add feature");
+
+    mergeMilestoneToMain(repo, "M060", roadmap);
+
+    assert.ok(existsSync(join(repo, "feature.txt")), "merged content reached main");
+    assert.equal(git(repo, "branch", "--list", "feat/branch_mode_milestone"), "");
+    assert.equal(hasMilestoneBranchRecord(repo, "M060"), false);
   });
 });

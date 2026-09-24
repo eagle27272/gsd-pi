@@ -914,7 +914,7 @@ function buildDiscussPrompt(nextId: string, preamble: string, basePath: string, 
     inlinedTemplates,
     commitInstruction: buildDocsCommitInstruction(`docs(${nextId}): context, requirements, and roadmap`),
     multiMilestoneCommitInstruction: buildDocsCommitInstruction("docs: project plan — N milestones"),
-    milestoneBranchQuestion: renderMilestoneBranchQuestion(basePath),
+    milestoneBranchQuestion: renderMilestoneBranchQuestion(basePath, nextId),
   }));
 }
 

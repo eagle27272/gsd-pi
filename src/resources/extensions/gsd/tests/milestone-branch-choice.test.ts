@@ -63,8 +63,8 @@ describe("setMilestoneBranch", () => {
     assert.match(reasonOf(setMilestoneBranch(repo, "M001", "milestone/M002")), /reserved/);
   });
 
-  test("rejects names reserved for gsd slice, quick-task, and workflow branches", () => {
-    for (const name of ["gsd/M001/S01", "gsd/quick/1-fix", "gsd/hotfix/login"]) {
+  test("rejects names under the gsd/ and worktree/ reserved prefixes", () => {
+    for (const name of ["gsd/M001/S01", "gsd/quick/1-fix", "gsd/hotfix/login", "gsd/foo", "worktree/foo"]) {
       assert.match(reasonOf(setMilestoneBranch(repo, "M001", name)), /reserves/);
     }
   });
@@ -72,6 +72,12 @@ describe("setMilestoneBranch", () => {
   test("rejects a name another milestone recorded", () => {
     writeMilestoneBranchRecord(repo, "M002", "feat/shared");
     assert.match(reasonOf(setMilestoneBranch(repo, "M001", "feat/shared")), /Milestone M002 already uses/);
+  });
+
+  test("rejects a name that clashes with another milestone's recorded name, by path or by case", () => {
+    writeMilestoneBranchRecord(repo, "M002", "feat/x");
+    assert.match(reasonOf(setMilestoneBranch(repo, "M001", "feat/x/y")), /clashes with the existing branch "feat\/x"/);
+    assert.match(reasonOf(setMilestoneBranch(repo, "M001", "FEAT/X")), /clashes with the existing branch "feat\/x"/);
   });
 
   test("rejects the milestone's integration branch", () => {

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, test } from "node:test";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { GSDError } from "../errors.ts";
 import {
   autoWorktreeBranch,
   forgetMilestoneBranchIfDeleted,
@@ -80,6 +81,15 @@ describe("milestone branch registry", () => {
     writeFileSync(join(repo, ".gsd", "milestone-branches", "M001.json"), "{not json");
     assert.throws(() => autoWorktreeBranch(repo, "M001"), /M001\.json/);
     assert.equal(milestoneIdForBranch(repo, "feat/anything"), null);
+  });
+
+  test("writeMilestoneBranchRecord rejects a traversal-shaped milestone ID and writes nothing", () => {
+    for (const bad of ["../escaped", "../../escaped", "a/b", "a\\b", "..", ".", ""]) {
+      assert.throws(() => writeMilestoneBranchRecord(repo, bad, "x"), GSDError);
+    }
+    assert.equal(existsSync(join(repo, ".gsd", "escaped.json")), false);
+    assert.equal(existsSync(join(repo, "escaped.json")), false);
+    assert.equal(existsSync(join(repo, "..", "escaped.json")), false);
   });
 
   test("forgetMilestoneBranchIfDeleted keeps the record until the branch is gone", () => {

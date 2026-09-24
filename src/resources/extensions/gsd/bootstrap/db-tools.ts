@@ -7,6 +7,7 @@ import { SUMMARY_SAVE_CONTENT_MAX_LENGTH } from "@opengsd/contracts";
 import { existsSync } from "node:fs";
 import { getErrorMessage } from "../error-utils.js";
 import { piExecutionInvocation } from "../execution-invocation.js";
+import { MILESTONE_ID_RE } from "../milestone-ids.js";
 import { piPlanningInvocation } from "../planning-invocation.js";
 import { loadEffectiveGSDPreferences } from "../preferences.js";
 import type { DbAdapter } from "../db-adapter.js";
@@ -948,6 +949,18 @@ export function registerDbTools(pi: ExtensionAPI): void {
 	) => {
 		const operation = "set_milestone_branch";
 		try {
+			if (!MILESTONE_ID_RE.test(params.milestoneId)) {
+				return {
+					content: [
+						{
+							type: "text" as const,
+							text: `Invalid milestone ID: "${params.milestoneId}". Use the M### format (e.g. M001).`,
+						},
+					],
+					details: { operation, milestoneId: params.milestoneId, error: "invalid_milestone_id" } as any,
+					isError: true,
+				};
+			}
 			const basePath = resolveCtxCwd(_ctx);
 			const { setMilestoneBranch } = await import("../milestone-branch-choice.js");
 			const result = setMilestoneBranch(basePath, params.milestoneId, params.branch);

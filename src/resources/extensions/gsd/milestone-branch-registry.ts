@@ -23,7 +23,11 @@ function recordDir(basePath: string): string {
   return join(gsdRoot(resolveWorktreeProjectRoot(basePath)), RECORD_DIR_NAME);
 }
 
+/** Rejects traversal-shaped IDs before they reach a path builder. Inline, not shared with worktree-manager: this module must stay a leaf. */
 function recordPath(basePath: string, milestoneId: string): string {
+  if (milestoneId === "" || milestoneId === "." || /[/\\]|\.\./.test(milestoneId)) {
+    throw new GSDError(GSD_PARSE_ERROR, `Milestone ID "${milestoneId}" is not a valid path segment.`);
+  }
   return join(recordDir(basePath), `${milestoneId}${RECORD_SUFFIX}`);
 }
 
@@ -91,6 +95,11 @@ export function writeMilestoneBranchRecord(basePath: string, milestoneId: string
 
 export function hasMilestoneBranchRecord(basePath: string, milestoneId: string): boolean {
   return existsSync(recordPath(basePath, milestoneId));
+}
+
+/** Recorded names by milestone ID, including milestones whose branch does not exist yet. */
+export function listRecordedMilestoneBranches(basePath: string): ReadonlyMap<string, string> {
+  return readAllRecords(basePath);
 }
 
 /**
