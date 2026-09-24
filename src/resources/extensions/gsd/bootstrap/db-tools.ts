@@ -937,6 +937,86 @@ export function registerDbTools(pi: ExtensionAPI): void {
 
 	registerWorkflowTool(pi, milestoneGenerateIdTool);
 
+	// ─── gsd_milestone_set_branch ──────────────────────────────────────────
+
+	const milestoneSetBranchExecute = async (
+		_toolCallId: string,
+		params: { milestoneId: string; branch: string },
+		_signal: AbortSignal | undefined,
+		_onUpdate: unknown,
+		_ctx: unknown,
+	) => {
+		const operation = "set_milestone_branch";
+		try {
+			const basePath = resolveCtxCwd(_ctx);
+			const { setMilestoneBranch } = await import("../milestone-branch-choice.js");
+			const result = setMilestoneBranch(basePath, params.milestoneId, params.branch);
+			if (!result.ok) {
+				return {
+					content: [
+						{
+							type: "text" as const,
+							text: `Branch name rejected: ${result.reason} Ask the user for another name.`,
+						},
+					],
+					details: { operation, milestoneId: params.milestoneId, error: result.reason } as any,
+					isError: true,
+				};
+			}
+			return {
+				content: [
+					{
+						type: "text" as const,
+						text: `Recorded branch ${result.branch} for ${params.milestoneId}.`,
+					},
+				],
+				details: { operation, milestoneId: params.milestoneId, branch: result.branch } as any,
+			};
+		} catch (err) {
+			const msg = getErrorMessage(err);
+			return {
+				content: [{ type: "text" as const, text: `Error recording milestone branch: ${msg}` }],
+				details: { operation, error: msg } as any,
+				isError: true,
+			};
+		}
+	};
+
+	const milestoneSetBranchTool = {
+		name: "gsd_milestone_set_branch",
+		label: "Set Milestone Branch",
+		description:
+			"Record the git branch name the user chose for a milestone. gsd creates the milestone's working branch under this name. " +
+			"Returns an error with the reason when the name is not allowed.",
+		promptSnippet: "Record the user's chosen git branch name for a milestone",
+		promptGuidelines: [
+			"Call gsd_milestone_set_branch only with a name the user chose or accepted in this conversation.",
+			"Call gsd_milestone_set_branch after the milestone ID exists and before saving the milestone CONTEXT.",
+			"If gsd_milestone_set_branch returns an error, show the reason to the user and ask for another name.",
+		],
+		parameters: Type.Object({
+			milestoneId: Type.String({ description: "Milestone ID (e.g. M001)" }),
+			branch: Type.String({ description: "Git branch name the user chose, e.g. feat/add_auth" }),
+		}),
+		execute: milestoneSetBranchExecute,
+		renderCall(args: any, theme: any) {
+			return new Text(
+				theme.fg("toolTitle", theme.bold(`milestone_set_branch ${args?.milestoneId ?? ""}`)),
+				0,
+				0,
+			);
+		},
+		renderResult(result: any, _options: any, theme: any) {
+			const d = readDetails(result);
+			if (result.isError || d?.error) {
+				return new Text(theme.fg("error", formatToolErrorText(result, d)), 0, 0);
+			}
+			return new Text(theme.fg("success", `Branch ${d?.branch ?? ""}`), 0, 0);
+		},
+	};
+
+	registerWorkflowTool(pi, milestoneSetBranchTool);
+
 	// ─── gsd_plan_milestone (gsd_milestone_plan alias) ─────────────────────
 
 	const planMilestoneExecute = async (

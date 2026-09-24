@@ -49,6 +49,14 @@ export const WORKFLOW_TOOL_CONTRACTS = [
 		auditEvent: "workflow.milestone.generate_id",
 	},
 	{
+		canonicalName: "gsd_milestone_set_branch",
+		aliases: [],
+		schemaId: "workflow.milestone.set_branch",
+		executorId: "executeMilestoneSetBranch",
+		writePolicy: "write",
+		auditEvent: "workflow.milestone.set_branch",
+	},
+	{
 		canonicalName: "gsd_plan_milestone",
 		aliases: ["gsd_milestone_plan"],
 		schemaId: "workflow.milestone.plan",
