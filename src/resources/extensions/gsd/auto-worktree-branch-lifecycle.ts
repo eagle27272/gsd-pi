@@ -8,6 +8,7 @@ import { GSDError, GSD_GIT_ERROR } from "./errors.js";
 import { readIntegrationBranch, runGit } from "./git-service.js";
 import { loadEffectiveGSDPreferences } from "./preferences.js";
 import { debugLog } from "./debug-logger.js";
+import { autoWorktreeBranch } from "./milestone-branch-registry.js";
 import { checkoutBranchWithStashGuard } from "./worktree-git-recovery.js";
 import {
   nativeAddAll,
@@ -23,10 +24,7 @@ import {
   nativeWorktreeList,
 } from "./native-git-bridge.js";
 
-/** Returns the git branch name for a milestone worktree (`milestone/<MID>`). */
-export function autoWorktreeBranch(milestoneId: string): string {
-  return `milestone/${milestoneId}`;
-}
+export { autoWorktreeBranch };
 
 export function _resolveAutoWorktreeStartPoint(
   integrationBranch: string | null | undefined,
@@ -45,7 +43,7 @@ export function _resolveAutoWorktreeStartPoint(
 /**
  * Enter branch isolation mode for a milestone.
  *
- * Creates `milestone/<MID>` from the integration branch (if it doesn't
+ * Creates the milestone branch from the integration branch (if it doesn't
  * exist yet) and checks out to it. No worktree directory is created — the
  * project root is the working copy; only HEAD changes.
  * An unborn repository first receives a baseline commit on its integration
@@ -60,7 +58,7 @@ export function enterBranchModeForMilestone(
   basePath: string,
   milestoneId: string,
 ): void {
-  const branch = autoWorktreeBranch(milestoneId);
+  const branch = autoWorktreeBranch(basePath, milestoneId);
 
   if (!nativeHasCommittedHead(basePath)) {
     const currentBranch = runGit(

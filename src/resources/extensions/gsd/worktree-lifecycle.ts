@@ -531,10 +531,25 @@ function lifecycleIsInAutoWorktree(
 
 function lifecycleAutoWorktreeBranch(
   deps: WorktreeLifecycleDeps,
+  basePath: string,
   milestoneId: string,
 ): string {
   return primitiveOverrides(deps).autoWorktreeBranch?.(milestoneId) ??
-    autoWorktreeBranch(milestoneId);
+    autoWorktreeBranch(basePath, milestoneId);
+}
+
+// Error messages must not throw a second time when the branch record itself
+// is what failed to read.
+function lifecycleMilestoneBranchLabel(
+  deps: WorktreeLifecycleDeps,
+  basePath: string,
+  milestoneId: string,
+): string {
+  try {
+    return lifecycleAutoWorktreeBranch(deps, basePath, milestoneId);
+  } catch {
+    return `the recorded branch for ${milestoneId}`;
+  }
 }
 
 /**
@@ -791,10 +806,11 @@ export function _enterMilestoneCore(
         rebuildGitService(s, deps);
         invalidateAllCaches();
         if (mode === "branch") s.isolationDegraded = false;
+        const branch = lifecycleAutoWorktreeBranch(deps, basePath, milestoneId);
         if (mode === "worktree") {
-          ctx.notify(isolationDegradedFallbackGuidance(milestoneId), "warning");
+          ctx.notify(isolationDegradedFallbackGuidance(milestoneId, branch), "warning");
         } else {
-          ctx.notify(`Recovered branch isolation on milestone/${milestoneId}.`, "info");
+          ctx.notify(`Recovered branch isolation on ${branch}.`, "info");
         }
         return { ok: true, mode: "branch", path: basePath };
       } catch (err) {
@@ -878,7 +894,7 @@ export function _enterMilestoneCore(
         eventType: "worktree-skip",
         data: { milestoneId, reason: "branch-mode-no-worktree" },
       });
-      ctx.notify(`Switched to branch milestone/${milestoneId}.`, "info");
+      ctx.notify(`Switched to branch ${lifecycleAutoWorktreeBranch(deps, basePath, milestoneId)}.`, "info");
       return { ok: true, mode: "branch", path: basePath };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -1250,7 +1266,7 @@ function _mergeBranchModeImpl(
   const { worktreeBasePath, milestoneId, notify } = mctx;
   try {
     const currentBranch = currentLifecycleBranch(deps, worktreeBasePath);
-    const milestoneBranch = lifecycleAutoWorktreeBranch(deps, milestoneId);
+    const milestoneBranch = lifecycleAutoWorktreeBranch(deps, mctx.originalBasePath, milestoneId);
 
     if (currentBranch !== milestoneBranch) {
       // #5538-followup: previous behaviour was to silently `return false`
@@ -1750,7 +1766,7 @@ export class WorktreeLifecycle {
         return;
       }
       ctx.notify(
-        `Auto-commit before exiting ${milestoneId} failed: ${errorText}. Branch ${lifecycleAutoWorktreeBranch(this.deps, milestoneId)} is preserved for recovery.`,
+        `Auto-commit before exiting ${milestoneId} failed: ${errorText}. Branch ${lifecycleMilestoneBranchLabel(this.deps, this.s.originalBasePath || this.s.basePath, milestoneId)} is preserved for recovery.`,
         "warning",
       );
     }
@@ -1767,7 +1783,7 @@ export class WorktreeLifecycle {
           error: err instanceof Error ? err.message : String(err),
         });
         ctx.notify(
-          `Could not leave milestone worktree before cleanup: ${err instanceof Error ? err.message : String(err)}. Branch ${lifecycleAutoWorktreeBranch(this.deps, milestoneId)} is preserved for recovery.`,
+          `Could not leave milestone worktree before cleanup: ${err instanceof Error ? err.message : String(err)}. Branch ${lifecycleMilestoneBranchLabel(this.deps, this.s.originalBasePath || this.s.basePath, milestoneId)} is preserved for recovery.`,
           "warning",
         );
       }
@@ -1788,7 +1804,7 @@ export class WorktreeLifecycle {
         error: err instanceof Error ? err.message : String(err),
       });
       ctx.notify(
-        `Worktree cleanup failed for ${milestoneId}: ${err instanceof Error ? err.message : String(err)}. Branch ${lifecycleAutoWorktreeBranch(this.deps, milestoneId)} is preserved for recovery.`,
+        `Worktree cleanup failed for ${milestoneId}: ${err instanceof Error ? err.message : String(err)}. Branch ${lifecycleMilestoneBranchLabel(this.deps, this.s.originalBasePath || this.s.basePath, milestoneId)} is preserved for recovery.`,
         "warning",
       );
     }
@@ -1986,7 +2002,7 @@ export class WorktreeLifecycle {
       invalidateAllCaches();
       this.s.isolationDegraded = true;
       ctx.notify(
-        `Switched to branch milestone/${milestoneId} (isolation degraded).`,
+        `Switched to branch ${lifecycleAutoWorktreeBranch(this.deps, basePath, milestoneId)} (isolation degraded).`,
         "info",
       );
     } catch (err) {

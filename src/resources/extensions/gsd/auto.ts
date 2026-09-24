@@ -2448,7 +2448,7 @@ function buildLoopDeps(pi: ExtensionAPI, ctx: ExtensionContext): LoopDeps {
     captureIntegrationBranch,
     getIsolationMode,
     getCurrentBranch,
-    autoWorktreeBranch,
+    autoWorktreeBranch: (milestoneId: string) => autoWorktreeBranch(s.canonicalProjectRoot, milestoneId),
     resolveMilestoneFile,
     reconcileMergeState,
 

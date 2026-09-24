@@ -28,6 +28,7 @@ import {
   updateMilestoneStatus,
 } from "./gsd-db.js";
 import { removeWorktree } from "./worktree-manager.js";
+import { autoWorktreeBranch } from "./milestone-branch-registry.js";
 import { logWarning } from "./workflow-logger.js";
 import { isAutoActive } from "./auto.js";
 import { isClosedStatus } from "./status-guards.js";
@@ -152,7 +153,7 @@ export function discardMilestone(basePath: string, milestoneId: string): boolean
 
   try {
     removeWorktree(basePath, milestoneId, {
-      branch: `milestone/${milestoneId}`,
+      branch: autoWorktreeBranch(basePath, milestoneId),
       deleteBranch: true,
     });
   } catch (err) {

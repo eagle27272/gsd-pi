@@ -18,6 +18,7 @@ import { loadEffectiveGSDPreferences } from "./preferences.js";
 import { listUnmergedGitPaths, probeGitConflictState, reconcileGitConflictsOnSignal } from "./git-conflict-state.js";
 import { resolveWorktreeProjectRoot } from "./worktree-root.js";
 import { enterBranchModeForMilestone } from "./auto-worktree-branch-lifecycle.js";
+import { autoWorktreeBranch } from "./milestone-branch-registry.js";
 import { gitSpawn } from "./git-exec.js";
 
 /**
@@ -542,7 +543,7 @@ export async function checkGitHealth(
       if (resolution.status === "missing") {
         const fixableUnbornBranch =
           isolationMode === "branch" &&
-          nativeIsCurrentUnbornBranch(basePath, `milestone/${milestone.id}`);
+          nativeIsCurrentUnbornBranch(basePath, autoWorktreeBranch(basePath, milestone.id));
         issues.push({
           severity: "error",
           code: "integration_branch_missing",

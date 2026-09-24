@@ -35,6 +35,7 @@ import { collectSecretsFromManifest } from "../get-secrets-from-user.js";
 import { gsdRoot, resolveMilestoneFile } from "./paths.js";
 import { findMilestoneIds } from "./milestone-ids.js";
 import { milestoneEntryBlockedGuidance } from "./guidance.js";
+import { autoWorktreeBranch } from "./milestone-branch-registry.js";
 import { invalidateAllCaches } from "./cache.js";
 import { writeLock, clearLock, readCrashLock, isLockProcessAlive } from "./crash-recovery.js";
 import {
@@ -788,11 +789,12 @@ export function auditOrphanedMilestoneBranches(
     if (m.status !== "complete") continue;
     if (seenMilestoneIds.has(m.id)) continue; // already processed in the branch loop
     if (!milestoneBranchListAvailable) {
+      const branchName = autoWorktreeBranch(basePath, m.id);
       try {
-        if (branchExists(basePath, `milestone/${m.id}`)) continue;
+        if (branchExists(basePath, branchName)) continue;
       } catch (err) {
         warnings.push(
-          `Could not verify whether milestone/${m.id} still exists; skipping branch-less worktree cleanup for safety: ${err instanceof Error ? err.message : String(err)}`,
+          `Could not verify whether ${branchName} still exists; skipping branch-less worktree cleanup for safety: ${err instanceof Error ? err.message : String(err)}`,
         );
         continue;
       }
@@ -1484,7 +1486,7 @@ export async function bootstrapAutoSession(
       !detectWorktreeName(base) &&
       !isGsdWorktreePath(base)
     ) {
-      const milestoneBranch = `milestone/${survivorMilestoneId}`;
+      const milestoneBranch = autoWorktreeBranch(base, survivorMilestoneId);
       const { nativeBranchExists } = await import("./native-git-bridge.js");
       hasSurvivorBranch = nativeBranchExists(base, milestoneBranch);
       if (hasSurvivorBranch) {

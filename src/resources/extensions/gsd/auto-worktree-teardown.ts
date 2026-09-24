@@ -48,7 +48,7 @@ export function teardownAutoWorktree(
 ): void {
   originalBasePath = resolveWorktreeProjectRoot(originalBasePath);
 
-  const branch = autoWorktreeBranch(milestoneId);
+  const branch = autoWorktreeBranch(originalBasePath, milestoneId);
   const { preserveBranch = false, preserveWorktree = false } = opts;
   const previousCwd = safeCwd(originalBasePath);
   let clearActiveWorkspace = true;
