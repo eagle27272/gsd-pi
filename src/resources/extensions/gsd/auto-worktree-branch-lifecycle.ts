@@ -1,8 +1,9 @@
 // gsd-pi — Auto-worktree branch lifecycle module.
 //
-// Owns milestone branch naming, branch-mode entry, and safe fast-forward of
-// reused milestone branches. Worktree creation/merge code imports this module
-// instead of keeping branch policy inside the legacy auto-worktree barrel.
+// Owns branch-mode entry and safe fast-forward of reused milestone branches;
+// milestone-branch-registry.ts owns the branch name itself. Worktree
+// creation/merge code imports this module instead of keeping branch policy
+// inside the legacy auto-worktree barrel.
 
 import { GSDError, GSD_GIT_ERROR } from "./errors.js";
 import { readIntegrationBranch, runGit } from "./git-service.js";

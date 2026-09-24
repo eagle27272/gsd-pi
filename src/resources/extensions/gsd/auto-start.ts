@@ -300,7 +300,7 @@ export function reconcileMergedMilestonesFromJournal(basePath: string): number {
  * re-enter the milestone, and the teardown is never retried.
  *
  * This audit runs on every fresh bootstrap to catch that gap:
- * 1. Lists all local `milestone/*` branches.
+ * 1. Lists all milestone branches (default `milestone/<MID>` or a recorded custom name).
  * 2. For each, checks if the milestone's DB status is "complete".
  * 3. If the branch is already merged into main → deletes the branch
  *    and cleans up any orphaned worktree directory (safe, no data loss).
@@ -738,12 +738,12 @@ export function auditOrphanedMilestoneBranches(
   }
 
   // Second pass (#5879): catch worktree directories stranded by a previous
-  // audit that deleted the milestone/* branch but failed to remove the
+  // audit that deleted the milestone's branch but failed to remove the
   // directory (or the dir was orphaned by a separate path entirely, e.g.
   // postflight-stash-restore-failed during closeout). The branch-keyed loop
-  // above is invisible to these cases — `nativeBranchList` returns nothing
-  // for the milestone, so the dir-cleanup block at line ~310 is never
-  // reached.
+  // above is invisible to these cases — `listMilestoneBranches` returns
+  // nothing for the milestone once its branch is gone, so the dir-cleanup
+  // block at line ~310 is never reached.
   //
   // Keyed on milestones whose DB status is `complete`. We do not iterate
   // over arbitrary directories under .gsd/worktrees/ to avoid touching

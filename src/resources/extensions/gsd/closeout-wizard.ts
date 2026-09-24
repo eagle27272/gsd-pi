@@ -125,7 +125,7 @@ export function detectIdleMilestoneResidueHint(basePath: string): IdleMilestoneR
   return {
     milestoneIds,
     message:
-      `Stranded milestone git residue detected (${listed}: worktree dir and/or milestone/* branch). ` +
+      `Stranded milestone git residue detected (${listed}: worktree dir and/or milestone branch). ` +
       `Run ${recovery} or /gsd status to recover closeout before starting new work.`,
   };
 }

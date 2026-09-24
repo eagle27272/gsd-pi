@@ -35,8 +35,9 @@ function safeCwd(fallback: string): string {
 
 /**
  * Detect if the process is currently inside an auto-worktree.
- * Uses the current directory structure plus git branch prefix so detection
- * still works after process restart when module state has been reset.
+ * Uses the current directory structure plus the milestone branch registry
+ * so detection still works after process restart when module state has
+ * been reset.
  */
 export function isInAutoWorktree(basePath: string): boolean {
   const targetPath = isGsdWorktreePath(basePath) ? basePath : safeCwd("");
