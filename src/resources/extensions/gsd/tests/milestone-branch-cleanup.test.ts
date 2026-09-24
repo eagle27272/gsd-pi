@@ -11,6 +11,7 @@ import { createAutoWorktree } from "../auto-worktree-creation.ts";
 import { mergeMilestoneToMain } from "../auto-worktree-merge.ts";
 import { teardownAutoWorktree } from "../auto-worktree-teardown.ts";
 import { hasMilestoneBranchRecord, writeMilestoneBranchRecord } from "../milestone-branch-registry.ts";
+import { closeDatabase } from "../gsd-db.ts";
 import { discardMilestone } from "../milestone-actions.ts";
 import { _clearGsdRootCache } from "../paths.ts";
 import { _resetServiceCache } from "../worktree.ts";
@@ -36,6 +37,10 @@ describe("milestone branch record cleanup", () => {
   afterEach(() => {
     process.chdir(savedCwd);
     process.env.HOME = originalHome;
+    // Close the DB while its backing file still exists — a connection left
+    // open across removeRepo() below closes against a deleted file and
+    // throws a disk I/O error in a later test's unrelated openDatabase().
+    closeDatabase();
     _clearGsdRootCache();
     _resetServiceCache();
     for (const repo of repos.splice(0)) removeRepo(repo);
@@ -182,6 +187,9 @@ describe("milestone branch record cleanup", () => {
     git(repo, "add", "feature.txt");
     git(repo, "commit", "-q", "-m", "feat: add feature");
 
+    // Branch mode has no worktree directory: mergeMilestoneToMain reads dirty
+    // state from process.cwd(), so the caller must be positioned on repo.
+    process.chdir(repo);
     mergeMilestoneToMain(repo, "M060", roadmap);
 
     assert.ok(existsSync(join(repo, "feature.txt")), "merged content reached main");
