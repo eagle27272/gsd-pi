@@ -73,6 +73,7 @@ const QUEUE_SAFE_TOOLS = new Set([
   // Discussion & planning tools
   "ask_user_questions",
   "gsd_milestone_generate_id",
+  "gsd_milestone_set_branch",
   "gsd_summary_save",
   // Web research tools used during queue discussion
   "search-the-web", "resolve_library", "get_library_docs", "fetch_page",

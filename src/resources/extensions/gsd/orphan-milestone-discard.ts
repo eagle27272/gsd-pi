@@ -11,6 +11,7 @@ import {
   type OrphanMilestoneDbSnapshot,
 } from "./db/writers/orphan-milestone-discard.js";
 import { MILESTONE_ID_RE } from "./milestone-ids.js";
+import { autoWorktreeBranch, forgetMilestoneBranchIfDeleted } from "./milestone-branch-registry.js";
 import { gsdRoot, milestoneDirExists } from "./paths.js";
 import { isSessionStale, type SessionStatus } from "./session-status-io.js";
 import { worktreesDirs } from "./worktree-placement.js";
@@ -130,7 +131,7 @@ function addExternalState(
   inspectionErrors: string[] = [],
 ): OrphanMilestoneSnapshot[] {
   return snapshots.map((snapshot) => {
-    const branch = `milestone/${snapshot.id}`;
+    const branch = autoWorktreeBranch(basePath, snapshot.id);
     const matchingWorktrees = externalState
       ? [...new Set([
         ...externalState.worktrees
@@ -249,6 +250,7 @@ export function discardOrphanMilestoneReservations(
     };
   }
   invalidateAllCaches();
+  for (const id of ids) forgetMilestoneBranchIfDeleted(projectRoot, id);
   return {
     ok: true,
     command: "discard-milestone",

@@ -109,7 +109,7 @@ export function mergeMilestoneToMain(
   roadmapContent: string,
 ): { commitMessage: string; pushed: boolean; prCreated: boolean; codeFilesChanged: boolean } {
   const worktreeCwd = process.cwd();
-  const milestoneBranch = autoWorktreeBranch(milestoneId);
+  const milestoneBranch = autoWorktreeBranch(originalBasePath_, milestoneId);
 
   // 1. Protect dirty state while proving closeout, then auto-commit it before
   //    leaving. Verification revisions include untracked paths, so committing

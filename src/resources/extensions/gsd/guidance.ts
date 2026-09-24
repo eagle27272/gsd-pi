@@ -176,9 +176,9 @@ export function worktreeCreationFailedGuidance(milestoneId: string, error: strin
   ].join("\n");
 }
 
-export function isolationDegradedFallbackGuidance(milestoneId: string): string {
+export function isolationDegradedFallbackGuidance(milestoneId: string, branch: string): string {
   return [
-    `Worktree isolation is degraded. Fell back to branch milestone/${milestoneId}.`,
+    `Worktree isolation is degraded. Fell back to branch ${branch}.`,
     `Work continues safely on the milestone branch in the project root.`,
     restoreIsolationHint(milestoneId),
   ].join("\n");

@@ -99,6 +99,8 @@ The user confirms or corrects before you write. Use one depth verification per m
 
 **CRITICAL — Non-bypassable gate:** CONTEXT.md writes are blocked until the user selects "(Recommended)". If they decline, cancel, or the tool fails, re-ask.
 
+{{milestoneBranchQuestion}}
+
 ## Output Phase
 
 Once the user is satisfied, in one pass for **each** new milestone:

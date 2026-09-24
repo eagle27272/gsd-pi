@@ -18,6 +18,7 @@ import { loadEffectiveGSDPreferences } from "./preferences.js";
 import { listUnmergedGitPaths, probeGitConflictState, reconcileGitConflictsOnSignal } from "./git-conflict-state.js";
 import { resolveWorktreeProjectRoot } from "./worktree-root.js";
 import { enterBranchModeForMilestone } from "./auto-worktree-branch-lifecycle.js";
+import { autoWorktreeBranch, forgetMilestoneBranchIfDeleted, isMilestoneBranch, listMilestoneBranches, milestoneIdForBranch } from "./milestone-branch-registry.js";
 import { gitSpawn } from "./git-exec.js";
 
 /**
@@ -217,14 +218,14 @@ export async function checkGitHealth(
     const worktrees = listWorktrees(basePath);
     // Orphan entries are milestone branches with no backing worktree; they are
     // handled by the stale milestone branch check below, not the worktree checks.
-    const milestoneWorktrees = worktrees.filter(wt => wt.branch.startsWith("milestone/") && !wt.orphan);
+    const milestoneWorktrees = worktrees.filter(wt => isMilestoneBranch(basePath, wt.branch) && !wt.orphan);
 
     // Load roadmap state once for cross-referencing
     const state = await deriveState(basePath);
 
     for (const wt of milestoneWorktrees) {
-      // Extract milestone ID from branch name "milestone/M001" → "M001"
-      const milestoneId = wt.branch.replace(/^milestone\//, "");
+      const milestoneId = milestoneIdForBranch(basePath, wt.branch);
+      if (!milestoneId) continue;
       const milestoneEntry = state.registry.find(m => m.id === milestoneId);
       const isComplete = milestoneEntry
         ? isClosedStatus(milestoneEntry.status)
@@ -339,7 +340,7 @@ export async function checkGitHealth(
 
     // ── Stale milestone branches ─────────────────────────────────────────
     try {
-      const branches = nativeBranchList(basePath, "milestone/*");
+      const branches = listMilestoneBranches(basePath);
       if (branches.length > 0) {
         const worktreeBranches = new Set(milestoneWorktrees.map(wt => wt.branch));
 
@@ -347,7 +348,8 @@ export async function checkGitHealth(
           // Skip branches that have a worktree (handled above)
           if (worktreeBranches.has(branch)) continue;
 
-          const milestoneId = branch.replace(/^milestone\//, "");
+          const milestoneId = milestoneIdForBranch(basePath, branch);
+          if (!milestoneId) continue;
           const roadmapPath = resolveMilestoneFile(basePath, milestoneId, "ROADMAP");
           let branchMilestoneComplete = false;
           const roadmapContent = roadmapPath ? await loadFile(roadmapPath) : null;
@@ -368,6 +370,7 @@ export async function checkGitHealth(
             if (shouldFix("stale_milestone_branch")) {
               try {
                 nativeBranchDelete(basePath, branch, true);
+                forgetMilestoneBranchIfDeleted(basePath, milestoneId);
                 fixesApplied.push(`deleted stale branch ${branch}`);
               } catch {
                 fixesApplied.push(`failed to delete branch ${branch}`);
@@ -542,7 +545,7 @@ export async function checkGitHealth(
       if (resolution.status === "missing") {
         const fixableUnbornBranch =
           isolationMode === "branch" &&
-          nativeIsCurrentUnbornBranch(basePath, `milestone/${milestone.id}`);
+          nativeIsCurrentUnbornBranch(basePath, autoWorktreeBranch(basePath, milestone.id));
         issues.push({
           severity: "error",
           code: "integration_branch_missing",

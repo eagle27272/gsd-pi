@@ -15,6 +15,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { deriveState } from "./state.js";
 import { canonicalJson, hashValue } from "./canonical-json.js";
 import { nativeBranchList, nativeDetectMainBranch, nativeBranchListMerged, nativeBranchDelete, nativeForEachRef, nativeUpdateRef } from "./native-git-bridge.js";
+import { forgetMilestoneBranchIfDeleted, listMilestoneBranches, milestoneIdForBranch } from "./milestone-branch-registry.js";
 import { logWarning } from "./workflow-logger.js";
 import {
   preserveProjectionChanges,
@@ -51,6 +52,8 @@ export async function handleCleanupBranches(ctx: ExtensionCommandContext, basePa
   for (const branch of mergedNonQuick) {
     try {
       nativeBranchDelete(basePath, branch, false);
+      const milestoneId = milestoneIdForBranch(basePath, branch);
+      if (milestoneId) forgetMilestoneBranchIfDeleted(basePath, milestoneId);
       deletedMerged++;
     } catch (e) {
       logWarning("command", `branch delete failed for ${branch}: ${(e as Error).message}`);
@@ -68,10 +71,11 @@ export async function handleCleanupBranches(ctx: ExtensionCommandContext, basePa
     const attachedBranches = new Set(
       listWorktrees(basePath).map((wt) => wt.branch),
     );
-    const milestoneBranches = nativeBranchList(basePath, "milestone/*");
+    const milestoneBranches = listMilestoneBranches(basePath);
     for (const branch of milestoneBranches) {
       if (attachedBranches.has(branch)) continue;
-      const milestoneId = branch.replace(/^milestone\//, "");
+      const milestoneId = milestoneIdForBranch(basePath, branch);
+      if (!milestoneId) continue;
 
       if (!isDbAvailable()) continue;
       const dbRow = getMilestone(milestoneId);
@@ -80,6 +84,7 @@ export async function handleCleanupBranches(ctx: ExtensionCommandContext, basePa
       // Milestone is complete per DB — proceed to delete branch
       try {
         nativeBranchDelete(basePath, branch, true);
+        forgetMilestoneBranchIfDeleted(basePath, milestoneId);
         deletedStaleMilestones++;
       } catch (e) { logWarning("command", `stale milestone branch delete failed for ${branch}: ${(e as Error).message}`); }
     }

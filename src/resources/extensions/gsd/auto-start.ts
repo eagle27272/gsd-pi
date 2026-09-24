@@ -35,6 +35,16 @@ import { collectSecretsFromManifest } from "../get-secrets-from-user.js";
 import { gsdRoot, resolveMilestoneFile } from "./paths.js";
 import { findMilestoneIds } from "./milestone-ids.js";
 import { milestoneEntryBlockedGuidance } from "./guidance.js";
+import {
+  autoWorktreeBranch,
+  forgetMilestoneBranchIfDeleted,
+  isMilestoneBranch,
+  listMergedMilestoneBranches,
+  listMilestoneBranches,
+  milestoneIdForBranch,
+  milestoneIdFromDefaultBranch,
+} from "./milestone-branch-registry.js";
+import { ensureMilestoneBranchName } from "./milestone-branch-choice.js";
 import { invalidateAllCaches } from "./cache.js";
 import { writeLock, clearLock, readCrashLock, isLockProcessAlive } from "./crash-recovery.js";
 import {
@@ -52,7 +62,6 @@ import {
   nativeDetectMainBranch,
   nativeBranchList,
   nativeBranchExists,
-  nativeBranchListMerged,
   nativeBranchDelete,
   nativeWorktreeRemove,
   nativeCommitCountBetween,
@@ -142,9 +151,10 @@ export function resolveIsolationNoneBranchCheckout(
   integrationBranch: string,
   isolationMode: string,
   isRepo: boolean,
+  isMilestone: (branch: string) => boolean = (branch) => milestoneIdFromDefaultBranch(branch) !== null,
 ): string | null {
   if (!isRepo || isolationMode !== "none") return null;
-  return currentBranch.startsWith("milestone/") ? integrationBranch : null;
+  return isMilestone(currentBranch) ? integrationBranch : null;
 }
 
 /**
@@ -290,7 +300,7 @@ export function reconcileMergedMilestonesFromJournal(basePath: string): number {
  * re-enter the milestone, and the teardown is never retried.
  *
  * This audit runs on every fresh bootstrap to catch that gap:
- * 1. Lists all local `milestone/*` branches.
+ * 1. Lists all milestone branches (default `milestone/<MID>` or a recorded custom name).
  * 2. For each, checks if the milestone's DB status is "complete".
  * 3. If the branch is already merged into main → deletes the branch
  *    and cleans up any orphaned worktree directory (safe, no data loss).
@@ -510,7 +520,7 @@ export function auditOrphanedMilestoneBranches(
   let milestoneBranches: string[];
   let milestoneBranchListAvailable = true;
   try {
-    milestoneBranches = branchList(basePath, "milestone/*");
+    milestoneBranches = listMilestoneBranches(basePath, { branchList, branchExists });
   } catch {
     milestoneBranchListAvailable = false;
     // git branch list failed — fall through with an empty branch set so the
@@ -529,7 +539,7 @@ export function auditOrphanedMilestoneBranches(
   // Get branches already merged into main
   let mergedBranches: Set<string>;
   try {
-    mergedBranches = new Set(nativeBranchListMerged(basePath, mainBranch, "milestone/*"));
+    mergedBranches = new Set(listMergedMilestoneBranches(basePath, mainBranch));
   } catch {
     mergedBranches = new Set();
   }
@@ -546,7 +556,8 @@ export function auditOrphanedMilestoneBranches(
   }
 
   for (const branch of milestoneBranches) {
-    const milestoneId = branch.replace(/^milestone\//, "");
+    const milestoneId = milestoneIdForBranch(basePath, branch);
+    if (!milestoneId) continue;
     const milestone = getMilestone(milestoneId);
 
     if (!milestone) continue;
@@ -642,6 +653,7 @@ export function auditOrphanedMilestoneBranches(
       // Branch is merged — safe to delete branch and clean up worktree dir
       try {
         nativeBranchDelete(basePath, branch, true);
+        forgetMilestoneBranchIfDeleted(basePath, milestoneId);
         pushAction({
           kind: "complete-merged-branch",
           milestoneId,
@@ -726,12 +738,12 @@ export function auditOrphanedMilestoneBranches(
   }
 
   // Second pass (#5879): catch worktree directories stranded by a previous
-  // audit that deleted the milestone/* branch but failed to remove the
+  // audit that deleted the milestone's branch but failed to remove the
   // directory (or the dir was orphaned by a separate path entirely, e.g.
   // postflight-stash-restore-failed during closeout). The branch-keyed loop
-  // above is invisible to these cases — `nativeBranchList` returns nothing
-  // for the milestone, so the dir-cleanup block at line ~310 is never
-  // reached.
+  // above is invisible to these cases — `listMilestoneBranches` returns
+  // nothing for the milestone once its branch is gone, so the dir-cleanup
+  // block at line ~310 is never reached.
   //
   // Keyed on milestones whose DB status is `complete`. We do not iterate
   // over arbitrary directories under .gsd/worktrees/ to avoid touching
@@ -739,7 +751,9 @@ export function auditOrphanedMilestoneBranches(
   // separately — those are handled by the in-progress orphan path above
   // when the branch is present, and by `/gsd doctor` when it is not.
   const seenMilestoneIds = new Set(
-    milestoneBranches.map((branch) => branch.replace(/^milestone\//, "")),
+    milestoneBranches
+      .map((branch) => milestoneIdForBranch(basePath, branch))
+      .filter((id): id is string => id !== null),
   );
   let completedMilestones: readonly { id: string; status: string }[] = [];
   try {
@@ -788,11 +802,12 @@ export function auditOrphanedMilestoneBranches(
     if (m.status !== "complete") continue;
     if (seenMilestoneIds.has(m.id)) continue; // already processed in the branch loop
     if (!milestoneBranchListAvailable) {
+      const branchName = autoWorktreeBranch(basePath, m.id);
       try {
-        if (branchExists(basePath, `milestone/${m.id}`)) continue;
+        if (branchExists(basePath, branchName)) continue;
       } catch (err) {
         warnings.push(
-          `Could not verify whether milestone/${m.id} still exists; skipping branch-less worktree cleanup for safety: ${err instanceof Error ? err.message : String(err)}`,
+          `Could not verify whether ${branchName} still exists; skipping branch-less worktree cleanup for safety: ${err instanceof Error ? err.message : String(err)}`,
         );
         continue;
       }
@@ -867,11 +882,12 @@ export function _selectResumableMilestone(
   mergedBranches: ReadonlySet<string>,
   isComplete: (milestoneId: string) => boolean,
   commitsAhead: (branch: string) => number,
+  milestoneIdFor: (branch: string) => string | null = milestoneIdFromDefaultBranch,
 ): string | null {
   const candidates: string[] = [];
   for (const branch of branchNames) {
-    if (!branch.startsWith("milestone/")) continue;
-    const milestoneId = branch.slice("milestone/".length);
+    const milestoneId = milestoneIdFor(branch);
+    if (!milestoneId) continue;
     if (mergedBranches.has(branch)) continue;
     if (!isComplete(milestoneId)) continue;
     let ahead = 0;
@@ -909,7 +925,7 @@ export function findUnmergedCompletedMilestone(
 
   let milestoneBranches: string[];
   try {
-    milestoneBranches = nativeBranchList(basePath, "milestone/*");
+    milestoneBranches = listMilestoneBranches(basePath);
   } catch {
     return null;
   }
@@ -924,9 +940,7 @@ export function findUnmergedCompletedMilestone(
 
   let mergedBranches: Set<string>;
   try {
-    mergedBranches = new Set(
-      nativeBranchListMerged(basePath, mainBranch, "milestone/*"),
-    );
+    mergedBranches = new Set(listMergedMilestoneBranches(basePath, mainBranch));
   } catch {
     mergedBranches = new Set();
   }
@@ -942,6 +956,7 @@ export function findUnmergedCompletedMilestone(
       return isCompletedMilestoneOnDisk(basePath, milestoneId);
     },
     (branch) => nativeCommitCountBetween(basePath, mainBranch, branch),
+    (branch) => milestoneIdForBranch(basePath, branch),
   );
 }
 
@@ -1484,7 +1499,7 @@ export async function bootstrapAutoSession(
       !detectWorktreeName(base) &&
       !isGsdWorktreePath(base)
     ) {
-      const milestoneBranch = `milestone/${survivorMilestoneId}`;
+      const milestoneBranch = autoWorktreeBranch(base, survivorMilestoneId);
       const { nativeBranchExists } = await import("./native-git-bridge.js");
       hasSurvivorBranch = nativeBranchExists(base, milestoneBranch);
       if (hasSurvivorBranch) {
@@ -1743,6 +1758,19 @@ export async function bootstrapAutoSession(
       if (getIsolationMode(base) !== "none" || strandedRecoveryAction) {
         captureIntegrationBranch(base, s.currentMilestoneId);
       }
+      if (getIsolationMode(base) !== "none" && !strandedRecoveryAction) {
+        const milestoneTitle = state.registry.find((m) => m.id === s.currentMilestoneId)?.title;
+        try {
+          await ensureMilestoneBranchName(ctx, base, s.currentMilestoneId, milestoneTitle);
+        } catch (err) {
+          s.active = false;
+          ctx.ui.notify(
+            `Auto-mode bootstrap stopped: could not settle the branch name for ${s.currentMilestoneId} (${err instanceof Error ? err.message : String(err)}).`,
+            "error",
+          );
+          return releaseLockAndReturn();
+        }
+      }
       setActiveMilestoneId(base, s.currentMilestoneId);
     }
 
@@ -1760,6 +1788,7 @@ export async function bootstrapAutoSession(
           integrationBranch,
           isolationMode,
           isRepo,
+          (branch) => isMilestoneBranch(base, branch),
         );
         if (branchToCheckout) {
           checkoutBranchWithStashGuard(base, branchToCheckout, "isolation-none-recovery");

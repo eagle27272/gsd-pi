@@ -2967,6 +2967,46 @@ export const executeTaskComplete = async (params, projectDir, invocation) => {
     }
   });
 
+  it("gsd_milestone_set_branch records the branch and rejects a taken name", async () => {
+    const base = makeTmpBase();
+    try {
+      execFileSync("git", ["init", "-q", "-b", "main"], { cwd: base });
+      execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"], { cwd: base });
+      execFileSync("git", ["branch", "feat/taken"], { cwd: base });
+      const server = makeMockServer();
+      registerWorkflowTools(server as any);
+      const tool = server.tools.find((t) => t.name === "gsd_milestone_set_branch");
+      assert.ok(tool, "set-branch tool should be registered");
+
+      const ok = await tool!.handler({ projectDir: base, milestoneId: "M001", branch: "feat/add_auth" });
+      assert.match((ok as any).content[0].text, /Recorded branch feat\/add_auth for M001/);
+      assert.ok(existsSync(join(base, ".gsd", "milestone-branches", "M001.json")));
+
+      const rejected = await tool!.handler({ projectDir: base, milestoneId: "M002", branch: "feat/taken" });
+      assertToolError(rejected, /Branch name rejected: .*already exists/);
+    } finally {
+      cleanup(base);
+    }
+  });
+
+  it("gsd_milestone_set_branch rejects a milestone ID shaped like a path traversal", async () => {
+    const base = makeTmpBase();
+    try {
+      execFileSync("git", ["init", "-q", "-b", "main"], { cwd: base });
+      execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"], { cwd: base });
+      const server = makeMockServer();
+      registerWorkflowTools(server as any);
+      const tool = server.tools.find((t) => t.name === "gsd_milestone_set_branch");
+      assert.ok(tool, "set-branch tool should be registered");
+
+      const rejected = await tool!.handler({ projectDir: base, milestoneId: "../x", branch: "feat/add_auth" });
+      assertToolError(rejected, /Invalid milestone ID/);
+      assert.ok(!existsSync(join(base, ".gsd", "milestone-branches")), "no record directory created");
+    } finally {
+      cleanup(base);
+    }
+  });
+
   it("gsd_plan_task reopens the DB before inline task planning writes", async () => {
     const base = makeTmpBase();
     try {

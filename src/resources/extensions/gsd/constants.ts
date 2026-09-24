@@ -37,6 +37,7 @@ export const CACHE_MAX = 50;
  *   - gsd_decision_save: records decisions (discuss.md output phase)
  *   - gsd_plan_milestone: writes roadmap (discuss.md single/multi milestone)
  *   - gsd_milestone_generate_id: generates milestone IDs (discuss.md multi-milestone)
+ *   - gsd_milestone_set_branch: records the milestone branch name (discuss and queue prompts)
  *   - gsd_requirement_save: creates requirements during discuss
  *   - gsd_requirement_update: updates requirements during discuss
  */
@@ -49,6 +50,8 @@ export const DISCUSS_TOOLS_ALLOWLIST: readonly string[] = [
   "gsd_plan_milestone",
   // Milestone ID generation (multi-milestone flow)
   "gsd_milestone_generate_id",
+  // Milestone branch name chosen by the user
+  "gsd_milestone_set_branch",
   // Requirement updates
   "gsd_requirement_save",
   "gsd_requirement_update",

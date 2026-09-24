@@ -26,6 +26,7 @@ import { join } from "node:path";
 
 import { GSDError, GSD_GIT_ERROR } from "./errors.js";
 import { MergeConflictError, readIntegrationBranch } from "./git-service.js";
+import { autoWorktreeBranch } from "./milestone-branch-registry.js";
 import {
   nativeBranchForceReset,
   nativeBranchExists,
@@ -42,14 +43,6 @@ import { emitSliceMerged, emitMilestoneResquash } from "./worktree-telemetry.js"
 import { loadEffectiveGSDPreferences } from "./preferences.js";
 import { getMilestone, getSlice, isDbAvailable } from "./gsd-db.js";
 import { gitCapture } from "./git-exec.js";
-
-/**
- * Auto-worktree milestone branch name. Must match autoWorktreeBranch() in
- * auto-worktree.ts; duplicated here to avoid a cyclic import.
- */
-function milestoneBranchName(milestoneId: string): string {
-  return `milestone/${milestoneId}`;
-}
 
 function resolveIntegrationBranch(projectRoot: string, milestoneId: string): string {
   const recorded = readIntegrationBranch(projectRoot, milestoneId);
@@ -178,7 +171,7 @@ export function mergeSliceToMain(
 ): SliceMergeResult {
   const started = Date.now();
   const worktreeCwd = process.cwd();
-  const milestoneBranch = milestoneBranchName(milestoneId);
+  const milestoneBranch = autoWorktreeBranch(projectRoot, milestoneId);
   const mainBranch = resolveIntegrationBranch(projectRoot, milestoneId);
 
   if (mainBranch === milestoneBranch) {

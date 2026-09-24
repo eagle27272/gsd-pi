@@ -28,6 +28,7 @@ import {
   updateMilestoneStatus,
 } from "./gsd-db.js";
 import { removeWorktree } from "./worktree-manager.js";
+import { autoWorktreeBranch, forgetMilestoneBranchIfDeleted } from "./milestone-branch-registry.js";
 import { logWarning } from "./workflow-logger.js";
 import { isAutoActive } from "./auto.js";
 import { isClosedStatus } from "./status-guards.js";
@@ -152,12 +153,17 @@ export function discardMilestone(basePath: string, milestoneId: string): boolean
 
   try {
     removeWorktree(basePath, milestoneId, {
-      branch: `milestone/${milestoneId}`,
+      branch: autoWorktreeBranch(basePath, milestoneId),
       deleteBranch: true,
     });
   } catch (err) {
     logWarning("engine", `discardMilestone worktree cleanup failed for ${milestoneId}: ${(err as Error).message}`);
   }
+  // A milestone named but never entered has no branch for removeWorktree to
+  // delete, so it never reaches forgetMilestoneBranchIfDeleted through that
+  // path — check directly or the record outlives the milestone and blocks
+  // reuse of its ID.
+  forgetMilestoneBranchIfDeleted(basePath, milestoneId);
 
   if (hasMilestoneDir && mDir) {
     removeManagedProjectionTreeExactSync(basePath, mDir);

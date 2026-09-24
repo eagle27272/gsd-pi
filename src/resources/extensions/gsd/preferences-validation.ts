@@ -1479,6 +1479,13 @@ export function validatePreferences(preferences: GSDPreferences): {
         errors.push("git.pr_target_branch must be a non-empty string (branch name)");
       }
     }
+    if (g.milestone_branch_format !== undefined) {
+      if (typeof g.milestone_branch_format === "string" && g.milestone_branch_format.trim()) {
+        git.milestone_branch_format = g.milestone_branch_format.trim();
+      } else {
+        errors.push("git.milestone_branch_format must be a non-empty string");
+      }
+    }
     // Deprecated: merge_to_main is ignored (branchless architecture).
     if (g.merge_to_main !== undefined) {
       warnings.push("git.merge_to_main is deprecated — milestone-level merge is now always used. Remove this setting.");

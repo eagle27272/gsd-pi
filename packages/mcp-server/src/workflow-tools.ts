@@ -56,6 +56,7 @@ interface GsdMcpBridge {
   claimReservedId: (...args: any[]) => any;
   findMilestoneIds: (...args: any[]) => any;
   getReservedMilestoneIds: (...args: any[]) => any;
+  MILESTONE_ID_RE: RegExp;
   milestoneIdSort: (...args: any[]) => any;
   nextMilestoneId: (...args: any[]) => any;
 }
@@ -2537,6 +2538,13 @@ const milestoneGenerateIdParams = {
 };
 const milestoneGenerateIdSchema = z.object(milestoneGenerateIdParams);
 
+const milestoneSetBranchParams = {
+  projectDir: projectDirParam,
+  milestoneId: nonEmptyString("milestoneId").describe("Milestone ID (e.g. M001)"),
+  branch: nonEmptyString("branch").describe("Git branch name the user chose, e.g. feat/add_auth"),
+};
+const milestoneSetBranchSchema = z.object(milestoneSetBranchParams);
+
 const planTaskParams = {
   projectDir: projectDirParam,
   milestoneId: nonEmptyString("milestoneId").describe("Milestone ID (e.g. M001)"),
@@ -3195,6 +3203,32 @@ export function registerWorkflowTools(
         generateOrReuseMilestoneId(projectDir),
       );
       return { content: [{ type: "text" as const, text: id }] };
+    },
+  );
+
+  server.tool(
+    "gsd_milestone_set_branch",
+    "Record the git branch name the user chose for a milestone. Returns an error with the reason when the name is not allowed.",
+    milestoneSetBranchParams,
+    async (args: Record<string, unknown>) => {
+      const { projectDir, milestoneId, branch } = parseWorkflowArgs(milestoneSetBranchSchema, args);
+      const { MILESTONE_ID_RE } = await importBridgeModule();
+      if (!MILESTONE_ID_RE.test(milestoneId)) {
+        throw new Error(`Invalid milestone ID: "${milestoneId}". Use the M### format (e.g. M001).`);
+      }
+      await enforceWorkflowWriteGate("gsd_milestone_set_branch", projectDir, milestoneId);
+      const { setMilestoneBranch } = await importWorkflowRuntimeModule<{
+        setMilestoneBranch: (
+          basePath: string,
+          milestoneId: string,
+          branch: string,
+        ) => { ok: true; branch: string } | { ok: false; reason: string };
+      }>("../../../src/resources/extensions/gsd/milestone-branch-choice.js");
+      const result = setMilestoneBranch(projectDir, milestoneId, branch);
+      if (!result.ok) {
+        throw new Error(`Branch name rejected: ${result.reason} Ask the user for another name.`);
+      }
+      return { content: [{ type: "text" as const, text: `Recorded branch ${result.branch} for ${milestoneId}.` }] };
     },
   );
 

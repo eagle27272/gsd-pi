@@ -534,13 +534,13 @@ export async function startParallel(
 
 /**
  * Create a git worktree for a milestone without changing the coordinator's cwd.
- * Uses milestone/<MID> branch naming (same as auto-worktree.ts).
+ * Uses the same milestone branch name as auto-worktree.ts.
  *
  * Exported with the `_` prefix purely for tests — production callers stay on
  * the closure-private name `createMilestoneWorktree` below.
  */
 export function _createMilestoneWorktree(basePath: string, milestoneId: string): string {
-  const branch = autoWorktreeBranch(milestoneId);
+  const branch = autoWorktreeBranch(basePath, milestoneId);
   const branchExists = nativeBranchExists(basePath, branch);
 
   let info: { name: string; path: string; branch: string; exists: boolean };

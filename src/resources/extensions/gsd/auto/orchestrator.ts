@@ -857,7 +857,7 @@ export class AutoOrchestrator implements AutoOrchestrationModule {
     const snapshot = await deriveState(activeBasePath);
     const milestoneId = snapshot.activeMilestone?.id ?? null;
     const buildExpectedBranch = (mode: ReturnType<typeof getIsolationMode>) =>
-      mode !== "none" && milestoneId ? autoWorktreeBranch(milestoneId) : null;
+      mode !== "none" && milestoneId ? autoWorktreeBranch(this.s.canonicalProjectRoot, milestoneId) : null;
     // The milestone lease coordinates concurrent workers on an isolated
     // milestone worktree/branch. `none` mode has no per-milestone isolation
     // and does not reliably claim a lease, so requiring one there would
