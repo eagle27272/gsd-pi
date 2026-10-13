@@ -1569,6 +1569,32 @@ test("claude-opus-5-5 as ceiling: light task IS downgraded to haiku - routing no
   assert.equal(result.wasDowngraded, true);
 });
 
+// --- claude-sonnet-5-5 / claude-haiku-5-5 catalog coverage ---
+
+test("claude-sonnet-5-5 is classified as standard tier in MODEL_CAPABILITY_TIER", () => {
+  assert.equal(MODEL_CAPABILITY_TIER["claude-sonnet-5-5"], "standard");
+});
+
+test("claude-haiku-5-5 is classified as light tier in MODEL_CAPABILITY_TIER", () => {
+  assert.equal(MODEL_CAPABILITY_TIER["claude-haiku-5-5"], "light");
+});
+
+test("light task with Vertex 5.5 models available routes to haiku-5-5", () => {
+  const config = {
+    ...defaultRoutingConfig(),
+    enabled: true,
+    tier_models: { light: "claude-haiku-5-5", standard: "claude-sonnet-5-5", heavy: "claude-opus-5-5" },
+  };
+  const result = resolveModelForComplexity(
+    { tier: "light", reason: "test", downgraded: false },
+    { primary: "anthropic-vertex/claude-opus-5-5", fallbacks: [] },
+    config,
+    ["anthropic-vertex/claude-haiku-5-5", "anthropic-vertex/claude-sonnet-5-5", "anthropic-vertex/claude-opus-5-5"],
+  );
+  assert.equal(result.modelId, "anthropic-vertex/claude-haiku-5-5");
+  assert.equal(result.wasDowngraded, true);
+});
+
 // ─── Duplicate registry keys (#1707 regression) ──────────────────────────────
 // The Sonnet 5 rollout appended a second "claude-sonnet-5" entry to three
 // registries (MODEL_CAPABILITY_TIER, MODEL_COST_PER_1K_INPUT,

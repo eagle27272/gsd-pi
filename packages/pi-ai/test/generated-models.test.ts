@@ -110,6 +110,36 @@ describe("models.generated.ts", () => {
 		expect(vertex.compat).toMatchObject({ forceAdaptiveThinking: true });
 	});
 
+	test("includes Claude Sonnet 5.5 on Vertex with always-on adaptive thinking", () => {
+		const vertex = MODELS["anthropic-vertex"]["claude-sonnet-5-5"];
+		expect(vertex).toBeDefined();
+		expect(vertex.api).toBe("anthropic-vertex");
+		expect(vertex.name).toBe("Claude Sonnet 5.5 (Vertex)");
+		expect(vertex.contextWindow).toBe(1_000_000);
+		expect(vertex.maxTokens).toBe(128_000);
+		expect(vertex.cost).toEqual({ input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 });
+		expect(vertex.thinkingLevelMap).toEqual({ xhigh: "xhigh", off: null });
+		expect(vertex.compat).toMatchObject({ forceAdaptiveThinking: true });
+	});
+
+	test("includes Claude Haiku 5.5 on Vertex with adaptive thinking and long-context pricing", () => {
+		const vertex = MODELS["anthropic-vertex"]["claude-haiku-5-5"];
+		expect(vertex).toBeDefined();
+		expect(vertex.api).toBe("anthropic-vertex");
+		expect(vertex.name).toBe("Claude Haiku 5.5 (Vertex)");
+		expect(vertex.contextWindow).toBe(1_000_000);
+		expect(vertex.maxTokens).toBe(128_000);
+		expect(vertex.cost).toEqual({
+			input: 0.1,
+			output: 0.5,
+			cacheRead: 0.01,
+			cacheWrite: 0.125,
+			tiers: [{ inputTokensAbove: 100_000, input: 0.5, output: 2.5, cacheRead: 0.05, cacheWrite: 0.625 }],
+		});
+		expect(vertex.thinkingLevelMap).toEqual({ xhigh: "xhigh" });
+		expect(vertex.compat).toMatchObject({ forceAdaptiveThinking: true });
+	});
+
 	test("includes Claude Sonnet 5 across Anthropic-backed providers with adaptive thinking", () => {
 		const anthropic = MODELS.anthropic["claude-sonnet-5"];
 		expect(anthropic).toBeDefined();
