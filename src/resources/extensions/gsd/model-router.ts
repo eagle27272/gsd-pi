@@ -153,6 +153,7 @@ const CAPABILITY_DIMENSIONS: ReadonlyArray<keyof ModelCapabilities> = [
 export const MODEL_CAPABILITY_TIER: Record<string, ComplexityTier> = {
   // Light-tier models (cheapest)
   "claude-haiku-4-5": "light",
+  "claude-haiku-5-5": "light",
   "claude-3-5-haiku-latest": "light",
   "claude-3-haiku-20240307": "light",
   "gpt-4o-mini": "light",
@@ -176,6 +177,7 @@ export const MODEL_CAPABILITY_TIER: Record<string, ComplexityTier> = {
   "claude-sonnet-4-5": "standard",
   "claude-sonnet-4-6": "standard",
   "claude-sonnet-5": "standard",           // GA on GitHub Copilot, Anthropic, Vertex, Bedrock
+  "claude-sonnet-5-5": "standard",
   "claude-sonnet-4-5-20250514": "standard",
   "claude-3-5-sonnet-latest": "standard",
   "gpt-4o": "standard",
@@ -222,11 +224,13 @@ export const MODEL_CAPABILITY_TIER: Record<string, ComplexityTier> = {
 
 const MODEL_COST_PER_1K_INPUT: Record<string, number> = {
   "claude-haiku-4-5": 0.0008,
+  "claude-haiku-5-5": 0.0001,
   "claude-3-5-haiku-latest": 0.0008,
   "claude-sonnet-4": 0.003,
   "claude-sonnet-4-5": 0.003,
   "claude-sonnet-4-6": 0.003,
   "claude-sonnet-5": 0.003,                // $3.00/M input; matches Sonnet 4.x pricing
+  "claude-sonnet-5-5": 0.002,
   "claude-sonnet-4-5-20250514": 0.003,
   "claude-opus-4-5": 0.005,
   "claude-opus-4-6": 0.005,
@@ -292,9 +296,11 @@ export const MODEL_CAPABILITY_PROFILES: Record<string, ModelCapabilities> = {
   "claude-sonnet-4-5":            { coding: 85, debugging: 80, research: 75, reasoning: 80, speed: 60, longContext: 75, instruction: 85 },
   "claude-sonnet-4-6":            { coding: 85, debugging: 80, research: 75, reasoning: 80, speed: 60, longContext: 75, instruction: 85 },
   "claude-sonnet-5":              { coding: 90, debugging: 85, research: 80, reasoning: 87, speed: 55, longContext: 80, instruction: 88 },
+  "claude-sonnet-5-5":            { coding: 90, debugging: 85, research: 80, reasoning: 87, speed: 55, longContext: 80, instruction: 88 },
   "claude-sonnet-4-5-20250514":   { coding: 85, debugging: 80, research: 75, reasoning: 80, speed: 60, longContext: 75, instruction: 85 },
   "claude-3-5-sonnet-latest":     { coding: 82, debugging: 78, research: 72, reasoning: 78, speed: 62, longContext: 70, instruction: 82 },
   "claude-haiku-4-5":             { coding: 60, debugging: 50, research: 45, reasoning: 50, speed: 95, longContext: 50, instruction: 75 },
+  "claude-haiku-5-5":             { coding: 60, debugging: 50, research: 45, reasoning: 50, speed: 95, longContext: 50, instruction: 75 },
   "claude-3-5-haiku-latest":      { coding: 60, debugging: 50, research: 45, reasoning: 50, speed: 95, longContext: 50, instruction: 75 },
   "claude-3-haiku-20240307":      { coding: 50, debugging: 40, research: 35, reasoning: 40, speed: 95, longContext: 40, instruction: 65 },
   "claude-3-opus-latest":         { coding: 90, debugging: 85, research: 82, reasoning: 90, speed: 35, longContext: 75, instruction: 88 },

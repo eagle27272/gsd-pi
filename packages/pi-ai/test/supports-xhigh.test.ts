@@ -62,6 +62,24 @@ describe("getSupportedThinkingLevels", () => {
 		expect(clampThinkingLevel(model!, "off")).toBe("minimal");
 	});
 
+	it("offers every level except off for Sonnet 5.5 on the Vertex API", () => {
+		const model = getModel("anthropic-vertex", "claude-sonnet-5-5");
+		expect(model).toBeDefined();
+		expect(getSupportedThinkingLevels(model!)).toEqual(["minimal", "low", "medium", "high", "xhigh"]);
+	});
+
+	it("clamps off up to minimal for Sonnet 5.5 on the Vertex API", () => {
+		const model = getModel("anthropic-vertex", "claude-sonnet-5-5");
+		expect(model).toBeDefined();
+		expect(clampThinkingLevel(model!, "off")).toBe("minimal");
+	});
+
+	it("offers every level including off for Haiku 5.5 on the Vertex API", () => {
+		const model = getModel("anthropic-vertex", "claude-haiku-5-5");
+		expect(model).toBeDefined();
+		expect(getSupportedThinkingLevels(model!)).toEqual(["off", "minimal", "low", "medium", "high", "xhigh"]);
+	});
+
 	it("includes xhigh for OpenRouter Fable 5 (openai-completions API)", () => {
 		const model = getModel("openrouter", "anthropic/claude-fable-5");
 		expect(model).toBeDefined();

@@ -16,6 +16,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const packageRoot = join(__dirname, "..");
 
+interface ModelsDevCostTier {
+	input?: number;
+	output?: number;
+	cache_read?: number;
+	cache_write?: number;
+	tier?: {
+		type?: string;
+		size?: number;
+	};
+}
+
 interface ModelsDevModel {
 	id: string;
 	name: string;
@@ -30,6 +41,7 @@ interface ModelsDevModel {
 		output?: number;
 		cache_read?: number;
 		cache_write?: number;
+		tiers?: ModelsDevCostTier[];
 	};
 	modalities?: {
 		input?: string[];
@@ -203,7 +215,9 @@ function isAnthropicAdaptiveThinkingModel(modelId: string): boolean {
 		modelId.includes("sonnet-5") ||
 		modelId.includes("sonnet.5") ||
 		modelId.includes("sonnet-4-6") ||
-		modelId.includes("sonnet-4.6")
+		modelId.includes("sonnet-4.6") ||
+		modelId.includes("haiku-5") ||
+		modelId.includes("haiku.5")
 	);
 }
 
@@ -212,12 +226,26 @@ function isAnthropicAlwaysThinkingModel(modelId: string): boolean {
 		modelId.includes("fable-5") ||
 		modelId.includes("fable.5") ||
 		modelId.includes("opus-5-5") ||
-		modelId.includes("opus-5.5")
+		modelId.includes("opus-5.5") ||
+		modelId.includes("sonnet-5-5") ||
+		modelId.includes("sonnet-5.5")
 	);
 }
 
 function mergeAnthropicMessagesCompat(model: Model<Api>, compat: AnthropicMessagesCompat): void {
 	model.compat = { ...(model.compat as AnthropicMessagesCompat | undefined), ...compat };
+}
+
+function toContextCostTiers(tiers: ModelsDevCostTier[] | undefined): Model<Api>["cost"]["tiers"] {
+	const contextTiers = (tiers ?? []).filter(t => t.tier?.type === "context" && typeof t.tier.size === "number");
+	if (contextTiers.length === 0) return undefined;
+	return contextTiers.map(t => ({
+		inputTokensAbove: t.tier!.size!,
+		input: t.input,
+		output: t.output,
+		cacheRead: t.cache_read,
+		cacheWrite: t.cache_write,
+	}));
 }
 
 function normalizeAnthropicVertexModelId(modelId: string): string {
@@ -272,7 +300,9 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 		model.id.includes("fable-5") ||
 		model.id.includes("fable.5") ||
 		model.id.includes("sonnet-5") ||
-		model.id.includes("sonnet.5")
+		model.id.includes("sonnet.5") ||
+		model.id.includes("haiku-5") ||
+		model.id.includes("haiku.5")
 	) {
 		mergeThinkingLevelMap(model, { xhigh: "xhigh" });
 	}
@@ -551,6 +581,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 						output: m.cost?.output || 0,
 						cacheRead: m.cost?.cache_read || 0,
 						cacheWrite: m.cost?.cache_write || 0,
+						tiers: toContextCostTiers(m.cost?.tiers),
 					},
 					contextWindow: m.limit?.context || 4096,
 					maxTokens: m.limit?.output || 4096,

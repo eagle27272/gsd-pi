@@ -4,6 +4,7 @@ import type { Api, Model } from "../src/types.ts";
 
 const EXPECTED_ADAPTIVE_THINKING_MODELS = [
 	"anthropic-vertex/claude-fable-5",
+	"anthropic-vertex/claude-haiku-5-5",
 	"anthropic-vertex/claude-opus-4-6",
 	"anthropic-vertex/claude-opus-4-7",
 	"anthropic-vertex/claude-opus-4-8",
@@ -11,6 +12,7 @@ const EXPECTED_ADAPTIVE_THINKING_MODELS = [
 	"anthropic-vertex/claude-opus-5-5",
 	"anthropic-vertex/claude-sonnet-4-6",
 	"anthropic-vertex/claude-sonnet-5",
+	"anthropic-vertex/claude-sonnet-5-5",
 	"anthropic/claude-fable-5",
 	"anthropic/claude-opus-4-6",
 	"anthropic/claude-opus-4-7",

@@ -92,6 +92,37 @@ describe("anthropic-vertex thinking payload", () => {
 		expect(payload.output_config).toEqual({ effort: "low" });
 	});
 
+	it("omits thinking for Sonnet 5.5 when no reasoning level is requested", async () => {
+		const payload = await captureVertexPayload(getModel("anthropic-vertex", "claude-sonnet-5-5"));
+
+		expect(payload.thinking).toBeUndefined();
+		expect(payload.output_config).toBeUndefined();
+	});
+
+	it("sends adaptive thinking at xhigh effort for Sonnet 5.5 at xhigh reasoning", async () => {
+		const payload = await captureVertexPayload(getModel("anthropic-vertex", "claude-sonnet-5-5"), {
+			reasoning: "xhigh",
+		});
+
+		expect(payload.thinking).toEqual({ type: "adaptive", display: "summarized" });
+		expect(payload.output_config).toEqual({ effort: "xhigh" });
+	});
+
+	it("sends thinking.type=disabled for Haiku 5.5 when no reasoning level is requested", async () => {
+		const payload = await captureVertexPayload(getModel("anthropic-vertex", "claude-haiku-5-5"));
+
+		expect(payload.thinking).toEqual({ type: "disabled" });
+	});
+
+	it("sends adaptive thinking at xhigh effort for Haiku 5.5 at xhigh reasoning", async () => {
+		const payload = await captureVertexPayload(getModel("anthropic-vertex", "claude-haiku-5-5"), {
+			reasoning: "xhigh",
+		});
+
+		expect(payload.thinking).toEqual({ type: "adaptive", display: "summarized" });
+		expect(payload.output_config).toEqual({ effort: "xhigh" });
+	});
+
 	it("still sends thinking.type=disabled for Opus 5 when no reasoning level is requested", async () => {
 		const payload = await captureVertexPayload(getModel("anthropic-vertex", "claude-opus-5"));
 
