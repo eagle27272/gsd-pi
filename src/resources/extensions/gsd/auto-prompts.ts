@@ -47,6 +47,7 @@ import type { TokenProvider } from "./token-counter.js";
 import {
   getBlockingReworkFindingsForTask,
   getGateResults,
+  getLatestAssessmentByScope,
   getMilestoneSlices,
   getPendingGatesForTurn,
   getSlice,
@@ -1640,7 +1641,8 @@ function isCompletedSliceStatus(status: string): boolean {
  * Skips reassessment when:
  * - No roadmap exists yet
  * - No slices are completed
- * - The last completed slice already has an assessment file
+ * - The last completed slice already has an assessment file, or a roadmap
+ *   reassessment recorded for it
  * - All slices are complete (milestone done — no point reassessing)
  */
 export async function checkNeedsReassessment(
@@ -1662,6 +1664,11 @@ export async function checkNeedsReassessment(
       const assessmentFile = resolveSliceFile(base, mid, lastCompleted, "ASSESSMENT");
       const hasAssessment = !!(assessmentFile && await loadFile(assessmentFile));
       if (hasAssessment) return null;
+      // gsd_reassess_roadmap records a milestone-scoped row and never writes the
+      // slice-scoped ASSESSMENT file (that is run-uat's output), so with UAT
+      // dispatch off this row is the only proof a reassess already ran.
+      const roadmapAssessment = getLatestAssessmentByScope(mid, "roadmap");
+      if (roadmapAssessment?.["slice_id"] === lastCompleted) return null;
       const summaryFile = resolveSliceFile(base, mid, lastCompleted, "SUMMARY");
       const hasSummary = !!(summaryFile && await loadFile(summaryFile));
       if (!hasSummary) return null;
