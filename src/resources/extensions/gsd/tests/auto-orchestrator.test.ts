@@ -893,6 +893,29 @@ test("completeActiveUnit clears in-flight idempotency and stops stale same-unit 
   assert.ok(f.journalNames().includes("unit-finalized"));
 });
 
+test("completed-no-advance wedge recheck clears once dispatch no longer selects the wedged unit", async (t) => {
+  let repeatUnit = true;
+  const f = makeFixture({
+    dispatch: () => repeatUnit
+      ? { action: "dispatch", unitType: "plan-milestone", unitId: "M001", prompt: "p" }
+      : { action: "stop", reason: "nothing left to dispatch", level: "info" },
+  });
+  t.after(() => f.cleanup());
+
+  const first = await f.orchestrator.advance();
+  if (first.kind !== "advanced") throw new Error(`expected advanced, got ${first.kind}`);
+  await f.orchestrator.completeActiveUnit(first.unit);
+  await f.orchestrator.advance();
+  const open = getOpenWedge(normalizeRealPath(f.base));
+  if (!open.ok || !open.wedge) throw new Error("expected completed-no-advance wedge");
+  assert.equal(open.wedge.guardId, COMPLETED_NO_ADVANCE_GUARD_ID);
+
+  assert.equal((await f.orchestrator.recheckWedge!(open.wedge)).blocking, true);
+
+  repeatUnit = false;
+  assert.equal((await f.orchestrator.recheckWedge!(open.wedge)).blocking, false);
+});
+
 test("dispatch-rule wedge recheck preserves a live blocker and clears after it resolves", async (t) => {
   let blocked = true;
   const f = makeFixture({
