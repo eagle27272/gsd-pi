@@ -995,10 +995,24 @@ export class AutoOrchestrator implements AutoOrchestrationModule {
       const current = snapshotUnitTargetRows(wedge.unitType, wedge.unitId);
       if (!current.ok) return { blocking: true, reason: current.error };
       const blocking = current.hash !== null && hashBackstopInput(current.hash) === wedge.inputHash;
-      return {
-        blocking,
-        ...(blocking ? { reason: `state did not advance for ${wedge.unitType} ${wedge.unitId}` } : {}),
-      };
+      if (!blocking) return { blocking: false };
+      // A unit can finish correctly without touching any row it targets
+      // (a confirmed roadmap reassessment). The rows never change, so the wedge
+      // is also cleared once dispatch stops selecting the same unit.
+      try {
+        const decision = await this.decideShadowDispatch();
+        const reselected = decision !== null
+          && "unitType" in decision
+          && decision.unitType === wedge.unitType
+          && decision.unitId === wedge.unitId;
+        if (!reselected) return { blocking: false };
+      } catch (error) {
+        return {
+          blocking: true,
+          reason: `could not recheck ${wedge.guardId}: ${getErrorMessage(error)}`,
+        };
+      }
+      return { blocking: true, reason: `state did not advance for ${wedge.unitType} ${wedge.unitId}` };
     }
 
     if (wedge.guardId === "orphaned-active-unit") {
@@ -1015,20 +1029,7 @@ export class AutoOrchestrator implements AutoOrchestrationModule {
       wedge.guardId === "no-active-milestone"
     ) {
       try {
-        const stateSnapshot = await deriveState(this.getLiveDispatchBasePath());
-        // Dispatch selection can update session bookkeeping. Re-evaluate with a
-        // shadow so acknowledging a wedge remains a read-only operation.
-        const shadowSession = {
-          ...this.s,
-          missingTaskPlanRetryCount: new Map(this.s.missingTaskPlanRetryCount),
-        } as AutoSession;
-        const decision = await decideOrchestratorDispatch(
-          this.ctx,
-          this.pi,
-          this.dispatchBasePath,
-          shadowSession,
-          { stateSnapshot },
-        );
+        const decision = await this.decideShadowDispatch();
         const currentGuard = decision && "kind" in decision && decision.kind === "blocked"
           ? decision
           : null;
@@ -1050,6 +1051,25 @@ export class AutoOrchestrator implements AutoOrchestrationModule {
     // existing explicit-ack behavior; state-derived guards above must prove
     // that their blocker has cleared before acknowledgment.
     return { blocking: false };
+  }
+
+  /**
+   * Dispatch selection can update session bookkeeping. Re-evaluate with a
+   * shadow so acknowledging a wedge remains a read-only operation.
+   */
+  private async decideShadowDispatch(): Promise<DispatchDecision> {
+    const stateSnapshot = await deriveState(this.getLiveDispatchBasePath());
+    const shadowSession = {
+      ...this.s,
+      missingTaskPlanRetryCount: new Map(this.s.missingTaskPlanRetryCount),
+    } as AutoSession;
+    return decideOrchestratorDispatch(
+      this.ctx,
+      this.pi,
+      this.dispatchBasePath,
+      shadowSession,
+      { stateSnapshot },
+    );
   }
 
   private readOrphanedActiveUnitBlocker(
