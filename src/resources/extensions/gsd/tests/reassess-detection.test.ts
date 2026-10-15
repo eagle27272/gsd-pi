@@ -17,6 +17,7 @@ import { checkNeedsReassessment } from "../auto-prompts.ts";
 import { invalidateAllCaches } from "../cache.ts";
 import {
   closeDatabase,
+  insertAssessment,
   insertMilestone,
   insertSlice,
   isDbAvailable,
@@ -178,6 +179,56 @@ test("checkNeedsReassessment returns null when all slices are complete", async (
 
     const result = await checkNeedsReassessment(base, "M001", dummyState);
     assert.strictEqual(result, null, "should return null — all slices done, no point reassessing");
+  } finally {
+    cleanup(base);
+  }
+});
+
+// ─── checkNeedsReassessment: roadmap assessment recorded in the DB ───────
+// gsd_reassess_roadmap writes only the milestone-scoped ROADMAP-ASSESSMENT, never
+// the slice-scoped ASSESSMENT that run-uat produces. With uat_dispatch off, the
+// DB row is the only proof a reassess ran; ignoring it re-dispatches forever.
+
+function recordRoadmapAssessment(sliceId: string): void {
+  insertAssessment({
+    path: "phases/01-m001/01-ROADMAP-ASSESSMENT.md",
+    milestoneId: "M001",
+    sliceId,
+    status: "roadmap-confirmed",
+    scope: "roadmap",
+    fullContent: "Roadmap still holds.",
+  });
+}
+
+test("checkNeedsReassessment returns null when a roadmap assessment covers the last completed slice", async () => {
+  const base = makeTmpBase();
+  try {
+    invalidateAllCaches();
+    seedSlices("complete", "pending");
+    writeSummary(base, "S01");
+    recordRoadmapAssessment("S01");
+
+    const result = await checkNeedsReassessment(base, "M001", dummyState);
+    assert.strictEqual(result, null, "a confirmed reassess must satisfy its own completion check");
+  } finally {
+    cleanup(base);
+  }
+});
+
+test("checkNeedsReassessment still dispatches when the roadmap assessment covers an earlier slice", async () => {
+  const base = makeTmpBase();
+  try {
+    invalidateAllCaches();
+    openDatabase(":memory:");
+    insertMilestone({ id: "M001", title: "Test", status: "active" });
+    insertSlice({ milestoneId: "M001", id: "S01", title: "First", status: "complete", risk: "high", depends: [], sequence: 1 });
+    insertSlice({ milestoneId: "M001", id: "S02", title: "Second", status: "complete", risk: "medium", depends: ["S01"], sequence: 2 });
+    insertSlice({ milestoneId: "M001", id: "S03", title: "Third", status: "pending", risk: "medium", depends: ["S02"], sequence: 3 });
+    writeSummary(base, "S02");
+    recordRoadmapAssessment("S01");
+
+    const result = await checkNeedsReassessment(base, "M001", dummyState);
+    assert.deepStrictEqual(result, { sliceId: "S02" });
   } finally {
     cleanup(base);
   }
