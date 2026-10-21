@@ -20,14 +20,14 @@ interface CursorAgentRunResult {
 	signal: NodeJS.Signals | null;
 }
 
-export type CursorAgentLineHandler = (line: string) => void;
+type CursorAgentLineHandler = (line: string) => void;
 
-export interface CursorAgentRunPlan {
+interface CursorAgentRunPlan {
 	command: string;
 	args: string[];
 }
 
-export interface CursorAgentStreamOptions extends SimpleStreamOptions {
+interface CursorAgentStreamOptions extends SimpleStreamOptions {
 	_cursorAgentRunnerForTest?: (
 		plan: CursorAgentRunPlan,
 		options: SimpleStreamOptions | undefined,
@@ -139,12 +139,12 @@ function gsdToolBaseName(name: string): string {
 	return name.replace(/^mcp__.+?__/, "");
 }
 
-export function isCursorBridgedGsdTool(name: string): boolean {
+function isCursorBridgedGsdTool(name: string): boolean {
 	const base = gsdToolBaseName(name);
 	return CURSOR_BRIDGED_GSD_TOOLS.has(name) || CURSOR_BRIDGED_GSD_TOOLS.has(base);
 }
 
-export function isGsdToolName(name: string): boolean {
+function isGsdToolName(name: string): boolean {
 	const base = gsdToolBaseName(name);
 	return base.startsWith("gsd_") || name.startsWith("gsd_");
 }

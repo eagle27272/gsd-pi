@@ -9,7 +9,7 @@ let cachedBinaryPresent: boolean | null = null;
 let cachedAuthed: boolean | null = null;
 let lastCheckMs = 0;
 
-export function getCursorAgentCommand(platform: NodeJS.Platform = process.platform): string {
+function getCursorAgentCommand(platform: NodeJS.Platform = process.platform): string {
 	return platform === "win32" ? "cursor-agent.cmd" : "cursor-agent";
 }
 
@@ -132,12 +132,6 @@ export function isCursorAgentBinaryPresent(): boolean {
 export function isCursorAgentReady(): boolean {
 	refreshCache();
 	return (cachedBinaryPresent ?? false) && (cachedAuthed ?? false);
-}
-
-export function clearCursorAgentReadinessCache(): void {
-	cachedBinaryPresent = null;
-	cachedAuthed = null;
-	lastCheckMs = 0;
 }
 
 export function readCursorAgentListModels(): string | null {

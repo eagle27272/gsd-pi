@@ -33,7 +33,7 @@ function model(id: string, name: string): CursorAgentModel {
 	return cursorAgentModelFromListEntry(id, name);
 }
 
-export function cursorAgentModelFromListEntry(id: string, name: string): CursorAgentModel {
+function cursorAgentModelFromListEntry(id: string, name: string): CursorAgentModel {
 	const blob = `${id} ${name}`;
 	const contextWindow = /\b1M\b/i.test(blob) || /1m/i.test(id) ? 1_000_000 : 256_000;
 	const reasoning =
