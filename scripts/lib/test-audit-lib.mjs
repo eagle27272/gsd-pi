@@ -27,6 +27,7 @@ export const UNIT_EXTENSION_GLOBS = new Set([
   'herdr',
   'subagent',
   'claude-code-cli',
+  'cursor-cli',
   'github-sync',
   'gsd-bug-report',
   'universal-config',
