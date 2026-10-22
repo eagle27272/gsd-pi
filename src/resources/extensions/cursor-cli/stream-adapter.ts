@@ -89,14 +89,15 @@ export function buildCursorPrompt(context: Context): string {
 	if (context.messages.length > 0) parts.push(context.messages.map(messageToText).join("\n\n"));
 	if (context.tools?.length) {
 		const names = context.tools.map((tool) => tool.name);
-		const bridged = names.filter((name) => isCursorBridgedGsdTool(name));
+		const bridge = buildCursorGsdToolBridge(context.tools);
+		const bridged = names.filter((name) => bridge.resolve(name) !== undefined);
 		parts.push(
 			`The external Cursor agent may execute its own tools. ` +
 			`GSD will not redispatch Cursor-owned internal tool events locally. ` +
 			`GSD lifecycle tools bridged to the local host: ${bridged.join(", ") || "(none)"}. ` +
 			(bridged.length > 0
 				? `To invoke one, emit exactly one final envelope in this form: ` +
-					`<gsd_tool_call>{"name":"gsd_task_complete","arguments":{...}}</gsd_tool_call>. ` +
+					`<gsd_tool_call>{"name":"${bridged[0]}","arguments":{...}}</gsd_tool_call>. ` +
 					`Use a bridged tool name and its real arguments; GSD removes the envelope and executes it locally. `
 				: "") +
 			`Requested GSD tools: ${names.join(", ")}`,
@@ -126,11 +127,9 @@ export function buildCursorAgentRunPlan(
 	);
 }
 
-const CURSOR_BRIDGED_GSD_TOOLS = new Set([
-	"gsd_task_complete",
-	"gsd_complete_task",
-	"gsd_task_recovery_resume",
-]);
+// Task lifecycle tools stay bridgeable even when a request omits them, so a stray
+// execute-task envelope keeps working (#1764).
+const CURSOR_BASELINE_BRIDGED_GSD_TOOLS = ["gsd_task_complete", "gsd_complete_task", "gsd_task_recovery_resume"] as const;
 
 const GSD_TOOL_CALL_OPEN = "<gsd_tool_call>";
 const GSD_TOOL_CALL_CLOSE = "</gsd_tool_call>";
@@ -139,14 +138,33 @@ function gsdToolBaseName(name: string): string {
 	return name.replace(/^mcp__.+?__/, "");
 }
 
-function isCursorBridgedGsdTool(name: string): boolean {
-	const base = gsdToolBaseName(name);
-	return CURSOR_BRIDGED_GSD_TOOLS.has(name) || CURSOR_BRIDGED_GSD_TOOLS.has(base);
-}
-
 function isGsdToolName(name: string): boolean {
 	const base = gsdToolBaseName(name);
 	return base.startsWith("gsd_") || name.startsWith("gsd_");
+}
+
+/**
+ * The GSD tools cursor-agent may invoke through the `<gsd_tool_call>` envelope.
+ *
+ * Cursor cannot call host tools natively, so every GSD tool a step needs must be
+ * forwarded. The host already scopes `context.tools` per auto-mode unit from the Unit
+ * Registry (e.g. complete-slice exposes gsd_slice_complete), so that surface is the
+ * single source of truth instead of a hardcoded set (#273). Host-side scope hooks still
+ * gate execution. Non-GSD tools (read/edit/bash) stay Cursor-owned.
+ */
+interface CursorGsdToolBridge {
+	/** Registered tool name for an emitted name, or undefined when the step does not forward it. */
+	resolve(name: string): string | undefined;
+}
+
+function buildCursorGsdToolBridge(tools: readonly { name: string }[] | undefined): CursorGsdToolBridge {
+	const gsdToolNames = (tools ?? []).map((tool) => tool.name).filter(isGsdToolName);
+	const byName = new Map<string, string>();
+	// Lowest precedence first: baseline, then MCP-scoped tools by bare name, then exact names.
+	for (const name of CURSOR_BASELINE_BRIDGED_GSD_TOOLS) byName.set(name, name);
+	for (const name of gsdToolNames) byName.set(gsdToolBaseName(name), name);
+	for (const name of gsdToolNames) byName.set(name, name);
+	return { resolve: (name) => byName.get(name) ?? byName.get(gsdToolBaseName(name)) };
 }
 
 export function unsupportedCursorGsdToolError(name: string): string {
@@ -415,6 +433,7 @@ export function streamViaCursorAgent(
 		try {
 			const cwd = options?.cwd || process.cwd();
 			const prompt = buildCursorPrompt(context);
+			const bridge = buildCursorGsdToolBridge(context.tools);
 			const plan = buildCursorAgentRunPlan(model.id, prompt, cwd);
 			const runForTest = options?._cursorAgentRunnerForTest;
 			let text = "";
@@ -446,7 +465,7 @@ export function streamViaCursorAgent(
 				stream.push({ type: "text_delta", contentIndex: 0, delta: value });
 			};
 			const acceptToolCall = (toolCall: ToolCall): void => {
-				if (isGsdToolName(toolCall.name) && !isCursorBridgedGsdTool(toolCall.name)) {
+				if (isGsdToolName(toolCall.name) && !bridge.resolve(toolCall.name)) {
 					throw new Error(unsupportedCursorGsdToolError(toolCall.name));
 				}
 				ensureStart();
@@ -468,8 +487,8 @@ export function streamViaCursorAgent(
 				}
 				const requestedName = stringValue(parsed.name);
 				if (!requestedName) throw invalidCursorGsdToolEnvelopeError("missing tool name");
-				const name = gsdToolBaseName(requestedName);
-				if (!isCursorBridgedGsdTool(name)) throw new Error(unsupportedCursorGsdToolError(requestedName));
+				const name = bridge.resolve(requestedName);
+				if (!name) throw new Error(unsupportedCursorGsdToolError(requestedName));
 				const args = objectValue(parsed.arguments ?? parsed.input);
 				if (!args) throw invalidCursorGsdToolEnvelopeError(`missing arguments for ${name}`);
 				acceptToolCall({
@@ -527,7 +546,7 @@ export function streamViaCursorAgent(
 				}
 				if (parsed.type === "tool_result") {
 					const toolCall = toolCalls.get(parsed.toolCallId);
-					if (toolCall && isCursorBridgedGsdTool(toolCall.name)) return;
+					if (toolCall && bridge.resolve(toolCall.name)) return;
 					if (toolCall) toolCall.externalResult = parsed.result;
 				}
 			};
