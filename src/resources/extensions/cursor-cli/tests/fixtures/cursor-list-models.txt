@@ -1,3 +1,5 @@
+Available models
+
 auto - Auto (default)
 gpt-5.3-codex-low - Codex 5.3 Low
 gpt-5.3-codex-low-fast - Codex 5.3 Low Fast
@@ -22,13 +24,13 @@ claude-sonnet-5-thinking-high - Claude Sonnet 5 1M Thinking
 claude-sonnet-5-thinking-xhigh - Claude Sonnet 5 1M Extra High Thinking
 gpt-5.6-luna-high - GPT-5.6 Luna 1M High
 grok-4.7-low - Grok 4.7  Low
-grok-4.7-low-fast - Grok 4.7  Low Fast
+grok-4.7-low-fast - Grok 4.7  Low Fast​​
 grok-4.7-medium - Grok 4.7  Medium
-grok-4.7-medium-fast - Grok 4.7  Medium Fast
+grok-4.7-medium-fast - Grok 4.7  Medium Fast​​
 grok-4.7-high - Grok 4.7  High
-grok-4.7-high-fast - Grok 4.7  High Fast
+grok-4.7-high-fast - Grok 4.7  High Fast​​
 grok-4.7-xhigh - Grok 4.7  Extra High
-grok-4.7-xhigh-fast - Grok 4.7  Extra High Fast
+grok-4.7-xhigh-fast - Grok 4.7  Extra High Fast​​
 cursor-grok-4.6-low - Grok 4.6 Low
 cursor-grok-4.6-low-fast - Grok 4.6 Low Fast
 cursor-grok-4.6-medium - Grok 4.6 Medium
@@ -210,3 +212,5 @@ kimi-k3-max - Kimi K3
 kimi-k2.7-code - Kimi K2.7 Code
 glm-5.2-high - GLM 5.2
 glm-5.2-max - GLM 5.2 Max
+
+Tip: use --model <id> (or /model <id> in interactive mode) to switch. Parameterized models also accept quoted overrides, e.g. --model 'claude-opus-4-8[context=1m,effort=high,fast=false]'.
