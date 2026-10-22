@@ -138,19 +138,31 @@ function gsdToolBaseName(name: string): string {
 	return name.replace(/^mcp__.+?__/, "");
 }
 
-function isGsdToolName(name: string): boolean {
+/**
+ * Host tools outside the `gsd_*` namespace that a step still needs cursor-agent to call:
+ * - `ask_user_questions` blocks on a human and carries the depth-verification gate the
+ *   discuss-* units hard-require (#276).
+ * - `subagent` fans work out to child sessions (run-uat, validate-milestone, closeout) (#276).
+ * Both run through the normal host tool path, so interactive tracking, write-gate state,
+ * and scope hooks apply exactly as they do for any other provider.
+ */
+const CURSOR_BRIDGEABLE_HOST_TOOLS: ReadonlySet<string> = new Set(["ask_user_questions", "subagent"]);
+
+/** True for tools cursor-agent may forward through the envelope: `gsd_*` plus the allowlisted host tools. */
+function isBridgeableHostToolName(name: string): boolean {
 	const base = gsdToolBaseName(name);
-	return base.startsWith("gsd_") || name.startsWith("gsd_");
+	return base.startsWith("gsd_") || CURSOR_BRIDGEABLE_HOST_TOOLS.has(base);
 }
 
 /**
- * The GSD tools cursor-agent may invoke through the `<gsd_tool_call>` envelope.
+ * The host tools cursor-agent may invoke through the `<gsd_tool_call>` envelope.
  *
- * Cursor cannot call host tools natively, so every GSD tool a step needs must be
+ * Cursor cannot call host tools natively, so every host tool a step needs must be
  * forwarded. The host already scopes `context.tools` per auto-mode unit from the Unit
- * Registry (e.g. complete-slice exposes gsd_slice_complete), so that surface is the
- * single source of truth instead of a hardcoded set (#273). Host-side scope hooks still
- * gate execution. Non-GSD tools (read/edit/bash) stay Cursor-owned.
+ * Registry (e.g. complete-slice exposes gsd_slice_complete), so that surface, narrowed to
+ * the bridgeable names above, is the single source of truth instead of a hardcoded set
+ * (#273). Host-side scope hooks still gate execution. Other tools (read/edit/bash) stay
+ * Cursor-owned.
  */
 interface CursorGsdToolBridge {
 	/** Registered tool name for an emitted name, or undefined when the step does not forward it. */
@@ -158,12 +170,12 @@ interface CursorGsdToolBridge {
 }
 
 function buildCursorGsdToolBridge(tools: readonly { name: string }[] | undefined): CursorGsdToolBridge {
-	const gsdToolNames = (tools ?? []).map((tool) => tool.name).filter(isGsdToolName);
+	const bridgeableNames = (tools ?? []).map((tool) => tool.name).filter(isBridgeableHostToolName);
 	const byName = new Map<string, string>();
 	// Lowest precedence first: baseline, then MCP-scoped tools by bare name, then exact names.
 	for (const name of CURSOR_BASELINE_BRIDGED_GSD_TOOLS) byName.set(name, name);
-	for (const name of gsdToolNames) byName.set(gsdToolBaseName(name), name);
-	for (const name of gsdToolNames) byName.set(name, name);
+	for (const name of bridgeableNames) byName.set(gsdToolBaseName(name), name);
+	for (const name of bridgeableNames) byName.set(name, name);
 	return { resolve: (name) => byName.get(name) ?? byName.get(gsdToolBaseName(name)) };
 }
 
@@ -465,7 +477,7 @@ export function streamViaCursorAgent(
 				stream.push({ type: "text_delta", contentIndex: 0, delta: value });
 			};
 			const acceptToolCall = (toolCall: ToolCall): void => {
-				if (isGsdToolName(toolCall.name) && !bridge.resolve(toolCall.name)) {
+				if (isBridgeableHostToolName(toolCall.name) && !bridge.resolve(toolCall.name)) {
 					throw new Error(unsupportedCursorGsdToolError(toolCall.name));
 				}
 				ensureStart();
