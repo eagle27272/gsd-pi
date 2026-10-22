@@ -1157,3 +1157,50 @@ test("transport compatibility accepts MCP-namespaced runtime tools", () => {
 
   assert.equal(error, null);
 });
+
+const CURSOR_DISPATCH_OPTIONS = {
+  projectRoot: "/tmp/project",
+  env: { GSD_WORKFLOW_MCP_COMMAND: "node" },
+  surface: "auto-mode",
+  unitType: "discuss-milestone",
+  authMode: "externalCli" as const,
+  baseUrl: "local://cursor-agent",
+};
+
+test("cursor-agent dispatch is blocked when a unit needs ask_user_questions the host does not expose (#276)", () => {
+  // cursor-agent reaches host tools only through the envelope bridge, which forwards what the
+  // live toolset exposes. Being on the workflow MCP surface list does not make the tool callable.
+  const error = getWorkflowTransportSupportError(
+    "cursor-agent",
+    ["ask_user_questions", "gsd_summary_save"],
+    { ...CURSOR_DISPATCH_OPTIONS, activeTools: ["gsd_summary_save", "read"] },
+  );
+
+  assert.match(error ?? "", /Provider "cursor-agent" cannot run auto-mode for discuss-milestone/);
+  assert.match(error ?? "", /requires ask_user_questions/);
+});
+
+test("cursor-agent dispatch passes when the host exposes ask_user_questions, bare or MCP-scoped (#276)", () => {
+  for (const exposed of ["ask_user_questions", "mcp__gsd-workflow__ask_user_questions"]) {
+    const error = getWorkflowTransportSupportError(
+      "cursor-agent",
+      ["ask_user_questions", "gsd_summary_save"],
+      { ...CURSOR_DISPATCH_OPTIONS, activeTools: [exposed, "gsd_summary_save"] },
+    );
+    assert.equal(error, null, `${exposed} should satisfy the requirement`);
+  }
+});
+
+test("claude-code dispatch still treats ask_user_questions as MCP-provided when the host omits it (#469, #276)", () => {
+  const error = getWorkflowTransportSupportError(
+    "claude-code",
+    ["ask_user_questions", "gsd_summary_save"],
+    {
+      ...CURSOR_DISPATCH_OPTIONS,
+      baseUrl: "local://claude-code",
+      activeTools: ["gsd_summary_save", "read"],
+    },
+  );
+
+  assert.equal(error, null);
+});
