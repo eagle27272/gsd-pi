@@ -380,6 +380,24 @@ export function getRequiredWorkflowToolsForAutoUnit(unitType: string): string[] 
   return getRequiredWorkflowToolsForUnit(unitType);
 }
 
+/**
+ * Providers that reach host tools only through an in-process envelope bridge
+ * (cursor-agent's `<gsd_tool_call>`), never through the workflow MCP server.
+ */
+const HOST_BRIDGE_PROVIDERS: ReadonlySet<string> = new Set(["cursor-agent"]);
+
+/**
+ * Surface-listed tools a host-bridge provider can only forward when the live host
+ * toolset exposes them. Appearing on the workflow MCP surface proves nothing for these
+ * providers, so the dispatch check must see them in the active tools (#276).
+ */
+const HOST_BRIDGE_LIVE_TOOLS: ReadonlySet<string> = new Set(["ask_user_questions"]);
+
+function isProvidedByWorkflowSurface(tool: string, provider: string): boolean {
+  if (!isWorkflowToolSurfaceName(tool)) return false;
+  return !(HOST_BRIDGE_PROVIDERS.has(provider) && HOST_BRIDGE_LIVE_TOOLS.has(tool));
+}
+
 function hasRequiredTool(requiredTool: string, activeTools: string[]): boolean {
   return activeTools.some((toolName) => {
     if (toolName === requiredTool) return true;
@@ -408,7 +426,7 @@ export function getWorkflowTransportSupportError(
 
   const uniqueRequired = [...new Set(requiredTools)];
   const missing = (options.activeTools && options.activeTools.length > 0)
-    ? uniqueRequired.filter((tool) => !isWorkflowToolSurfaceName(tool) && !hasRequiredTool(tool, options.activeTools!))
+    ? uniqueRequired.filter((tool) => !isProvidedByWorkflowSurface(tool, provider) && !hasRequiredTool(tool, options.activeTools!))
     : uniqueRequired.filter((tool) => !isWorkflowToolSurfaceName(tool));
   if (missing.length === 0) return null;
 

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Context, Message, Model } from "@gsd/pi-ai";
 import { agentLoop } from "@gsd/pi-agent-core";
-import type { AgentEvent, AgentMessage } from "@gsd/pi-agent-core";
+import type { AgentContext, AgentEvent, AgentMessage } from "@gsd/pi-agent-core";
 import {
 	buildCursorAgentRunPlan,
 	buildCursorPrompt,
@@ -515,4 +515,132 @@ test("cursor adapter refuses unbridged GSD tool calls (#1764)", async () => {
 	assert.ok(error && error.type === "error");
 	assert.match(error.error.errorMessage ?? "", /tool unsupported under cursor-agent: gsd_exec/);
 	assert.equal(unsupportedCursorGsdToolError("gsd_exec"), "tool unsupported under cursor-agent: gsd_exec");
+});
+
+// ─── #276: interactive and coordination host tools ────────────────────────
+
+async function collectEvents(tools: { name: string }[], line: string) {
+	const stream = streamViaCursorAgent(model, { ...context, tools } as Context, {
+		_cursorAgentRunnerForTest: async () => ({ stdout: `${line}\n`, stderr: "", code: 0, signal: null }),
+	});
+	const events = [];
+	for await (const event of stream) events.push(event);
+	return events;
+}
+
+test("buildCursorPrompt bridges ask_user_questions and subagent when the step exposes them (#276)", () => {
+	const prompt = buildCursorPrompt({
+		...context,
+		tools: [{ name: "read" }, { name: "ask_user_questions" }, { name: "subagent" }, { name: "gsd_summary_save" }],
+	} as Context);
+	assert.match(
+		prompt,
+		/GSD lifecycle tools bridged to the local host: ask_user_questions, subagent, gsd_summary_save\./,
+	);
+	assert.doesNotMatch(prompt, /bridged to the local host:[^.]*\bread\b/);
+});
+
+test("buildCursorPrompt does not bridge ask_user_questions or subagent when the step omits them (#276)", () => {
+	const prompt = buildCursorPrompt({ ...context, tools: [{ name: "gsd_summary_save" }] } as Context);
+	assert.match(prompt, /GSD lifecycle tools bridged to the local host: gsd_summary_save\./);
+	assert.doesNotMatch(prompt, /bridged to the local host:[^.]*ask_user_questions/);
+	assert.doesNotMatch(prompt, /bridged to the local host:[^.]*subagent/);
+});
+
+test("buildCursorPrompt bridges MCP-scoped ask_user_questions by its registered name (#276)", () => {
+	const prompt = buildCursorPrompt({
+		...context,
+		tools: [{ name: "mcp__gsd-workflow__ask_user_questions" }],
+	} as Context);
+	assert.match(prompt, /bridged to the local host: mcp__gsd-workflow__ask_user_questions\./);
+});
+
+for (const toolName of ["ask_user_questions", "subagent"] as const) {
+	test(`cursor adapter accepts a ${toolName} envelope when the step exposes it (#276)`, async () => {
+		const events = await collectEvents(
+			[{ name: toolName }],
+			envelopeLine(toolName, { questions: [{ id: "depth_verification_M001_confirm" }] }),
+		);
+		assert.ok(!events.some((event) => event.type === "error"), `${toolName} envelope must not be rejected`);
+		const done = events.find((event) => event.type === "done");
+		assert.ok(done && done.type === "done");
+		const toolCall = done.message.content.find((block) => block.type === "toolCall");
+		assert.ok(toolCall && toolCall.type === "toolCall");
+		assert.equal(toolCall.name, toolName);
+		assert.deepEqual(toolCall.arguments, { questions: [{ id: "depth_verification_M001_confirm" }] });
+	});
+
+	test(`cursor adapter resolves a bare ${toolName} envelope to the MCP-scoped tool (#276)`, async () => {
+		const scoped = `mcp__gsd-workflow__${toolName}`;
+		const events = await collectEvents([{ name: scoped }], envelopeLine(toolName, { input: "x" }));
+		assert.ok(!events.some((event) => event.type === "error"));
+		const done = events.find((event) => event.type === "done");
+		assert.ok(done && done.type === "done");
+		const toolCall = done.message.content.find((block) => block.type === "toolCall");
+		assert.ok(toolCall && toolCall.type === "toolCall");
+		assert.equal(toolCall.name, scoped);
+	});
+
+	test(`cursor adapter refuses a ${toolName} envelope when the step does not expose it (#276)`, async () => {
+		const events = await collectEvents([{ name: "gsd_summary_save" }], envelopeLine(toolName, { input: "x" }));
+		const error = events.find((event) => event.type === "error");
+		assert.ok(error && error.type === "error");
+		assert.match(error.error.errorMessage ?? "", new RegExp(`tool unsupported under cursor-agent: ${toolName}`));
+	});
+}
+
+test("cursor discuss step passes a depth-verification gate through the ask_user_questions envelope round trip (#276)", async () => {
+	const askCalls: Record<string, unknown>[] = [];
+	let gateConfirmed = false;
+	const askTool = {
+		name: "ask_user_questions",
+		label: "Ask user",
+		description: "Ask the human a structured question",
+		parameters: { type: "object", properties: { questions: { type: "array" } }, required: ["questions"] },
+		async execute(_id: string, args: Record<string, unknown>) {
+			askCalls.push(args);
+			gateConfirmed = true;
+			return { content: [{ type: "text", text: "User answered: Yes, depth confirmed" }], details: {} };
+		},
+	};
+	const saveTool = {
+		name: "gsd_summary_save",
+		label: "Save summary",
+		description: "Persist the milestone context",
+		parameters: { type: "object", properties: { content: { type: "string" } }, required: ["content"] },
+		async execute(_id: string, args: Record<string, unknown>) {
+			// The write gate: persisting is refused until the depth question was asked and answered.
+			if (!gateConfirmed) throw new Error("depth_verification gate not confirmed");
+			return { content: [{ type: "text", text: `Saved ${String(args.content)}` }], details: {}, terminate: true };
+		},
+	};
+
+	const prompts: string[] = [];
+	const turns = [
+		envelopeLine("ask_user_questions", { questions: [{ id: "depth_verification_M001_confirm", question: "Depth OK?" }] }),
+		envelopeLine("gsd_summary_save", { content: "M001-CONTEXT" }),
+	];
+	const prompt: AgentMessage = { role: "user", content: "Discuss M001.", timestamp: Date.now() };
+	const stream = agentLoop(
+		[prompt],
+		{ systemPrompt: "Discuss the milestone.", messages: [], tools: [askTool, saveTool] as unknown as AgentContext["tools"] },
+		{ model, convertToLlm: (messages) => messages as Message[] },
+		undefined,
+		(_model, llmContext) => {
+			prompts.push(buildCursorPrompt(llmContext));
+			const line = turns[prompts.length - 1] ?? turns[turns.length - 1];
+			return streamViaCursorAgent(model, llmContext, {
+				_cursorAgentRunnerForTest: async () => ({ stdout: `${line}\n`, stderr: "", code: 0, signal: null }),
+			});
+		},
+	);
+
+	const events: AgentEvent[] = [];
+	for await (const event of stream) events.push(event);
+
+	assert.equal(askCalls.length, 1, "ask_user_questions executes exactly once across the round trip");
+	assert.equal(prompts.length, 2, "the answer is fed back to cursor-agent for a second turn");
+	assert.match(prompts[1], /User answered: Yes, depth confirmed/);
+	assert.ok(events.some((e) => e.type === "tool_execution_end" && e.toolName === "ask_user_questions" && !e.isError));
+	assert.ok(events.some((e) => e.type === "tool_execution_end" && e.toolName === "gsd_summary_save" && !e.isError));
 });
