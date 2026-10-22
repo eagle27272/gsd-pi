@@ -45,11 +45,28 @@ test("buildCursorSpawnInvocation uses cmd /c on Windows", () => {
 });
 
 test("buildCursorPrompt preserves system, message, and tool context", () => {
-	const prompt = buildCursorPrompt(context);
+	const prompt = buildCursorPrompt({ ...context, tools: [{ name: "read" }] } as Context);
 	assert.match(prompt, /System instructions:\nBe concise\./);
 	assert.match(prompt, /User:\nHello/);
-	assert.match(prompt, /Requested GSD tools: gsd_plan_slice/);
+	assert.match(prompt, /Requested GSD tools: read/);
 	assert.match(prompt, /GSD lifecycle tools bridged to the local host: \(none\)/);
+});
+
+test("buildCursorPrompt bridges every GSD tool the step exposes, not just task tools (#273)", () => {
+	const prompt = buildCursorPrompt({
+		...context,
+		tools: [
+			{ name: "read" },
+			{ name: "gsd_slice_complete" },
+			{ name: "gsd_exec" },
+			{ name: "mcp__gsd-workflow__gsd_summary_save" },
+		],
+	} as Context);
+	assert.match(
+		prompt,
+		/GSD lifecycle tools bridged to the local host: gsd_slice_complete, gsd_exec, mcp__gsd-workflow__gsd_summary_save\./,
+	);
+	assert.doesNotMatch(prompt, /bridged to the local host: read/);
 });
 
 test("buildCursorPrompt explains the local GSD lifecycle bridge (#1764)", () => {
@@ -372,6 +389,117 @@ test("cursor lifecycle envelope executes gsd_task_complete through the host agen
 	for await (const event of stream) events.push(event);
 	assert.deepEqual(executedArgs, { milestoneId: "M001", sliceId: "S01", taskId: "T03" });
 	assert.ok(events.some((event) => event.type === "tool_execution_end" && event.toolName === "gsd_task_complete"));
+});
+
+function envelopeLine(name: string, args: Record<string, unknown>): string {
+	const payload = JSON.stringify({ name, arguments: args });
+	return JSON.stringify({
+		type: "assistant",
+		message: { content: [{ type: "text", text: `<gsd_tool_call>${payload}</gsd_tool_call>` }] },
+	});
+}
+
+test("cursor adapter bridges gsd_slice_complete when the step exposes it (#273)", async () => {
+	const stream = streamViaCursorAgent(
+		model,
+		{ ...context, tools: [{ name: "gsd_slice_complete" }, { name: "gsd_exec" }] } as Context,
+		{
+			_cursorAgentRunnerForTest: async () => ({
+				stdout: `${envelopeLine("gsd_slice_complete", { milestoneId: "M001", sliceId: "S01" })}\n`,
+				stderr: "",
+				code: 0,
+				signal: null,
+			}),
+		},
+	);
+	const events = [];
+	for await (const event of stream) events.push(event);
+	assert.ok(!events.some((event) => event.type === "error"), "closeout envelope must not be rejected");
+	const done = events.find((event) => event.type === "done");
+	assert.ok(done && done.type === "done");
+	const toolCall = done.message.content.find((block) => block.type === "toolCall");
+	assert.ok(toolCall && toolCall.type === "toolCall");
+	assert.equal(toolCall.name, "gsd_slice_complete");
+	assert.deepEqual(toolCall.arguments, { milestoneId: "M001", sliceId: "S01" });
+});
+
+test("cursor adapter resolves a bare envelope name to the MCP-scoped tool the step registered (#273)", async () => {
+	const stream = streamViaCursorAgent(
+		model,
+		{ ...context, tools: [{ name: "mcp__gsd-workflow__gsd_slice_complete" }] } as Context,
+		{
+			_cursorAgentRunnerForTest: async () => ({
+				stdout: `${envelopeLine("gsd_slice_complete", { milestoneId: "M001", sliceId: "S01" })}\n`,
+				stderr: "",
+				code: 0,
+				signal: null,
+			}),
+		},
+	);
+	const events = [];
+	for await (const event of stream) events.push(event);
+	const done = events.find((event) => event.type === "done");
+	assert.ok(done && done.type === "done");
+	const toolCall = done.message.content.find((block) => block.type === "toolCall");
+	assert.ok(toolCall && toolCall.type === "toolCall");
+	assert.equal(toolCall.name, "mcp__gsd-workflow__gsd_slice_complete");
+});
+
+test("cursor adapter still refuses GSD tools the step did not expose (#273)", async () => {
+	const stream = streamViaCursorAgent(
+		model,
+		{ ...context, tools: [{ name: "gsd_exec" }] } as Context,
+		{
+			_cursorAgentRunnerForTest: async () => ({
+				stdout: `${envelopeLine("gsd_slice_complete", { milestoneId: "M001", sliceId: "S01" })}\n`,
+				stderr: "",
+				code: 0,
+				signal: null,
+			}),
+		},
+	);
+	const events = [];
+	for await (const event of stream) events.push(event);
+	const error = events.find((event) => event.type === "error");
+	assert.ok(error && error.type === "error");
+	assert.match(error.error.errorMessage ?? "", /tool unsupported under cursor-agent: gsd_slice_complete/);
+});
+
+test("cursor lifecycle envelope executes gsd_slice_complete through the host agent loop (#273)", async () => {
+	let executedArgs: Record<string, unknown> | undefined;
+	const sliceCompleteTool = {
+		name: "gsd_slice_complete",
+		label: "Complete slice",
+		description: "Complete the active slice",
+		parameters: {
+			type: "object",
+			properties: { milestoneId: { type: "string" }, sliceId: { type: "string" } },
+			required: ["milestoneId", "sliceId"],
+		},
+		async execute(_toolCallId: string, args: Record<string, unknown>) {
+			executedArgs = args;
+			return { content: [{ type: "text", text: "Slice S01 complete" }], details: {}, terminate: true };
+		},
+	};
+	const prompt: AgentMessage = { role: "user", content: "Complete slice S01.", timestamp: Date.now() };
+	const stream = agentLoop(
+		[prompt],
+		{ systemPrompt: "Close the slice.", messages: [], tools: [sliceCompleteTool as any] },
+		{ model, convertToLlm: (messages) => messages as Message[] },
+		undefined,
+		(_model, llmContext) => streamViaCursorAgent(model, llmContext, {
+			_cursorAgentRunnerForTest: async () => ({
+				stdout: `${envelopeLine("gsd_slice_complete", { milestoneId: "M001", sliceId: "S01" })}\n`,
+				stderr: "",
+				code: 0,
+				signal: null,
+			}),
+		}),
+	);
+	const events: AgentEvent[] = [];
+	for await (const event of stream) events.push(event);
+	assert.deepEqual(executedArgs, { milestoneId: "M001", sliceId: "S01" });
+	assert.ok(events.some((event) => event.type === "tool_execution_end" && event.toolName === "gsd_slice_complete"));
 });
 
 test("cursor adapter refuses unbridged GSD tool calls (#1764)", async () => {
