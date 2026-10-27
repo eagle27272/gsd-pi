@@ -140,6 +140,40 @@ describe("models.generated.ts", () => {
 		expect(vertex.compat).toMatchObject({ forceAdaptiveThinking: true });
 	});
 
+	test("includes Claude 5.5 and Fable 5.1 on GitHub Copilot", () => {
+		const copilot = MODELS["github-copilot"];
+		const expected = {
+			"claude-opus-5.5": { name: "Claude Opus 5.5", cost: { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 } },
+			"claude-sonnet-5.5": { name: "Claude Sonnet 5.5", cost: { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 } },
+			"claude-haiku-5.5": {
+				name: "Claude Haiku 5.5",
+				cost: {
+					input: 0.1,
+					output: 0.5,
+					cacheRead: 0.01,
+					cacheWrite: 0.125,
+					tiers: [{ inputTokensAbove: 100_000, input: 0.5, output: 2.5, cacheRead: 0.05, cacheWrite: 0.625 }],
+				},
+			},
+			"claude-fable-5.1": { name: "Claude Fable 5.1", cost: { input: 10, output: 50, cacheRead: 0.25, cacheWrite: 12.5 } },
+		} as const;
+
+		for (const [id, { name, cost }] of Object.entries(expected)) {
+			const model = (copilot as Record<string, (typeof copilot)[keyof typeof copilot]>)[id];
+			expect(model, id).toBeDefined();
+			expect(model.provider).toBe("github-copilot");
+			expect(model.api).toBe("openai-completions");
+			expect(model.name).toBe(name);
+			expect(model.reasoning).toBe(true);
+			expect(model.input).toEqual(["text", "image"]);
+			expect(model.contextWindow).toBe(1_000_000);
+			expect(model.maxTokens).toBe(128_000);
+			expect(model.cost).toEqual(cost);
+			expect(model.thinkingLevelMap).toEqual({ xhigh: "xhigh" });
+			expect(model.compat).toMatchObject({ supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false });
+		}
+	});
+
 	test("includes Claude Sonnet 5 across Anthropic-backed providers with adaptive thinking", () => {
 		const anthropic = MODELS.anthropic["claude-sonnet-5"];
 		expect(anthropic).toBeDefined();
