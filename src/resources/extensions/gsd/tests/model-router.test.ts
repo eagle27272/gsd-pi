@@ -1595,6 +1595,16 @@ test("light task with Vertex 5.5 models available routes to haiku-5-5", () => {
   assert.equal(result.wasDowngraded, true);
 });
 
+// --- GitHub Copilot dotted ids resolve to the 5.x tiers ---
+
+test("dotted Copilot ids for 5.x Claude models canonicalize onto their tier entries", () => {
+  assert.equal(canonicalizeModelId("github-copilot/claude-fable-5.1"), "claude-fable-5-1");
+  assert.equal(MODEL_CAPABILITY_TIER[canonicalizeModelId("github-copilot/claude-fable-5.1")], "heavy");
+  assert.equal(MODEL_CAPABILITY_TIER[canonicalizeModelId("github-copilot/claude-opus-5.5")], "heavy");
+  assert.equal(MODEL_CAPABILITY_TIER[canonicalizeModelId("github-copilot/claude-sonnet-5.5")], "standard");
+  assert.equal(MODEL_CAPABILITY_TIER[canonicalizeModelId("github-copilot/claude-haiku-5.5")], "light");
+});
+
 // ─── Duplicate registry keys (#1707 regression) ──────────────────────────────
 // The Sonnet 5 rollout appended a second "claude-sonnet-5" entry to three
 // registries (MODEL_CAPABILITY_TIER, MODEL_COST_PER_1K_INPUT,

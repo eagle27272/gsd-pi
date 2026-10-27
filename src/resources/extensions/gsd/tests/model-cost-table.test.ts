@@ -66,6 +66,14 @@ test("lookupModelCost finds Claude Haiku 5.5 pricing", () => {
   assert.equal(entry.outputPer1k, 0.0005);
 });
 
+test("lookupModelCost prices Claude Fable 5.1 on its own entry", () => {
+  const entry = lookupModelCost("claude-fable-5-1");
+  assert.ok(entry);
+  assert.equal(entry.id, "claude-fable-5-1");
+  assert.equal(entry.inputPer1k, 0.010);
+  assert.equal(entry.outputPer1k, 0.050);
+});
+
 test("lookupModelCost finds MAI Code 1.1 Flash pricing", () => {
   const entry = lookupModelCost("github-copilot/mai-code-1.1-flash");
   assert.ok(entry);
