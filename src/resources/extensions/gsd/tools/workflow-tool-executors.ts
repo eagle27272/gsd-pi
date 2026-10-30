@@ -33,6 +33,7 @@ export {
 import { emitLifecycleShadowObservation } from "../uok/audit.js";
 import { extractMilestoneSeq } from "../milestone-ids.js";
 import { readMilestoneMergeObservation } from "../db/milestone-closeout-readiness.js";
+import { readMilestoneValidationStatus } from "../milestone-validation-verdict.js";
 import { immediateTransaction } from "../db/engine.js";
 import { isClosedStatus } from "../status-guards.js";
 import { GATE_REGISTRY } from "../gate-registry.js";
@@ -2419,6 +2420,7 @@ export async function executeMilestoneStatus(
         status: s.status,
         taskCounts: getSliceTaskCounts(params.milestoneId, s.id),
       }));
+      const validation = readMilestoneValidationStatus(params.milestoneId);
 
       const result = {
         milestoneId: milestone.id,
@@ -2429,6 +2431,7 @@ export async function executeMilestoneStatus(
         dependsOn: milestone.depends_on ?? [],
         sliceCount: slices.length,
         slices,
+        ...(validation ? { validation } : {}),
       };
 
       milestoneStatusReadInterleaveForTest?.();

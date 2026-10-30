@@ -8,9 +8,14 @@
  */
 
 import type { Theme } from "@gsd/pi-coding-agent";
-import { truncateToWidth, matchesKey, Key } from "@gsd/pi-tui";
+import { truncateToWidth, visibleWidth, matchesKey, Key } from "@gsd/pi-tui";
 import { deriveState } from "./state.js";
 import { isDbAvailable, getMilestoneSlices, getSliceTasks } from "./gsd-db.js";
+import {
+  formatMilestoneValidationSummary,
+  readMilestoneValidationStatus,
+  type MilestoneValidationStatus,
+} from "./milestone-validation-verdict.js";
 import { getAutoDashboardData } from "./auto.js";
 import type { AutoDashboardData } from "./auto-dashboard.js";
 import { getAutoRuntimeSnapshot } from "./auto-runtime-state.js";
@@ -56,6 +61,33 @@ function formatCharCount(chars: number): string {
   if (chars >= 1_000_000) return `${(chars / 1_000_000).toFixed(2)}M chars`;
   if (chars >= 1_000) return `${(chars / 1_000).toFixed(1)}k chars`;
   return `${chars} chars`;
+}
+
+function wrapPath(path: string, width: number): string[] {
+  const maxWidth = Math.max(1, width);
+  const lines: string[] = [];
+  let line = "";
+  let lineWidth = 0;
+  for (const { segment } of new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(path)) {
+    const segmentWidth = visibleWidth(segment);
+    if (line && lineWidth + segmentWidth > maxWidth) {
+      const trailingSpaces = line.match(/ +$/)?.[0] ?? "";
+      if (trailingSpaces && trailingSpaces.length < line.length && trailingSpaces.length + segmentWidth <= maxWidth) {
+        // Keep boundary spaces on the next row so padding cannot hide them.
+        lines.push(line.slice(0, -trailingSpaces.length));
+        line = trailingSpaces;
+        lineWidth = trailingSpaces.length;
+      } else {
+        lines.push(line);
+        line = "";
+        lineWidth = 0;
+      }
+    }
+    line += segment;
+    lineWidth += segmentWidth;
+  }
+  if (line) lines.push(line);
+  return lines;
 }
 
 export class GSDDashboardOverlay {
@@ -174,6 +206,7 @@ export class GSDDashboardOverlay {
     const nextIdentity = this.computeDashboardIdentity(runtimeSnapshot);
 
     const identityChanged = initial || nextIdentity !== this.loadedDashboardIdentity;
+    let validationChanged = false;
     if (identityChanged) {
       this.dashData = getAutoDashboardData();
       const loadedIdentity = this.computeDashboardIdentity(this.dashData);
@@ -184,6 +217,15 @@ export class GSDDashboardOverlay {
       }
     } else {
       this.refreshVolatileDashboardData(runtimeSnapshot);
+      if (this.milestoneData) {
+        const previous = this.milestoneData.validation;
+        const validation = readMilestoneValidationStatus(this.milestoneData.id);
+        validationChanged = previous?.verdict !== validation?.verdict
+          || previous?.remediationRound !== validation?.remediationRound
+          || previous?.validationPath !== validation?.validationPath
+          || previous?.validationFileUnavailable !== validation?.validationFileUnavailable;
+        if (validationChanged) this.milestoneData.validation = validation;
+      }
     }
 
     if (initial) {
@@ -192,7 +234,7 @@ export class GSDDashboardOverlay {
 
     this.scheduleEnvironmentRefresh(this.dashData.basePath || process.cwd());
 
-    if (identityChanged) {
+    if (identityChanged || validationChanged) {
       this.invalidate();
     }
     this.tui.requestRender();
@@ -236,6 +278,7 @@ export class GSDDashboardOverlay {
       const view: MilestoneView = {
         id: mid,
         title: state.activeMilestone.title,
+        validation: readMilestoneValidationStatus(mid),
         slices: [],
         phase: state.phase,
         progress: {
@@ -498,6 +541,21 @@ export class GSDDashboardOverlay {
     if (this.milestoneData) {
       const mv = this.milestoneData;
       lines.push(row(th.fg("text", th.bold(`${mv.id}: ${mv.title}`))));
+      if (mv.validation) {
+        const color = mv.validation.verdict === "pass" ? "success" : "warning";
+        lines.push(row(`${th.fg("dim", "Validation:")} ${th.fg(color, formatMilestoneValidationSummary(mv.validation))}`));
+        if (mv.validation.validationPath) {
+          const label = mv.validation.validationFileUnavailable
+            ? "Validation file: unavailable at recorded path"
+            : "Validation file:";
+          lines.push(row(th.fg(mv.validation.validationFileUnavailable ? "warning" : "dim", label)));
+          for (const pathLine of wrapPath(mv.validation.validationPath, contentWidth - 2)) {
+            lines.push(row(th.fg("dim", `  ${pathLine}`)));
+          }
+        } else {
+          lines.push(row(th.fg("warning", "Validation file: unavailable (not recorded)")));
+        }
+      }
       lines.push(blank());
 
       const totalSlices = mv.slices.length;
@@ -733,6 +791,7 @@ export class GSDDashboardOverlay {
 interface MilestoneView {
   id: string;
   title: string;
+  validation?: MilestoneValidationStatus;
   slices: SliceView[];
   phase: string;
   progress: {
