@@ -9,6 +9,7 @@ import {
   getAllMilestones,
   getMilestone,
   getMilestoneLifecycleShadowSnapshot,
+  getSlice,
   getSliceStatusSummary,
   getSliceTaskCounts,
   getTask,
@@ -38,7 +39,7 @@ import { isClosedStatus } from "../status-guards.js";
 import { GATE_REGISTRY } from "../gate-registry.js";
 import { generateRequirementsMd, saveArtifactToDb } from "../db-writer.js";
 import { clearPathCache, normalizeRealPath, relMilestoneFile, relSliceFile, relSlicePath, resolveGsdPathContract, resolveMilestoneFile, resolveSliceFile } from "../paths.js";
-import { saveFile, clearParseCache } from "../files.js";
+import { loadFile, parseSummary, saveFile, clearParseCache } from "../files.js";
 import { removeProjectionFileSync } from "../atomic-write.js";
 import { hostname } from "node:os";
 import { isAbsolute, relative, resolve } from "node:path";
@@ -1962,6 +1963,17 @@ function errorResult(operation: string, message: string, error: string): ToolExe
   };
 }
 
+function summaryHasNoDocumentedFollowUps(content: string): boolean {
+  const summary = parseSummary(content);
+  return [summary.knownLimitations, summary.followUps].every((section) => {
+    const text = section.trim()
+      .replace(/^[\s>*-]+/, "")
+      .replace(/^[`*_]+|[`*_]+$/g, "")
+      .trim();
+    return text === "" || /^(?:none|n\/a|not applicable)\.?$/i.test(text);
+  });
+}
+
 export async function executeUatResultSave(
   params: UatResultSaveParams,
   basePath: string = process.cwd(),
@@ -1982,6 +1994,15 @@ export async function executeUatResultSave(
   const { run } = prepared;
 
   try {
+    const humanChecks = run.params.checks.filter((check) => check.result === "NEEDS-HUMAN");
+    let sliceSummary = "";
+    if (humanChecks.length > 0) {
+      const projectRoot = resolveGsdPathContract(basePath).projectRoot;
+      const summaryPath = resolveSliceFile(projectRoot, run.params.milestoneId, run.params.sliceId, "SUMMARY");
+      const visibleSummary = summaryPath ? await loadFile(summaryPath) : null;
+      sliceSummary = visibleSummary ?? getSlice(run.params.milestoneId, run.params.sliceId)?.full_summary_md ?? "";
+    }
+    const summaryMismatch = sliceSummary.trim() !== "" && summaryHasNoDocumentedFollowUps(sliceSummary);
     const summary = await executeSummarySave(
       {
         milestone_id: run.params.milestoneId,
@@ -2035,18 +2056,36 @@ export async function executeUatResultSave(
     });
     invalidateStateCache();
     if (run.hasHuman) {
+      const notification = summaryMismatch
+        ? `SUMMARY.md has no documented known limitations or follow-ups, but UAT for ${run.params.milestoneId}/${run.params.sliceId} is ${run.params.verdict} with NEEDS-HUMAN checks (${humanChecks.map((check) => check.id).join(", ")}). See ${assessmentPath}.`
+        : `UAT for ${run.params.milestoneId}/${run.params.sliceId} has NEEDS-HUMAN checks awaiting human validation`;
       appendNotification(
-        `UAT for ${run.params.milestoneId}/${run.params.sliceId} has NEEDS-HUMAN checks awaiting human validation`,
+        notification,
         "warning",
         "notify",
         { kind: "uat-needs-human", scope: `${run.params.milestoneId}/${run.params.sliceId}` },
       );
     }
     const savedText = `UAT result saved for ${run.params.milestoneId}/${run.params.sliceId}: ${run.params.verdict}`;
+    const message = [savedText];
+    if (summaryMismatch) {
+      message.push(`Warning: SUMMARY.md has no documented known limitations or follow-ups, but this ${run.params.verdict} UAT assessment contains unresolved NEEDS-HUMAN checks.`);
+    }
+    if (run.manualGuidance) {
+      message.push(`Manual validation needed:\n${run.manualGuidance}`);
+    }
+    if (humanChecks.length > 0) {
+      const checks = humanChecks.map((check) => {
+        const description = check.description.replace(/\s+/g, " ").trim();
+        const notes = check.notes?.replace(/\s+/g, " ").trim();
+        return `- ${check.id}: ${description}${notes ? ` — ${notes}` : ""}`;
+      });
+      message.push(`NEEDS-HUMAN checks:\n${checks.join("\n")}\n\nAssessment: \`${assessmentPath}\``);
+    }
     return {
       content: [{
         type: "text",
-        text: run.manualGuidance ? `${savedText}\n\nManual validation needed:\n${run.manualGuidance}` : savedText,
+        text: message.join("\n\n"),
       }],
       details: {
         operation: "save_uat_result",
