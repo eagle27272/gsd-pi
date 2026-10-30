@@ -10,7 +10,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { buildSliceSummaryExcerpt, buildCompleteMilestonePrompt, buildValidateMilestonePrompt } from "../auto-prompts.ts";
+import { buildSliceAssessmentExcerpt, buildSliceSummaryExcerpt, buildCompleteMilestonePrompt, buildValidateMilestonePrompt } from "../auto-prompts.ts";
 import { invalidateAllCaches } from "../cache.ts";
 import {
   closeDatabase,
@@ -250,6 +250,112 @@ test("#4780 excerpt: section bodies are capped", async (t) => {
     out.length < 2000,
     `excerpt length ${out.length} should be well under 2KB when one section hits the cap`,
   );
+});
+
+test("#283 assessment excerpt preserves unresolved checks and excludes passing rows", async (t) => {
+  const base = createBase();
+  t.after(() => cleanup(base));
+  invalidateAllCaches();
+
+  writeAssessment(base, "S01", [
+    "---",
+    "verdict: PARTIAL",
+    "---",
+    "# UAT Result - S01",
+    "## Checks",
+    "| Check | Mode | Result | Evidence | Notes |",
+    "|-------|------|--------|----------|-------|",
+    "| Automated contract | runtime | PASS | gsd_uat_exec:run-1 | No NEEDS-HUMAN work here. |",
+    "| Verify --filter-class | runtime | NEEDS-HUMAN | - | Tool output was inconclusive. |",
+    "| Confirm CI \\| TRX artifact | human-follow-up | NEEDS-HUMAN | - | Check that the artifact was uploaded. |",
+    "",
+    "## Overall Verdict",
+    "PARTIAL - Manual checks remain.",
+    "",
+    "## Full Runtime Trace",
+    "Noisy runtime trace. ".repeat(100),
+  ].join("\n"));
+  const absPath = join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test Milestone"), "01-01-ASSESSMENT.md");
+
+  const out = await buildSliceAssessmentExcerpt(absPath, ".gsd/phases/01-m001/01-01-ASSESSMENT.md", "S01");
+
+  assert.ok(out);
+  assert.match(out, /PARTIAL/);
+  assert.match(out, /NEEDS-HUMAN/);
+  assert.match(out, /Verify --filter-class/);
+  assert.match(out, /Tool output was inconclusive/);
+  assert.match(out, /Confirm CI.*TRX artifact/);
+  assert.match(out, /artifact was uploaded/);
+  assert.doesNotMatch(out, /Automated contract/);
+  assert.doesNotMatch(out, /Noisy runtime trace/);
+});
+
+test("#283 passing assessments still show bounded human follow-ups", async (t) => {
+  const base = createBase();
+  t.after(() => cleanup(base));
+  invalidateAllCaches();
+  writeAssessment(base, "S01", [
+    "---",
+    "verdict: PASS",
+    "---",
+    "## Checks",
+    "| Check | Mode | Result | Evidence | Notes |",
+    "|-------|------|--------|----------|-------|",
+    `| Review the layout | human-follow-up | NEEDS-HUMAN | - | ${"Detailed visual review. ".repeat(100)} |`,
+    "",
+    "## Overall Verdict",
+    "PASS - Automated checks passed.",
+  ].join("\n"));
+  const absPath = join(base, ".gsd", "phases", canonicalPhaseDirName("M001", "Test Milestone"), "01-01-ASSESSMENT.md");
+
+  const out = await buildSliceAssessmentExcerpt(absPath, ".gsd/phases/01-m001/01-01-ASSESSMENT.md", "S01");
+
+  assert.ok(out);
+  assert.match(out, /PASS/);
+  assert.match(out, /NEEDS-HUMAN/);
+  assert.match(out, /Review the layout/);
+  assert.match(out, /truncated — see full `\.gsd\/phases\/01-m001\/01-01-ASSESSMENT\.md`/);
+  const truncatedChecks = out.match(/#### NEEDS-HUMAN checks\n([\s\S]*?)\n… \(truncated/);
+  assert.ok(truncatedChecks);
+  assert.equal(truncatedChecks[1].length, 800);
+});
+
+test("#283 milestone validation sees human checks even when slice summaries say none", async (t) => {
+  const base = createBase();
+  t.after(() => cleanup(base));
+  invalidateAllCaches();
+  writeRoadmap(base, makeRoadmap());
+  seedRoadmapSlices(base);
+  writeSummary(base, "S01", [
+    "---",
+    "id: S01",
+    "verification_result: passed",
+    "---",
+    "# S01: Slice summary",
+    "## Known Limitations",
+    "None.",
+    "## Follow-ups",
+    "None.",
+  ].join("\n"));
+  writeSummary(base, "S02", makeFatSummary("S02"));
+  writeAssessment(base, "S01", [
+    "---",
+    "verdict: PARTIAL",
+    "---",
+    "## Checks",
+    "| Check | Mode | Result | Evidence | Notes |",
+    "|-------|------|--------|----------|-------|",
+    "| Confirm the CI integration job | human-follow-up | NEEDS-HUMAN | - | Verify its TRX artifact was uploaded. |",
+    "",
+    "## Overall Verdict",
+    "PARTIAL - Manual confirmation required.",
+  ].join("\n"));
+
+  const prompt = await buildValidateMilestonePrompt("M001", "Test Milestone", base);
+
+  assert.match(prompt, /### S01 Assessment \(excerpt\)/);
+  assert.match(prompt, /Confirm the CI integration job/);
+  assert.match(prompt, /Verify its TRX artifact was uploaded/);
 });
 
 // ─── buildCompleteMilestonePrompt integration test ─────────────────────────
