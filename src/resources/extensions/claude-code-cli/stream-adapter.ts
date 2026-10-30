@@ -85,6 +85,10 @@ import {
 	MILESTONE_STATUS_OBSERVATION_PENDING_SOURCE_REVISION,
 } from "../gsd/milestone-status-observation-context.js";
 import { resolveUokFlags } from "../gsd/uok/flags.js";
+import {
+	applyCodegraphPromptHookPolicy,
+	CODEGRAPH_NO_PROMPT_HOOK_ENV,
+} from "../codegraph/prompt-policy.js";
 import { hasBrowserContractPrefix } from "../shared/browser-contract.js";
 import { showInterviewRound, type Question, type RoundResult } from "../shared/tui.js";
 import type {
@@ -2178,7 +2182,7 @@ function logClaudeCodeSdkStderr(data: unknown): void {
  */
 export function buildSdkOptions(
 	modelId: string,
-	_prompt: string,
+	prompt: string,
 	overrides?: { permissionMode?: "bypassPermissions" | "acceptEdits" | "default" | "plan" },
 	extraOptions: Record<string, unknown> & { reasoning?: ThinkingLevel; gsdPhase?: string } = {},
 ): Record<string, unknown> {
@@ -2353,6 +2357,16 @@ export function buildSdkOptions(
 			: { thinking: { type: "disabled" } }
 		: undefined;
 
+	const sdkEnv = applyCodegraphPromptHookPolicy(
+		withClaudeCodePrintBgWaitCeiling(
+			isRecord(extraEnv) ? { ...process.env, ...extraEnv as NodeJS.ProcessEnv } : process.env,
+		),
+		prompt,
+	);
+	if (process.env.GSD_SUBAGENT_CHILD === "1") {
+		sdkEnv[CODEGRAPH_NO_PROMPT_HOOK_ENV] = "1";
+	}
+
 	return {
 		pathToClaudeCodeExecutable: getClaudePath(),
 		model: modelId,
@@ -2379,9 +2393,7 @@ export function buildSdkOptions(
 		...(thinkingConfig ?? {}),
 		...(effort ? { effort } : {}),
 		...sdkExtraOptions,
-		env: withClaudeCodePrintBgWaitCeiling(
-			isRecord(extraEnv) ? { ...process.env, ...extraEnv as NodeJS.ProcessEnv } : process.env,
-		),
+		env: sdkEnv,
 		stderr: typeof extraStderr === "function" ? extraStderr : logClaudeCodeSdkStderr,
 	};
 }
@@ -2549,6 +2561,7 @@ async function pumpSdkMessages(
 		const projectRoot = resolveWorkflowMcpProjectRoot(cwd);
 		autoInitClaudeCodeWorkflowMcp(cwd);
 		const gsdPhase = resolveGsdPhaseForSdk(context, projectRoot);
+		const lastUser = [...context.messages].reverse().find((message) => message.role === "user");
 		const canUseToolHandler = createClaudeCodeCanUseToolHandler(uiContext);
 		// When no UI is available (headless / auto-mode), auto-approve all
 		// tool requests. This replaces the old bypassPermissions workaround.
@@ -2557,7 +2570,7 @@ async function pumpSdkMessages(
 				({ behavior: "allow", toolUseID: opts.toolUseID }));
 		const sdkOpts = buildSdkOptions(
 			modelId,
-			"",
+			lastUser ? extractMessageText(lastUser) : "",
 			{ permissionMode },
 			{
 				cwd,
