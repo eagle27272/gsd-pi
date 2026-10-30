@@ -468,6 +468,8 @@ See [Remote Questions — Telegram Commands](./remote-questions.md#telegram-comm
 `Ctrl+Alt+G` or `/gsd status` shows real-time progress:
 
 - Current milestone, slice, and task
+- The active milestone's validation verdict, remediation round, and validation-file path when validation has been recorded
+- A warning when the validation-file path was not recorded or an absolute recorded path is unavailable
 - Auto mode elapsed time and phase
 - Per-unit cost and token breakdown
 - Cost projections

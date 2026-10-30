@@ -132,9 +132,10 @@ export function registerQueryTools(
     description:
       "Read the current status of a milestone and all its slices from the GSD database. " +
       "Returns milestone metadata (including `dependsOn`, the persisted milestone dependencies), " +
-      "per-slice status, and task counts per slice. " +
+      "per-slice status, task counts, and any persisted validation verdict, remediation round, and file path. " +
+      "An unrecorded validation path is null; an unavailable absolute validation file is marked `validationFileUnavailable`. " +
       "Use this instead of querying .gsd/gsd.db directly via sqlite3 or better-sqlite3.",
-    promptSnippet: "Get milestone status, slice statuses, and task counts for a given milestoneId",
+    promptSnippet: "Get milestone status, slice statuses, task counts, and validation for a given milestoneId",
     promptGuidelines: [
       "Use this tool — not sqlite3 or better-sqlite3 — to inspect milestone or slice state from the DB.",
     ],

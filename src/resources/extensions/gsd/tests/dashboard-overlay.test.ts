@@ -14,11 +14,13 @@ import { GSDDashboardOverlay } from "../dashboard-overlay.ts";
 import type { UnitMetrics } from "../metrics.ts";
 import { assertFullOuterBorder } from "./tui-border-assertions.ts";
 import { autoSession, getAutoRuntimeSnapshot } from "../auto-runtime-state.ts";
+import { formatTextStatus } from "../commands/handlers/core.ts";
 import { adoptOrTransitionLifecycle } from "../db/writers/lifecycle-commands.ts";
 import { clearParseCache } from "../files.ts";
 import {
   closeDatabase,
   executeDomainOperation,
+  insertAssessment,
   insertMilestone,
   insertSlice,
   insertTask,
@@ -27,6 +29,7 @@ import {
 } from "../gsd-db.ts";
 import { completeMilestone } from "../milestone-lifecycle-domain-operation.ts";
 import { clearPathCache } from "../paths.ts";
+import { deriveState } from "../state.ts";
 import { handleValidateMilestone } from "../tools/validate-milestone.ts";
 import { captureVerificationSourceSnapshot } from "../verification-source-integrity.ts";
 
@@ -211,6 +214,176 @@ test("GSDDashboardOverlay reloads milestone progress after a DB-backed completio
   assert.equal((overlay as any).milestoneData, null, "completed milestone must not be presented as the active milestone");
   const rendered = overlay.render(100).join("\n");
   assert.ok(!rendered.includes("S01"), "stale active slice must not be presented as current");
+});
+
+test("status views refresh a legacy validation without a project revision change", async (t) => {
+  const basePath = join(tmpdir(), `gsd-dashboard-validation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const milestoneDir = join(basePath, ".gsd", "phases", "01-dashboard");
+  mkdirSync(milestoneDir, { recursive: true });
+  writeFileSync(join(milestoneDir, "01-CONTEXT.md"), "# M001\n");
+  assert.equal(openDatabase(join(basePath, ".gsd", "gsd.db")), true);
+  insertMilestone({ id: "M001", title: "Dashboard validation", status: "active" });
+  insertSlice({ id: "S01", milestoneId: "M001", title: "Done", status: "complete" });
+
+  autoSession.reset();
+  autoSession.basePath = basePath;
+  const overlay = new GSDDashboardOverlay({ requestRender() {} }, fakeTheme as any, () => {});
+  t.after(() => {
+    overlay.dispose();
+    autoSession.reset();
+    closeDatabase();
+    clearParseCache();
+    clearPathCache();
+    rmSync(basePath, { recursive: true, force: true });
+  });
+
+  await (overlay as any).refreshInFlight;
+  assert.doesNotMatch(overlay.render(160).join("\n"), /Validation:/);
+  const identityBefore = (overlay as any).loadedDashboardIdentity;
+  const params = {
+    milestoneId: "M001",
+    verdict: "needs-attention" as const,
+    remediationRound: 0,
+    successCriteriaChecklist: "- [x] Delivered",
+    sliceDeliveryAudit: "Delivered",
+    crossSliceIntegration: "Reviewed",
+    requirementCoverage: "Covered",
+    verdictRationale: "Human confirmation remains outstanding.",
+  };
+  const saved = await handleValidateMilestone(params, basePath, { skipBrowserEvidenceGate: true });
+  assert.ok(!("error" in saved), `validation failed: ${"error" in saved ? saved.error : ""}`);
+  assert.equal(
+    (overlay as any).computeDashboardIdentity(getAutoRuntimeSnapshot()),
+    identityBefore,
+    "legacy validation does not change the dashboard identity",
+  );
+
+  await (overlay as any).refreshDashboard(false);
+  const rendered = overlay.render(160).join("\n");
+  assert.match(rendered, /Validation:\s+needs-attention.*round 0/i);
+  const unwrapped = rendered.split("\n")
+    .filter((line) => line.startsWith("│"))
+    .map((line) => line.slice(1, -1).trim())
+    .join("");
+  assert.ok(unwrapped.includes(saved.validationPath), "dashboard should show the complete validation path");
+
+  const text = formatTextStatus(await deriveState(basePath), basePath);
+  assert.match(text, /Validation:\s+needs-attention.*round 0/i);
+  assert.ok(text.includes(saved.validationPath), "text status should show the validation path");
+
+  const revalidated = await handleValidateMilestone({
+    ...params,
+    verdict: "pass",
+    remediationRound: 2,
+    verdictRationale: "Confirmed.",
+  }, basePath, { skipBrowserEvidenceGate: true });
+  assert.ok(!("error" in revalidated));
+  await (overlay as any).refreshDashboard(false);
+  const updated = overlay.render(160).join("\n");
+  assert.match(updated, /Validation:\s+pass.*round 2/i);
+  assert.doesNotMatch(updated, /needs-attention/);
+
+  rmSync(revalidated.validationPath);
+  await (overlay as any).refreshDashboard(false);
+  const missing = overlay.render(160).join("\n");
+  assert.match(missing, /Validation file:\s+unavailable/i);
+  assert.match(formatTextStatus(await deriveState(basePath), basePath), /Validation file:.*unavailable/i);
+});
+
+test("status views show validation even when its recorded file path is empty", async (t) => {
+  const basePath = join(tmpdir(), `gsd-dashboard-missing-path-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const milestoneDir = join(basePath, ".gsd", "phases", "01-dashboard");
+  mkdirSync(milestoneDir, { recursive: true });
+  writeFileSync(join(milestoneDir, "01-CONTEXT.md"), "# M001\n");
+  assert.equal(openDatabase(join(basePath, ".gsd", "gsd.db")), true);
+  insertMilestone({ id: "M001", title: "Dashboard validation", status: "active" });
+  insertAssessment({
+    path: "",
+    milestoneId: "M001",
+    status: "needs-attention",
+    scope: "milestone-validation",
+    fullContent: "---\nremediation_round: 2\n---\n",
+  });
+
+  autoSession.reset();
+  autoSession.basePath = basePath;
+  const overlay = new GSDDashboardOverlay({ requestRender() {} }, fakeTheme as any, () => {});
+  t.after(() => {
+    overlay.dispose();
+    autoSession.reset();
+    closeDatabase();
+    clearParseCache();
+    clearPathCache();
+    rmSync(basePath, { recursive: true, force: true });
+  });
+
+  await (overlay as any).refreshInFlight;
+  const rendered = overlay.render(160).join("\n");
+  assert.match(rendered, /Validation:\s+needs-attention.*round 2/i);
+  assert.match(rendered, /Validation file:\s+unavailable/i);
+  const text = formatTextStatus(await deriveState(basePath), basePath);
+  assert.match(text, /Validation:\s+needs-attention.*round 2/i);
+  assert.match(text, /Validation file:\s+unavailable/i);
+  await assert.doesNotReject(() => (overlay as any).refreshDashboard(false));
+});
+
+test("GSDDashboardOverlay keeps long validation paths visible at narrow widths", async (t) => {
+  const basePath = join(tmpdir(), `gsd-dashboard-long-path-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const milestoneDir = join(basePath, ".gsd", "phases", "01-dashboard");
+  mkdirSync(milestoneDir, { recursive: true });
+  writeFileSync(join(milestoneDir, "01-CONTEXT.md"), "# M001\n");
+  assert.equal(openDatabase(join(basePath, ".gsd", "gsd.db")), true);
+  insertMilestone({ id: "M001", title: "Dashboard validation", status: "active" });
+  insertSlice({ id: "S01", milestoneId: "M001", title: "Done", status: "complete" });
+  const validationPath = join(
+    basePath,
+    ".gsd",
+    "phases",
+    `01-${"long".repeat(30)} spaced ${"name".repeat(30)}`,
+    "01-VALIDATION.md",
+  );
+  insertAssessment({
+    path: validationPath,
+    milestoneId: "M001",
+    status: "needs-attention",
+    scope: "milestone-validation",
+    fullContent: "---\nverdict: needs-attention\n---\n",
+  });
+
+  autoSession.reset();
+  autoSession.basePath = basePath;
+  const overlay = new GSDDashboardOverlay({ requestRender() {} }, fakeTheme as any, () => {});
+  t.after(() => {
+    overlay.dispose();
+    autoSession.reset();
+    closeDatabase();
+    clearParseCache();
+    clearPathCache();
+    rmSync(basePath, { recursive: true, force: true });
+  });
+
+  await (overlay as any).refreshInFlight;
+  const lines = (overlay as any).buildContentLines(80) as string[];
+  assert.match(lines.join("\n"), /round unavailable/i);
+  const pathLabelIndex = lines.findIndex((line) => line.trim().startsWith("Validation file:"));
+  assert.notEqual(pathLabelIndex, -1);
+  const pathLines: string[] = [];
+  for (const line of lines.slice(pathLabelIndex + 1)) {
+    if (!line.trim()) break;
+    pathLines.push(line.slice(2));
+  }
+  assert.equal(pathLines.map((line) => line.trimEnd()).join(""), validationPath, "wrapped path must retain spaces");
+
+  const boundaryPrefix = `/${"a".repeat(72)}`;
+  const renderPath = (path: string): string[] => {
+    (overlay as any).milestoneData.validation.validationPath = path;
+    const pathContent = (overlay as any).buildContentLines(80) as string[];
+    const labelIndex = pathContent.findIndex((line) => line.trim().startsWith("Validation file:"));
+    return pathContent.slice(labelIndex + 1, labelIndex + 3);
+  };
+  const withoutSpace = renderPath(`${boundaryPrefix}界/01-VALIDATION.md`);
+  const withSpace = renderPath(`${boundaryPrefix} 界/01-VALIDATION.md`);
+  assert.notDeepEqual(withSpace, withoutSpace, "a boundary space before a wide character must remain visible");
 });
 
 test("GSDDashboardOverlay render and scroll do not run environment doctor subprocesses", (t) => {

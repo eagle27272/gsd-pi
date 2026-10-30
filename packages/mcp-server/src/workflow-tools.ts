@@ -3848,7 +3848,7 @@ export function registerWorkflowTools(
 
   server.tool(
     "gsd_milestone_status",
-    "Read the current status of a milestone and all its slices from the GSD database. Includes `dependsOn`, the persisted milestone dependencies.",
+    "Read the current status of a milestone and all its slices from the GSD database. Includes `dependsOn` and any persisted validation verdict, remediation round, and file path. An unrecorded validation path is null; an unavailable absolute validation file is marked `validationFileUnavailable`.",
     milestoneStatusParams,
     async (args: Record<string, unknown>) => {
       // gsd_milestone_status is a read-only query. In-process (query-tools.ts)
