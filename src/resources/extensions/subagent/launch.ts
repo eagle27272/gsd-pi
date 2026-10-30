@@ -3,6 +3,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { SessionManager } from "@gsd/pi-coding-agent";
+import { CODEGRAPH_NO_PROMPT_HOOK_ENV } from "../codegraph/prompt-policy.js";
 import { shellEscape } from "../shared/terminal.js";
 import type { AgentConfig } from "./agents.js";
 
@@ -56,6 +57,7 @@ export function buildSubagentProcessEnv(
 	const childEnv: NodeJS.ProcessEnv = {
 		...env,
 		[SUBAGENT_CHILD_ENV_VAR]: SUBAGENT_CHILD_ENV_VALUE,
+		[CODEGRAPH_NO_PROMPT_HOOK_ENV]: "1",
 	};
 	if (runtimeContractRoot) childEnv[SUBAGENT_RUNTIME_CONTRACT_ROOT_ENV_VAR] = path.resolve(runtimeContractRoot);
 	else delete childEnv[SUBAGENT_RUNTIME_CONTRACT_ROOT_ENV_VAR];
@@ -63,7 +65,7 @@ export function buildSubagentProcessEnv(
 }
 
 export function buildShellEnvAssignments(env: NodeJS.ProcessEnv = process.env): string[] {
-	return [SUBAGENT_CHILD_ENV_VAR, SUBAGENT_RUNTIME_CONTRACT_ROOT_ENV_VAR]
+	return [SUBAGENT_CHILD_ENV_VAR, SUBAGENT_RUNTIME_CONTRACT_ROOT_ENV_VAR, CODEGRAPH_NO_PROMPT_HOOK_ENV]
 		.flatMap((name) => env[name] ? [`${name}=${shellEscape(env[name])}`] : []);
 }
 

@@ -1630,6 +1630,165 @@ describe("stream-adapter — session persistence (#2859)", () => {
 		assert.deepEqual(options.settingSources, ["user", "project", "local"]);
 	});
 
+	test("generic prompts suppress the CodeGraph prompt hook without changing other settings", () => {
+		for (const prompt of [
+			"retry it",
+			"Show today's sessions",
+			"Review the validation details",
+			"Change the GitHub issue title",
+			"<system-reminder>Read src/auth.ts and inspect the function</system-reminder> retry it",
+		]) {
+			const options = buildSdkOptions("claude-sonnet-4-20250514", prompt, undefined, {
+				env: {
+					GSD_SUBAGENT_CHILD: "0",
+					CODEGRAPH_NO_PROMPT_HOOK: "0",
+					CODEGRAPH_PROMPT_HOOK: "1",
+					UNRELATED_SETTING: "preserved",
+				},
+			});
+			const env = options.env as NodeJS.ProcessEnv;
+			assert.equal(env.CODEGRAPH_NO_PROMPT_HOOK, "1", prompt);
+			assert.equal(env.CODEGRAPH_PROMPT_HOOK, "1", prompt);
+			assert.equal(env.UNRELATED_SETTING, "preserved", prompt);
+			assert.deepEqual(options.settingSources, ["user", "project", "local"]);
+		}
+	});
+
+	test("clear code prompts preserve the user's CodeGraph hook setting", () => {
+		for (const prompt of [
+			"Inspect src/auth.ts",
+			"Explain `ValidTitle`",
+			"Find verifyToken()",
+			"Refactor the validation code",
+		]) {
+			for (const setting of ["0", "1"]) {
+				const options = buildSdkOptions("claude-sonnet-4-20250514", prompt, undefined, {
+					env: { GSD_SUBAGENT_CHILD: "0", CODEGRAPH_NO_PROMPT_HOOK: setting },
+				});
+				assert.equal((options.env as NodeJS.ProcessEnv).CODEGRAPH_NO_PROMPT_HOOK, setting, prompt);
+			}
+		}
+	});
+
+	test("a child SDK request cannot re-enable the CodeGraph prompt hook", () => {
+		const options = buildSdkOptions("claude-sonnet-4-20250514", "Inspect src/auth.ts", undefined, {
+			env: { GSD_SUBAGENT_CHILD: "1", CODEGRAPH_NO_PROMPT_HOOK: "0" },
+		});
+		assert.equal((options.env as NodeJS.ProcessEnv).CODEGRAPH_NO_PROMPT_HOOK, "1");
+	});
+
+	test("a child process cannot bypass the CodeGraph gate through SDK environment overrides", () => {
+		const previousChild = process.env.GSD_SUBAGENT_CHILD;
+		process.env.GSD_SUBAGENT_CHILD = "1";
+		try {
+			const options = buildSdkOptions("claude-sonnet-4-20250514", "Inspect src/auth.ts", undefined, {
+				env: { GSD_SUBAGENT_CHILD: "0", CODEGRAPH_NO_PROMPT_HOOK: "0" },
+			});
+			assert.equal((options.env as NodeJS.ProcessEnv).CODEGRAPH_NO_PROMPT_HOOK, "1");
+		} finally {
+			if (previousChild === undefined) delete process.env.GSD_SUBAGENT_CHILD;
+			else process.env.GSD_SUBAGENT_CHILD = previousChild;
+		}
+	});
+
+	test("the CodeGraph hook gate uses only the latest user request", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "claude-codegraph-prompt-"));
+		const previousHook = process.env.CODEGRAPH_NO_PROMPT_HOOK;
+		const previousChild = process.env.GSD_SUBAGENT_CHILD;
+		process.env.CODEGRAPH_NO_PROMPT_HOOK = "0";
+		delete process.env.GSD_SUBAGENT_CHILD;
+		const model = {
+			...CLAUDE_CODE_MODELS[0]!,
+			api: "anthropic-messages" as const,
+			provider: "claude-code",
+			baseUrl: "",
+		};
+		const scenarios: Array<{
+			name: string;
+			messages: Context["messages"];
+			expectedHook: string;
+			hasImage?: boolean;
+		}> = [
+			{
+				name: "generic request after a code request",
+				messages: [
+					{ role: "user", content: "Refactor src/auth.ts", timestamp: 1 },
+					{ role: "user", content: "retry it", timestamp: 2 },
+				],
+				expectedHook: "1",
+			},
+			{
+				name: "code request after a generic request",
+				messages: [
+					{ role: "user", content: "retry it", timestamp: 1 },
+					{ role: "user", content: [{ type: "text", text: "Refactor src/auth.ts" }], timestamp: 2 },
+				],
+				expectedHook: "0",
+			},
+			{
+				name: "image-only request after a code request",
+				messages: [
+					{ role: "user", content: "Refactor src/auth.ts", timestamp: 1 },
+					{ role: "user", content: [{ type: "image", data: "aGVsbG8=", mimeType: "image/png" }], timestamp: 2 },
+				],
+				expectedHook: "1",
+				hasImage: true,
+			},
+			{
+				name: "no user request",
+				messages: [],
+				expectedHook: "1",
+			},
+		];
+		try {
+			for (const scenario of scenarios) {
+				const captured: {
+					env?: NodeJS.ProcessEnv;
+					prompt?: string | AsyncIterable<unknown>;
+				} = {};
+				const context: Context = {
+					systemPrompt: "Read the source code in the repository.",
+					messages: scenario.messages,
+				};
+				const options = {
+					cwd,
+					_skipWorkflowMcpPreflightForTest: true,
+					async *_sdkQueryForTest(args: {
+						prompt: string | AsyncIterable<unknown>;
+						options?: Record<string, unknown>;
+					}) {
+						captured.env = args.options?.env as NodeJS.ProcessEnv | undefined;
+						captured.prompt = args.prompt;
+						yield makeSdkSuccessResult("finished");
+					},
+				};
+				await streamViaClaudeCode(model, context, options).result();
+				assert.equal(captured.env?.CODEGRAPH_NO_PROMPT_HOOK, scenario.expectedHook, scenario.name);
+				if (scenario.hasImage) {
+					assert.ok(captured.prompt && typeof captured.prompt !== "string");
+					const messages: unknown[] = [];
+					for await (const message of captured.prompt) messages.push(message);
+					assert.match(JSON.stringify(messages), /aGVsbG8=/);
+					assert.match(JSON.stringify(messages), /Refactor src\/auth\.ts/);
+				} else {
+					assert.equal(typeof captured.prompt, "string");
+					if (scenario.messages.length === 0) {
+						assert.match(String(captured.prompt), /Read the source code/);
+					} else {
+						assert.match(String(captured.prompt), /Refactor src\/auth\.ts/);
+						assert.match(String(captured.prompt), /retry it/);
+					}
+				}
+			}
+		} finally {
+			if (previousHook === undefined) delete process.env.CODEGRAPH_NO_PROMPT_HOOK;
+			else process.env.CODEGRAPH_NO_PROMPT_HOOK = previousHook;
+			if (previousChild === undefined) delete process.env.GSD_SUBAGENT_CHILD;
+			else process.env.GSD_SUBAGENT_CHILD = previousChild;
+			rmSync(cwd, { recursive: true, force: true });
+		}
+	});
+
 	test("buildSdkOptions sets model and prompt correctly", () => {
 		const options = buildSdkOptions("claude-sonnet-4-20250514", "hello world");
 		assert.equal(options.model, "claude-sonnet-4-20250514");
