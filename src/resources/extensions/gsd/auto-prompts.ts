@@ -88,6 +88,7 @@ import { classifyUatContentForRun } from "./uat-policy.js";
 import { checkNeedsRunUat as resolveNeedsRunUat, type UatDispatchCandidate } from "./uat-dispatch.js";
 import { isClosedStatus } from "./status-guards.js";
 import { buildWebAppUatGuidanceBlock } from "./web-app-uat.js";
+import { splitPipeRow } from "./knowledge-parser.js";
 import {
   readPendingTaskRecoveryContext,
   type PendingTaskRecoveryContext,
@@ -997,6 +998,22 @@ export async function buildSliceAssessmentExcerpt(
   ];
   if (verdict) lines.push(`**Verdict:** \`${verdict.toUpperCase()}\``);
   if (checksMatch) lines.push(`**Checks:** ${checksMatch[1]} passed`);
+  const checkRows = (extractMarkdownSection(content, "Checks") ?? "")
+    .split("\n")
+    .filter((line) => /^\s*\|/.test(line))
+    .map(splitPipeRow)
+    .filter((cells) => cells.length >= 5 && cells[2]?.trim().toUpperCase() === "NEEDS-HUMAN");
+  if (checkRows.length > 0) {
+    const humanChecks = checkRows.map((cells) => {
+      const description = (cells[0] || "(description missing; read full assessment)").replace(/<br\s*\/?>/gi, " ");
+      const notes = (cells[4] ?? "").replace(/<br\s*\/?>/gi, " ").trim();
+      return `- ${description}${notes && notes !== "-" ? ` — ${notes}` : ""}`;
+    }).join("\n");
+    const capped = humanChecks.length > 800
+      ? `${humanChecks.slice(0, 800)}\n… (truncated — see full \`${relPath}\`)`
+      : humanChecks;
+    lines.push("", "#### NEEDS-HUMAN checks", capped);
+  }
   if (edgeCases?.trim()) {
     const trimmed = edgeCases.trim();
     lines.push(
