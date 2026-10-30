@@ -4,7 +4,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, statSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -1604,6 +1604,62 @@ describe("workflow MCP tools", () => {
       assert.equal(parsed.milestoneId, "M001");
       assert.equal(parsed.sliceCount, 1);
       assert.equal(parsed.slices[0].id, "S01");
+    } finally {
+      cleanup(base);
+    }
+  });
+
+  it("gsd_milestone_status exposes persisted validation through MCP", async () => {
+    const base = makeTmpBase();
+    const validationPath = join(base, ".gsd", "phases", "04-validation", "04-VALIDATION.md");
+    try {
+      openDatabase(join(base, ".gsd", "gsd.db"));
+      insertMilestone({ id: "M004", title: "Validation", status: "active" });
+      _getAdapter()!.prepare(`
+        INSERT INTO assessments (path, milestone_id, status, scope, full_content, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        validationPath,
+        "M004",
+        "needs-attention",
+        "milestone-validation",
+        "---\nverdict: needs-attention\nremediation_round: 0\n---\n",
+        "2026-01-01T00:00:00.000Z",
+      );
+
+      const server = makeMockServer();
+      registerWorkflowTools(server as any);
+      const statusTool = server.tools.find((tool) => tool.name === "gsd_milestone_status");
+      assert.ok(statusTool);
+
+      const result = await statusTool.handler({ projectDir: base, milestoneId: "M004" }) as any;
+      const parsed = JSON.parse(result.content[0].text as string);
+      const expected = {
+        verdict: "needs-attention",
+        remediationRound: 0,
+        validationPath,
+        validationFileUnavailable: true,
+      };
+      assert.deepEqual(parsed.validation, expected);
+      assert.deepEqual(result.structuredContent.validation, expected);
+
+      mkdirSync(dirname(validationPath), { recursive: true });
+      writeFileSync(validationPath, "---\nverdict: needs-attention\nremediation_round: 0\n---\n");
+      const restored = await statusTool.handler({ projectDir: base, milestoneId: "M004" }) as any;
+      assert.deepEqual(restored.structuredContent.validation, {
+        verdict: "needs-attention",
+        remediationRound: 0,
+        validationPath,
+      });
+
+      _getAdapter()!.prepare("UPDATE assessments SET path = '' WHERE milestone_id = ? AND scope = ?")
+        .run("M004", "milestone-validation");
+      const noPath = await statusTool.handler({ projectDir: base, milestoneId: "M004" }) as any;
+      assert.deepEqual(noPath.structuredContent.validation, {
+        verdict: "needs-attention",
+        remediationRound: 0,
+        validationPath: null,
+      });
     } finally {
       cleanup(base);
     }
