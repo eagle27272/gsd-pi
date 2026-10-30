@@ -17,12 +17,14 @@ import {
   upsertRequirement,
   getAllMilestones,
   getMilestone,
+  getSlice,
 } from "../gsd-db.ts";
 import { getAutoWorker, registerAutoWorker } from "../db/auto-workers.ts";
 import { claimMilestoneLease, getMilestoneLease } from "../db/milestone-leases.ts";
 import { deriveState, invalidateStateCache } from "../state.ts";
 import { autoSession } from "../auto-runtime-state.ts";
-import { normalizeRealPath, relSliceFile, targetMilestoneFile } from "../paths.ts";
+import { normalizeRealPath, relSliceFile, resolveSliceFile, targetMilestoneFile } from "../paths.ts";
+import { buildSliceAssessmentExcerpt } from "../auto-prompts.ts";
 import { _setManagedProjectionWriteFaultForTest } from "../managed-projection-history.ts";
 import { recordUnitHarnessAbort } from "../unit-runtime.ts";
 import { markApprovalGateVerified, markDepthVerified, clearDiscussionFlowState, loadWriteGateSnapshot, setPendingGate } from "../bootstrap/write-gate.ts";
@@ -56,6 +58,7 @@ import {
 import { removeProjectionFileSync } from "../atomic-write.ts";
 import { discardProjectionEvidence } from "./projection-evidence-helpers.ts";
 import { canonicalPhaseDirName } from "../layout-policy.ts";
+import { buildRunUatPresentationForType } from "../tool-presentation-plan.ts";
 
 function executePlanMilestone(
   params: Parameters<typeof executePlanMilestoneWithInvocation>[0],
@@ -253,6 +256,83 @@ function writeRoadmap(base: string, milestoneId: string, sliceIds: string[]): vo
     "",
   ];
   writeFileSync(join(milestoneDir, `${milestoneId}-ROADMAP.md`), lines.join("\n"));
+}
+
+async function completeSliceForUatWarning(base: string, followUps: string): Promise<{
+  worktree: string;
+  summaryPath: string;
+}> {
+  seedMilestone("M001", "Milestone One");
+  seedSlice("M001", "S01", "pending");
+  writeRoadmap(base, "M001", ["S01"]);
+  seedCompletedTaskAuthority({
+    milestoneId: "M001",
+    sliceId: "S01",
+    taskId: "T01",
+    runId: "uat-summary-warning",
+  });
+  const completed = await inProjectDir(base, () => executeSliceComplete({
+    milestoneId: "M001",
+    sliceId: "S01",
+    sliceTitle: "Slice One",
+    oneLiner: "Slice implementation is complete.",
+    narrative: "The automated slice verification passed.",
+    verification: "Automated checks passed.",
+    knownLimitations: "None.",
+    followUps,
+    uatContent: "## UAT Type\n- UAT mode: mixed\n\n## Smoke Test\nRun the checks.",
+  }, base));
+  assert.equal(completed.isError, undefined);
+
+  const worktree = join(base, ".gsd", "worktrees", "M001");
+  const execDir = join(worktree, ".gsd", "exec");
+  mkdirSync(execDir, { recursive: true });
+  writeFileSync(join(execDir, "uat-summary-warning.meta.json"), JSON.stringify({
+    id: "uat-summary-warning",
+    metadata: {
+      kind: "uat_exec",
+      milestoneId: "M001",
+      sliceId: "S01",
+      checkId: "UAT-01",
+      intent: "uat-runtime-check",
+    },
+  }));
+  return { worktree, summaryPath: String(completed.details.summaryPath) };
+}
+
+function uatWithHumanChecks(verdict: "PARTIAL" | "PASS"): Parameters<typeof executeUatResultSave>[0] {
+  return {
+    milestoneId: "M001",
+    sliceId: "S01",
+    uatType: "mixed",
+    verdict,
+    checks: [
+      {
+        id: "UAT-01",
+        description: "Automated checks",
+        mode: "runtime",
+        result: "PASS",
+        evidence: [{ kind: "gsd_uat_exec", ref: "uat-summary-warning" }],
+      },
+      {
+        id: "UAT-02",
+        description: "Verify --filter-class behavior",
+        mode: "runtime",
+        result: "NEEDS-HUMAN",
+        notes: "The tooling output was inconclusive.",
+        nonAutomatable: true,
+      },
+      {
+        id: "UAT-03",
+        description: "Confirm CI TRX artifact",
+        mode: "human-follow-up",
+        result: "NEEDS-HUMAN",
+        notes: "Check that the artifact was uploaded.",
+        nonAutomatable: true,
+      },
+    ],
+    presentation: buildRunUatPresentationForType("mixed"),
+  };
 }
 
 test("executeSummarySave persists artifact and returns computed path", async () => {
@@ -1950,6 +2030,162 @@ test("executeUatResultSave merges canonical plan ID and read-only tools when pre
     assert.ok(attempt.presentation?.presentedTools?.includes("read"), "read-only tool must be merged in");
     assert.ok(attempt.presentation?.presentedTools?.includes("gsd_uat_result_save"));
   } finally {
+    closeDatabase();
+    cleanup(base);
+  }
+});
+
+test("executeUatResultSave warns when a partial assessment contradicts an empty slice summary (#283)", async () => {
+  const base = makeTmpBase();
+  try {
+    openTestDb(base);
+    initNotificationStore(base);
+    const { worktree, summaryPath } = await completeSliceForUatWarning(base, "None.");
+    const summary = readFileSync(summaryPath, "utf-8");
+    assert.match(summary, /## Known Limitations\s+None\./);
+    assert.match(summary, /## Follow-ups\s+None\./);
+
+    const result = await inProjectDir(worktree, () =>
+      executeUatResultSave(uatWithHumanChecks("PARTIAL"), worktree));
+
+    assert.equal(result.isError, undefined);
+    const text = result.content[0]?.text ?? "";
+    assert.match(text, /SUMMARY.*(?:no|none).*known limitations.*follow-ups/i);
+    assert.match(text, /PARTIAL/);
+    assert.match(text, /UAT-02.*--filter-class/);
+    assert.match(text, /tooling output was inconclusive/i);
+    assert.match(text, /UAT-03.*CI TRX artifact/);
+    assert.match(text, /artifact was uploaded/i);
+    assert.match(text, /ASSESSMENT\.md/);
+
+    const assessmentPath = resolveSliceFile(base, "M001", "S01", "ASSESSMENT");
+    assert.ok(assessmentPath);
+    const excerpt = await buildSliceAssessmentExcerpt(
+      assessmentPath,
+      relSliceFile(base, "M001", "S01", "ASSESSMENT"),
+      "S01",
+    );
+    assert.ok(excerpt);
+    assert.match(excerpt, /Verify --filter-class behavior.*tooling output was inconclusive/i);
+    assert.match(excerpt, /Confirm CI TRX artifact.*artifact was uploaded/i);
+
+    const notifications = readNotifications(base, { kind: "uat-needs-human", scope: "M001/S01" });
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0].message, /SUMMARY.*(?:no|none).*known limitations.*follow-ups/i);
+    assert.match(notifications[0].message, /UAT-02/);
+    assert.match(notifications[0].message, /UAT-03/);
+  } finally {
+    _resetNotificationStore();
+    closeDatabase();
+    cleanup(base);
+  }
+});
+
+test("executeUatResultSave surfaces human checks without falsely calling a documented follow-up empty (#283)", async () => {
+  const base = makeTmpBase();
+  try {
+    openTestDb(base);
+    initNotificationStore(base);
+    const { worktree } = await completeSliceForUatWarning(base, "Review the deferred integration checks.");
+
+    const result = await inProjectDir(worktree, () =>
+      executeUatResultSave(uatWithHumanChecks("PASS"), worktree));
+
+    assert.equal(result.isError, undefined);
+    const text = result.content[0]?.text ?? "";
+    assert.match(text, /UAT-02.*--filter-class/);
+    assert.match(text, /UAT-03.*CI TRX artifact/);
+    assert.doesNotMatch(text, /SUMMARY.*(?:no|none).*known limitations.*follow-ups/i);
+  } finally {
+    _resetNotificationStore();
+    closeDatabase();
+    cleanup(base);
+  }
+});
+
+test("executeUatResultSave compares UAT against the current visible summary (#283)", async () => {
+  const base = makeTmpBase();
+  try {
+    openTestDb(base);
+    initNotificationStore(base);
+    const { worktree, summaryPath } = await completeSliceForUatWarning(base, "Previously tracked follow-up.");
+    const original = readFileSync(summaryPath, "utf-8");
+    const withoutFollowUps = original.replace("Previously tracked follow-up.", "None.");
+    const savedEmpty = await inProjectDir(base, () => executeSummarySave({
+      milestone_id: "M001",
+      slice_id: "S01",
+      artifact_type: "SUMMARY",
+      content: withoutFollowUps,
+    }, base));
+    assert.equal(savedEmpty.isError, undefined);
+    assert.match(readFileSync(summaryPath, "utf-8"), /## Follow-ups\s+None\./);
+    assert.match(getSlice("M001", "S01")?.full_summary_md ?? "", /Previously tracked follow-up/);
+
+    const partial = await inProjectDir(worktree, () =>
+      executeUatResultSave(uatWithHumanChecks("PARTIAL"), worktree));
+    assert.equal(partial.isError, undefined);
+    assert.match(partial.content[0]?.text ?? "", /SUMMARY.*(?:no|none).*known limitations.*follow-ups/i);
+
+    const documented = withoutFollowUps.replace(
+      "## Follow-ups\n\nNone.",
+      "## Follow-ups\n\nReview the pending human checks.",
+    );
+    const savedDocumented = await inProjectDir(base, () => executeSummarySave({
+      milestone_id: "M001",
+      slice_id: "S01",
+      artifact_type: "SUMMARY",
+      content: documented,
+    }, base));
+    assert.equal(savedDocumented.isError, undefined);
+    const pass = await inProjectDir(worktree, () =>
+      executeUatResultSave(uatWithHumanChecks("PASS"), worktree));
+    assert.equal(pass.isError, undefined);
+    assert.doesNotMatch(pass.content[0]?.text ?? "", /SUMMARY.*(?:no|none).*known limitations.*follow-ups/i);
+  } finally {
+    _resetNotificationStore();
+    closeDatabase();
+    cleanup(base);
+  }
+});
+
+test("executeUatResultSave falls back to the stored summary when its file is missing (#283)", async () => {
+  const base = makeTmpBase();
+  try {
+    openTestDb(base);
+    initNotificationStore(base);
+    const { worktree, summaryPath } = await completeSliceForUatWarning(base, "None.");
+    assert.match(getSlice("M001", "S01")?.full_summary_md ?? "", /## Follow-ups\s+None\./);
+    unlinkSync(summaryPath);
+
+    const result = await inProjectDir(worktree, () =>
+      executeUatResultSave(uatWithHumanChecks("PARTIAL"), worktree));
+
+    assert.equal(result.isError, undefined);
+    assert.match(result.content[0]?.text ?? "", /SUMMARY.*(?:no|none).*known limitations.*follow-ups/i);
+  } finally {
+    _resetNotificationStore();
+    closeDatabase();
+    cleanup(base);
+  }
+});
+
+test("executeUatResultSave does not warn about an empty summary after a fully automated pass (#283)", async () => {
+  const base = makeTmpBase();
+  try {
+    openTestDb(base);
+    initNotificationStore(base);
+    const { worktree } = await completeSliceForUatWarning(base, "None.");
+    const params = uatWithHumanChecks("PASS");
+    params.checks = params.checks.slice(0, 1);
+
+    const result = await inProjectDir(worktree, () =>
+      executeUatResultSave(params, worktree));
+
+    assert.equal(result.isError, undefined);
+    assert.doesNotMatch(result.content[0]?.text ?? "", /SUMMARY.*(?:no|none).*known limitations.*follow-ups/i);
+    assert.equal(readNotifications(base, { kind: "uat-needs-human", scope: "M001/S01" }).length, 0);
+  } finally {
+    _resetNotificationStore();
     closeDatabase();
     cleanup(base);
   }
