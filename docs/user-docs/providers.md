@@ -80,6 +80,13 @@ gsd
 
 GSD detects your local Claude Code installation and uses it as the authenticated Anthropic surface. This is the TOS-compliant path for subscription users — GSD never handles your subscription credentials directly.
 
+When Claude Code's optional CodeGraph prompt hook is installed, GSD suppresses
+automatic CodeGraph hints unless the latest user request clearly identifies code,
+a source file, or a symbol. Ambiguous code requests may not receive a hint.
+The gate does not change CodeGraph's match ranking. Existing CodeGraph opt-outs
+and other Claude hooks are unaffected, and configured CodeGraph tools remain
+available for explicit queries.
+
 For the full walkthrough, including install commands, `/login`, verification, and troubleshooting, see [Use Claude Code With a Claude Subscription](./claude-code-subscription.md).
 
 > **Note:** GSD does not support browser-based OAuth sign-in for Anthropic. Use an API key or the Claude Code CLI instead.

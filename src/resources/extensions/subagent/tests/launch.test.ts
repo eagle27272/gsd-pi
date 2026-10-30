@@ -84,9 +84,29 @@ describe("subagent launch module", () => {
 		assert.ok(plan.args.includes("--no-session"));
 		assert.equal(plan.args.includes("--session"), false);
 		assert.equal(plan.env[SUBAGENT_CHILD_ENV_VAR], SUBAGENT_CHILD_ENV_VALUE);
+		assert.equal(plan.env.CODEGRAPH_NO_PROMPT_HOOK, "1");
 		assert.equal(plan.cwd, "/repo");
 		assert.deepEqual(plan.session, { mode: "fresh" });
 		assert.deepEqual(plan.args.slice(plan.args.indexOf("--tools"), plan.args.indexOf("--tools") + 2), ["--tools", "read,write"]);
+	});
+
+	it("disables the CodeGraph prompt hook in child processes without changing the parent", () => {
+		const parent = { CODEGRAPH_NO_PROMPT_HOOK: "0", CODEGRAPH_PROMPT_HOOK: "1", UNRELATED_SETTING: "kept" };
+		const child = buildSubagentProcessEnv(parent);
+
+		assert.equal(child.CODEGRAPH_NO_PROMPT_HOOK, "1");
+		assert.equal(child.CODEGRAPH_PROMPT_HOOK, "1");
+		assert.equal(child.UNRELATED_SETTING, "kept");
+		assert.equal(parent.CODEGRAPH_NO_PROMPT_HOOK, "0");
+	});
+
+	it("includes the CodeGraph hook opt-out in child shell assignments", () => {
+		const assignments = buildShellEnvAssignments({
+			[SUBAGENT_CHILD_ENV_VAR]: SUBAGENT_CHILD_ENV_VALUE,
+			CODEGRAPH_NO_PROMPT_HOOK: "1",
+		});
+
+		assert.ok(assignments.includes("CODEGRAPH_NO_PROMPT_HOOK='1'"));
 	});
 
 	it("propagates the parent authority to a nested repository child", (t) => {
@@ -113,6 +133,7 @@ describe("subagent launch module", () => {
 		assert.deepEqual(buildShellEnvAssignments(plan.env), [
 			`${SUBAGENT_CHILD_ENV_VAR}='${SUBAGENT_CHILD_ENV_VALUE}'`,
 			`${SUBAGENT_RUNTIME_CONTRACT_ROOT_ENV_VAR}='${dir}'`,
+			"CODEGRAPH_NO_PROMPT_HOOK='1'",
 		]);
 	});
 
@@ -240,12 +261,21 @@ describe("subagent launch module", () => {
 		manager.appendMessage({ role: "user", content: [{ type: "text", text: "hello" }] } as any);
 		manager.appendMessage(makeAssistantMessage());
 
-		const session = resolveSubagentSessionArgs("fork", manager);
+		const plan = createSubagentLaunchPlan({
+			agent: makeAgent(),
+			task: "inspect forked context",
+			tmpPromptPath: null,
+			defaultCwd: dir,
+			contextMode: "fork",
+			parentSessionManager: manager,
+		});
+		const session = plan.session;
 
 		assert.equal(session.mode, "fork");
 		assert.ok(session.sessionFile);
 		assert.notEqual(session.sessionFile, manager.getSessionFile());
 		assert.equal(session.sessionDir, dir);
+		assert.equal(plan.env.CODEGRAPH_NO_PROMPT_HOOK, "1");
 	});
 
 	it("fails forked context loudly without a persisted parent session", () => {
