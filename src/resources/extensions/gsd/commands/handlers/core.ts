@@ -18,6 +18,7 @@ import { buildVisualBriefPrompt, parseVisualBriefArgs, VISUAL_BRIEF_USAGE } from
 import { GSD_CORE_IMPLEMENTED_CATALOG } from "../../commands-gsd-core.js";
 import { GSD_CORE_ALIAS_CATALOG } from "../gsd-core-aliases.js";
 import { readCurrentTaskRecoveryRoute } from "../../task-recovery-domain-operation.js";
+import { formatMilestoneValidationSummary, readMilestoneValidationStatus } from "../../milestone-validation-verdict.js";
 
 export function showHelp(ctx: ExtensionCommandContext, args = ""): void {
   const summaryLines = [
@@ -619,6 +620,12 @@ export function formatTextStatus(state: GSDState, basePath?: string): string {
 
   if (state.activeMilestone) {
     lines.push(`Active milestone: ${state.activeMilestone.id} — ${state.activeMilestone.title}`);
+    const validation = readMilestoneValidationStatus(state.activeMilestone.id);
+    if (validation) {
+      lines.push(`Validation: ${formatMilestoneValidationSummary(validation)}`);
+      const validationFile = validation.validationPath ?? "unavailable (not recorded)";
+      lines.push(`Validation file: ${validationFile}${validation.validationFileUnavailable ? " (unavailable)" : ""}`);
+    }
   }
   if (state.activeSlice) {
     lines.push(`Active slice: ${state.activeSlice.id} — ${state.activeSlice.title}`);

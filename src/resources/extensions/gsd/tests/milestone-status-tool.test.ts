@@ -2,8 +2,8 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 
@@ -15,7 +15,9 @@ import {
   openDatabase,
   closeDatabase,
   _getAdapter,
+  insertAssessment,
 } from "../gsd-db.ts";
+import { handleValidateMilestone } from "../tools/validate-milestone.ts";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -199,6 +201,244 @@ test("gsd_milestone_status returns empty slices array for milestone with no slic
     assert.equal(parsed.milestoneId, "M002");
     assert.equal(parsed.sliceCount, 0);
     assert.deepEqual(parsed.slices, []);
+  } finally {
+    closeDatabase();
+    cleanup(base);
+  }
+});
+
+test("gsd_milestone_status reports a persisted validation even when the file conflicts", async () => {
+  const base = makeTmpBase();
+  const phaseDir = join(realpathSync(base), ".gsd", "phases", "01-m001");
+  const validationPath = join(phaseDir, "01-VALIDATION.md");
+  mkdirSync(phaseDir, { recursive: true });
+  writeFileSync(join(phaseDir, "01-CONTEXT.md"), "# M001\n");
+  try {
+    openTestDb(base);
+    seedMilestone("M001", "Test Milestone");
+    seedSlice("M001", "S01", "complete");
+
+    const saved = await handleValidateMilestone({
+      milestoneId: "M001",
+      verdict: "needs-attention",
+      remediationRound: 0,
+      successCriteriaChecklist: "- [x] Delivered",
+      sliceDeliveryAudit: "Delivered",
+      crossSliceIntegration: "Reviewed",
+      requirementCoverage: "Covered",
+      verdictRationale: "Human confirmation remains outstanding.",
+    }, base, { skipBrowserEvidenceGate: true });
+    assert.ok(!("error" in saved), "validation should be persisted");
+    assert.equal(saved.validationPath, validationPath);
+
+    writeFileSync(validationPath, "---\nverdict: pass\nremediation_round: 9\n---\n");
+
+    const pi = makeMockPi();
+    registerQueryTools(pi);
+    const result = await executeToolInDir(pi.tools[0], { milestoneId: "M001" }, base);
+    const parsed = JSON.parse(result.content[0].text);
+    const expected = {
+      verdict: "needs-attention",
+      remediationRound: 0,
+      validationPath,
+    };
+
+    assert.deepEqual(parsed.validation, expected);
+    assert.deepEqual(result.details.validation, expected);
+    assert.equal(parsed.status, "active");
+  } finally {
+    closeDatabase();
+    cleanup(base);
+  }
+});
+
+test("gsd_milestone_status reports the latest milestone validation rather than another assessment", async () => {
+  const base = makeTmpBase();
+  const olderPath = join(base, ".gsd", "phases", "01-old", "01-VALIDATION.md");
+  const validationPath = join(base, ".gsd", "phases", "01-new", "01-VALIDATION.md");
+  try {
+    openTestDb(base);
+    seedMilestone("M001", "Test Milestone");
+    insertAssessment({
+      path: olderPath,
+      milestoneId: "M001",
+      status: "needs-attention",
+      scope: "milestone-validation",
+      fullContent: "---\nverdict: needs-attention\nremediation_round: 0\n---\n",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    insertAssessment({
+      path: validationPath,
+      milestoneId: "M001",
+      status: "needs-remediation",
+      scope: "milestone-validation",
+      fullContent: "---\nverdict: needs-remediation\nremediation_round: 3\n---\n",
+      createdAt: "2026-01-02T00:00:00.000Z",
+    });
+    insertAssessment({
+      path: join(base, ".gsd", "roadmap-assessment.md"),
+      milestoneId: "M001",
+      status: "pass",
+      scope: "roadmap",
+      fullContent: "---\nverdict: pass\nremediation_round: 99\n---\n",
+      createdAt: "2026-01-03T00:00:00.000Z",
+    });
+
+    const pi = makeMockPi();
+    registerQueryTools(pi);
+    const result = await executeToolInDir(pi.tools[0], { milestoneId: "M001" }, base);
+    const parsed = JSON.parse(result.content[0].text);
+
+    assert.deepEqual(parsed.validation, {
+      verdict: "needs-remediation",
+      remediationRound: 3,
+      validationPath,
+      validationFileUnavailable: true,
+    });
+  } finally {
+    closeDatabase();
+    cleanup(base);
+  }
+});
+
+test("gsd_milestone_status does not invent a remediation round for malformed metadata", async () => {
+  const base = makeTmpBase();
+  const validationPath = join(base, ".gsd", "01-VALIDATION.md");
+  try {
+    openTestDb(base);
+    seedMilestone("M001", "Test Milestone");
+    writeFileSync(validationPath, "# Validation projection\n");
+    const pi = makeMockPi();
+    registerQueryTools(pi);
+
+    for (const frontmatter of [
+      "verdict: needs-attention",
+      "verdict: needs-attention\nremediation_round: invalid",
+      "verdict: needs-attention\nremediation_round: -1",
+      "verdict: needs-attention\nremediation_round: 1.5",
+      "verdict: needs-attention\nremediation_round: 9007199254740992",
+    ]) {
+      insertAssessment({
+        path: validationPath,
+        milestoneId: "M001",
+        status: "needs-attention",
+        scope: "milestone-validation",
+        fullContent: `---\n${frontmatter}\n---\n`,
+      });
+      const result = await executeToolInDir(pi.tools[0], { milestoneId: "M001" }, base);
+      const parsed = JSON.parse(result.content[0].text);
+      assert.deepEqual(parsed.validation, {
+        verdict: "needs-attention",
+        remediationRound: null,
+        validationPath,
+      }, frontmatter);
+    }
+  } finally {
+    closeDatabase();
+    cleanup(base);
+  }
+});
+
+test("gsd_milestone_status preserves validation when the stored file path is empty or invalid", async () => {
+  const base = makeTmpBase();
+  try {
+    openTestDb(base);
+    seedMilestone("M001", "Test Milestone");
+    insertAssessment({
+      path: "",
+      milestoneId: "M001",
+      status: "needs-attention",
+      scope: "milestone-validation",
+      fullContent: "---\nverdict: needs-attention\nremediation_round: 2\n---\n",
+    });
+
+    const pi = makeMockPi();
+    registerQueryTools(pi);
+    const result = await executeToolInDir(pi.tools[0], { milestoneId: "M001" }, base);
+    const parsed = JSON.parse(result.content[0].text);
+
+    assert.equal(result.isError, undefined);
+    assert.deepEqual(parsed.validation, {
+      verdict: "needs-attention",
+      remediationRound: 2,
+      validationPath: null,
+    });
+    assert.deepEqual(result.details.validation, parsed.validation);
+
+    const invalidPath = join(base, ".gsd", "01-VALIDATION.md") + "\0invalid";
+    _getAdapter()!.prepare("UPDATE assessments SET path = ? WHERE path = ''").run(invalidPath);
+    const invalid = await executeToolInDir(pi.tools[0], { milestoneId: "M001" }, base);
+    assert.deepEqual(JSON.parse(invalid.content[0].text).validation, {
+      verdict: "needs-attention",
+      remediationRound: 2,
+      validationPath: invalidPath,
+      validationFileUnavailable: true,
+    });
+  } finally {
+    closeDatabase();
+    cleanup(base);
+  }
+});
+
+test("gsd_milestone_status marks a removed worktree validation file unavailable", async () => {
+  const base = makeTmpBase();
+  const recordedPath = join(base, ".gsd", "worktrees", "M001", ".gsd", "phases", "01-m001", "01-VALIDATION.md");
+  const mirrorPath = join(base, ".gsd", "phases", "01-m001", "01-VALIDATION.md");
+  const content = "---\nverdict: needs-attention\nremediation_round: 0\n---\n";
+  mkdirSync(dirname(mirrorPath), { recursive: true });
+  writeFileSync(mirrorPath, content);
+  try {
+    openTestDb(base);
+    seedMilestone("M001", "Test Milestone");
+    insertAssessment({
+      path: recordedPath,
+      milestoneId: "M001",
+      status: "needs-attention",
+      scope: "milestone-validation",
+      fullContent: content,
+    });
+
+    const pi = makeMockPi();
+    registerQueryTools(pi);
+    const missing = await executeToolInDir(pi.tools[0], { milestoneId: "M001" }, base);
+    assert.deepEqual(JSON.parse(missing.content[0].text).validation, {
+      verdict: "needs-attention",
+      remediationRound: 0,
+      validationPath: recordedPath,
+      validationFileUnavailable: true,
+    });
+
+    mkdirSync(dirname(recordedPath), { recursive: true });
+    writeFileSync(recordedPath, content);
+    const restored = await executeToolInDir(pi.tools[0], { milestoneId: "M001" }, base);
+    assert.deepEqual(JSON.parse(restored.content[0].text).validation, {
+      verdict: "needs-attention",
+      remediationRound: 0,
+      validationPath: recordedPath,
+    });
+  } finally {
+    closeDatabase();
+    cleanup(base);
+  }
+});
+
+test("gsd_milestone_status does not treat an omitted assessment as validation", async () => {
+  const base = makeTmpBase();
+  try {
+    openTestDb(base);
+    seedMilestone("M001", "Test Milestone");
+    insertAssessment({
+      path: join(base, ".gsd", "01-VALIDATION.md"),
+      milestoneId: "M001",
+      status: "omitted",
+      scope: "milestone-validation",
+      fullContent: "---\noutcome: omitted\n---\n",
+    });
+    const pi = makeMockPi();
+    registerQueryTools(pi);
+    const result = await executeToolInDir(pi.tools[0], { milestoneId: "M001" }, base);
+    const parsed = JSON.parse(result.content[0].text);
+    assert.equal("validation" in parsed, false);
   } finally {
     closeDatabase();
     cleanup(base);
