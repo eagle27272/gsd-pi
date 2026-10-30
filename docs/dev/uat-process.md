@@ -36,6 +36,7 @@ GSD exposes a product-level Browser Automation Contract with canonical `browser_
 - `gsd_uat_result_save` validates objective evidence, fresh UAT-owned exec evidence, canonical tool presentation, and mode-specific evidence before saving the assessment and attempt artifact.
 - Milestone closeout requires each slice assessment to record `PASS`; it retries UAT-scoped non-passing verdicts before blocking with steps to rerun UAT, inspect `/gsd status`, or dispatch reassessment work.
 - Manual handoff text includes the real worktree path when checks are left as `NEEDS-HUMAN`.
+- Because UAT runs after slice completion, `gsd_uat_result_save` lists unresolved human checks and warns when the earlier summary has no documented limitations or follow-ups. Milestone validation excerpts retain those checks and their notes.
 - Milestone validation downgrades a pass to `needs-attention` when browser-observable acceptance criteria lack persisted browser/runtime evidence.
 
 ## Next Deepening Opportunities
