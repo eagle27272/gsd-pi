@@ -884,6 +884,27 @@ function createClient(
 		return { client, isOAuthToken: false };
 	}
 
+	// The key is an Okta bearer token, not an Anthropic key, so it never goes in x-api-key.
+	if (model.provider === "ai-gateway") {
+		const client = new Anthropic({
+			apiKey: null,
+			authToken: apiKey,
+			baseURL: model.baseUrl,
+			dangerouslyAllowBrowser: true,
+			defaultHeaders: mergeHeaders(
+				{
+					accept: "application/json",
+					"anthropic-dangerous-direct-browser-access": "true",
+					...(betaFeatures.length > 0 ? { "anthropic-beta": betaFeatures.join(",") } : {}),
+				},
+				model.headers,
+				optionsHeaders,
+			),
+		});
+
+		return { client, isOAuthToken: false };
+	}
+
 	// OAuth: Bearer auth, Claude Code identity headers
 	if (isOAuthToken(apiKey)) {
 		const client = new Anthropic({
