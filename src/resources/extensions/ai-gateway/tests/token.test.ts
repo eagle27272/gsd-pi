@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createTokenRefresher, fetchLauncherToken, resolveTtlSeconds } from "../token.ts";
+import { createTokenRefresher, fetchLauncherToken, LAUNCHER_TIMEOUT_MS, resolveTtlSeconds } from "../token.ts";
 
 test("resolveTtlSeconds defaults to 300 seconds", () => {
 	assert.equal(resolveTtlSeconds(undefined), 300);
@@ -109,4 +109,19 @@ test("the refresher reads the TTL from GSD_AI_GATEWAY_TOKEN_TTL_SECONDS by defau
 	} finally {
 		delete process.env.GSD_AI_GATEWAY_TOKEN_TTL_SECONDS;
 	}
+});
+
+test("the launcher timeout outlasts the launcher's own five minute sign-in window", () => {
+	assert.ok(LAUNCHER_TIMEOUT_MS > 300_000, `timeout is ${LAUNCHER_TIMEOUT_MS}ms`);
+});
+
+test("fetchLauncherToken includes the launcher's last stderr line in the error", async () => {
+	await assert.rejects(
+		fetchLauncherToken(async () => ({
+			stdout: "",
+			stderr: "opening browser\nAI Gateway sign-in expired; a sign-in tab opened 3 min ago.\n",
+			code: 1,
+		})),
+		/sign-in tab opened 3 min ago/,
+	);
 });

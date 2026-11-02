@@ -205,3 +205,22 @@ test("buildGatewayModels takes capabilities from the catalog and defaults the re
 	assert.equal(unknown.maxTokens, 64000);
 	assert.deepEqual(unknown.cost, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
 });
+
+test("an expired launcher session pauses the run instead of falling back to another model", async () => {
+	const { classifyError } = await import("../../gsd/error-classifier.ts");
+	const { streamSimple } = await import("@gsd/pi-ai");
+	writeLauncherConfig();
+	const { pi, providers } = makeMockPi();
+	aiGateway(pi as never);
+	const [first] = buildGatewayModels(["claude-sonnet-5-5"]);
+	const model = { ...first, provider: "ai-gateway", api: "anthropic-messages", baseUrl: String(providers[0].config.baseUrl) };
+
+	let message = "";
+	for await (const event of streamSimple(model as never, { messages: [] }, {})) {
+		if (event.type === "error") message = event.error.errorMessage ?? "";
+		break;
+	}
+
+	assert.match(message, /claude-ai-gw gw login/);
+	assert.notEqual(classifyError(message).kind, "model-error");
+});

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { getModel } from "../src/models.ts";
-import { streamAnthropic } from "../src/providers/anthropic.ts";
+import { streamAnthropic, streamSimpleAnthropic } from "../src/providers/anthropic.ts";
 import type { Context, Model } from "../src/types.ts";
 
 const mockState = vi.hoisted(() => ({
@@ -70,6 +70,26 @@ describe("ai-gateway provider auth", () => {
 
 		const headers = opts.defaultHeaders as Record<string, string>;
 		expect(headers["X-JH-Client"]).toBe("gsd-pi");
+	});
+
+	it("sends X-JH-Client even when the model carries no headers", async () => {
+		const { headers: _omitted, ...withoutHeaders } = gatewayModel;
+		const opts = await drain(withoutHeaders as Model<"anthropic-messages">, "okta-token");
+
+		const headers = opts.defaultHeaders as Record<string, string>;
+		expect(headers["X-JH-Client"]).toBe("gsd-pi");
+	});
+
+	it("tells the user to run claude-ai-gw gw login when no token resolved", () => {
+		let message = "";
+		try {
+			streamSimpleAnthropic(gatewayModel, context, {});
+		} catch (error) {
+			message = (error as Error).message;
+		}
+
+		expect(message).toContain("claude-ai-gw gw login");
+		expect(message).not.toMatch(/no api key/i);
 	});
 
 	it("leaves a plain anthropic model on x-api-key auth", async () => {

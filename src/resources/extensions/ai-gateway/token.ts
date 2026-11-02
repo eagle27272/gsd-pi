@@ -1,8 +1,9 @@
 import { execFile } from "node:child_process";
 
 const DEFAULT_TTL_SECONDS = 300;
-// A sign-in can open a browser tab and wait for Okta, so this is longer than a typical spawn.
-const LAUNCHER_TIMEOUT_MS = 60_000;
+// Killing the launcher mid sign-in closes its callback server, and it then refuses another tab for 10 minutes.
+// Its own sign-in window is 300 seconds, so this has to outlast that.
+export const LAUNCHER_TIMEOUT_MS = 330_000;
 const LOGIN_HINT = "run `claude-ai-gw gw login`";
 
 export type RunResult = { stdout: string; stderr: string; code: number };
@@ -37,7 +38,9 @@ export async function fetchLauncherToken(run: RunCommand = runCommand): Promise<
 
 	const token = result.stdout.trim();
 	if (result.code !== 0 || token.length === 0) {
-		throw new Error(`claude-ai-gw did not return a token (exit ${result.code}); ${LOGIN_HINT}`);
+		const reason = result.stderr.trim().split("\n").pop();
+		const detail = reason ? `: ${reason}` : "";
+		throw new Error(`claude-ai-gw did not return a token (exit ${result.code})${detail}; ${LOGIN_HINT}`);
 	}
 	return token;
 }

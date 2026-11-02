@@ -414,6 +414,37 @@ describe("default model selection", () => {
 		expect(result.model?.id).toBe("openai/ghost-model");
 	});
 
+	test("findInitialModel prefers an established provider over the ai-gateway launcher provider", async () => {
+		const base = {
+			api: "anthropic-messages" as const,
+			baseUrl: "https://example.test",
+			reasoning: true,
+			input: ["text", "image"] as ("text" | "image")[],
+			cost: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 200000,
+			maxTokens: 8192,
+		};
+		const gateway: Model<"anthropic-messages"> = {
+			...base,
+			id: defaultModelPerProvider["ai-gateway"],
+			name: "gateway",
+			provider: "ai-gateway",
+		};
+		const vertex: Model<"anthropic-messages"> = {
+			...base,
+			id: defaultModelPerProvider["anthropic-vertex"],
+			name: "vertex",
+			provider: "anthropic-vertex",
+		};
+		const registry = {
+			getAvailable: async () => [gateway, vertex],
+		} as unknown as Parameters<typeof findInitialModel>[0]["modelRegistry"];
+
+		const result = await findInitialModel({ scopedModels: [], isContinuing: false, modelRegistry: registry });
+
+		expect(result.model?.provider).toBe("anthropic-vertex");
+	});
+
 	test("findInitialModel selects ai-gateway default when available", async () => {
 		const aiGatewayModel: Model<"anthropic-messages"> = {
 			id: "anthropic/claude-opus-4-6",

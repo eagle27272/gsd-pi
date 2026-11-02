@@ -776,6 +776,10 @@ export const streamSimpleAnthropic: StreamFunction<"anthropic-messages", SimpleS
 ): AssistantMessageEventStream => {
 	const apiKey = options?.apiKey || getEnvApiKey(model.provider);
 	if (!apiKey) {
+		// Not worded as a missing key: the error classifier would treat that as a reason to switch models.
+		if (model.provider === "ai-gateway") {
+			throw new Error("AI Gateway token unavailable; run `claude-ai-gw gw login`");
+		}
 		throw new Error(`No API key for provider: ${model.provider}`);
 	}
 
@@ -895,6 +899,7 @@ function createClient(
 				{
 					accept: "application/json",
 					"anthropic-dangerous-direct-browser-access": "true",
+					"X-JH-Client": "gsd-pi",
 					...(betaFeatures.length > 0 ? { "anthropic-beta": betaFeatures.join(",") } : {}),
 				},
 				model.headers,

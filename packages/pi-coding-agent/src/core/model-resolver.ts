@@ -17,7 +17,6 @@ function isValidThinkingLevel(level: string): level is ThinkingLevel {
 
 /** Default model IDs for each known provider */
 export const defaultModelPerProvider: Record<KnownProvider, string> = {
-	"ai-gateway": "claude-sonnet-5-5",
 	"amazon-bedrock": "us.anthropic.claude-opus-4-6-v1",
 	anthropic: "claude-opus-4-8",
 	"anthropic-vertex": "claude-sonnet-4-6",
@@ -52,6 +51,8 @@ export const defaultModelPerProvider: Record<KnownProvider, string> = {
 	"xiaomi-token-plan-cn": "mimo-v2.5-pro",
 	"xiaomi-token-plan-ams": "mimo-v2.5-pro",
 	"xiaomi-token-plan-sgp": "mimo-v2.5-pro",
+	// Last so that having the launcher installed never overrides an established provider.
+	"ai-gateway": "claude-sonnet-5-5",
 };
 
 export interface ScopedModel {
