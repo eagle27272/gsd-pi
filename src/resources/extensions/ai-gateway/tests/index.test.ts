@@ -177,12 +177,27 @@ test("session_start does not overwrite an existing credential", () => {
 	assert.equal((authStorage.get("ai-gateway") as { access: string }).access, "live");
 });
 
-test("buildGatewayModels takes capabilities from the catalog and defaults the rest", () => {
-	const [known, unknown] = buildGatewayModels(["claude-sonnet-5-5", "claude-future-9"]);
+test("the 5.5 models get 1M context, 128K output and adaptive thinking", () => {
+	const models = buildGatewayModels(["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"]);
 
-	assert.equal(known.id, "claude-sonnet-5-5");
-	assert.equal(known.reasoning, true);
-	assert.ok(known.contextWindow > 0 && known.maxTokens > 0);
+	assert.equal(models.length, 3);
+	for (const model of models) {
+		assert.equal(model.contextWindow, 1_000_000, model.id);
+		assert.equal(model.maxTokens, 128_000, model.id);
+		assert.equal((model.compat as { forceAdaptiveThinking?: boolean } | undefined)?.forceAdaptiveThinking, true, model.id);
+		assert.ok(!model.name.includes("Vertex"), `${model.id} name is ${model.name}`);
+	}
+});
+
+test("a model in both catalogs takes the anthropic entry", () => {
+	const [model] = buildGatewayModels(["claude-sonnet-4-6"]);
+
+	assert.equal(model.name, "Claude Sonnet 4.6");
+	assert.equal(model.contextWindow, 1_000_000);
+});
+
+test("buildGatewayModels takes capabilities from the catalog and defaults the rest", () => {
+	const [, unknown] = buildGatewayModels(["claude-sonnet-5-5", "claude-future-9"]);
 
 	assert.equal(unknown.id, "claude-future-9");
 	assert.deepEqual(unknown.input, ["text", "image"]);

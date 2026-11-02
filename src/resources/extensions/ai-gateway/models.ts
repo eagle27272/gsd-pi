@@ -10,7 +10,10 @@ function isClaude(id: string): boolean {
 }
 
 export function buildGatewayModels(ids: string[]): ProviderModelConfig[] {
-	const catalog = new Map(getModels("anthropic").map((model) => [model.id, model]));
+	// Newer Claude models reach the catalog through Vertex first; the capabilities match the direct API.
+	const catalog = new Map(
+		[...getModels("anthropic-vertex"), ...getModels("anthropic")].map((model) => [model.id, model]),
+	);
 
 	return ids.filter(isClaude).map((id) => {
 		const known = catalog.get(id);
@@ -27,7 +30,7 @@ export function buildGatewayModels(ids: string[]): ProviderModelConfig[] {
 		}
 		return {
 			id,
-			name: known.name,
+			name: known.name.replace(/ \(Vertex\)$/, ""),
 			reasoning: known.reasoning,
 			thinkingLevelMap: known.thinkingLevelMap,
 			input: known.input.filter((kind): kind is "text" | "image" => kind === "text" || kind === "image"),
