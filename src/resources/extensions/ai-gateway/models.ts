@@ -30,7 +30,7 @@ export function buildGatewayModels(ids: string[]): ProviderModelConfig[] {
 			name: known.name,
 			reasoning: known.reasoning,
 			thinkingLevelMap: known.thinkingLevelMap,
-			input: known.input,
+			input: known.input.filter((kind): kind is "text" | "image" => kind === "text" || kind === "image"),
 			cost: known.cost,
 			contextWindow: known.contextWindow,
 			maxTokens: known.maxTokens,
