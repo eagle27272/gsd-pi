@@ -199,7 +199,7 @@ Sends Anthropic Messages requests straight to the AskJack AI Gateway agent that 
 
 ```bash
 claude-ai-gw                      # once: sign in with Okta and pick an agent
-pi --provider ai-gateway --model "claude-sonnet-5-5"
+pi --model "ai-gateway/claude-sonnet-5-5"
 ```
 
 To make it your default, set `defaultProvider` to `ai-gateway` in settings.
