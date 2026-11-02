@@ -17,6 +17,7 @@ function isValidThinkingLevel(level: string): level is ThinkingLevel {
 
 /** Default model IDs for each known provider */
 export const defaultModelPerProvider: Record<KnownProvider, string> = {
+	"ai-gateway": "claude-sonnet-5-5",
 	"amazon-bedrock": "us.anthropic.claude-opus-4-6-v1",
 	anthropic: "claude-opus-4-8",
 	"anthropic-vertex": "claude-sonnet-4-6",

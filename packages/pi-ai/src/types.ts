@@ -23,6 +23,7 @@ export type KnownImagesApi = "openrouter-images";
 export type ImagesApi = KnownImagesApi | (string & {});
 
 export type KnownProvider =
+	| "ai-gateway"
 	| "amazon-bedrock"
 	| "anthropic"
 	| "anthropic-vertex"
