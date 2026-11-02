@@ -193,6 +193,28 @@ export AWS_BEDROCK_SKIP_AUTH=1
 export AWS_BEDROCK_FORCE_HTTP1=1
 ```
 
+### AI Gateway (claude-ai-gw)
+
+Sends Anthropic Messages requests straight to the AskJack AI Gateway agent that the `claude-ai-gw` launcher has saved. The launcher stays installed as the credential helper and as the source of the agent, so `claude-ai-gw gw pick` also switches gsd at the next session start.
+
+```bash
+claude-ai-gw                      # once: sign in with Okta and pick an agent
+pi --provider ai-gateway --model "claude-sonnet-5-5"
+```
+
+To make it your default, set `defaultProvider` to `ai-gateway` in settings.
+
+Every request sends `Authorization: Bearer <token>` and `X-JH-Client: gsd-pi`, plus `X-JH-Session-Id` from the gsd session id when it is a valid label. Tokens come from `claude-ai-gw --token` and are reused for 5 minutes. Only the `claude-*` models the agent allows are registered.
+
+| Variable | Effect |
+|----------|--------|
+| `GSD_AI_GATEWAY_TOKEN_TTL_SECONDS` | How long a token is reused. Default `300`. Invalid, zero or negative values fall back to the default. |
+| `GSD_AI_GATEWAY_BASE_URL` | Replaces the whole base URL built from the launcher's saved agent. |
+| `GSD_AI_GATEWAY_CONFIG_DIR` | Where to read the launcher's files. Default `~/.claude-ai-gw`. |
+| `CLAUDE_AI_GW_INSTITUTION_ID` | Same override the launcher honors. |
+
+If the launcher config is missing or unreadable, the provider is not registered. If a request cannot get a token, the error says to run `claude-ai-gw gw login`.
+
 ### Cloudflare AI Gateway
 
 `CLOUDFLARE_API_KEY` can be set via `/login`. The account ID and gateway slug must be set as environment variables.
