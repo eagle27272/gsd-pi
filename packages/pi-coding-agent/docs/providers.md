@@ -193,6 +193,30 @@ export AWS_BEDROCK_SKIP_AUTH=1
 export AWS_BEDROCK_FORCE_HTTP1=1
 ```
 
+### AI Gateway (claude-ai-gw)
+
+The `ai-gateway` provider sends Anthropic Messages requests to the AskJack AI Gateway agent that the `claude-ai-gw` command saved. gsd uses `claude-ai-gw` to sign in and to get tokens. When you run `claude-ai-gw gw pick`, gsd uses the new agent at the next session start.
+
+To set up the provider, sign in and pick an agent. Then select the model:
+
+```bash
+claude-ai-gw                      # once: sign in with Okta and pick an agent
+pi --model "ai-gateway/claude-sonnet-5-5"
+```
+
+To make it your default provider, set `defaultProvider` to `ai-gateway` in the settings.
+
+Each request sends the headers `Authorization: Bearer <token>` and `X-JH-Client: gsd-pi`. If the gsd session id is a valid label, the request also sends `X-JH-Session-Id`. gsd gets tokens from `claude-ai-gw --token` and reuses each token for 5 minutes. gsd keeps the current token in the auth file `~/.gsd/agent/auth.json` (mode 600). The token stays there after gsd exits. gsd registers only the `claude-*` models that the agent allows.
+
+| Variable | Effect |
+|----------|--------|
+| `GSD_AI_GATEWAY_TOKEN_TTL_SECONDS` | Time in seconds that gsd reuses a token. The default is `300`. A value that is not a number, zero, or negative uses the default. |
+| `GSD_AI_GATEWAY_BASE_URL` | Replaces the base URL that gsd builds from the saved agent. |
+| `GSD_AI_GATEWAY_CONFIG_DIR` | Directory that holds the `claude-ai-gw` files. The default is `~/.claude-ai-gw`. |
+| `CLAUDE_AI_GW_INSTITUTION_ID` | Sets the institution id in the URL, the same as in `claude-ai-gw`. |
+
+If the `claude-ai-gw` configuration file is missing or unreadable, gsd does not register the provider. If gsd cannot get a token, the error tells you to run `claude-ai-gw gw login`.
+
 ### Cloudflare AI Gateway
 
 `CLOUDFLARE_API_KEY` can be set via `/login`. The account ID and gateway slug must be set as environment variables.

@@ -1081,3 +1081,90 @@ test("PROVIDER_ROUTES includes openai-codex as route for openai (#2922)", async 
     'PROVIDER_ROUTES must include "openai-codex" as a route (#2922)',
   );
 });
+
+// ─── ai-gateway ───────────────────────────────────────────────────────────────
+
+function aiGatewayFixture(opts: { launcherConfig: boolean; launcherBinary: boolean }) {
+  const repo = realpathSync(mkdtempSync(join(tmpdir(), "gsd-providers-ai-gateway-repo-")));
+  const tmpHome = realpathSync(mkdtempSync(join(tmpdir(), "gsd-providers-ai-gateway-home-")));
+  const binDir = join(tmpHome, "bin");
+  const launcherDir = join(tmpHome, ".claude-ai-gw");
+  mkdirSync(join(repo, ".gsd"), { recursive: true });
+  mkdirSync(binDir, { recursive: true });
+  mkdirSync(launcherDir, { recursive: true });
+  writeFileSync(
+    join(repo, ".gsd", "PREFERENCES.md"),
+    ["---", "models:", "  execution: ai-gateway/claude-sonnet-5-5", "---", ""].join("\n"),
+  );
+  if (opts.launcherConfig) {
+    writeFileSync(
+      join(launcherDir, "config.json"),
+      JSON.stringify({ env: "prod", agent_id: "agent-1", models: ["claude-sonnet-5-5"] }),
+    );
+  }
+  if (opts.launcherBinary) {
+    const binary = join(binDir, "claude-ai-gw");
+    writeFileSync(binary, "#!/bin/sh\nexit 0\n");
+    chmodSync(binary, 0o755);
+  }
+  return {
+    repo,
+    tmpHome,
+    env: { HOME: tmpHome, PATH: binDir, GSD_AI_GATEWAY_CONFIG_DIR: launcherDir },
+    cleanup: () => {
+      rmSync(repo, { recursive: true, force: true });
+      rmSync(tmpHome, { recursive: true, force: true });
+    },
+  };
+}
+
+test("runProviderChecks reports ok for ai-gateway when the launcher config and binary are present", () => {
+  const fx = aiGatewayFixture({ launcherConfig: true, launcherBinary: true });
+  withEnv(fx.env, () => {
+    withCwd(fx.repo, () => {
+      const gateway = runProviderChecks().find(r => r.name === "ai-gateway");
+      assert.ok(gateway, "ai-gateway result should exist");
+      assert.equal(gateway!.status, "ok");
+      assert.equal(gateway!.label, "AI Gateway");
+    });
+  });
+  fx.cleanup();
+});
+
+test("runProviderChecks reports error for ai-gateway when claude-ai-gw is not on PATH", () => {
+  const fx = aiGatewayFixture({ launcherConfig: true, launcherBinary: false });
+  withEnv(fx.env, () => {
+    withCwd(fx.repo, () => {
+      const gateway = runProviderChecks().find(r => r.name === "ai-gateway");
+      assert.ok(gateway, "ai-gateway result should exist");
+      assert.equal(gateway!.status, "error");
+      assert.ok(gateway!.detail?.includes("claude-ai-gw"), "should name the launcher to install");
+    });
+  });
+  fx.cleanup();
+});
+
+test("runProviderChecks reports error for ai-gateway when the launcher has no saved agent", () => {
+  const fx = aiGatewayFixture({ launcherConfig: false, launcherBinary: true });
+  withEnv(fx.env, () => {
+    withCwd(fx.repo, () => {
+      const gateway = runProviderChecks().find(r => r.name === "ai-gateway");
+      assert.ok(gateway, "ai-gateway result should exist");
+      assert.equal(gateway!.status, "error");
+      assert.ok(gateway!.detail?.includes("claude-ai-gw"), "should point at the launcher to pick an agent");
+    });
+  });
+  fx.cleanup();
+});
+
+test("runProviderChecksAsync matches sync for ai-gateway", async () => {
+  const fx = aiGatewayFixture({ launcherConfig: true, launcherBinary: true });
+  await withEnvAsync(fx.env, async () => {
+    await withCwdAsync(fx.repo, async () => {
+      const sync = runProviderChecks();
+      const async_ = await runProviderChecksAsync();
+      assert.deepEqual(normalizeProviderResults(async_), normalizeProviderResults(sync));
+    });
+  });
+  fx.cleanup();
+});

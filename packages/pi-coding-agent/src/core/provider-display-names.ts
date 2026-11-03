@@ -1,4 +1,5 @@
 export const BUILT_IN_PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+	"ai-gateway": "AI Gateway",
 	anthropic: "Anthropic",
 	"anthropic-vertex": "Anthropic on Vertex AI",
 	"amazon-bedrock": "Amazon Bedrock",
