@@ -24,7 +24,7 @@ const BUILT_IN_HOSTS: Record<string, string> = {
 const ENV_NAME_RE = /^[a-z0-9-]{1,20}$/;
 const ENV_ORIGIN_RE = /^https?:\/\/[^\s/]+(:\d+)?$/;
 
-export function launcherDir(): string {
+function launcherDir(): string {
 	return process.env.GSD_AI_GATEWAY_CONFIG_DIR || join(homedir(), ".claude-ai-gw");
 }
 

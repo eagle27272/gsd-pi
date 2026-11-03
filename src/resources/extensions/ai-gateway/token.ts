@@ -6,8 +6,8 @@ const DEFAULT_TTL_SECONDS = 300;
 export const LAUNCHER_TIMEOUT_MS = 330_000;
 const LOGIN_HINT = "run `claude-ai-gw gw login`";
 
-export type RunResult = { stdout: string; stderr: string; code: number };
-export type RunCommand = (cmd: string, args: string[]) => Promise<RunResult>;
+type RunResult = { stdout: string; stderr: string; code: number };
+type RunCommand = (cmd: string, args: string[]) => Promise<RunResult>;
 
 export type TokenCredentials = { access: string; refresh: string; expires: number };
 
