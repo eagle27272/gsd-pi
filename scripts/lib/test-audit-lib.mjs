@@ -34,6 +34,7 @@ export const UNIT_EXTENSION_GLOBS = new Set([
   'visual-brief',
   'mcp-client',
   'codegraph',
+  'ai-gateway',
 ]);
 
 export const INTEGRATION_EXTENSION_GLOBS = new Set([

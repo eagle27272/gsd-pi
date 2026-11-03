@@ -51,6 +51,8 @@ export const defaultModelPerProvider: Record<KnownProvider, string> = {
 	"xiaomi-token-plan-cn": "mimo-v2.5-pro",
 	"xiaomi-token-plan-ams": "mimo-v2.5-pro",
 	"xiaomi-token-plan-sgp": "mimo-v2.5-pro",
+	// Last so that having the launcher installed never overrides an established provider.
+	"ai-gateway": "claude-sonnet-5-5",
 };
 
 export interface ScopedModel {
