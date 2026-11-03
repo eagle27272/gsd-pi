@@ -74,12 +74,13 @@ const TOOL_KEYS: ToolKeyConfig[] = [
 /**
  * Known LLM provider IDs that, if authed, mean the user doesn't need onboarding.
  * Sourced from the shared setup-catalog so adding a provider lands in one place.
- * 'anthropic-vertex' and 'ollama' aren't in PROVIDER_REGISTRY but are still
+ * 'anthropic-vertex', 'ai-gateway' and 'ollama' aren't in PROVIDER_REGISTRY but are still
  * treated as "authed = no onboarding needed" for back-compat.
  */
 const LLM_PROVIDER_IDS = Array.from(new Set([
   ...getLlmProviderIds(),
   'anthropic-vertex',
+  'ai-gateway',
   'ollama',
 ]))
 

@@ -16,6 +16,7 @@ import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import { AuthStorage } from "@gsd/pi-coding-agent";
 import { getEnvApiKey } from "@gsd/pi-ai";
+import { readLauncherConfig } from "../ai-gateway/launcher-config.js";
 import { isCursorAgentReadyUncached } from "../cursor-cli/readiness.js";
 import { loadEffectiveGSDPreferences } from "./preferences.js";
 import { getAuthPath, PROVIDER_REGISTRY, supportsBrowserOAuth, type ProviderCategory } from "./key-manager.js";
@@ -86,6 +87,7 @@ function modelToProviderId(model: string): string | null {
       openai: "openai",
       "github-copilot": "github-copilot",
       "cursor-agent": "cursor-agent",
+      "ai-gateway": "ai-gateway",
     };
     if (prefixMap[prefix]) return prefixMap[prefix];
     return rawPrefix;
@@ -160,6 +162,7 @@ interface KeyLookup {
 const CLI_BINARY_MAP: Record<string, string[]> = {
   "claude-code": ["claude", "claude-code"],
   "cursor-agent": ["cursor-agent"],
+  "ai-gateway": ["claude-ai-gw"],
 };
 
 const CLI_AUTH_PATH_CHECK_PROVIDERS = new Set<string>([
@@ -214,6 +217,28 @@ function isCliBinaryInPath(providerId: string): boolean {
 function isExternalCliProviderReady(providerId: string): boolean {
   if (providerId === "cursor-agent") return isCursorAgentReadyUncached();
   return isCliBinaryInPath(providerId);
+}
+
+function checkAiGateway(): ProviderCheckResult {
+  const base = { name: "ai-gateway", label: "AI Gateway", category: "llm", required: true } as const;
+  if (!isCliBinaryInPath("ai-gateway")) {
+    return {
+      ...base,
+      status: "error",
+      message: "AI Gateway — claude-ai-gw not found",
+      detail: "Install claude-ai-gw and run `claude-ai-gw gw login`",
+    };
+  }
+  const launcher = readLauncherConfig();
+  if (!launcher) {
+    return {
+      ...base,
+      status: "error",
+      message: "AI Gateway — no saved agent",
+      detail: "Run `claude-ai-gw` once to sign in and pick an agent",
+    };
+  }
+  return { ...base, status: "ok", message: `AI Gateway — ${launcher.agentName} via claude-ai-gw` };
 }
 
 function cursorAgentFailureDetail(): string {
@@ -385,6 +410,11 @@ function checkLlmProviders(): ProviderCheckResult[] {
   const results: ProviderCheckResult[] = [];
 
   for (const providerId of required) {
+    if (providerId === "ai-gateway") {
+      results.push(checkAiGateway());
+      continue;
+    }
+
     // CLI-authenticated providers don't need API keys. The provider's own
     // request path validates CLI sessions when it is used.
     if (CLI_AUTH_PROVIDERS.has(providerId)) {
