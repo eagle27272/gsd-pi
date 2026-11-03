@@ -204,7 +204,7 @@ pi --model "ai-gateway/claude-sonnet-5-5"
 
 To make it your default, set `defaultProvider` to `ai-gateway` in settings.
 
-Every request sends `Authorization: Bearer <token>` and `X-JH-Client: gsd-pi`, plus `X-JH-Session-Id` from the gsd session id when it is a valid label. Tokens come from `claude-ai-gw --token` and are reused for 5 minutes. Only the `claude-*` models the agent allows are registered.
+Every request sends `Authorization: Bearer <token>` and `X-JH-Client: gsd-pi`, plus `X-JH-Session-Id` from the gsd session id when it is a valid label. Tokens come from `claude-ai-gw --token` and are reused for 5 minutes. The current token is kept in the auth file (`~/.gsd/agent/auth.json`, mode 600) and stays there after gsd exits. Only the `claude-*` models the agent allows are registered.
 
 | Variable | Effect |
 |----------|--------|
