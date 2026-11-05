@@ -1805,9 +1805,129 @@ test("decideOrchestratorDispatch replays pending verification retry dispatch", a
   rmSync(base, { recursive: true, force: true });
 });
 
+for (const [retryUnitType, retryPhase] of [
+  ["validate-milestone", "validating-milestone"],
+  ["complete-milestone", "completing-milestone"],
+] as const) {
+  test(`decideOrchestratorDispatch drops a stale ${retryUnitType} retry once state has left ${retryPhase}`, async () => {
+    const base = mkdtempSync(join(tmpdir(), "gsd-orchestrator-stale-milestone-retry-"));
+
+    try {
+      mkdirSync(join(base, ".gsd"), { recursive: true });
+      openDatabase(join(base, ".gsd", "gsd.db"));
+      insertMilestone({ id: "M005", title: "Milestone 5", status: "active" });
+      insertSlice({ milestoneId: "M005", id: "S03", title: "Done", status: "complete" });
+      insertSlice({ milestoneId: "M005", id: "S04", title: "Added later", status: "pending" });
+
+      const planSliceRule: UnifiedRule = {
+        name: "test-plan-added-slice",
+        when: "dispatch",
+        evaluation: "first-match",
+        where: async () => ({
+          action: "dispatch" as const,
+          unitType: "plan-slice",
+          unitId: "M005/S04",
+          prompt: "plan the added slice",
+        }),
+        then: (r: unknown) => r,
+      };
+      setRegistry(new RuleRegistry([planSliceRule]));
+
+      const stateSnapshot: GSDState = {
+        ...makeState(),
+        activeMilestone: { id: "M005", title: "Milestone 5" },
+        activeSlice: { id: "S04", title: "Added later" },
+        phase: "planning",
+      };
+      const ctx = { model: {}, modelRegistry: { getAll: () => [], getAvailable: () => [] } } as never;
+      const pi = { getActiveTools: () => [] } as never;
+      const session = {
+        basePath: base,
+        pendingOrchestrationDispatch: null,
+        pendingVerificationRetryDispatch: {
+          unitType: retryUnitType,
+          unitId: "M005",
+          prompt: "stale retry prompt",
+          pauseAfterUatDispatch: false,
+          state: { ...stateSnapshot, activeSlice: null, phase: retryPhase },
+          mid: "M005",
+          midTitle: "Milestone 5",
+        },
+        pendingVerificationRetry: {
+          unitId: "M005",
+          failureContext: "canonical validation needs fresh objective evidence",
+          attempt: 1,
+        },
+      } as never;
+
+      const result = await decideOrchestratorDispatch(ctx, pi, base, session, { stateSnapshot });
+
+      assert.ok(result);
+      if (!result || !("unitType" in result)) assert.fail(`expected dispatch decision, got ${JSON.stringify(result)}`);
+      assert.equal(result.unitType, "plan-slice");
+      assert.equal(result.unitId, "M005/S04");
+      assert.notEqual(result.reason, "verification-retry");
+      const sess = session as unknown as {
+        pendingVerificationRetry: unknown;
+        pendingVerificationRetryDispatch: unknown;
+        pendingOrchestrationDispatch: { prompt?: string } | null;
+      };
+      assert.equal(sess.pendingVerificationRetryDispatch, null);
+      assert.equal(sess.pendingVerificationRetry, null);
+      assert.ok(sess.pendingOrchestrationDispatch?.prompt?.startsWith("plan the added slice"));
+    } finally {
+      resetRegistry();
+      closeDatabase();
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+}
+
+test("decideOrchestratorDispatch replays a validate-milestone retry while state is still validating-milestone", async () => {
+  const base = mkdtempSync(join(tmpdir(), "gsd-orchestrator-live-milestone-retry-"));
+
+  try {
+    mkdirSync(join(base, ".gsd"), { recursive: true });
+    openDatabase(join(base, ".gsd", "gsd.db"));
+    insertMilestone({ id: "M005", title: "Milestone 5", status: "active" });
+    insertSlice({ milestoneId: "M005", id: "S03", title: "Done", status: "complete" });
+
+    const stateSnapshot: GSDState = {
+      ...makeState(),
+      activeMilestone: { id: "M005", title: "Milestone 5" },
+      phase: "validating-milestone",
+    };
+    const ctx = { model: {}, modelRegistry: { getAll: () => [], getAvailable: () => [] } } as never;
+    const pi = { getActiveTools: () => [] } as never;
+    const session = {
+      basePath: base,
+      pendingOrchestrationDispatch: null,
+      pendingVerificationRetryDispatch: {
+        unitType: "validate-milestone",
+        unitId: "M005",
+        prompt: "retry validation",
+        pauseAfterUatDispatch: false,
+        state: stateSnapshot,
+        mid: "M005",
+        midTitle: "Milestone 5",
+      },
+    } as never;
+
+    const result = await decideOrchestratorDispatch(ctx, pi, base, session, { stateSnapshot });
+
+    assert.ok(result);
+    if (!result || !("unitType" in result)) assert.fail(`expected dispatch decision, got ${JSON.stringify(result)}`);
+    assert.equal(result.unitType, "validate-milestone");
+    assert.equal(result.reason, "verification-retry");
+  } finally {
+    closeDatabase();
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
 test("decideOrchestratorDispatch blocks a non-slice verification retry without DB authority", async () => {
   closeDatabase();
-  const stateSnapshot = makeState();
+  const stateSnapshot: GSDState = { ...makeState(), phase: "validating-milestone" };
   const pendingRetry = {
     unitType: "validate-milestone",
     unitId: "M001",

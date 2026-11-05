@@ -19,7 +19,8 @@ import { closeoutAndStop } from "./closeout.js";
 import {
   _resolveDispatchGuardBasePath,
 } from "./phase-helpers.js";
-import type { PendingVerificationRetry } from "./session.js";
+import type { Phase } from "../types.js";
+import type { AutoSession, PendingVerificationRetry } from "./session.js";
 import type { IterationContext, IterationData, LoopState, PhaseResult, PreDispatchData } from "./types.js";
 
 export function getAlreadyClosedDispatchReason(unitType: string, unitId: string): string | null {
@@ -51,6 +52,35 @@ export function shouldBypassAlreadyClosedForVerificationRetry(
     retryInfo?.unitId === unitId &&
     retryInfo.signature?.startsWith("git-commit:") === true
   );
+}
+
+const MILESTONE_UNIT_PHASE: Readonly<Record<string, Phase>> = {
+  "validate-milestone": "validating-milestone",
+  "complete-milestone": "completing-milestone",
+};
+
+/**
+ * A milestone-level retry snapshot goes stale when state has moved off the
+ * phase that unit belongs to, e.g. a slice was added after validation first
+ * failed. Replaying it would bypass dispatch and never plan the new work.
+ */
+export function isStaleMilestoneRetry(unitType: string, statePhase: Phase): boolean {
+  const expectedPhase = MILESTONE_UNIT_PHASE[unitType];
+  return expectedPhase !== undefined && expectedPhase !== statePhase;
+}
+
+export function discardStaleVerificationRetry(
+  s: AutoSession,
+  stale: { unitType: string; unitId: string },
+): void {
+  s.pendingVerificationRetryDispatch = null;
+  if (s.pendingVerificationRetry?.unitId === stale.unitId) {
+    s.pendingVerificationRetry = null;
+  }
+  const pending = s.pendingOrchestrationDispatch;
+  if (pending?.unitType === stale.unitType && pending.unitId === stale.unitId) {
+    s.pendingOrchestrationDispatch = null;
+  }
 }
 
 function isUnhandledPhaseWarning(dispatchResult: DispatchAction): dispatchResult is Extract<DispatchAction, { action: "stop" }> {
@@ -177,7 +207,17 @@ export async function runDispatch(
   let dispatchState = state;
   let dispatchMid = mid;
   let dispatchMidTitle = midTitle;
-  const pendingRetryDispatch = s.pendingVerificationRetryDispatch;
+  let pendingRetryDispatch = s.pendingVerificationRetryDispatch;
+  if (pendingRetryDispatch && isStaleMilestoneRetry(pendingRetryDispatch.unitType, state.phase)) {
+    debugLog("autoLoop", {
+      phase: "dispatch-drop-stale-verification-retry",
+      unitType: pendingRetryDispatch.unitType,
+      unitId: pendingRetryDispatch.unitId,
+      statePhase: state.phase,
+    });
+    discardStaleVerificationRetry(s, pendingRetryDispatch);
+    pendingRetryDispatch = null;
+  }
   if (pendingRetryDispatch) {
     unitType = pendingRetryDispatch.unitType;
     unitId = pendingRetryDispatch.unitId;
