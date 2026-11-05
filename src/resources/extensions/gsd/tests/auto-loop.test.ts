@@ -7702,6 +7702,74 @@ test("dispatch Worktree Safety wins before stuck detection for execute-task with
   );
 });
 
+test("runDispatch drops a stale validate-milestone retry when a slice was added after validation failed", async (t) => {
+  _resetPendingResolve();
+
+  const s = makeLoopSession();
+  t.after(() => rmSync(s.basePath, { recursive: true, force: true }));
+  const staleState = {
+    phase: "validating-milestone",
+    activeMilestone: { id: "M005", title: "Test", status: "active" },
+    activeSlice: null,
+    activeTask: null,
+    registry: [{ id: "M005", status: "active" }],
+    blockers: [],
+  } as any;
+  s.pendingVerificationRetryDispatch = {
+    unitType: "validate-milestone",
+    unitId: "M005",
+    prompt: "stale validation retry",
+    pauseAfterUatDispatch: false,
+    state: staleState,
+    mid: "M005",
+    midTitle: "Test",
+  };
+  s.pendingVerificationRetry = {
+    unitId: "M005",
+    failureContext: "canonical validation needs fresh objective evidence",
+    attempt: 1,
+  };
+  const deps = makeMockDeps({
+    resolveDispatch: async () => ({
+      action: "dispatch" as const,
+      unitType: "plan-slice",
+      unitId: "M005/S04",
+      prompt: "plan the added slice",
+    }),
+  });
+
+  const result = await runDispatch(
+    {
+      ctx: makeMockCtx(),
+      pi: makeMockPi(),
+      s,
+      deps,
+      prefs: undefined,
+      iteration: 1,
+      flowId: "test-flow",
+      nextSeq: () => 1,
+    },
+    {
+      state: {
+        ...staleState,
+        phase: "planning",
+        activeSlice: { id: "S04", title: "Added later" },
+      },
+      mid: "M005",
+      midTitle: "Test",
+    },
+    { consecutiveFinalizeTimeouts: 0 },
+  );
+
+  assert.equal(result.action, "next");
+  if (result.action !== "next") return;
+  assert.equal(result.data.unitType, "plan-slice");
+  assert.equal(result.data.unitId, "M005/S04");
+  assert.equal(result.data.isRetry, false);
+  assert.equal(s.pendingVerificationRetryDispatch, null);
+  assert.equal(s.pendingVerificationRetry, null);
+});
+
 test("dispatch Worktree Safety honors degraded branch fallback instead of demanding the canonical worktree root", async (t) => {
   _resetPendingResolve();
 
