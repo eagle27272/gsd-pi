@@ -210,6 +210,78 @@ describe("require_slice_discussion dispatch rule (#3454)", () => {
     }
   });
 
+  // ─── Sketch slices (refining phase) ───────────────────────────────────
+
+  test("returns stop action for a sketch slice in the refining phase when CONTEXT is missing", async () => {
+    const basePath = makeBasePath("refining-fire");
+    try {
+      const prefs = {
+        phases: { require_slice_discussion: true, progressive_planning: true },
+      } as unknown as GSDPreferences;
+      const state = buildState({
+        phase: "refining",
+        activeSlice: { id: "S02", title: "Sketch slice" },
+      });
+      const action = await findRule().match(buildCtx(basePath, prefs, state));
+      assert.ok(action, "refining phase must be gated by require_slice_discussion");
+      assert.strictEqual(action!.action, "stop");
+      if (action!.action === "stop") {
+        assert.match(action!.reason, /S02 requires discussion/);
+        assert.match(action!.reason, /\/gsd discuss/);
+      }
+    } finally {
+      rmSync(basePath, { recursive: true, force: true });
+    }
+  });
+
+  test("falls through (null) for a refining slice whose CONTEXT file exists", async () => {
+    const basePath = makeBasePath("refining-ctx-present");
+    try {
+      const phaseDir = join(basePath, ".gsd", "phases", "01-m001");
+      writeFileSync(join(phaseDir, "01-02-CONTEXT.md"), "# Discussion notes\n", "utf-8");
+
+      const prefs = {
+        phases: { require_slice_discussion: true, progressive_planning: true },
+      } as unknown as GSDPreferences;
+      const state = buildState({
+        phase: "refining",
+        activeSlice: { id: "S02", title: "Sketch slice" },
+      });
+      const action = await findRule().match(buildCtx(basePath, prefs, state));
+      assert.strictEqual(action, null);
+    } finally {
+      rmSync(basePath, { recursive: true, force: true });
+    }
+  });
+
+  test("falls through (null) for a refining slice when the preference is disabled", async () => {
+    const basePath = makeBasePath("refining-pref-disabled");
+    try {
+      const prefs = {
+        phases: { require_slice_discussion: false, progressive_planning: true },
+      } as unknown as GSDPreferences;
+      const state = buildState({
+        phase: "refining",
+        activeSlice: { id: "S02", title: "Sketch slice" },
+      });
+      const action = await findRule().match(buildCtx(basePath, prefs, state));
+      assert.strictEqual(action, null);
+    } finally {
+      rmSync(basePath, { recursive: true, force: true });
+    }
+  });
+
+  test("rule is ordered before the 'refining → refine-slice' rule", () => {
+    const discussIdx = DISPATCH_RULES.findIndex(r => r.name.includes(RULE_NAME_TOKEN));
+    const refineIdx = DISPATCH_RULES.findIndex(r => r.name.startsWith("refining → refine-slice"));
+    assert.ok(discussIdx >= 0, "require_slice_discussion rule must be registered");
+    assert.ok(refineIdx >= 0, "refine-slice rule must be registered");
+    assert.ok(
+      discussIdx < refineIdx,
+      "require_slice_discussion rule must be ordered before refine-slice so it preempts dispatch",
+    );
+  });
+
   // ─── Rule ordering: must run before the plan-slice rule ──────────────
 
   test("rule is ordered before the 'planning → plan-slice' rule", () => {

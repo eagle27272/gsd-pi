@@ -465,7 +465,7 @@ Priority  Rule                                          Fires When
 14        pre-planning (no context) → discuss-milestone active milestone, CONTEXT missing
 15        pre-planning (no research) → research-mile…   CONTEXT done, RESEARCH missing
 16        pre-planning (has research) → plan-milestone  CONTEXT + RESEARCH done, ROADMAP missing
-17        planning (require_slice_discussion) → pause   slice flagged for discussion (#3454)
+17        planning (require_slice_discussion) → pause   slice flagged for discussion (#3454); also gates sketch slices in refining
 18        planning (multi slices need research) → par…  ROADMAP done, slice RESEARCH missing × ≥2
 19        planning (no research) → research-slice       single slice needs RESEARCH
 20        refining → refine-slice                       slice is sketch, needs expansion

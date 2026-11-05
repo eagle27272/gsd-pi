@@ -1312,7 +1312,8 @@ export const DISPATCH_RULES: DispatchRule[] = [
   {
     name: "planning (require_slice_discussion) → pause for discussion",
     match: async ({ state, mid, basePath, prefs }) => {
-      if (state.phase !== "planning") return null;
+      // Sketch slices derive to `refining`, not `planning`, so both phases need the gate.
+      if (state.phase !== "planning" && state.phase !== "refining") return null;
       if (!prefs?.phases?.require_slice_discussion) return null;
       if (!state.activeSlice) return null;
       // Only pause if the slice has no context file yet (discussion not done).
