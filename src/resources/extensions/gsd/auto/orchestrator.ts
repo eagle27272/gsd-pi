@@ -108,7 +108,9 @@ import {
 import { evaluateAllCompleteSettlement } from "../milestone-settlement.js";
 import { hasHeldMilestoneLease, reclaimMissingMilestoneLease } from "./milestone-lease-reclaim.js";
 import {
+  discardStaleVerificationRetry,
   getAlreadyClosedDispatchReason as getDispatchAlreadyClosedReason,
+  isStaleMilestoneRetry,
   shouldBypassAlreadyClosedForVerificationRetry,
 } from "./dispatch.js";
 import { readLatestTaskAttempt } from "../task-execution-domain-operation.js";
@@ -305,7 +307,11 @@ export async function decideOrchestratorDispatch(
   // otherwise a stale execute-task / complete-slice / complete-milestone
   // retry whose target milestone has since been parked would preempt
   // project-level deep rules like `discuss-project`.
-  const pendingRetry = session?.pendingVerificationRetryDispatch;
+  let pendingRetry = session?.pendingVerificationRetryDispatch;
+  if (session && pendingRetry && active && isStaleMilestoneRetry(pendingRetry.unitType, state.phase)) {
+    discardStaleVerificationRetry(session, pendingRetry);
+    pendingRetry = null;
+  }
   if (session && pendingRetry && active) {
     const authorityBlocker = getDispatchAuthorityBlocker(pendingRetry.unitType, pendingRetry.unitId);
     if (authorityBlocker) {
