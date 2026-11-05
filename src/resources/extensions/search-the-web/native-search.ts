@@ -76,6 +76,7 @@ const NATIVE_WEB_SEARCH_PROVIDERS = new Set([
   "claude-code",
   "anthropic-vertex",
   "vercel-ai-gateway",
+  "ai-gateway",
 ]);
 
 function looksLikeAnthropicModelName(modelName: string): boolean {

@@ -1339,6 +1339,33 @@ test("#4478 vercel-ai-gateway with anthropic-messages api injects native web_sea
   );
 });
 
+test("ai-gateway with anthropic-messages api injects native web_search", async () => {
+  const pi = createMockPI();
+  registerNativeSearchHooks(pi);
+
+  await pi.fire("model_select", {
+    type: "model_select",
+    model: { provider: "ai-gateway", api: "anthropic-messages", name: "claude-sonnet-5-5" },
+    previousModel: undefined,
+    source: "set",
+  });
+
+  const payload: Record<string, unknown> = {
+    model: "claude-sonnet-5-5",
+    tools: [{ name: "bash", type: "custom" }],
+  };
+  const result = await pi.fire("before_provider_request", {
+    type: "before_provider_request",
+    payload,
+    model: { provider: "ai-gateway", id: "claude-sonnet-5-5", api: "anthropic-messages" },
+  });
+  const tools = ((result as any)?.tools ?? payload.tools) as any[];
+  assert.ok(
+    tools.some((t) => t.type === "web_search_20250305"),
+    "AI Gateway Claude route should inject native web_search",
+  );
+});
+
 test("#4478 amazon-bedrock provider does NOT inject (different tool schema)", async () => {
   const pi = createMockPI();
   registerNativeSearchHooks(pi);
