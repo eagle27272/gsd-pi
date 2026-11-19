@@ -151,14 +151,25 @@ export function calculateContextTokens(usage: Usage): number {
 	return usage.input + usage.cacheRead + usage.cacheWrite;
 }
 
+function hasReportedUsage(usage: Usage): boolean {
+	return usage.input > 0 || usage.output > 0 || usage.cacheRead > 0 || usage.cacheWrite > 0 || usage.totalTokens > 0;
+}
+
 /**
  * Get usage from an assistant message if available.
- * Skips aborted and error messages as they don't have valid usage data.
+ * Skips aborted and error messages as they don't have valid usage data, and
+ * replies whose provider reported all-zero usage (some OpenAI-compatible and
+ * local servers do), which would otherwise pin the context estimate near zero.
  */
 function getAssistantUsage(msg: AgentMessage): Usage | undefined {
 	if (msg.role === "assistant" && "usage" in msg) {
 		const assistantMsg = msg as AssistantMessage;
-		if (assistantMsg.stopReason !== "aborted" && assistantMsg.stopReason !== "error" && assistantMsg.usage) {
+		if (
+			assistantMsg.stopReason !== "aborted" &&
+			assistantMsg.stopReason !== "error" &&
+			assistantMsg.usage &&
+			hasReportedUsage(assistantMsg.usage)
+		) {
 			return assistantMsg.usage;
 		}
 	}
@@ -252,6 +263,8 @@ export function shouldCompact(contextTokens: number, contextWindow: number, sett
  * Estimate token count for a message using chars/4 heuristic.
  * This is conservative (overestimates tokens).
  */
+const IMAGE_ESTIMATE_CHARS = 4800;
+
 export function estimateTokens(message: AgentMessage): number {
 	let chars = 0;
 
@@ -264,6 +277,9 @@ export function estimateTokens(message: AgentMessage): number {
 				for (const block of content) {
 					if (block.type === "text" && block.text) {
 						chars += block.text.length;
+					}
+					if (block.type === "image") {
+						chars += IMAGE_ESTIMATE_CHARS;
 					}
 				}
 			}
@@ -292,7 +308,7 @@ export function estimateTokens(message: AgentMessage): number {
 						chars += block.text.length;
 					}
 					if (block.type === "image") {
-						chars += 4800; // Estimate images as 4000 chars, or 1200 tokens
+						chars += IMAGE_ESTIMATE_CHARS;
 					}
 				}
 			}
@@ -569,6 +585,18 @@ export class CompactionProducedNoSummaryError extends Error {
 	}
 }
 
+export class CompactionSummaryTruncatedError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "CompactionSummaryTruncatedError";
+	}
+}
+
+function truncatedSummaryMessage(what: string, maxTokens: number | undefined): string {
+	const limit = maxTokens === undefined ? "the output token limit" : `the ${maxTokens}-token output limit`;
+	return `${what} was cut off at ${limit}; saving it would silently drop the rest of the history. Raise compaction reserveTokens or use a model with a larger output limit.`;
+}
+
 export function isDegenerateSummary(summary: string | undefined): boolean {
 	if (summary === undefined) return false;
 	const normalized = summary.trim().toLowerCase();
@@ -692,6 +720,9 @@ async function summarizeOnce(
 
 	if (response.stopReason === "error") {
 		throw new Error(`Summarization failed: ${response.errorMessage || "Unknown error"}`);
+	}
+	if (response.stopReason === "length") {
+		throw new CompactionSummaryTruncatedError(truncatedSummaryMessage("Summary", options.maxTokens));
 	}
 
 	return summaryText(response);
@@ -1085,6 +1116,9 @@ async function generateTurnPrefixSummary(
 
 	if (response.stopReason === "error") {
 		throw new Error(`Turn prefix summarization failed: ${response.errorMessage || "Unknown error"}`);
+	}
+	if (response.stopReason === "length") {
+		throw new CompactionSummaryTruncatedError(truncatedSummaryMessage("Turn prefix summary", maxTokens));
 	}
 
 	return summaryText(response);

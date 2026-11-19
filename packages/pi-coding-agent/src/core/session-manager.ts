@@ -2,8 +2,15 @@ import { uuidv7 } from "@gsd/pi-agent-core";
 import type { ImageContent, Message, TextContent } from "@gsd/pi-ai";
 import {
 	appendFileSync,
+	closeSync,
 	existsSync,
+	fstatSync,
 	mkdirSync,
+	openSync,
+	readFileSync,
+	readSync,
+	renameSync,
+	unlinkSync,
 	writeFileSync,
 } from "fs";
 import { readdir } from "fs/promises";
@@ -108,6 +115,41 @@ function createSessionId(): string {
 }
 
 /**
+ * The backup keeps a non-.jsonl suffix so session listing never offers it for resume.
+ * Refuses to proceed if the file cannot be moved: losing the history is worse than failing to open.
+ */
+function setAsideUnreadableSessionFile(sessionFile: string): void {
+	if (readFileSync(sessionFile, "utf8").trim() === "") return;
+	const backup = `${sessionFile}.unreadable-${Date.now()}`;
+	try {
+		renameSync(sessionFile, backup);
+	} catch (error) {
+		throw new Error(
+			`Session file ${sessionFile} has no readable header and could not be moved aside: ${
+				error instanceof Error ? error.message : String(error)
+			}`,
+		);
+	}
+}
+
+/** A crash mid-append can leave the last line unterminated; the next append would fuse onto it. */
+function terminateTrailingLine(sessionFile: string): void {
+	const fd = openSync(sessionFile, "r");
+	let endsWithNewline = true;
+	try {
+		const { size } = fstatSync(fd);
+		if (size > 0) {
+			const lastByte = Buffer.alloc(1);
+			readSync(fd, lastByte, 0, 1, size - 1);
+			endsWithNewline = lastByte[0] === 0x0a;
+		}
+	} finally {
+		closeSync(fd);
+	}
+	if (!endsWithNewline) appendFileSync(sessionFile, "\n");
+}
+
+/**
  * Manages conversation sessions as append-only trees stored in JSONL files.
  *
  * Each session entry has an id and parentId forming a tree structure. The "leaf"
@@ -152,10 +194,12 @@ export class SessionManager {
 		if (existsSync(this.sessionFile)) {
 			this.fileEntries = loadEntriesFromFile(this.sessionFile);
 
-			// If file was empty or corrupted (no valid header), truncate and start fresh
-			// to avoid appending messages without a session header (which breaks the session)
+			// Without a valid header, appending would produce a headerless session, so
+			// start fresh. A non-empty file may still hold recoverable history (a torn
+			// first line from a crash), so move it aside rather than overwrite it.
 			if (this.fileEntries.length === 0) {
 				const explicitPath = this.sessionFile;
+				setAsideUnreadableSessionFile(explicitPath);
 				this.newSession();
 				this.sessionFile = explicitPath;
 				this._rewriteFile();
@@ -168,6 +212,8 @@ export class SessionManager {
 
 			if (migrateToCurrentVersion(this.fileEntries)) {
 				this._rewriteFile();
+			} else {
+				terminateTrailingLine(this.sessionFile);
 			}
 
 			this._buildIndex();
@@ -230,7 +276,16 @@ export class SessionManager {
 	private _rewriteFile(): void {
 		if (!this.persist || !this.sessionFile) return;
 		const content = `${this.fileEntries.map((e) => JSON.stringify(e)).join("\n")}\n`;
-		writeFileSync(this.sessionFile, content);
+		const tempFile = `${this.sessionFile}.${process.pid}.tmp`;
+		try {
+			writeFileSync(tempFile, content);
+			renameSync(tempFile, this.sessionFile);
+		} catch (error) {
+			try {
+				unlinkSync(tempFile);
+			} catch {}
+			throw error;
+		}
 	}
 
 	isPersisted(): boolean {
@@ -264,12 +319,19 @@ export class SessionManager {
 		}
 
 		if (!this.flushed) {
-			for (const e of this.fileEntries) {
-				appendFileSync(this.sessionFile, `${JSON.stringify(e)}\n`);
-			}
+			this._rewriteFile();
 			this.flushed = true;
-		} else {
+			return;
+		}
+
+		try {
 			appendFileSync(this.sessionFile, `${JSON.stringify(entry)}\n`);
+		} catch (error) {
+			// The entry is already in memory, so the file may now be missing it or end
+			// in a torn line. Rewriting from memory on the next persist heals both;
+			// appending past the gap would leave children pointing at absent parents.
+			this.flushed = false;
+			throw error;
 		}
 	}
 
