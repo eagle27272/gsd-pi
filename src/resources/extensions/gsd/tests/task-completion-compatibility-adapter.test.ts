@@ -58,6 +58,7 @@ import {
   detectArtifactDbDrift,
   repairArtifactDbDrift,
 } from "../state-reconciliation/drift/artifact-db.js";
+import { reconcileBeforeDispatch } from "../state-reconciliation/index.js";
 import type { GSDState } from "../types.js";
 
 interface TaskIdentity {
@@ -1141,10 +1142,7 @@ test("#1726: a blockerDiscovered failure leaves no staged SUMMARY and no wedge",
   );
 });
 
-test("#1726: an interrupted retry quarantines its abandoned staged SUMMARY without a blocker", async () => {
-  const { stageTaskCompletion } = await subject();
-  const { basePath, attemptId } = createFixture();
-  const staged = await stageTaskCompletion(stageInput(basePath));
+function abandonStagedSummaryViaInterruptedRetry(attemptId: string): void {
   db().prepare(`
     INSERT INTO unit_dispatches (
       trace_id, turn_id, worker_id, milestone_lease_token,
@@ -1173,6 +1171,13 @@ test("#1726: an interrupted retry quarantines its abandoned staged SUMMARY witho
     summary: "The retry was cancelled",
     output: { cancelled: true },
   });
+}
+
+test("#1726: an interrupted retry quarantines its abandoned staged SUMMARY without a blocker", async () => {
+  const { stageTaskCompletion } = await subject();
+  const { basePath, attemptId } = createFixture();
+  const staged = await stageTaskCompletion(stageInput(basePath));
+  abandonStagedSummaryViaInterruptedRetry(attemptId);
 
   assert.equal(row("SELECT full_summary_md FROM tasks WHERE id = 'T01'").full_summary_md, "");
   assert.equal(count("artifacts"), 0, "settlement removes the stale artifact row atomically");
@@ -1209,6 +1214,42 @@ test("#1726: an interrupted retry quarantines its abandoned staged SUMMARY witho
   assert.deepEqual(
     await taskSummaryDivergence(basePath),
     { doctorDivergence: false, reconciliationDivergence: false },
+  );
+});
+
+test("#302: an abandoned staged SUMMARY with a stale artifact row is quarantined once without a phantom blocker", async () => {
+  const { stageTaskCompletion } = await subject();
+  const { basePath, attemptId } = createFixture();
+  const staged = await stageTaskCompletion(stageInput(basePath));
+  const stagedContent = readFileSync(staged.summaryPath, "utf8");
+  abandonStagedSummaryViaInterruptedRetry(attemptId);
+  seedAbsolutePathArtifactRow({
+    path: staged.summaryPath,
+    artifact_type: "SUMMARY",
+    milestone_id: "M001",
+    slice_id: "S01",
+    task_id: "T01",
+    full_content: stagedContent,
+  });
+
+  const state = reconciliationState();
+  const taskRecords = detectArtifactDbDrift(state, { basePath, state }).filter((record) =>
+    record.kind === "artifact-db-status-divergence" && record.taskId === "T01"
+  );
+  assert.equal(taskRecords.length, 1, "one task SUMMARY yields one drift record, not one per detection loop");
+
+  const result = await reconcileBeforeDispatch(basePath);
+
+  assert.deepEqual(result.blockers, [], "quarantining the abandoned SUMMARY must not raise a blocker for the moved file");
+  assert.equal(existsSync(staged.summaryPath), false);
+  assert.equal(
+    Number(row("SELECT COUNT(*) AS count FROM artifacts WHERE artifact_type = 'SUMMARY'").count),
+    0,
+  );
+  assert.equal(
+    result.repaired.filter((record) => record.kind === "artifact-db-status-divergence").length,
+    1,
+    "the abandoned SUMMARY is repaired exactly once",
   );
 });
 
