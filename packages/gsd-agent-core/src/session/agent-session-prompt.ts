@@ -9,6 +9,7 @@ import { stripFrontmatter } from "@gsd/pi-coding-agent/utils/frontmatter.js";
 import { sleep } from "@gsd/pi-coding-agent/utils/sleep.js";
 import type { PromptOptions } from "./agent-session-types.js";
 import type { AgentSessionHost } from "./agent-session-host.js";
+import { isRetryableErrorText, retryDelayMs } from "./retry-classification.js";
 
 type NoProgressTerminalRetryFingerprint = {
 	errorKind: "terminated" | "timeout";
@@ -490,11 +491,7 @@ export class AgentSessionPromptModule {
 		const contextWindow = this.host.model?.contextWindow ?? 0;
 		if (isContextOverflow(message, contextWindow)) return false;
 
-		const err = message.errorMessage;
-		// Match: overloaded_error, provider returned error, rate limit, 429, 500, 502, 503, 504, service unavailable, network/connection errors (including connection lost), WebSocket transport closes/errors, fetch failed, premature stream endings, HTTP/2 closed before response, terminated, retry delay exceeded
-		return /overloaded|provider.?returned.?error|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server.?error|internal.?error|network.?error|connection.?error|connection.?refused|connection.?lost|websocket.?closed|websocket.?error|other side closed|fetch failed|upstream.?connect|reset before headers|socket hang up|ended without|stream ended before message_stop|http2 request did not get a response|timed? out|timeout|terminated|retry delay/i.test(
-			err,
-		);
+		return isRetryableErrorText(message.errorMessage);
 	}
 
 	canPrepareRetry(message: AssistantMessage): boolean {
@@ -523,7 +520,7 @@ export class AgentSessionPromptModule {
 			return false;
 		}
 
-		const delayMs = settings.baseDelayMs * 2 ** (this.host._retryAttempt - 1);
+		const delayMs = retryDelayMs(settings, this.host._retryAttempt);
 
 		this.host.emit({
 			type: "auto_retry_start",
