@@ -31,6 +31,8 @@
     "packages/pi-ai/src/providers/openai-responses-shared.ts",
     "packages/pi-ai/src/providers/provider-payload-shape.test.ts",
     "packages/pi-ai/src/utils/tests/normalize-tool-arguments.test.ts",
+    "packages/pi-ai/src/utils/overflow.ts",
+    "packages/pi-ai/src/utils/tests/overflow.test.ts",
     "packages/pi-ai/test/google-shared-convert-tools.test.ts",
     "packages/pi-ai/test/cache-retention.test.ts",
     "packages/pi-agent-core/src/agent.ts",
