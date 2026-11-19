@@ -14,6 +14,7 @@ import {
 	shouldCompact,
 } from "../compaction/index.js";
 import type { AgentSessionHost } from "./agent-session-host.js";
+import { retryTransientFailures } from "./retry-classification.js";
 
 export function resolveThresholdContextTokens(assistantMessage: AssistantMessage, messages: AgentMessage[]): number {
 	const estimate = estimateContextTokens(messages);
@@ -353,15 +354,22 @@ export class AgentSessionCompactionModule {
 				details = extensionCompaction.details;
 			} else {
 				// Generate compaction result
-				const compactResult = await compact(
-					preparation,
-					this.host.model,
-					apiKey,
-					headers,
-					undefined,
-					this.host._autoCompactionAbortController.signal,
-					this.host.thinkingLevel,
-					this.host.agent.streamFn,
+				const model = this.host.model;
+				const compactionSignal = this.host._autoCompactionAbortController.signal;
+				const compactResult = await retryTransientFailures(
+					() =>
+						compact(
+							preparation,
+							model,
+							apiKey,
+							headers,
+							undefined,
+							compactionSignal,
+							this.host.thinkingLevel,
+							this.host.agent.streamFn,
+						),
+					this.host.settingsManager.getRetrySettings(),
+					compactionSignal,
 				);
 				summary = compactResult.summary;
 				firstKeptEntryId = compactResult.firstKeptEntryId;
