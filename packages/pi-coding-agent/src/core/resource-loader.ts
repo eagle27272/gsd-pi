@@ -10,7 +10,7 @@ export type { ResourceCollision, ResourceDiagnostic } from "./diagnostics.js";
 
 import { canonicalizePath, isLocalPath, resolvePath } from "../utils/paths.js";
 import { expandContextImports } from "./context-imports.js";
-import { createEventBus, type EventBus } from "./event-bus.js";
+import { createEventBus, type EventBus, type EventBusController } from "./event-bus.js";
 import { createExtensionRuntime, loadExtensionFromFactory, loadExtensions } from "./extensions/loader.js";
 import type { Extension, ExtensionFactory, ExtensionRuntime, LoadExtensionsResult } from "./extensions/types.js";
 import { DefaultPackageManager, type PathMetadata } from "./package-manager.js";
@@ -205,6 +205,8 @@ export class DefaultResourceLoader implements ResourceLoader {
 	private agentDir: string;
 	private settingsManager: SettingsManager;
 	private eventBus: EventBus;
+	/** Only a bus this loader created can be cleared; a caller-supplied one may have other subscribers. */
+	private ownedEventBus: EventBusController | undefined;
 	private packageManager: DefaultPackageManager;
 	private additionalExtensionPaths: string[];
 	private additionalSkillPaths: string[];
@@ -260,7 +262,12 @@ export class DefaultResourceLoader implements ResourceLoader {
 		this.cwd = resolvePath(options.cwd);
 		this.agentDir = resolvePath(options.agentDir);
 		this.settingsManager = options.settingsManager ?? SettingsManager.create(this.cwd, this.agentDir);
-		this.eventBus = options.eventBus ?? createEventBus();
+		if (options.eventBus) {
+			this.eventBus = options.eventBus;
+		} else {
+			this.ownedEventBus = createEventBus();
+			this.eventBus = this.ownedEventBus;
+		}
 		this.packageManager = new DefaultPackageManager({
 			cwd: this.cwd,
 			agentDir: this.agentDir,
@@ -377,6 +384,9 @@ export class DefaultResourceLoader implements ResourceLoader {
 	}
 
 	async reload(): Promise<void> {
+		// Extension factories run again below and subscribe again; without this the
+		// previous load's handlers stay attached and every event fires twice.
+		this.ownedEventBus?.clear();
 		await this.settingsManager.reload();
 		const resolvedPaths = await this.packageManager.resolve();
 		const cliExtensionPaths = await this.packageManager.resolveExtensionSources(this.additionalExtensionPaths, {

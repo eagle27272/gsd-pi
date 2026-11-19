@@ -691,8 +691,23 @@ export class SessionManager {
 			throw new Error(`Entry ${leafId} not found`);
 		}
 
-		// Filter out LabelEntry from path - we'll recreate them from the resolved map
-		const pathWithoutLabels = path.filter((e) => e.type !== "label");
+		// Filter out LabelEntry from path - we'll recreate them from the resolved map.
+		// Entries that sat below a dropped label are re-parented to the label's parent,
+		// otherwise the branch's parent chain would end at an id that is not in the file.
+		const droppedLabelParents = new Map<string, string | null>();
+		for (const entry of path) {
+			if (entry.type === "label") droppedLabelParents.set(entry.id, entry.parentId);
+		}
+		const resolveKeptParent = (parentId: string | null): string | null => {
+			let current = parentId;
+			while (current !== null && droppedLabelParents.has(current)) {
+				current = droppedLabelParents.get(current) ?? null;
+			}
+			return current;
+		};
+		const pathWithoutLabels = path
+			.filter((e) => e.type !== "label")
+			.map((e) => (e.parentId !== null && droppedLabelParents.has(e.parentId) ? { ...e, parentId: resolveKeptParent(e.parentId) } : e));
 
 		const newSessionId = createSessionId();
 		const timestamp = new Date().toISOString();
