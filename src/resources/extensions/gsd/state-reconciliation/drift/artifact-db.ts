@@ -311,6 +311,11 @@ function detectArtifactDbStatusDriftForMilestone(
         row.task_id,
     );
     const currentStagedTaskIds = new Set<string>();
+    // One task SUMMARY is one drift. Reporting it from both the artifact row
+    // and the disk scan yields two records for the same file; once the first
+    // repair quarantines it, the second is judged against a file that is gone
+    // and fails closed as a blocker.
+    const rowReportedTaskIds = new Set<string>();
 
     if (tasks.length === 0 && summaryRows.length > 0) {
       addUniqueDrift(drifts, seen, {
@@ -378,11 +383,13 @@ function detectArtifactDbStatusDriftForMilestone(
         dbStatus: task.status,
         reason: `task ${slice.id}/${row.task_id} has SUMMARY artifact while DB status is ${task.status}`,
       });
+      rowReportedTaskIds.add(task.id);
     }
 
     for (const task of tasks) {
       if (isClosedStatus(task.status)) continue;
       if (currentStagedTaskIds.has(task.id)) continue;
+      if (rowReportedTaskIds.has(task.id)) continue;
       const diskTaskSummary = resolveTaskFile(
         basePath,
         milestoneId,
