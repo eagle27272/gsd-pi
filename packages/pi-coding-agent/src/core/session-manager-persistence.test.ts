@@ -134,3 +134,27 @@ describe("SessionManager persistence", () => {
 		});
 	});
 });
+
+describe("createBranchedSession with a label in the path", () => {
+	it("keeps every entry reachable from the new leaf", () => {
+		const dir = mkdtempSync(join(tmpdir(), "gsd-session-branch-"));
+		try {
+			const manager = SessionManager.create(dir, dir);
+			const first = manager.appendMessage(userMessage("first"));
+			manager.appendMessage(assistantMessage("reply"));
+			manager.appendLabelChange(first, "checkpoint");
+			const afterLabel = manager.appendMessage(userMessage("after the label"));
+
+			const branchedFile = manager.createBranchedSession(afterLabel) as string;
+
+			const branched = SessionManager.open(branchedFile, dir);
+			const texts = branched
+				.getBranch(afterLabel)
+				.filter((entry) => entry.type === "message")
+				.map((entry: any) => (typeof entry.message.content === "string" ? entry.message.content : entry.message.content[0].text));
+			assert.deepEqual(texts, ["first", "reply", "after the label"]);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+});

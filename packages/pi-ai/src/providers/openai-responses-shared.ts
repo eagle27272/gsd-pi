@@ -244,7 +244,7 @@ export function convertResponsesMessages<TApi extends Api>(
 				.map((c) => c.text)
 				.join("\n");
 			const hasImages = msg.content.some((c): c is ImageContent => c.type === "image");
-			const hasText = textResult.length > 0;
+			const hasText = textResult.trim().length > 0;
 			const [callId] = msg.toolCallId.split("|");
 
 			let output: string | ResponseFunctionCallOutputItemList;
@@ -270,7 +270,7 @@ export function convertResponsesMessages<TApi extends Api>(
 
 				output = contentParts;
 			} else {
-				output = sanitizeSurrogates(hasText ? textResult : "(see attached image)");
+				output = sanitizeSurrogates(hasText ? textResult : "(no tool output)");
 			}
 
 			messages.push({

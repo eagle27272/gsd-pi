@@ -272,5 +272,9 @@ export function truncateLine(
 	if (line.length <= maxChars) {
 		return { text: line, wasTruncated: false };
 	}
-	return { text: `${line.slice(0, maxChars)}... [truncated]`, wasTruncated: true };
+	let end = maxChars;
+	const lastKept = line.charCodeAt(end - 1);
+	// A cut between the halves of a surrogate pair leaves a lone surrogate, which provider JSON rejects.
+	if (lastKept >= 0xd800 && lastKept <= 0xdbff) end--;
+	return { text: `${line.slice(0, end)}... [truncated]`, wasTruncated: true };
 }
