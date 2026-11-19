@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import chalk from "chalk";
 import { CONFIG_DIR_NAME } from "../config.js";
 import { loadThemeFromPath, type Theme } from "../theme/theme.js";
@@ -94,6 +94,27 @@ function getUserContextFilePath(): string {
 	return join(configDir ? resolvePath(configDir) : join(homedir(), ".claude"), "CLAUDE.md");
 }
 
+/**
+ * A linked worktree's `.git` is a file pointing at `<main>/.git/worktrees/<name>`.
+ * Returns the main checkout's root, or undefined for anything else.
+ */
+function findMainCheckoutOfLinkedWorktree(dir: string): string | undefined {
+	let gitFile: string;
+	try {
+		gitFile = readFileSync(join(dir, ".git"), "utf-8");
+	} catch {
+		return undefined;
+	}
+	const gitDirLine = /^gitdir:\s*(.+)$/m.exec(gitFile);
+	if (!gitDirLine) return undefined;
+	const worktreeGitDir = resolve(dir, gitDirLine[1].trim());
+	const commonGitDir = resolve(worktreeGitDir, "..", "..");
+	if (basename(resolve(worktreeGitDir, "..")) !== "worktrees" || basename(commonGitDir) !== ".git") {
+		return undefined;
+	}
+	return resolve(commonGitDir, "..");
+}
+
 export function loadProjectContextFiles(options: { cwd: string }): Array<{ path: string; content: string }> {
 	const resolvedCwd = resolvePath(options.cwd);
 
@@ -110,12 +131,18 @@ export function loadProjectContextFiles(options: { cwd: string }): Array<{ path:
 
 	let currentDir = resolvedCwd;
 	const root = resolve("/");
+	// Worktrees nested inside their main checkout would otherwise inject the same
+	// tracked file twice, once from each copy.
+	let shadowedMainCheckout: string | undefined;
 
 	while (true) {
-		const contextFile = loadContextFileFromDir(currentDir);
+		const contextFile = currentDir === shadowedMainCheckout ? null : loadContextFileFromDir(currentDir);
 		if (contextFile && !seenPaths.has(contextFile.path)) {
 			ancestorContextFiles.unshift(contextFile);
 			seenPaths.add(contextFile.path);
+		}
+		if (contextFile && shadowedMainCheckout === undefined) {
+			shadowedMainCheckout = findMainCheckoutOfLinkedWorktree(currentDir);
 		}
 
 		if (currentDir === root) break;
