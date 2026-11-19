@@ -196,7 +196,7 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 				? msg.content.filter((c): c is ImageContent => c.type === "image")
 				: [];
 
-			const hasText = textResult.length > 0;
+			const hasText = textResult.trim().length > 0;
 			const hasImages = imageContent.length > 0;
 
 			// Gemini 3+ models support multimodal function responses with images nested inside
@@ -205,7 +205,11 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 			const modelSupportsMultimodalFunctionResponse = supportsMultimodalFunctionResponse(model.id);
 
 			// Use "output" key for success, "error" key for errors as per SDK documentation
-			const responseValue = hasText ? sanitizeSurrogates(textResult) : hasImages ? "(see attached image)" : "";
+			const responseValue = hasText
+				? sanitizeSurrogates(textResult)
+				: hasImages
+					? "(see attached image)"
+					: "(no tool output)";
 
 			const imageParts: Part[] = imageContent.map((imageBlock) => ({
 				inlineData: {

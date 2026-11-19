@@ -614,6 +614,39 @@ function normalizeToolCallId(id: string): string {
 	return sanitized.length > 64 ? sanitized.slice(0, 64) : sanitized;
 }
 
+function createToolResultBlock(msg: ToolResultMessage, trailingImages: ContentBlock[]): ContentBlock.ToolResultMember {
+	const hasImages = msg.content.some((c) => c.type === "image");
+	if (!msg.isError || !hasImages) {
+		return {
+			toolResult: {
+				toolUseId: msg.toolCallId,
+				content: msg.content.map((c) =>
+					c.type === "image"
+						? { image: createImageBlock(c.mimeType, c.data) }
+						: { text: sanitizeSurrogates(c.text) },
+				),
+				status: msg.isError ? ToolResultStatus.ERROR : ToolResultStatus.SUCCESS,
+			},
+		};
+	}
+
+	const text = msg.content
+		.filter((c): c is TextContent => c.type === "text")
+		.map((c) => c.text)
+		.join("\n");
+	trailingImages.push({ text: `Images attached to the failed tool result ${msg.toolCallId}:` });
+	for (const block of msg.content) {
+		if (block.type === "image") trailingImages.push({ image: createImageBlock(block.mimeType, block.data) });
+	}
+	return {
+		toolResult: {
+			toolUseId: msg.toolCallId,
+			content: [{ text: sanitizeSurrogates(text) || "(see the images attached after the tool results)" }],
+			status: ToolResultStatus.ERROR,
+		},
+	};
+}
+
 function convertMessages(
 	context: Context,
 	model: Model<"bedrock-converse-stream">,
@@ -719,34 +752,16 @@ function convertMessages(
 				// Bedrock requires all tool results to be in one message
 				const toolResults: ContentBlock.ToolResultMember[] = [];
 
-				// Add current tool result with all content blocks combined
-				toolResults.push({
-					toolResult: {
-						toolUseId: m.toolCallId,
-						content: m.content.map((c) =>
-							c.type === "image"
-								? { image: createImageBlock(c.mimeType, c.data) }
-								: { text: sanitizeSurrogates(c.text) },
-						),
-						status: m.isError ? ToolResultStatus.ERROR : ToolResultStatus.SUCCESS,
-					},
-				});
+				// Bedrock rejects images inside an error toolResult, so they follow the tool results instead.
+				const trailingImages: ContentBlock[] = [];
+
+				toolResults.push(createToolResultBlock(m, trailingImages));
 
 				// Look ahead for consecutive toolResult messages
 				let j = i + 1;
 				while (j < transformedMessages.length && transformedMessages[j].role === "toolResult") {
 					const nextMsg = transformedMessages[j] as ToolResultMessage;
-					toolResults.push({
-						toolResult: {
-							toolUseId: nextMsg.toolCallId,
-							content: nextMsg.content.map((c) =>
-								c.type === "image"
-									? { image: createImageBlock(c.mimeType, c.data) }
-									: { text: sanitizeSurrogates(c.text) },
-							),
-							status: nextMsg.isError ? ToolResultStatus.ERROR : ToolResultStatus.SUCCESS,
-						},
-					});
+					toolResults.push(createToolResultBlock(nextMsg, trailingImages));
 					j++;
 				}
 
@@ -755,7 +770,7 @@ function convertMessages(
 
 				result.push({
 					role: ConversationRole.USER,
-					content: toolResults,
+					content: [...toolResults, ...trailingImages],
 				});
 				break;
 			}

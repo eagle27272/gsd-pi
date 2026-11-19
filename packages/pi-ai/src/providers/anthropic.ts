@@ -116,6 +116,40 @@ const fromClaudeCodeName = (name: string, tools?: Tool[]) => {
 /**
  * Convert content blocks to Anthropic API format
  */
+function convertToolResultBlock(msg: ToolResultMessage, trailingImages: ContentBlockParam[]): ContentBlockParam {
+	if (!msg.isError || !msg.content.some((c) => c.type === "image")) {
+		return {
+			type: "tool_result",
+			tool_use_id: msg.toolCallId,
+			content: convertContentBlocks(msg.content),
+			is_error: msg.isError,
+		};
+	}
+
+	const text = msg.content
+		.filter((c): c is TextContent => c.type === "text")
+		.map((c) => c.text)
+		.join("\n");
+	trailingImages.push({ type: "text", text: `Images attached to the failed tool result ${msg.toolCallId}:` });
+	for (const block of msg.content) {
+		if (block.type !== "image") continue;
+		trailingImages.push({
+			type: "image",
+			source: {
+				type: "base64",
+				media_type: block.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+				data: block.data,
+			},
+		});
+	}
+	return {
+		type: "tool_result",
+		tool_use_id: msg.toolCallId,
+		content: sanitizeSurrogates(text) || "(see the images attached after the tool results)",
+		is_error: true,
+	};
+}
+
 function convertContentBlocks(content: (TextContent | ImageContent)[]):
 	| string
 	| Array<
@@ -1214,24 +1248,17 @@ function convertMessages(
 			// Collect all consecutive toolResult messages, needed for z.ai Anthropic endpoint
 			const toolResults: ContentBlockParam[] = [];
 
+			// Anthropic rejects images inside an error tool_result, so they follow the tool results instead.
+			const trailingImages: ContentBlockParam[] = [];
+
 			// Add the current tool result
-			toolResults.push({
-				type: "tool_result",
-				tool_use_id: msg.toolCallId,
-				content: convertContentBlocks(msg.content),
-				is_error: msg.isError,
-			});
+			toolResults.push(convertToolResultBlock(msg, trailingImages));
 
 			// Look ahead for consecutive toolResult messages
 			let j = i + 1;
 			while (j < transformedMessages.length && transformedMessages[j].role === "toolResult") {
 				const nextMsg = transformedMessages[j] as ToolResultMessage; // We know it's a toolResult
-				toolResults.push({
-					type: "tool_result",
-					tool_use_id: nextMsg.toolCallId,
-					content: convertContentBlocks(nextMsg.content),
-					is_error: nextMsg.isError,
-				});
+				toolResults.push(convertToolResultBlock(nextMsg, trailingImages));
 				j++;
 			}
 
@@ -1241,7 +1268,7 @@ function convertMessages(
 			// Add a single user message with all tool results
 			params.push({
 				role: "user",
-				content: toolResults,
+				content: [...toolResults, ...trailingImages],
 			});
 		}
 	}
@@ -1293,11 +1320,19 @@ function convertTools(
 		if (sanitizeInputSchema) {
 			inputSchema = sanitizeSchemaForMoonshot(tool.parameters);
 		} else {
-			const schema = tool.parameters as { properties?: unknown; required?: string[] };
+			const schema = tool.parameters as {
+				properties?: unknown;
+				required?: string[];
+				$defs?: unknown;
+				definitions?: unknown;
+			};
 			inputSchema = {
 				type: "object" as const,
 				properties: schema.properties ?? {},
 				required: schema.required ?? [],
+				// Property $refs point here, so dropping them leaves the model guessing the shape.
+				...(schema.$defs ? { $defs: schema.$defs } : {}),
+				...(schema.definitions ? { definitions: schema.definitions } : {}),
 			};
 		}
 		// Always strip verbose metadata to reduce payload size

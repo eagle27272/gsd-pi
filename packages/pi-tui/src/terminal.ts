@@ -97,6 +97,8 @@ export class ProcessTerminal implements Terminal {
 	private progressInterval?: ReturnType<typeof setInterval>;
 	private _outputClosed = false;
 	private outputClosedHandler?: () => void;
+	private exitHandler?: () => void;
+	private modifyOtherKeysFallbackTimer?: ReturnType<typeof setTimeout>;
 	private writeLogPath = (() => {
 		const env = process.env.PI_TUI_WRITE_LOG || "";
 		if (!env) return "";
@@ -201,13 +203,22 @@ export class ProcessTerminal implements Terminal {
 			this._mouseActive = true;
 		}
 
+		// A crash or process.exit() skips stop(), which would leave bracketed paste,
+		// the keyboard protocol and mouse reporting enabled in the user's shell.
+		this.exitHandler = () => this.restoreModesForExit();
+		process.on("exit", this.exitHandler);
+
 		// Set up resize handler immediately
 		process.stdout.on("resize", this.resizeHandler);
 
 		// Refresh terminal dimensions - they may be stale after suspend/resume
 		// (SIGWINCH is lost while process is stopped). Unix only.
 		if (process.platform !== "win32") {
-			process.kill(process.pid, "SIGWINCH");
+			try {
+				process.kill(process.pid, "SIGWINCH");
+			} catch {
+				// Sandboxes (seccomp, containers) can forbid signalling ourselves; dimensions refresh on the next resize.
+			}
 		}
 
 		// On Windows, enable ENABLE_VIRTUAL_TERMINAL_INPUT so the console sends
@@ -291,7 +302,8 @@ export class ProcessTerminal implements Terminal {
 		this.setupStdinBuffer();
 		process.stdin.on("data", this.stdinDataHandler!);
 		this.writeStdout("\x1b[?u");
-		setTimeout(() => {
+		this.modifyOtherKeysFallbackTimer = setTimeout(() => {
+			this.modifyOtherKeysFallbackTimer = undefined;
 			if (!this._kittyProtocolActive && !this._modifyOtherKeysActive) {
 				this.writeStdout("\x1b[>4;2m");
 				this._modifyOtherKeysActive = true;
@@ -377,7 +389,38 @@ export class ProcessTerminal implements Terminal {
 		}
 	}
 
+	/** Synchronous and idempotent: it runs from the process `exit` event, where only sync writes land. */
+	restoreModesForExit(): void {
+		this.cancelModifyOtherKeysFallback();
+		this.writeStdout("\x1b[?2004l");
+		if (this._mouseActive) {
+			this.writeStdout(DISABLE_MOUSE);
+			this._mouseActive = false;
+		}
+		if (this._kittyProtocolActive) {
+			this.writeStdout("\x1b[<u");
+			this._kittyProtocolActive = false;
+			setKittyProtocolActive(false);
+		}
+		if (this._modifyOtherKeysActive) {
+			this.writeStdout("\x1b[>4;0m");
+			this._modifyOtherKeysActive = false;
+		}
+	}
+
+	private cancelModifyOtherKeysFallback(): void {
+		if (this.modifyOtherKeysFallbackTimer) {
+			clearTimeout(this.modifyOtherKeysFallbackTimer);
+			this.modifyOtherKeysFallbackTimer = undefined;
+		}
+	}
+
 	stop(): void {
+		this.cancelModifyOtherKeysFallback();
+		if (this.exitHandler) {
+			process.removeListener("exit", this.exitHandler);
+			this.exitHandler = undefined;
+		}
 		if (this.clearProgressInterval()) {
 			this.writeStdout(TERMINAL_PROGRESS_CLEAR_SEQUENCE);
 		}
@@ -481,8 +524,10 @@ export class ProcessTerminal implements Terminal {
 	}
 
 	setTitle(title: string): void {
-		// OSC 0;title BEL - set terminal window title
-		this.writeStdout(`\x1b]0;${title}\x07`);
+		// OSC 0;title BEL - set terminal window title. Titles come from cwd names, session
+		// names and extensions, so strip control characters that would end the sequence early.
+		const safeTitle = title.replace(/[\u0000-\u001f\u007f-\u009f]/g, "");
+		this.writeStdout(`\x1b]0;${safeTitle}\x07`);
 	}
 
 	setProgress(active: boolean): void {

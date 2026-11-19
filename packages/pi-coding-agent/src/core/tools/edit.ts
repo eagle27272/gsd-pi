@@ -37,7 +37,7 @@ const replaceEditSchema = Type.Object(
 		}),
 		newText: Type.String({ description: "Replacement text for this targeted edit." }),
 	},
-	{ additionalProperties: false },
+	{},
 );
 
 const editSchema = Type.Object(
@@ -48,7 +48,7 @@ const editSchema = Type.Object(
 				"One or more targeted replacements, each matched against the original file (not incrementally). Merge changes that touch the same or nearby lines into a single edit rather than emitting overlapping or nested edits.",
 		}),
 	},
-	{ additionalProperties: false },
+	{},
 );
 
 export type EditToolInput = Static<typeof editSchema>;
@@ -86,6 +86,12 @@ export interface EditToolOptions {
 	operations?: EditOperations;
 }
 
+function isSingleEdit(value: unknown): value is { oldText: string; newText: string } {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+	const edit = value as Record<string, unknown>;
+	return typeof edit.oldText === "string" && typeof edit.newText === "string";
+}
+
 function prepareEditArguments(input: unknown): EditToolInput {
 	if (!input || typeof input !== "object") {
 		return input as EditToolInput;
@@ -94,11 +100,15 @@ function prepareEditArguments(input: unknown): EditToolInput {
 	const args = input as Record<string, unknown>;
 
 	// Some models (Opus 4.6, GLM-5.1) send edits as a JSON string instead of an array.
+	// Others send one edit object instead of a one-element array.
 	if (typeof args.edits === "string") {
 		try {
 			const parsed = JSON.parse(args.edits);
 			if (Array.isArray(parsed)) args.edits = parsed;
+			else if (isSingleEdit(parsed)) args.edits = [parsed];
 		} catch {}
+	} else if (isSingleEdit(args.edits)) {
+		args.edits = [args.edits];
 	}
 
 	const oldText = typeof args.oldText === "string" ? args.oldText : undefined;
