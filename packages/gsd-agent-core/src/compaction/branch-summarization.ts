@@ -77,6 +77,8 @@ export interface GenerateBranchSummaryOptions {
 	replaceInstructions?: boolean;
 	/** Tokens reserved for prompt + LLM response (default 16384) */
 	reserveTokens?: number;
+	/** Override for the model call, used by tests */
+	completeFn?: typeof completeSimple;
 }
 
 // ============================================================================
@@ -284,7 +286,16 @@ export async function generateBranchSummary(
 	entries: SessionEntry[],
 	options: GenerateBranchSummaryOptions,
 ): Promise<BranchSummaryResult> {
-	const { model, apiKey, headers, signal, customInstructions, replaceInstructions, reserveTokens = 16384 } = options;
+	const {
+		model,
+		apiKey,
+		headers,
+		signal,
+		customInstructions,
+		replaceInstructions,
+		reserveTokens = 16384,
+		completeFn = completeSimple,
+	} = options;
 
 	// Token budget = context window minus reserved space for prompt + response
 	const contextWindow = model.contextWindow || 128000;
@@ -321,10 +332,14 @@ export async function generateBranchSummary(
 	];
 
 	// Call LLM for summarization
-	const response = await completeSimple(
+	const maxTokens = Math.min(
+		Math.floor(0.5 * reserveTokens),
+		model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY,
+	);
+	const response = await completeFn(
 		model,
 		{ systemPrompt: SUMMARIZATION_SYSTEM_PROMPT, messages: summarizationMessages },
-		{ apiKey, headers, signal, maxTokens: 2048 },
+		{ apiKey, headers, signal, maxTokens },
 	);
 
 	// Check if aborted or errored
@@ -333,6 +348,11 @@ export async function generateBranchSummary(
 	}
 	if (response.stopReason === "error") {
 		return { error: response.errorMessage || "Summarization failed" };
+	}
+	if (response.stopReason === "length") {
+		return {
+			error: `Branch summary was cut off at the output token limit (${maxTokens} tokens), so it was not saved.`,
+		};
 	}
 
 	let summary = response.content

@@ -935,6 +935,18 @@ function prepareToolCallArguments(tool: AgentTool<any>, toolCall: AgentToolCall)
 	};
 }
 
+/**
+ * Providers finalize streamed tool arguments with a lenient JSON parser, so a
+ * call interrupted by the token cap arrives looking valid with fields missing.
+ * Generation is sequential, so only the final content block can be the
+ * interrupted one; earlier tool calls were closed before the cap was reached.
+ */
+function isToolCallCutOffByOutputCap(assistantMessage: AssistantMessage, toolCall: AgentToolCall): boolean {
+	if (assistantMessage.stopReason !== "length") return false;
+	const lastBlock = assistantMessage.content[assistantMessage.content.length - 1];
+	return lastBlock?.type === "toolCall" && lastBlock.id === toolCall.id;
+}
+
 async function prepareToolCall(
 	currentContext: AgentContext,
 	assistantMessage: AssistantMessage,
@@ -960,6 +972,17 @@ async function prepareToolCall(
 				terminate: true,
 			},
 			isError: externalResult.isError ?? false,
+		};
+	}
+
+	if (isToolCallCutOffByOutputCap(assistantMessage, toolCall)) {
+		return {
+			kind: "immediate",
+			result: createErrorToolResult(
+				`Tool call ${toolCall.name} was cut off by the output token limit before its arguments were complete, so it was not run. Retry with less content in a single call, for example by writing a large file in several smaller steps.`,
+			),
+			isError: true,
+			countsTowardValidationFailure: false,
 		};
 	}
 
