@@ -26,7 +26,7 @@ import {
   resolveTaskFile,
 } from "./paths.js";
 import { deriveState } from "./state.js";
-import { isClosedStatus } from "./status-guards.js";
+import { isClosedStatus, isHiddenFromRoadmap } from "./status-guards.js";
 import { workflowEventLogPath } from "./workflow-event-ledger.js";
 import { readEvents } from "./workflow-events.js";
 import { flushWorkflowProjections } from "./projection-flush.js";
@@ -189,6 +189,9 @@ function reportCheckboxDbStatusDivergence(
   status: string,
   checkboxDone: boolean,
 ): void {
+  // The renderers omit skipped rows, so a line left behind for one is stale
+  // projection, not checkbox drift, and the doctor has no way to repair it.
+  if (isHiddenFromRoadmap(status)) return;
   const dbDone = isClosedStatus(status);
   if (checkboxDone === dbDone) return;
 
