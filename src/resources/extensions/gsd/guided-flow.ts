@@ -1845,11 +1845,15 @@ async function handleMilestoneActions(
       : reason === "needs_rethink" ? "Needs rethinking — approach needs reconsideration"
       : "Parked by user";
 
-    const success = parkMilestone(basePath, milestoneId, reasonText);
-    if (success) {
-      ctx.ui.notify(`Parked ${milestoneId}. Run /gsd unpark ${milestoneId} to reactivate.`, "info");
-    } else {
-      ctx.ui.notify(`Could not park ${milestoneId} — milestone not found or already parked.`, "warning");
+    try {
+      const success = parkMilestone(basePath, milestoneId, reasonText);
+      if (success) {
+        ctx.ui.notify(`Parked ${milestoneId}. Run /gsd unpark ${milestoneId} to reactivate.`, "info");
+      } else {
+        ctx.ui.notify(`Could not park ${milestoneId} — milestone not found or already parked.`, "warning");
+      }
+    } catch (err) {
+      ctx.ui.notify(err instanceof Error ? err.message : String(err), "error");
     }
     return true;
   }
@@ -1862,8 +1866,12 @@ async function handleMilestoneActions(
       declineLabel: "Cancel",
     });
     if (confirmed) {
-      discardMilestone(basePath, milestoneId);
-      ctx.ui.notify(`Discarded ${milestoneId}.`, "info");
+      try {
+        discardMilestone(basePath, milestoneId);
+        ctx.ui.notify(`Discarded ${milestoneId}.`, "info");
+      } catch (err) {
+        ctx.ui.notify(err instanceof Error ? err.message : String(err), "error");
+      }
       return true;
     }
     return false;
@@ -2438,11 +2446,15 @@ export async function showSmartEntry(
       const { fireStatusViaCommand } = await import("./commands.js");
       await fireStatusViaCommand(ctx);
     } else if (choice === "park") {
-      const success = parkMilestone(basePath, milestoneId, "Validation attention deferred by user");
-      ctx.ui.notify(
-        success ? `Parked ${milestoneId}. Run /gsd unpark ${milestoneId} to reactivate.` : `Could not park ${milestoneId} — milestone not found.`,
-        success ? "info" : "warning",
-      );
+      try {
+        const success = parkMilestone(basePath, milestoneId, "Validation attention deferred by user");
+        ctx.ui.notify(
+          success ? `Parked ${milestoneId}. Run /gsd unpark ${milestoneId} to reactivate.` : `Could not park ${milestoneId} — milestone not found.`,
+          success ? "info" : "warning",
+        );
+      } catch (err) {
+        ctx.ui.notify(err instanceof Error ? err.message : String(err), "error");
+      }
     }
     return;
   }
@@ -2553,7 +2565,12 @@ export async function showSmartEntry(
           declineLabel: "Cancel",
         });
         if (confirmed) {
-          discardMilestone(basePath, milestoneId);
+          try {
+            discardMilestone(basePath, milestoneId);
+          } catch (err) {
+            ctx.ui.notify(err instanceof Error ? err.message : String(err), "error");
+            return;
+          }
           return showSmartEntry(ctx, pi, basePath, options);
         }
       }

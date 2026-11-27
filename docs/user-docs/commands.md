@@ -122,9 +122,10 @@ After writing the file, GSD attempts to open it in a browser using the local pla
 | `/gsd reset-slice` | Reopen the full terminal slice and every terminal task in one guarded database operation, preserve prior execution history, then refresh readable status |
 | `/gsd park` | Park a milestone — skip without deleting |
 | `/gsd unpark` | Reactivate a parked milestone |
+| `/gsd cancel <id> ["reason"]` | Cancel a milestone and its unfinished slices and tasks, keeping completed work and history. Refused while an Attempt is running; settle it first. Works on milestones with adopted canonical lifecycle history |
 | `/gsd discard <milestone-id>` | Confirm and permanently discard one milestone without entering the smart-entry flow |
 | `/gsd rethink` | Conversational project reorganization — reorder, park, discard unadopted work, or add milestones |
-| Discard milestone | Available via `/gsd` wizard → "Milestone actions" → "Discard"; milestones with adopted canonical lifecycle history must be parked instead |
+| Discard milestone | Available via `/gsd` wizard → "Milestone actions" → "Discard"; milestones with adopted canonical lifecycle history must be parked or cancelled instead |
 
 Milestone and slice titles created during planning must not contain forward slash (`/`), en dash, or em dash characters. GSD reserves those characters as state-document delimiters, so `plan-milestone` rejects titles that include them.
 

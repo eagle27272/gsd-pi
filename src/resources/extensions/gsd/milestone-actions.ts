@@ -1,5 +1,5 @@
 /**
- * GSD Milestone Actions — Park, Unpark, and Discard operations.
+ * GSD Milestone Actions — Park, Unpark, Cancel, and Discard operations.
  *
  * Park: Creates a PARKED.md marker file. deriveState() skips parked milestones
  * when finding the active milestone, but keeps them in the registry.
@@ -7,10 +7,13 @@
  * Unpark: Removes the PARKED.md marker. The milestone resumes normal state
  * derivation (active/pending depending on position and dependencies).
  *
+ * Cancel: Abandons the milestone and its unfinished work but keeps all history.
+ *
  * Discard: Permanently removes the milestone directory. Also prunes
  * QUEUE-ORDER.json if the discarded milestone was in it.
  */
 
+import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -32,6 +35,15 @@ import { autoWorktreeBranch, forgetMilestoneBranchIfDeleted } from "./milestone-
 import { logWarning } from "./workflow-logger.js";
 import { isAutoActive } from "./auto.js";
 import { isClosedStatus } from "./status-guards.js";
+import { MILESTONE_ID_RE } from "./milestone-ids.js";
+import { GSDError, GSD_STALE_STATE } from "./errors.js";
+import type { ExecutionInvocation } from "./execution-invocation.js";
+import {
+  cancelMilestoneLifecycle,
+  parkMilestoneLifecycle,
+  readMilestoneLifecycleStatus,
+  unparkMilestoneLifecycle,
+} from "./milestone-lifecycle-domain-operation.js";
 import { atomicWriteSync, removeProjectionFileSync } from "./atomic-write.js";
 import { removeManagedProjectionTreeExactSync } from "./managed-projection-history.js";
 
@@ -49,14 +61,51 @@ function assertNotAutoActive(action: string): void {
   }
 }
 
+function milestoneActionInvocation(
+  operation: "park" | "unpark" | "cancel",
+  milestoneId: string,
+  actorType: "user" | "agent",
+): ExecutionInvocation {
+  const id = randomUUID();
+  return {
+    idempotencyKey: `internal:milestone.${operation}:${milestoneId}:${id}`,
+    sourceTransport: "internal",
+    actorType,
+    traceId: id,
+  };
+}
+
 // ─── Park ──────────────────────────────────────────────────────────────────
+
+/**
+ * Split `/gsd park` arguments into a milestone ID and a free-text reason. The
+ * first token is the ID only when it looks like one, so `/gsd park "why"`
+ * still parks the active milestone.
+ */
+export function parseParkArguments(arg: string): { targetId: string; reason: string } {
+  const trimmed = arg.trim();
+  const [first = "", ...rest] = trimmed.split(/\s+/);
+  const hasId = MILESTONE_ID_RE.test(first);
+  const reasonText = hasId ? rest.join(" ") : trimmed;
+  return {
+    targetId: hasId ? first : "",
+    reason: reasonText.trim().replace(/^["']|["']$/g, ""),
+  };
+}
 
 /**
  * Park a milestone — creates a PARKED.md marker file with reason and timestamp.
  * Parked milestones are skipped during active-milestone discovery but stay on disk.
  * Returns true if successfully parked, false if milestone not found, already parked, or complete.
+ * Throws when the database refuses the park, after removing the marker, so a
+ * failed park is never reported as success.
  */
-export function parkMilestone(basePath: string, milestoneId: string, reason: string): boolean {
+export function parkMilestone(
+  basePath: string,
+  milestoneId: string,
+  reason: string,
+  actorType: "user" | "agent" = "user",
+): boolean {
   assertNotAutoActive("park milestone");
   const mDir = resolveMilestonePath(basePath, milestoneId);
   if (!mDir || !existsSync(mDir)) return false;
@@ -90,9 +139,24 @@ export function parkMilestone(basePath: string, milestoneId: string, reason: str
   // Sync DB status so deriveStateFromDb also skips this milestone (#2694)
   if (dbAvailable) {
     try {
-      updateMilestoneStatus(milestoneId, "parked");
+      const canonicalStatus = readMilestoneLifecycleStatus(milestoneId);
+      if (canonicalStatus === null) {
+        updateMilestoneStatus(milestoneId, "parked");
+      } else if (canonicalStatus !== "paused") {
+        parkMilestoneLifecycle({
+          invocation: milestoneActionInvocation("park", milestoneId, actorType),
+          milestoneId,
+          reason,
+        });
+      }
     } catch (err) {
-      logWarning("engine", `parkMilestone DB sync failed for ${milestoneId}: ${(err as Error).message}`);
+      removeProjectionFileSync(parkedPath);
+      invalidateAllCaches();
+      throw new GSDError(
+        GSD_STALE_STATE,
+        `parkMilestone: could not park ${milestoneId}: ${(err as Error).message}`,
+        { cause: err },
+      );
     }
   }
   invalidateAllCaches();
@@ -104,8 +168,13 @@ export function parkMilestone(basePath: string, milestoneId: string, reason: str
 /**
  * Unpark a milestone — removes the PARKED.md marker file.
  * Returns true if successfully unparked, false if milestone not found or not parked.
+ * Throws, leaving the marker in place, when the database refuses the unpark.
  */
-export function unparkMilestone(basePath: string, milestoneId: string): boolean {
+export function unparkMilestone(
+  basePath: string,
+  milestoneId: string,
+  actorType: "user" | "agent" = "user",
+): boolean {
   assertNotAutoActive("unpark milestone");
   const mDir = resolveMilestonePath(basePath, milestoneId);
   if (!mDir || !existsSync(mDir)) return false;
@@ -119,17 +188,76 @@ export function unparkMilestone(basePath: string, milestoneId: string): boolean 
   // PARKED marker was lost on disk, and /gsd unpark should repair that state.
   if (!hadParkedFile && !dbThinksParked) return false;
 
+  // Sync DB status so deriveStateFromDb picks up the unparked milestone (#2694).
+  // The DB goes first: if it refuses, the marker stays and the milestone is
+  // still parked rather than half-resumed.
+  if (isDbAvailable()) {
+    try {
+      const canonicalStatus = readMilestoneLifecycleStatus(milestoneId);
+      if (canonicalStatus === null) {
+        updateMilestoneStatus(milestoneId, "active");
+      } else if (canonicalStatus === "paused") {
+        unparkMilestoneLifecycle({
+          invocation: milestoneActionInvocation("unpark", milestoneId, actorType),
+          milestoneId,
+        });
+      }
+    } catch (err) {
+      throw new GSDError(
+        GSD_STALE_STATE,
+        `unparkMilestone: could not unpark ${milestoneId}: ${(err as Error).message}`,
+        { cause: err },
+      );
+    }
+  }
   if (hadParkedFile) {
     removeProjectionFileSync(parkedPath);
   }
-  // Sync DB status so deriveStateFromDb picks up the unparked milestone (#2694)
-  if (isDbAvailable()) {
-    try {
-      updateMilestoneStatus(milestoneId, "active");
-    } catch (err) {
-      logWarning("engine", `unparkMilestone DB sync failed for ${milestoneId}: ${(err as Error).message}`);
-    }
+  invalidateAllCaches();
+  return true;
+}
+
+// ─── Cancel ────────────────────────────────────────────────────────────────
+
+/**
+ * Cancel a milestone — abandons it and its unfinished slices and tasks while
+ * keeping every record, so adopted canonical lifecycle history survives.
+ * Returns false if the milestone is not found or already closed. Throws when
+ * the database refuses, for example while an Attempt is still running.
+ */
+export function cancelMilestone(
+  basePath: string,
+  milestoneId: string,
+  reason: string,
+  actorType: "user" | "agent" = "user",
+): boolean {
+  assertNotAutoActive("cancel milestone");
+  const trimmedReason = reason.trim();
+  if (!trimmedReason) {
+    throw new GSDError(GSD_STALE_STATE, `cancelMilestone: a reason is required to cancel ${milestoneId}`);
   }
+  if (!isDbAvailable()) {
+    throw new GSDError(GSD_STALE_STATE, `cancelMilestone: database unavailable, cannot cancel ${milestoneId}`);
+  }
+  const milestone = getMilestone(milestoneId);
+  if (!milestone || isClosedStatus(milestone.status)) return false;
+
+  try {
+    cancelMilestoneLifecycle({
+      invocation: milestoneActionInvocation("cancel", milestoneId, actorType),
+      milestoneId,
+      reason: trimmedReason,
+    });
+  } catch (err) {
+    throw new GSDError(
+      GSD_STALE_STATE,
+      `cancelMilestone: could not cancel ${milestoneId}: ${(err as Error).message}`,
+      { cause: err },
+    );
+  }
+
+  const parkedFile = resolveMilestoneFile(basePath, milestoneId, "PARKED");
+  if (parkedFile) removeProjectionFileSync(parkedFile);
   invalidateAllCaches();
   return true;
 }
@@ -148,7 +276,15 @@ export function discardMilestone(basePath: string, milestoneId: string): boolean
   const hasDbMilestone = isDbAvailable() && getMilestone(milestoneId) !== null;
   if (!hasMilestoneDir && !hasDbMilestone) return false;
   if (hasDbMilestone) {
-    assertNoAdoptedLifecycleHistory("discardMilestone", [milestoneId]);
+    try {
+      assertNoAdoptedLifecycleHistory("discardMilestone", [milestoneId]);
+    } catch (err) {
+      throw new GSDError(
+        GSD_STALE_STATE,
+        `${(err as Error).message}. ${milestoneId} keeps its history; run /gsd park ${milestoneId} to take it out of the queue, or /gsd cancel ${milestoneId} to abandon it.`,
+        { cause: err },
+      );
+    }
   }
 
   try {

@@ -773,3 +773,232 @@ export function reopenMilestoneHierarchy(
     shadows,
   };
 }
+
+export interface MilestonePauseResumeHierarchyResult {
+  milestoneLifecycleId: string;
+  shadow: LifecycleShadowRecord;
+}
+
+function transitionMilestoneAvailability(
+  context: Readonly<DomainOperationContext>,
+  input: { milestoneId: string },
+  change: {
+    operationType: "milestone.park" | "milestone.unpark";
+    fromStatuses: readonly CanonicalLifecycleStatus[];
+    toStatus: "paused" | "ready";
+    legacyStatus: "parked" | "active";
+    verb: string;
+  },
+): MilestonePauseResumeHierarchyResult {
+  if (requireActiveDomainOperationContext(context) !== change.operationType) {
+    throw new Error(`Milestone ${change.verb} requires a ${change.operationType} Domain Operation`);
+  }
+  const milestoneId = requireText(input.milestoneId, "milestoneId");
+  const changedAt = monotonicOperationTimestamp(context, milestoneId);
+  const milestone = loadMilestone(context, milestoneId);
+  const identity = `Milestone ${milestoneId}`;
+  requireMatchingShadow(milestone, identity);
+  if (!change.fromStatuses.includes(milestone.lifecycleStatus!)) {
+    throw new MilestoneLifecycleValidationError(
+      `${identity} cannot ${change.verb} from canonical lifecycle ${milestone.lifecycleStatus}`,
+    );
+  }
+  if (change.toStatus === "paused") requireNoActiveAttempts(milestoneId);
+
+  const lifecycle = adoptOrTransitionLifecycle(context, {
+    itemKind: "milestone",
+    milestoneId,
+    lifecycleStatus: change.toStatus,
+    occurredAt: changedAt,
+  });
+  const updated = getDb().prepare(`
+    UPDATE milestones SET status = :status
+    WHERE id = :milestone_id AND status = :expected_status
+  `).run({
+    ":status": change.legacyStatus,
+    ":milestone_id": milestoneId,
+    ":expected_status": milestone.legacyStatus,
+  });
+  if (changedRows(updated) !== 1) {
+    throw new Error(`Milestone ${change.verb} must update ${identity}`);
+  }
+
+  const shadow = readLifecycleShadowComparison(context, { itemKind: "milestone", milestoneId });
+  if (shadow.kind !== "match" && shadow.kind !== "semantic_match_exact_delta") {
+    throw new Error(`Milestone ${change.verb} did not converge canonical and legacy lifecycle state`);
+  }
+  return { milestoneLifecycleId: lifecycle.lifecycleId, shadow };
+}
+
+export function pauseMilestoneHierarchy(
+  context: Readonly<DomainOperationContext>,
+  input: { milestoneId: string },
+): MilestonePauseResumeHierarchyResult {
+  return transitionMilestoneAvailability(context, input, {
+    operationType: "milestone.park",
+    fromStatuses: ["ready", "in_progress"],
+    toStatus: "paused",
+    legacyStatus: "parked",
+    verb: "park",
+  });
+}
+
+export function resumeMilestoneHierarchy(
+  context: Readonly<DomainOperationContext>,
+  input: { milestoneId: string },
+): MilestonePauseResumeHierarchyResult {
+  return transitionMilestoneAvailability(context, input, {
+    operationType: "milestone.unpark",
+    fromStatuses: ["paused"],
+    toStatus: "ready",
+    legacyStatus: "active",
+    verb: "unpark",
+  });
+}
+
+interface MilestoneCancellationHierarchyInput {
+  milestoneId: string;
+  reason: string;
+}
+
+interface MilestoneCancellationHierarchyResult {
+  milestoneLifecycleId: string;
+  cancelledSliceIds: string[];
+  cancelledTaskIds: string[];
+  preservedSliceIds: string[];
+  preservedTaskIds: string[];
+  shadows: LifecycleShadowRecord[];
+}
+
+function cancelUnfinishedRow(
+  context: Readonly<DomainOperationContext>,
+  row: HierarchyRow,
+  milestoneId: string,
+  identity: string,
+  cancelledAt: string,
+): "cancelled" | "preserved" {
+  const normalized = normalizeLegacyLifecycleStatus(row.legacyStatus);
+  if (!normalized) {
+    throw new MilestoneLifecycleValidationError(
+      `${identity} has unrecognized status ${row.legacyStatus}`,
+    );
+  }
+  if (row.lifecycleId) requireMatchingShadow(row, identity);
+  if (normalized === "completed" || normalized === "cancelled") return "preserved";
+
+  const lifecycle = {
+    milestoneId,
+    lifecycleStatus: "cancelled" as const,
+    occurredAt: cancelledAt,
+    ...(!row.lifecycleId ? { adoptedFromStatus: normalized } : {}),
+  };
+  if (row.itemKind === "task") {
+    adoptOrTransitionLifecycle(context, {
+      ...lifecycle, itemKind: "task", sliceId: row.sliceId!, taskId: row.taskId!,
+    });
+    const updated = getDb().prepare(`
+      UPDATE tasks SET status = 'skipped', completed_at = NULL
+      WHERE milestone_id = :milestone_id AND slice_id = :slice_id AND id = :task_id
+        AND status = :expected_status
+    `).run({
+      ":milestone_id": milestoneId,
+      ":slice_id": row.sliceId,
+      ":task_id": row.taskId,
+      ":expected_status": row.legacyStatus,
+    });
+    if (changedRows(updated) !== 1) throw new Error(`Milestone cancel must update ${identity}`);
+  } else {
+    adoptOrTransitionLifecycle(context, { ...lifecycle, itemKind: "slice", sliceId: row.sliceId! });
+    const updated = getDb().prepare(`
+      UPDATE slices SET status = 'skipped', completed_at = NULL
+      WHERE milestone_id = :milestone_id AND id = :slice_id AND status = :expected_status
+    `).run({
+      ":milestone_id": milestoneId,
+      ":slice_id": row.sliceId,
+      ":expected_status": row.legacyStatus,
+    });
+    if (changedRows(updated) !== 1) throw new Error(`Milestone cancel must update ${identity}`);
+  }
+  return "cancelled";
+}
+
+/**
+ * Cancel a Milestone and every unfinished Slice and Task under it. Finished
+ * work keeps its canonical history, and nothing is deleted. Running Attempts
+ * must be settled first, so cancellation never has to interrupt live work.
+ */
+export function cancelMilestoneHierarchy(
+  context: Readonly<DomainOperationContext>,
+  input: MilestoneCancellationHierarchyInput,
+): MilestoneCancellationHierarchyResult {
+  if (requireActiveDomainOperationContext(context) !== "milestone.cancel") {
+    throw new Error("Milestone cancel requires a milestone.cancel Domain Operation");
+  }
+  const milestoneId = requireText(input.milestoneId, "milestoneId");
+  requireText(input.reason, "reason");
+  const cancelledAt = monotonicOperationTimestamp(context, milestoneId);
+  const milestone = loadMilestone(context, milestoneId);
+  const milestoneStatus = normalizeLegacyLifecycleStatus(milestone.legacyStatus);
+  if (milestoneStatus === "completed" || milestoneStatus === "cancelled") {
+    throw new MilestoneLifecycleValidationError(
+      `Milestone ${milestoneId} is already ${milestoneStatus} and cannot be cancelled`,
+    );
+  }
+  if (milestone.lifecycleId) requireMatchingShadow(milestone, `Milestone ${milestoneId}`);
+  requireNoActiveAttempts(milestoneId);
+
+  const cancelledTaskIds: string[] = [];
+  const preservedTaskIds: string[] = [];
+  const cancelledSliceIds: string[] = [];
+  const preservedSliceIds: string[] = [];
+  const tasks = loadTasks(context, milestoneId);
+  const slices = loadSlices(context, milestoneId);
+  for (const task of tasks) {
+    const identity = `${task.sliceId}/${task.taskId}`;
+    const outcome = cancelUnfinishedRow(context, task, milestoneId, `Task ${identity}`, cancelledAt);
+    (outcome === "cancelled" ? cancelledTaskIds : preservedTaskIds).push(identity);
+  }
+  for (const slice of slices) {
+    const outcome = cancelUnfinishedRow(context, slice, milestoneId, `Slice ${slice.sliceId}`, cancelledAt);
+    (outcome === "cancelled" ? cancelledSliceIds : preservedSliceIds).push(slice.sliceId!);
+  }
+
+  const lifecycle = adoptOrTransitionLifecycle(context, {
+    itemKind: "milestone",
+    milestoneId,
+    lifecycleStatus: "cancelled",
+    occurredAt: cancelledAt,
+    ...(!milestone.lifecycleId && milestoneStatus ? { adoptedFromStatus: milestoneStatus } : {}),
+  });
+  const updated = getDb().prepare(`
+    UPDATE milestones SET status = 'skipped', completed_at = NULL
+    WHERE id = :milestone_id AND status = :expected_status
+  `).run({ ":milestone_id": milestoneId, ":expected_status": milestone.legacyStatus });
+  if (changedRows(updated) !== 1) {
+    throw new Error(`Milestone cancel must update Milestone ${milestoneId}`);
+  }
+
+  const shadows = [
+    readLifecycleShadowComparison(context, { itemKind: "milestone", milestoneId }),
+    ...slices.map((slice) =>
+      readLifecycleShadowComparison(context, { itemKind: "slice", milestoneId, sliceId: slice.sliceId! })
+    ),
+    ...tasks.map((task) =>
+      readLifecycleShadowComparison(context, {
+        itemKind: "task", milestoneId, sliceId: task.sliceId!, taskId: task.taskId!,
+      })
+    ),
+  ];
+  if (shadows.some((shadow) =>
+    shadow.kind !== "match" && shadow.kind !== "semantic_match_exact_delta")) {
+    throw new Error("Milestone cancel did not converge canonical and legacy lifecycle state");
+  }
+  return {
+    milestoneLifecycleId: lifecycle.lifecycleId,
+    cancelledSliceIds,
+    cancelledTaskIds,
+    preservedSliceIds,
+    preservedTaskIds,
+    shadows,
+  };
+}

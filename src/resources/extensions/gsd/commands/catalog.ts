@@ -19,7 +19,7 @@ export interface GsdCommandDefinition {
 type CompletionMap = Record<string, readonly GsdCommandDefinition[]>;
 
 export const GSD_COMMAND_DESCRIPTION =
-  "GSD — Git Ship Done: /gsd help|start|templates|next|auto|stop|pause|status|widget|visualize|brief|report|queue|quick|discuss|capture|triage|dispatch|verdict|history|undo|undo-task|reset-slice|rate|skip|export|cleanup|closeout|recover|rebuild|db|model|mode|prefs|config|keys|hooks|run-hook|skill-health|doctor|debug|logs|forensics|changelog|steer|knowledge|memory|new-milestone|new-project|parallel|park|unpark|discard|init|setup|onboarding|inspect|extensions|update|upgrade|fast|mcp|rethink|workflow|codebase|notifications|ship|do|usage|context|session-report|backlog|pr-branch|add-tests|scan|language|worktree|eval-review";
+  "GSD — Git Ship Done: /gsd help|start|templates|next|auto|stop|pause|status|widget|visualize|brief|report|queue|quick|discuss|capture|triage|dispatch|verdict|history|undo|undo-task|reset-slice|rate|skip|export|cleanup|closeout|recover|rebuild|db|model|mode|prefs|config|keys|hooks|run-hook|skill-health|doctor|debug|logs|forensics|changelog|steer|knowledge|memory|new-milestone|new-project|parallel|park|unpark|cancel|discard|init|setup|onboarding|inspect|extensions|update|upgrade|fast|mcp|rethink|workflow|codebase|notifications|ship|do|usage|context|session-report|backlog|pr-branch|add-tests|scan|language|worktree|eval-review";
 
 export const TOP_LEVEL_SUBCOMMANDS: readonly GsdCommandDefinition[] = [
   { cmd: "help", desc: "Categorized command reference with descriptions" },
@@ -81,6 +81,7 @@ export const TOP_LEVEL_SUBCOMMANDS: readonly GsdCommandDefinition[] = [
   { cmd: "parallel", desc: "Parallel milestone orchestration (start, status, stop, merge, watch)" },
   { cmd: "park", desc: "Park a milestone — skip without deleting" },
   { cmd: "unpark", desc: "Reactivate a parked milestone" },
+  { cmd: "cancel", desc: "Cancel one milestone and its unfinished work, keeping history (with confirmation)" },
   { cmd: "discard", desc: "Permanently discard one milestone (with confirmation)" },
   { cmd: "update", desc: "Update GSD to the latest version; --models refreshes the model catalog" },
   { cmd: "upgrade", desc: "Alias for update; installs the latest @opengsd package" },

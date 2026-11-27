@@ -125,6 +125,7 @@ export function showHelp(ctx: ExtensionCommandContext, args = ""): void {
     "  /gsd rethink        Conversational project reorganization — reorder, park, discard, add milestones",
     "  /gsd park [id]      Park a milestone — skip without deleting  [reason]",
     "  /gsd unpark [id]    Reactivate a parked milestone",
+    "  /gsd cancel <id>    Cancel one milestone and its unfinished work, keeping history  [reason]",
     "  /gsd discard <id>   Permanently discard one milestone (with confirmation)",
     "",
     "PROJECT KNOWLEDGE",
