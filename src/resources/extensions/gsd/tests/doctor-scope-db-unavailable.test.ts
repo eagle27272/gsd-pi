@@ -267,6 +267,51 @@ test("checkEngineHealth reports checkbox divergence against DB status", async (t
   );
 });
 
+test("checkEngineHealth ignores skipped slices and tasks the renderers omit (#315)", async (t) => {
+  const base = mkdtempSync(join(tmpdir(), "gsd-doctor-checkbox-skipped-"));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+
+  const gsdDir = join(base, ".gsd");
+  mkdirSync(gsdDir, { recursive: true });
+
+  openDatabase(join(gsdDir, "gsd.db"));
+  insertMilestone({ id: "M001", title: "Foundation", status: "active" });
+  insertSlice({ id: "S01", milestoneId: "M001", title: "Done", status: "complete", risk: "low", depends: [], sequence: 1 });
+  insertTask({ id: "T01", milestoneId: "M001", sliceId: "S01", title: "Done task", status: "complete", sequence: 1 });
+  insertSlice({ id: "S02", milestoneId: "M001", title: "Abandoned", status: "pending", risk: "low", depends: [], sequence: 2 });
+  insertTask({ id: "T01", milestoneId: "M001", sliceId: "S02", title: "First", status: "pending", sequence: 1 });
+  insertTask({ id: "T02", milestoneId: "M001", sliceId: "S02", title: "Second", status: "pending", sequence: 2 });
+
+  const roadmap = await renderRoadmapFromDb(base, "M001");
+  if ("skipped" in roadmap) assert.fail("planned milestone should render a roadmap");
+  const donePlan = await renderPlanFromDb(base, "M001", "S01");
+  const abandonedPlan = await renderPlanFromDb(base, "M001", "S02");
+
+  const db = _getAdapter()!;
+  db.prepare("UPDATE tasks SET status = 'skipped' WHERE milestone_id = 'M001' AND slice_id = 'S02'").run();
+  db.prepare("UPDATE slices SET status = 'skipped' WHERE milestone_id = 'M001' AND id = 'S02'").run();
+
+  assert.match(readFileSync(roadmap.roadmapPath, "utf-8"), /- \[ \] \*\*S02:/, "S02 line is still projected");
+  assert.match(readFileSync(abandonedPlan.planPath, "utf-8"), /- \[ \] \*\*T01\*\*:/, "S02 task lines are still projected");
+
+  const issues: any[] = [];
+  await checkEngineHealth(base, issues, []);
+  assert.deepEqual(
+    issues.filter((issue) => issue.code === "checkbox_db_status_divergence"),
+    [],
+    "a leftover line for a skipped row is stale projection the renderers omit, not checkbox drift",
+  );
+
+  writeFileSync(donePlan.planPath, readFileSync(donePlan.planPath, "utf-8").replace("- [x] **T01**:", "- [ ] **T01**:"), "utf-8");
+  const driftIssues: any[] = [];
+  await checkEngineHealth(base, driftIssues, []);
+  assert.deepEqual(
+    driftIssues.filter((issue) => issue.code === "checkbox_db_status_divergence").map((issue) => issue.unitId),
+    ["M001/S01/T01"],
+    "real drift on a non-skipped task is still reported",
+  );
+});
+
 test("checkEngineHealth keeps PLAN checkbox divergence after stale projection flush", async (t) => {
   const base = mkdtempSync(join(tmpdir(), "gsd-doctor-checkbox-plan-drift-"));
   t.after(() => rmSync(base, { recursive: true, force: true }));
