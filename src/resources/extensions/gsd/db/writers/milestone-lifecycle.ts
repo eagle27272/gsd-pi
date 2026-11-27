@@ -856,12 +856,12 @@ export function resumeMilestoneHierarchy(
   });
 }
 
-export interface MilestoneCancellationHierarchyInput {
+interface MilestoneCancellationHierarchyInput {
   milestoneId: string;
   reason: string;
 }
 
-export interface MilestoneCancellationHierarchyResult {
+interface MilestoneCancellationHierarchyResult {
   milestoneLifecycleId: string;
   cancelledSliceIds: string[];
   cancelledTaskIds: string[];

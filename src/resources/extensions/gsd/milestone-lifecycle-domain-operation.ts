@@ -586,7 +586,7 @@ export function completeMilestone(input: {
   };
 }
 
-export interface MilestoneAvailabilityReceipt {
+interface MilestoneAvailabilityReceipt {
   status: DomainOperationResult["status"];
   operationId: string;
   resultingRevision: number;
@@ -689,7 +689,7 @@ export function readMilestoneLifecycleStatus(milestoneId: string): CanonicalLife
   return row ? String(row["lifecycle_status"]) as CanonicalLifecycleStatus : null;
 }
 
-export interface MilestoneCancellationReceipt {
+interface MilestoneCancellationReceipt {
   status: DomainOperationResult["status"];
   operationId: string;
   resultingRevision: number;
