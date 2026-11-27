@@ -771,7 +771,10 @@ export async function showInterviewRound(
 				optionsTotal = fullLeft.length;
 				optionsViewport = maxBody;
 				const maxOptionsScroll = Math.max(0, fullLeft.length - maxBody);
-				if (optionsScroll > maxOptionsScroll) optionsScroll = maxOptionsScroll;
+				// The editor is the last block in the column and scroll keys are ignored
+				// while it has focus, so pin to the bottom or typing happens off-screen.
+				if (focusNotes) optionsScroll = maxOptionsScroll;
+				else if (optionsScroll > maxOptionsScroll) optionsScroll = maxOptionsScroll;
 
 				const leftLines = fullLeft.slice(optionsScroll, optionsScroll + maxBody);
 				if (fullLeft.length > maxBody) {
@@ -836,7 +839,7 @@ export async function showInterviewRound(
 					hints.push(isLast && allAnswered() ? "enter to review" : "enter to next");
 				}
 				if (previewTotal > previewViewport) hints.push(`${SCROLL_HINT_KEYS} scroll preview`);
-				if (optionsTotal > optionsViewport) hints.push(`${SCROLL_HINT_KEYS} scroll options`);
+				if (optionsTotal > optionsViewport && !focusNotes) hints.push(`${SCROLL_HINT_KEYS} scroll options`);
 				hints.push("esc to exit");
 				const footer = ui.hints(hints)[0] ?? "";
 
