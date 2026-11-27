@@ -9,7 +9,7 @@ import { showDiscuss, showHeadlessMilestoneCreation, showQueue } from "../../gui
 import { handleStart, handleTemplates, dispatchMarkdownPhasePlugin } from "../../commands-workflow-templates.js";
 import { gsdRoot } from "../../paths.js";
 import { deriveState } from "../../state.js";
-import { discardMilestone, isParked, parkMilestone, unparkMilestone } from "../../milestone-actions.js";
+import { cancelMilestone, discardMilestone, isParked, parkMilestone, parseParkArguments, unparkMilestone } from "../../milestone-actions.js";
 import { loadEffectiveGSDPreferences } from "../../preferences.js";
 import { setPlanningDepth } from "../../planning-depth.js";
 import { nextMilestoneId, normalizeDiscussTarget } from "../../milestone-ids.js";
@@ -633,8 +633,8 @@ export async function handleWorkflowCommand(trimmed: string, ctx: ExtensionComma
   if (trimmed === "park" || trimmed.startsWith("park ")) {
     if (requireNotAutoActive("/gsd park", ctx)) return true;
     const basePath = projectRoot();
-    const arg = trimmed.replace(/^park\s*/, "").trim();
-    let targetId = arg;
+    const parsed = parseParkArguments(trimmed.replace(/^park\s*/, ""));
+    let targetId = parsed.targetId;
     if (!targetId) {
       const state = await deriveState(basePath);
       if (!state.activeMilestone) {
@@ -647,13 +647,16 @@ export async function handleWorkflowCommand(trimmed: string, ctx: ExtensionComma
       ctx.ui.notify(`${targetId} is already parked. Use /gsd unpark ${targetId} to reactivate.`, "info");
       return true;
     }
-    const reasonParts = arg.replace(targetId, "").trim().replace(/^["']|["']$/g, "");
-    const reason = reasonParts || "Parked via /gsd park";
-    const success = parkMilestone(basePath, targetId, reason);
-    ctx.ui.notify(
-      success ? `Parked ${targetId}. Run /gsd unpark ${targetId} to reactivate.` : `Could not park ${targetId} — milestone not found.`,
-      success ? "info" : "warning",
-    );
+    const reason = parsed.reason || "Parked via /gsd park";
+    try {
+      const success = parkMilestone(basePath, targetId, reason);
+      ctx.ui.notify(
+        success ? `Parked ${targetId}. Run /gsd unpark ${targetId} to reactivate.` : `Could not park ${targetId} — milestone not found, already parked, or complete.`,
+        success ? "info" : "warning",
+      );
+    } catch (err) {
+      ctx.ui.notify(err instanceof Error ? err.message : String(err), "error");
+    }
     return true;
   }
   if (trimmed === "unpark" || trimmed.startsWith("unpark ")) {
@@ -675,11 +678,44 @@ export async function handleWorkflowCommand(trimmed: string, ctx: ExtensionComma
         return true;
       }
     }
-    const success = unparkMilestone(basePath, targetId);
-    ctx.ui.notify(
-      success ? `Unparked ${targetId}. It will resume its normal position in the queue.` : `Could not unpark ${targetId} — milestone not found or not parked.`,
-      success ? "info" : "warning",
-    );
+    try {
+      const success = unparkMilestone(basePath, targetId);
+      ctx.ui.notify(
+        success ? `Unparked ${targetId}. It will resume its normal position in the queue.` : `Could not unpark ${targetId} — milestone not found or not parked.`,
+        success ? "info" : "warning",
+      );
+    } catch (err) {
+      ctx.ui.notify(err instanceof Error ? err.message : String(err), "error");
+    }
+    return true;
+  }
+  if (trimmed === "cancel" || trimmed.startsWith("cancel ")) {
+    if (requireNotAutoActive("/gsd cancel", ctx)) return true;
+    const parsed = parseParkArguments(trimmed.replace(/^cancel\s*/, ""));
+    if (!parsed.targetId) {
+      ctx.ui.notify('Usage: /gsd cancel <milestone-id> ["reason"]', "warning");
+      return true;
+    }
+    const { targetId } = parsed;
+    const confirmed = await showConfirm(ctx, {
+      title: "Cancel milestone?",
+      message: `This cancels ${targetId} and its unfinished slices and tasks. Completed work and history are kept.`,
+      confirmLabel: "Cancel milestone",
+      declineLabel: "Keep",
+    });
+    if (!confirmed) {
+      ctx.ui.notify(`Cancel of ${targetId} aborted.`, "info");
+      return true;
+    }
+    try {
+      const success = cancelMilestone(projectRoot(), targetId, parsed.reason || "Cancelled via /gsd cancel");
+      ctx.ui.notify(
+        success ? `Cancelled ${targetId}.` : `Could not cancel ${targetId} — milestone not found or already closed.`,
+        success ? "info" : "warning",
+      );
+    } catch (err) {
+      ctx.ui.notify(err instanceof Error ? err.message : String(err), "error");
+    }
     return true;
   }
   if (trimmed === "discard" || trimmed.startsWith("discard ")) {
@@ -700,11 +736,15 @@ export async function handleWorkflowCommand(trimmed: string, ctx: ExtensionComma
       ctx.ui.notify(`Discard of ${targetId} cancelled.`, "info");
       return true;
     }
-    const success = discardMilestone(projectRoot(), targetId);
-    ctx.ui.notify(
-      success ? `Discarded ${targetId}.` : `Could not discard ${targetId} — milestone not found.`,
-      success ? "info" : "warning",
-    );
+    try {
+      const success = discardMilestone(projectRoot(), targetId);
+      ctx.ui.notify(
+        success ? `Discarded ${targetId}.` : `Could not discard ${targetId} — milestone not found.`,
+        success ? "info" : "warning",
+      );
+    } catch (err) {
+      ctx.ui.notify(err instanceof Error ? err.message : String(err), "error");
+    }
     return true;
   }
   return false;

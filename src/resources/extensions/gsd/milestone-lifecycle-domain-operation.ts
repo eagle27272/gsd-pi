@@ -4,18 +4,24 @@
 import {
   executeDomainOperation,
   type DomainJsonValue,
+  type DomainOperationContext,
   type DomainOperationRequest,
   type DomainOperationResult,
 } from "./db/domain-operation.js";
 import { getDb } from "./db/engine.js";
+import type { CanonicalLifecycleStatus } from "./db/lifecycle-shadow-comparison.js";
 import { MILESTONE_LIFECYCLE_PROJECTION_KIND } from "./projection-identity.js";
 import { readMilestoneCloseoutAuthorization } from "./db/milestone-closeout-readiness.js";
 import { readDomainOperationFence } from "./db/writers/lifecycle-commands.js";
 import type { LifecycleShadowRecord } from "./db/writers/lifecycle-commands.js";
 import {
+  cancelMilestoneHierarchy,
   completeMilestoneHierarchy,
   MilestoneLifecycleValidationError,
+  pauseMilestoneHierarchy,
   reopenMilestoneHierarchy,
+  resumeMilestoneHierarchy,
+  type MilestonePauseResumeHierarchyResult,
 } from "./db/writers/milestone-lifecycle.js";
 import type { ExecutionInvocation } from "./execution-invocation.js";
 import {
@@ -149,7 +155,7 @@ function normalizedAudit(audit?: MilestoneCompletionAudit): StoredCompletionAudi
 }
 
 function operationRequest(
-  operationType: "milestone.complete" | "milestone.reopen",
+  operationType: "milestone.complete" | "milestone.reopen" | "milestone.park" | "milestone.unpark" | "milestone.cancel",
   invocation: ExecutionInvocation,
   payload: Record<string, DomainJsonValue>,
 ): DomainOperationRequest {
@@ -577,5 +583,197 @@ export function completeMilestone(input: {
     dispositionIds: stored.dispositionIds,
     closeout: stored.closeout,
     isCurrent: isCurrentMilestoneCompletionOperation(operation.operationId, milestoneId),
+  };
+}
+
+interface MilestoneAvailabilityReceipt {
+  status: DomainOperationResult["status"];
+  operationId: string;
+  resultingRevision: number;
+  milestoneLifecycleId: string;
+  canonicalStatus: "paused" | "ready";
+  legacyStatus: "parked" | "active";
+}
+
+function changeMilestoneAvailability(input: {
+  invocation: ExecutionInvocation;
+  milestoneId: string;
+  operationType: "milestone.park" | "milestone.unpark";
+  eventType: "milestone.parked" | "milestone.unparked";
+  reason?: string;
+  write: (
+    context: Readonly<DomainOperationContext>,
+    request: { milestoneId: string },
+  ) => MilestonePauseResumeHierarchyResult;
+  canonicalStatus: MilestoneAvailabilityReceipt["canonicalStatus"];
+  legacyStatus: MilestoneAvailabilityReceipt["legacyStatus"];
+}): MilestoneAvailabilityReceipt {
+  const milestoneId = requiredText(input.milestoneId, "milestoneId");
+  const reason = input.reason?.trim() || null;
+  const operation = executeDomainOperation(
+    operationRequest(input.operationType, input.invocation, { milestoneId, reason }),
+    (context) => {
+      const result = input.write(context, { milestoneId });
+      return {
+        events: [{
+          eventType: input.eventType,
+          entityType: "milestone",
+          entityId: milestoneId,
+          payload: {
+            milestoneLifecycleId: result.milestoneLifecycleId,
+            reason,
+            lifecycleShadowComparison: shadowPayload(result.shadow),
+          },
+          destinations: ["projection"],
+        }],
+        projections: [{
+          projectionKey: `lifecycle/${milestoneId}`.toLowerCase(),
+          projectionKind: MILESTONE_LIFECYCLE_PROJECTION_KIND,
+          rendererVersion: "1",
+        }],
+      };
+    },
+  );
+  const lifecycle = getDb().prepare(`
+    SELECT lifecycle_id FROM workflow_item_lifecycles
+    WHERE item_kind = 'milestone' AND milestone_id = :milestone_id
+      AND slice_id IS NULL AND task_id IS NULL
+  `).get({ ":milestone_id": milestoneId });
+  return {
+    status: operation.status,
+    operationId: operation.operationId,
+    resultingRevision: operation.resultingRevision,
+    milestoneLifecycleId: String(lifecycle?.["lifecycle_id"]),
+    canonicalStatus: input.canonicalStatus,
+    legacyStatus: input.legacyStatus,
+  };
+}
+
+/** Pause an adopted Milestone's canonical lifecycle and project the legacy `parked` status. */
+export function parkMilestoneLifecycle(input: {
+  invocation: ExecutionInvocation;
+  milestoneId: string;
+  reason?: string;
+}): MilestoneAvailabilityReceipt {
+  return changeMilestoneAvailability({
+    ...input,
+    operationType: "milestone.park",
+    eventType: "milestone.parked",
+    write: pauseMilestoneHierarchy,
+    canonicalStatus: "paused",
+    legacyStatus: "parked",
+  });
+}
+
+/** Return a parked adopted Milestone to `ready` and project the legacy `active` status. */
+export function unparkMilestoneLifecycle(input: {
+  invocation: ExecutionInvocation;
+  milestoneId: string;
+}): MilestoneAvailabilityReceipt {
+  return changeMilestoneAvailability({
+    ...input,
+    operationType: "milestone.unpark",
+    eventType: "milestone.unparked",
+    write: resumeMilestoneHierarchy,
+    canonicalStatus: "ready",
+    legacyStatus: "active",
+  });
+}
+
+export function readMilestoneLifecycleStatus(milestoneId: string): CanonicalLifecycleStatus | null {
+  const row = getDb().prepare(`
+    SELECT lifecycle_status FROM workflow_item_lifecycles
+    WHERE item_kind = 'milestone' AND milestone_id = :milestone_id
+      AND slice_id IS NULL AND task_id IS NULL
+  `).get({ ":milestone_id": milestoneId });
+  return row ? String(row["lifecycle_status"]) as CanonicalLifecycleStatus : null;
+}
+
+interface MilestoneCancellationReceipt {
+  status: DomainOperationResult["status"];
+  operationId: string;
+  resultingRevision: number;
+  milestoneLifecycleId: string;
+  canonicalStatus: "cancelled";
+  legacyStatus: "skipped";
+  cancelledSliceIds: string[];
+  cancelledTaskIds: string[];
+  preservedSliceIds: string[];
+  preservedTaskIds: string[];
+}
+
+/** Cancel an adopted Milestone and its unfinished work in one durable operation, keeping all history. */
+export function cancelMilestoneLifecycle(input: {
+  invocation: ExecutionInvocation;
+  milestoneId: string;
+  reason: string;
+  audit?: MilestoneCompletionAudit;
+}): MilestoneCancellationReceipt {
+  const milestoneId = requiredText(input.milestoneId, "milestoneId");
+  const reason = requiredText(input.reason, "reason");
+  const audit = normalizedAudit(input.audit);
+  const operation = executeDomainOperation(
+    operationRequest("milestone.cancel", input.invocation, { milestoneId, reason, audit }),
+    (context) => {
+      const result = cancelMilestoneHierarchy(context, { milestoneId, reason });
+      return {
+        events: [{
+          eventType: "milestone.cancelled",
+          entityType: "milestone",
+          entityId: milestoneId,
+          payload: {
+            milestoneLifecycleId: result.milestoneLifecycleId,
+            reason,
+            audit,
+            cancelledSliceIds: result.cancelledSliceIds,
+            cancelledTaskIds: result.cancelledTaskIds,
+            preservedSliceIds: result.preservedSliceIds,
+            preservedTaskIds: result.preservedTaskIds,
+            lifecycleShadowComparisons: result.shadows.map((shadow) => shadowPayload(shadow)),
+          },
+          destinations: ["projection"],
+        }],
+        projections: [{
+          projectionKey: `lifecycle/${milestoneId}`.toLowerCase(),
+          projectionKind: MILESTONE_LIFECYCLE_PROJECTION_KIND,
+          rendererVersion: "1",
+        }],
+      };
+    },
+  );
+  const stored = storedCancellationPayload(operation.operationId);
+  return {
+    status: operation.status,
+    operationId: operation.operationId,
+    resultingRevision: operation.resultingRevision,
+    milestoneLifecycleId: stored.milestoneLifecycleId,
+    canonicalStatus: "cancelled",
+    legacyStatus: "skipped",
+    cancelledSliceIds: stored.cancelledSliceIds,
+    cancelledTaskIds: stored.cancelledTaskIds,
+    preservedSliceIds: stored.preservedSliceIds,
+    preservedTaskIds: stored.preservedTaskIds,
+  };
+}
+
+function storedCancellationPayload(operationId: string): {
+  milestoneLifecycleId: string;
+  cancelledSliceIds: string[];
+  cancelledTaskIds: string[];
+  preservedSliceIds: string[];
+  preservedTaskIds: string[];
+} {
+  const events = getDb().prepare(`
+    SELECT payload_json FROM workflow_domain_events
+    WHERE operation_id = :operation_id AND event_type = 'milestone.cancelled'
+  `).all({ ":operation_id": operationId }) as Array<Record<string, unknown>>;
+  if (events.length !== 1) throw new Error("Milestone cancel receipt requires one durable event");
+  const payload = JSON.parse(String(events[0]!["payload_json"])) as Record<string, unknown>;
+  return {
+    milestoneLifecycleId: stringField(payload, "milestoneLifecycleId", "cancel"),
+    cancelledSliceIds: stringArrayField(payload, "cancelledSliceIds", "cancel"),
+    cancelledTaskIds: stringArrayField(payload, "cancelledTaskIds", "cancel"),
+    preservedSliceIds: stringArrayField(payload, "preservedSliceIds", "cancel"),
+    preservedTaskIds: stringArrayField(payload, "preservedTaskIds", "cancel"),
   };
 }
